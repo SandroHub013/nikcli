@@ -8,6 +8,7 @@ import type { SubmitControl } from "./card"
 import { t } from "../i18n"
 import { Brief } from "../choices/brief"
 import { isRecommended } from "../choices/list"
+import { Button } from "../ui/controls"
 
 export function DesignCard(props: {
   proposal: DesignProposal
@@ -204,14 +205,13 @@ export function DesignCard(props: {
       </Show>
 
       <div data-slot="design-actions">
-        <button
-          type="button"
-          data-slot="design-submit"
+        <Button
+          data-slot="design-submit" variant="primary" size="lg"
           disabled={props.control.disabled}
           onClick={() => props.onSubmit()}
         >
           {props.control.label}
-        </button>
+        </Button>
         <button
           type="button"
           data-slot="design-ghost"

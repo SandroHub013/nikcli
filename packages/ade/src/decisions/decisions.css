@@ -247,42 +247,18 @@
   margin-top: 8px;
 }
 
-[data-slot="decision-submit"],
-[data-slot="decision-ghost"],
-[data-slot="decision-chip"] {
-  height: 26px;
-  padding: 0 12px;
-  border: 1px solid var(--ade-border-strong);
-  border-radius: var(--ade-radius-sm);
-  background: var(--ade-accent);
-  color: var(--ade-accent-fg);
-  font: inherit;
-  font-size: var(--ade-font-sm);
-  font-weight: 600;
-  cursor: pointer;
-  transition: var(--ade-btn-transition);
-}
-
-[data-slot="decision-submit"]:active:not(:disabled) {
-  transform: var(--ade-press);
-}
-
-[data-slot="decision-ghost"],
-[data-slot="decision-chip"] {
-  border-color: var(--ade-border);
-  background: transparent;
-  color: var(--ade-text-soft);
-  font-weight: 500;
-  transition: var(--ade-btn-transition);
-}
-
-[data-slot="decision-ghost"]:active:not(:disabled) {
-  transform: var(--ade-press);
-}
-
+/* `decision-submit` and `decision-ghost` are Buttons (primary, and secondary, small in a row). The date chips stay chips. */
 [data-slot="decision-chip"] {
   height: 22px;
   padding: 0 8px;
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-sm);
+  background: transparent;
+  color: var(--ade-text-soft);
+  font: inherit;
+  font-size: var(--ade-font-sm);
+  font-weight: 500;
+  cursor: pointer;
   transition: var(--ade-btn-transition);
 }
 
@@ -290,14 +266,11 @@
   transform: var(--ade-press);
 }
 
-[data-slot="decision-ghost"]:hover:not(:disabled),
 [data-slot="decision-chip"]:hover:not(:disabled) {
   background: var(--ade-hover);
   color: var(--ade-text);
 }
 
-[data-slot="decision-submit"]:disabled,
-[data-slot="decision-ghost"]:disabled,
 [data-slot="decision-chip"]:disabled {
   opacity: 0.5;
   cursor: default;
@@ -453,11 +426,6 @@ button[data-slot="decision-row"]:hover {
 
 [data-slot="decision-row"] [data-slot="decision-pill"] {
   margin-left: 0;
-}
-
-[data-slot="decision-row"] [data-slot="decision-ghost"] {
-  height: 22px;
-  padding: 0 8px;
 }
 
 [data-slot="decisions-problems"] {

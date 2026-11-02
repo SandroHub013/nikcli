@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
+import postcss, { type Rule } from "postcss"
 
 /**
  * One press, one transition, one focus ring — read from the stylesheets.
@@ -170,4 +171,66 @@ describe("the button scale", () => {
       expect(heights).toContain(`height: ${height}px`)
     })
   }
+})
+
+describe("a primary-coloured control is the primitive's", () => {
+  /*
+   * DS-8: eight sheets redrew the accent-filled button, each with its own height, radius and disabled opacity. The
+   * primitive (`ui/controls.css`, `[data-ui="button"]`) owns that look now, so a rule that fills something with the
+   * accent ground is either the primitive, or a thing that is not a button (a bar, a dot, a selection), or one of
+   * the existing ones named here.
+   *
+   * The list is a ratchet: it only gets shorter. A new accent-filled button does not go on it — it is a
+   * `<Button variant="primary">`. A rule that leaves the list must be taken off it, so the next one cannot hide
+   * behind its name.
+   */
+  const ACCENT_GROUND = /^var\(--ade-accent(-strong)?\)$/
+  const BASELINE: readonly string[] = [
+    "agent/agent-console.css :: [data-slot=\"agent-action\"][data-primary]",
+    "agent/agent-console.css :: [data-slot=\"agent-action\"][data-primary]:hover",
+    "agent/agent-console.css :: [data-slot=\"agent-send\"]",
+    "agent/agent-console.css :: [data-slot=\"agent-send\"]:hover:not(:disabled)",
+    "bots/bots.css :: [data-slot=\"bots-row-unread\"]",
+    "bots/bots.css :: [data-slot=\"room-needs-you\"]",
+    "browser/browser.css :: [data-slot=\"dev-server-offer-open\"]",
+    "chat/chat.css :: [data-slot=\"chat-caret\"]",
+    "command/palette.css :: [data-component=\"palette\"] [data-slot=\"option\"][data-selected]::before",
+    "decisions/decisions.css :: [data-slot=\"decision-option\"][data-on] [data-slot=\"decision-option-key\"]",
+    "decisions/decisions.css :: [data-slot=\"sheet-steps\"] i[data-on]",
+    "design/design.css :: [data-slot=\"sheet-steps\"] i[data-on]",
+    "design/design.css :: [data-slot=\"variant-pick-button\"][data-on=\"true\"] [data-slot=\"variant-key\"]",
+    "dev.css :: [data-slot=\"ade-add\"][data-tone=\"primary\"]",
+    "dev.css :: [data-slot=\"ade-add\"][data-tone=\"primary\"]:hover",
+    "dev.css :: [data-slot=\"ade-notice-progress-fill\"]",
+    "editor/editor.css :: [data-component=\"editor\"] [data-slot=\"btn\"][data-variant=\"primary\"]",
+    "editor/editor.css :: [data-component=\"editor\"] [data-slot=\"btn\"][data-variant=\"primary\"]:hover:not(:disabled)",
+    "grid/pane.css :: [data-slot=\"pane-answer\"][data-tone=\"primary\"]",
+    "grid/pane.css :: [data-slot=\"pane-answer\"][data-tone=\"primary\"]:hover",
+    "index.css :: [data-component=\"update-dialog\"] [data-slot=\"update-dialog-fill\"]",
+    "index.css :: [data-slot=\"sidebar-resize-handle\"]:hover, [data-component=\"ade-sidebar\"][data-resizing] [data-slot=\"sidebar-resize-handle\"]",
+    "remote/remote.css :: [data-component=\"remote-space\"] [data-slot=\"primary\"]",
+    "review/diff-view.css :: [data-component=\"diff-view\"] [data-slot=\"file-row\"][data-selected]::before",
+    "review/diff-view.css :: [data-component=\"diff-view\"] [data-slot=\"status\"][data-status=\"modified\"]",
+    "review/diff-view.css :: [data-component=\"diff-view\"] [data-slot=\"status\"][data-status=\"renamed\"]",
+    "session-new/session-new.css :: [data-slot=\"new-count\"][data-active]",
+  ]
+
+  test("no new rule fills a control with the accent ground", () => {
+    const found: string[] = []
+    for (const { path, text } of CSS) {
+      const file = path.slice(SRC.length).split("\\").join("/").replace(/^\//, "")
+      for (const rule of postcss.parse(text).nodes.flatMap((node) =>
+        node.type === "rule" ? [node] : node.type === "atrule" && node.name !== "keyframes" ? (node.nodes ?? []).filter((n) => n.type === "rule") : [],
+      )) {
+        const fills = (rule as Rule).nodes.some(
+          (decl) => decl.type === "decl" && /^background(-color)?$/.test(decl.prop) && ACCENT_GROUND.test(decl.value.trim()),
+        )
+        if (fills) found.push(`${file} :: ${(rule as Rule).selector.replace(/\s+/g, " ")}`)
+      }
+    }
+    found.sort()
+    expect(found.filter((entry) => !BASELINE.includes(entry))).toEqual([])
+    // A rule that was cleaned up must also leave the list, or the list stops being a ratchet.
+    expect(BASELINE.filter((entry) => !found.includes(entry))).toEqual([])
+  })
 })

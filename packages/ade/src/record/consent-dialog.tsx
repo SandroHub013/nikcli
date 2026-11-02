@@ -3,6 +3,7 @@ import { Sheet, SheetTitle } from "../ui/sheet"
 import type { RecordConsent } from "./record-panel"
 import type { RecordTarget } from "./recording"
 import { t } from "../i18n"
+import { Button } from "../ui/controls"
 
 /**
  * The question ADE asks before an agent films it (S36).
@@ -40,17 +41,16 @@ export function RecordConsentDialog(props: {
         </label>
       </div>
       <footer data-slot="record-consent-actions">
-        <button
-          type="button"
+        <Button
           data-slot="decision-ghost"
           ref={(button) => queueMicrotask(() => button.focus())}
           onClick={refuse}
         >
           {t("record.consent.no")}
-        </button>
-        <button type="button" data-slot="decision-submit" onClick={() => props.onAnswer({ allowed: true, mic: mic() })}>
+        </Button>
+        <Button data-slot="decision-submit" variant="primary" onClick={() => props.onAnswer({ allowed: true, mic: mic() })}>
           {t("record.consent.yes")}
-        </button>
+        </Button>
       </footer>
     </Sheet>
   )

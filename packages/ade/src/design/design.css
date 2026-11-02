@@ -386,39 +386,7 @@
   gap: 10px;
 }
 
-[data-slot="design-submit"] {
-  /* `lg`: it is the confirm of its panel. */
-  height: 32px;
-  padding: 0 var(--ade-space-7);
-  border: 0;
-  border-radius: var(--ade-radius-sm);
-  background: var(--ade-accent);
-  color: var(--ade-accent-fg);
-  font: inherit;
-  font-size: var(--ade-font-sm);
-  font-weight: var(--ade-weight-semibold);
-  cursor: pointer;
-  transition: var(--ade-btn-transition);
-}
-
-[data-slot="design-submit"]:hover {
-  background: var(--ade-accent-strong);
-}
-
-[data-slot="design-submit"]:active {
-  background: var(--ade-accent-strong);
-  transform: var(--ade-press);
-}
-
-/* In dark mode, opacity 0.5 on green still looks bright. Sunken ground and weak text clearly indicate disabled state. */
-[data-slot="design-submit"]:disabled {
-  background: var(--ade-sunken);
-  color: var(--ade-text-weak);
-  border: 1px solid var(--ade-border-subtle);
-  cursor: not-allowed;
-  opacity: 1;
-}
-
+/* `design-submit` is a Button (primary, lg): the confirm of its panel. */
 [data-slot="design-ghost"]:disabled {
   opacity: 0.5;
   cursor: not-allowed;

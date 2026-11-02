@@ -11,6 +11,7 @@ import "./decisions.css"
 import { t } from "../i18n"
 import { errorMessage } from "../session-new/start-failure"
 import { askerName } from "../choices/list"
+import { Button } from "../ui/controls"
 
 /**
  * The whole register in a grid pane: who receives the answers, what waits for
@@ -202,14 +203,13 @@ export function DecisionsPane(props: {
                         fallback={
                           <div data-slot="decision-actions">
                             <span data-slot="decision-hint">{deliveryText(props.hub, decision, now())}</span>
-                            <button
-                              type="button"
-                              data-slot="decision-ghost"
+                            <Button
+                              data-slot="decision-ghost" size="sm"
                               disabled={props.hub.busy(decision.k)}
                               onClick={() => setConfirmingReopen(decision.k)}
                             >
                               {t("decisions.change")}
-                            </button>
+                            </Button>
                           </div>
                         }
                       >
@@ -224,9 +224,8 @@ export function DecisionsPane(props: {
                                 )
                               : t("decisions.change.confirm", decision.k)}
                           </span>
-                          <button
-                            type="button"
-                            data-slot="decision-submit"
+                          <Button
+                            data-slot="decision-submit" variant="primary"
                             disabled={props.hub.busy(decision.k)}
                             onClick={() => {
                               setConfirmingReopen(undefined)
@@ -234,14 +233,13 @@ export function DecisionsPane(props: {
                             }}
                           >
                             {t("decisions.reopen")}
-                          </button>
-                          <button
-                            type="button"
-                            data-slot="decision-ghost"
+                          </Button>
+                          <Button
+                            data-slot="decision-ghost" size="sm"
                             onClick={() => setConfirmingReopen(undefined)}
                           >
                             {t("new.cancel")}
-                          </button>
+                          </Button>
                         </div>
                       </Show>
                     </section>
@@ -262,14 +260,13 @@ export function DecisionsPane(props: {
                     <span data-slot="decision-pill" data-tone="later">
                       {t("decisions.pill.deferred", formatDay(decision.deferredUntil ?? "", now()))}
                     </span>
-                    <button
-                      type="button"
-                      data-slot="decision-ghost"
+                    <Button
+                      data-slot="decision-ghost" size="sm"
                       disabled={props.hub.busy(decision.k)}
                       onClick={() => void props.hub.reopen(decision).then((done) => done && setExpanded(decision.k))}
                     >
                       {t("decisions.reopen")}
-                    </button>
+                    </Button>
                   </div>
                 )}
               </For>
@@ -367,9 +364,8 @@ function RecipientPicker(props: { hub: DecisionsHub; queued: number }) {
       <Show when={pending()}>
         <div data-slot="decisions-recipient-confirm" role="alert">
           <span>{t("decisions.recipient.confirm", props.queued, String(pendingTitle() ?? ""))}</span>
-          <button
-            type="button"
-            data-slot="decision-submit"
+          <Button
+            data-slot="decision-submit" variant="primary"
             onClick={() => {
               const next = pending()
               props.hub.choose(next)
@@ -377,10 +373,10 @@ function RecipientPicker(props: { hub: DecisionsHub; queued: number }) {
             }}
           >
             {t("decisions.recipient.deliver")}
-          </button>
-          <button type="button" data-slot="decision-ghost" onClick={() => setPending(undefined)}>
+          </Button>
+          <Button data-slot="decision-ghost" size="sm" onClick={() => setPending(undefined)}>
             {t("new.cancel")}
-          </button>
+          </Button>
         </div>
       </Show>
       <Show when={!pending() && status().state !== "pronta"}>

@@ -1026,27 +1026,9 @@
   line-height: var(--ade-leading);
 }
 
+/* A Button (primary, lg): the screen with no project only decides where it sits. */
 [data-slot="empty-action"] {
   margin-top: var(--ade-space-2);
-  padding: var(--ade-space-4) var(--ade-space-7);
-  border: 0;
-  border-radius: var(--ade-radius-md);
-  background: var(--ade-accent);
-  color: var(--ade-accent-fg);
-  font-family: var(--ade-sans);
-  font-size: var(--ade-font-md);
-  font-weight: var(--ade-weight-semibold);
-  cursor: pointer;
-  transition: background var(--ade-dur-fast) var(--ade-ease);
-}
-
-[data-slot="empty-action"]:hover {
-  background: var(--ade-accent-strong);
-}
-
-[data-slot="empty-action"]:focus-visible {
-  outline: none;
-  box-shadow: var(--ade-focus-ring);
 }
 
 /* ── body layout ──────────────────────────────────────────────────────────── */

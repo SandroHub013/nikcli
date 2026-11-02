@@ -59,6 +59,21 @@ const SURFACES: Surface[] = [
     forbidden: REDRAWN,
   },
   {
+    name: "decisions, design, the consent and update dialogs and the empty project screen",
+    tsx: [
+      "decisions/decision-card.tsx",
+      "decisions/decisions-pane.tsx",
+      "record/consent-dialog.tsx",
+      "update/update-dialog.tsx",
+      "design/design-card.tsx",
+      "design/design-pane.tsx",
+      "surface/empty-project.tsx",
+    ],
+    slots: ["decision-submit", "decision-ghost", "design-submit", "empty-action"],
+    css: ["decisions/decisions.css", "design/design.css", "dev.css"],
+    forbidden: REDRAWN,
+  },
+  {
     name: "the sidebar",
     tsx: ["sidebar/sidebar.tsx"],
     slots: ["workspace-open-project", "section-add", "empty-action-btn", "search-clear"],

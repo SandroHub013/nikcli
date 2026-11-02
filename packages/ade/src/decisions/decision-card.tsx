@@ -5,6 +5,7 @@ import type { SubmitControl } from "./card"
 import { t } from "../i18n"
 import { Brief } from "../choices/brief"
 import { isRecommended } from "../choices/list"
+import { Button } from "../ui/controls"
 
 /**
  * One open decision, answerable: context, the options as numbered choices, a
@@ -133,34 +134,31 @@ export function DecisionCard(props: {
       </Show>
 
       <div data-slot="decision-actions">
-        <button
-          type="button"
-          data-slot="decision-submit"
+        <Button
+          data-slot="decision-submit" variant="primary"
           disabled={props.control.disabled}
           onClick={() => props.onSubmit()}
         >
           {props.control.label}
-        </button>
+        </Button>
         <Show when={props.control.recordOnly}>
-          <button
-            type="button"
+          <Button
             data-slot="decision-ghost"
             data-action="record"
             disabled={props.busy}
             onClick={() => props.onRecord()}
           >
             {t("decisions.submit.record")}
-          </button>
+          </Button>
         </Show>
-        <button
-          type="button"
+        <Button
           data-slot="decision-ghost"
           disabled={props.busy}
           aria-expanded={deferring()}
           onClick={() => setDeferring(!deferring())}
         >
           {t("decisions.defer.open")}
-        </button>
+        </Button>
         <Show when={!props.control.options}>
           <span data-slot="decision-hint">{props.recipientHint}</span>
         </Show>
