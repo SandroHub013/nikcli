@@ -547,8 +547,9 @@ export function hasTerminal(id: string): boolean {
   return terminals.has(id)
 }
 
-export function writeToTerminal(id: string, chunk: string): void {
-  getTerminal(id).terminal.write(chunk)
+/** `written` is called once xterm has parsed the chunk: the page's answer to the host's flow control (RS-7). */
+export function writeToTerminal(id: string, chunk: string, written?: () => void): void {
+  getTerminal(id).terminal.write(chunk, written)
 }
 
 /**

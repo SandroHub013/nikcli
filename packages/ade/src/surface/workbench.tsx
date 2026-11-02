@@ -7819,7 +7819,8 @@ export function Workbench() {
     }
   }
 
-  const feedTerminal = (paneId: string, chunk: string) => {
+  /** `written` is called once the terminal has parsed the chunk, or at once when there is none: the host's flow control waits for it (RS-7). */
+  const feedTerminal = (paneId: string, chunk: string, written?: () => void) => {
     /*
      * Nothing is written to a pane that no longer exists.
      *
@@ -7831,7 +7832,7 @@ export function Workbench() {
      * already run.
      */
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
-    if (!pane) return
+    if (!pane) return written?.()
 
     // A working agent keeps repainting (spinner, streamed text); every chunk
     // pushes back the moment the pane is declared idle again.
@@ -7840,7 +7841,7 @@ export function Workbench() {
     else if (hooked(paneId) && interruptEnds(activityOf.get(paneId), interruptedAt.get(paneId))) settleWhenQuiet(paneId)
     else if (pane.status === "idle") noticeWorkFromOutput(pane)
 
-    writeToTerminal(paneId, chunk)
+    writeToTerminal(paneId, chunk, written)
     screenRequests.fed(paneId)
     if (!liveTerminals().has(paneId)) {
       setLiveTerminals((ids) => new Set(ids).add(paneId))
@@ -9160,7 +9161,7 @@ export function Workbench() {
         command: agent.command,
         args: extraArgs,
         cwd: workDir,
-        onData: (chunk) => {
+        onData: (chunk, written) => {
           const now = Date.now()
           firstByteAt ??= now
           lastByteAt = now
@@ -9172,7 +9173,9 @@ export function Workbench() {
             if (seen) paneClasses.set(paneId, seen)
           }
 
-          feedTerminal(paneId, chunk)
+          feedTerminal(paneId, chunk, written)
+          // The terminal answers the host when it has written the chunk (RS-7).
+          return true
         },
         onLine: (line, stream) => {
           appendLine(paneId, line, stream === "err" ? "note" : "step")
@@ -9474,13 +9477,14 @@ export function Workbench() {
         command: "ssh",
         args,
         ...(home ? { cwd: home } : {}),
-        onData: (chunk) => {
+        onData: (chunk, written) => {
           lastOutputAt.set(paneId, Date.now())
           noteBracketedPaste(paneId, chunk)
           tail = (tail + stripAnsi(chunk)).slice(-400)
           // Whole, up to a generous cap: a PowerShell 5.1 error is 400+ characters, and what says it comes first.
           sinceStep = (sinceStep + stripAnsi(chunk)).slice(-8000)
-          feedTerminal(paneId, chunk)
+          feedTerminal(paneId, chunk, written)
+          return true
         },
         onLine: (line, stream) => appendLine(paneId, line, stream === "err" ? "note" : "step"),
         onExit: (code) => {
