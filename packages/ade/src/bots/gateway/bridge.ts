@@ -17,6 +17,7 @@ import { runBotTurn } from "../serve-turn"
 import { startGatewayController, type GatewayBridge, type GatewayController, type GatewayMessage } from "./controller"
 import type { GatewayPanelApi, GatewayPanelDeps, LinkStatus as LiveStatus, PairingRequest } from "./panel-state"
 import { recheckTrust, scopeOf } from "./policy"
+import { projectOfLink } from "./project-of"
 import { localAccountStore } from "../account"
 import { localRemoteStore, remoteKey } from "./remote"
 import { appMemoryStore } from "../memory-app"
@@ -33,6 +34,7 @@ interface LinkStatus {
   readonly bot: string
   readonly platform: string
   readonly project?: string | null
+  readonly enabled?: boolean
   readonly connected?: boolean
   readonly connectedAtMs?: number | null
 }
@@ -65,8 +67,7 @@ export function tauriGatewayBridge(): GatewayBridge {
     previewEnd: (bot, platform, chat, fallback) =>
       invoke<void>("gateway_preview_end", { bot, platform, chat, fallback: fallback ?? null }),
     async project(bot, platform) {
-      const links = await invoke<LinkStatus[]>("gateway_status")
-      return links.find((link) => link.bot === bot && link.platform === platform)?.project ?? undefined
+      return projectOfLink(await invoke<LinkStatus[]>("gateway_status"), bot, platform)
     },
     async linkStatus(bot, platform) {
       const links = await invoke<LinkStatus[]>("gateway_status")

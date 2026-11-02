@@ -594,9 +594,8 @@ impl Hub {
     /// stops and is switched off.
     pub fn clear_token(&self, bot: &str, platform: Platform) -> Result<(), String> {
         check_bot(bot)?;
-        self.halt(bot, platform);
+        self.halt_and_drain(bot, platform, "token cancellato");
         self.failed().remove(&(bot.to_string(), platform));
-        remove_pending_file(&pending_file_path(self.store.path(), bot, platform));
         let _keychain = self.keychain();
         self.vault.delete(&self.service, &token_name(bot, platform))?;
         if platform.needs_app_token() {
@@ -829,6 +828,7 @@ impl Hub {
             secrets: self.secrets(),
             backoff: self.backoff,
             started_at,
+            halted: stopped.clone(),
         };
         tokio::spawn(task.run(stopped, self.ready.subscribe()));
         self.links().insert((bot.to_string(), platform), Running { adapter, stop, wake, live, pending });
@@ -851,33 +851,17 @@ impl Hub {
     /// Switches the gateway off, and remembers it is off.
     pub fn stop(&self, bot: &str, platform: Platform) -> Result<(), String> {
         check_bot(bot)?;
-        let queued = self.links().get(&(bot.to_string(), platform)).map(|running| running.pending.clone());
-        self.halt(bot, platform);
-        self.failed().remove(&(bot.to_string(), platform));
         // «Off» is a kill switch: what was waiting is not delivered later, after a restart or a switch-on.
         // The position moves past it, so the platform does not send it again either (BOT-2).
-        let path = pending_file_path(self.store.path(), bot, platform);
-        let mut waiting: Vec<PendingEntry> = match queued {
-            Some(queue) => queue.lock().unwrap().drain(..).collect(),
-            None => read_pending_file(&path),
-        };
-        let unacked = waiting.iter().filter(|entry| !entry.acked).count();
         let mut furthest: Option<String> = None;
-        for entry in waiting.drain(..) {
+        for entry in self.halt_and_drain(bot, platform, "spento") {
             if let Some(cursor) = entry.cursor {
                 if is_cursor_ahead(furthest.as_deref(), &cursor) {
                     furthest = Some(cursor);
                 }
             }
         }
-        remove_pending_file(&path);
-        if unacked > 0 {
-            self.env.log(&format!(
-                "gateway {} {}: spento: {unacked} messaggi in coda scartati",
-                platform.id(),
-                &bot_key(bot)[..8]
-            ));
-        }
+        self.failed().remove(&(bot.to_string(), platform));
         if let Some(cursor) = furthest {
             let _ = self.advance_cursor(bot, platform, None, &cursor);
         }
@@ -905,6 +889,38 @@ impl Hub {
         if let Some(running) = self.links().remove(&(bot.to_string(), platform)) {
             let _ = running.stop.send(true);
         }
+    }
+
+    /// Halts the link and takes everything it had queued, removing the pending file with the queue's lock held
+    /// (B1). The stop flag is set first: a `deliver` that got the lock before is drained here, and one that comes
+    /// after sees the flag and writes nothing, so no message read before the switch-off is handed on after it.
+    /// Used by «off» and by clearing the token (and so by deleting a bot). The count goes to the log.
+    fn halt_and_drain(&self, bot: &str, platform: Platform, why: &str) -> Vec<PendingEntry> {
+        let queued = self.links().get(&(bot.to_string(), platform)).map(|running| running.pending.clone());
+        self.halt(bot, platform);
+        let path = pending_file_path(self.store.path(), bot, platform);
+        let waiting: Vec<PendingEntry> = match queued {
+            Some(queue) => {
+                let mut queue = queue.lock().unwrap();
+                let waiting = queue.drain(..).collect();
+                remove_pending_file(&path);
+                waiting
+            }
+            None => {
+                let waiting = read_pending_file(&path);
+                remove_pending_file(&path);
+                waiting
+            }
+        };
+        let unacked = waiting.iter().filter(|entry| !entry.acked).count();
+        if unacked > 0 {
+            self.env.log(&format!(
+                "gateway {} {}: {why}: {unacked} messaggi in coda scartati",
+                platform.id(),
+                &bot_key(bot)[..8]
+            ));
+        }
+        waiting
     }
 
     /// Whether any gateway is switched on, running or waiting to retry: the
@@ -1445,6 +1461,8 @@ struct Task {
     secrets: Vec<String>,
     backoff: (Duration, Duration),
     started_at: u64,
+    /// The link's stop flag, read where a message is about to be handed on: a gateway switched off delivers nothing more.
+    halted: watch::Receiver<bool>,
 }
 
 
@@ -1520,8 +1538,20 @@ impl Task {
                         left_behind = batch.len();
                         break;
                     }
-                    for message in batch {
+                    // A gateway switched off while the batch is in hand delivers no more of it (B1): the rest
+                    // is counted as left behind, like a batch that was stopped on its way in.
+                    let mut batch = batch.into_iter();
+                    let mut switched_off = false;
+                    while let Some(message) = batch.next() {
+                        if *stopped.borrow() {
+                            left_behind = 1 + batch.len();
+                            switched_off = true;
+                            break;
+                        }
                         self.deliver(message).await;
+                    }
+                    if switched_off {
+                        break;
                     }
                     if self.pending.lock().unwrap().iter().all(|entry| entry.acked) {
                         self.save_cursor();
@@ -1680,6 +1710,12 @@ impl Task {
         };
         let cursor = message.cursor.clone().or_else(|| self.adapter.cursor());
         let mut pending = self.pending.lock().unwrap();
+        // Switched off since the batch was read (B1): `stop` sets the flag before it drains this queue under the same
+        // lock, so a message that gets here after it is not written to the file and not handed on.
+        if *self.halted.borrow() {
+            self.env.log(&format!("{tag}: messaggio non consegnato: il gateway è stato spento"));
+            return;
+        }
         if pending.iter().any(|entry| entry.msg.chat == msg.chat && entry.msg.id == msg.id) {
             self.env.log(&format!("{tag}: ignorato un messaggio già in coda"));
             return;
@@ -3639,6 +3675,58 @@ mod tests {
             s.env.statuses.lock().unwrap().last().is_some_and(|status| status.needs_attention && status.attention_reason.as_deref() == Some(QUEUE_FULL))
         })
         .await;
+    }
+
+    /* B1 (review of bot-ack): «off» while a batch is in hand. The rest of the batch is not handed on after it. */
+    #[tokio::test]
+    async fn a_message_read_before_off_is_not_handed_on_after_it() {
+        let s = setup("off-mid-batch");
+        authorize(&s, "42");
+        let (adapter, feed) = start(&s);
+        s.hub.pairing_open(BOT, Platform::Fake).unwrap();
+        // The task is held on a stranger's code (a slow network) with an authorized message still to deliver.
+        adapter.hold_sends.store(true, std::sync::atomic::Ordering::SeqCst);
+        feed.send(Ok(vec![
+            message("1", "c7", "7", "uno sconosciuto"),
+            with_cursor("601", message("2", "c42", "42", "autorizzato")),
+        ]))
+        .unwrap();
+        eventually("l'invio allo sconosciuto è in corso", || adapter.send_attempts.load(std::sync::atomic::Ordering::SeqCst) == 1).await;
+
+        s.hub.stop(BOT, Platform::Fake).unwrap();
+        adapter.hold_sends.store(false, std::sync::atomic::Ordering::SeqCst);
+        tokio::time::sleep(Duration::from_millis(80)).await;
+
+        assert!(s.env.messages.lock().unwrap().is_empty(), "a message read before «off» was handed on after it");
+        assert!(!pending_file_path(s.hub.store.path(), BOT, Platform::Fake).exists(), "a ghost in the pending file");
+    }
+
+    /* B1: clearing the token empties the queue under its lock and leaves nothing to come back, with a line in the log. */
+    #[tokio::test]
+    async fn clearing_the_token_drops_the_queue_and_leaves_no_file() {
+        let s = setup("clear-token-drains");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        feed.send(Ok(vec![
+            with_cursor("701", message("1", "c42", "42", "uno")),
+            with_cursor("702", message("2", "c42", "42", "due")),
+        ]))
+        .unwrap();
+        eventually("i messaggi", || s.env.messages.lock().unwrap().len() == 2).await;
+        let path = pending_file_path(s.hub.store.path(), BOT, Platform::Fake);
+        assert!(path.exists());
+
+        s.hub.clear_token(BOT, Platform::Fake).unwrap();
+
+        assert!(!path.exists());
+        assert!(s.env.log.lock().unwrap().iter().any(|line| line.contains("token cancellato: 2 messaggi in coda scartati")));
+        // The authorized list stays: a late write of the old queue would come back with a new token. None does.
+        s.hub.set_token(BOT, Platform::Fake, TOKEN).unwrap();
+        s.hub.start(BOT, Platform::Fake, "C:/progetto").unwrap();
+        s.hub.unready();
+        s.hub.ready();
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        assert_eq!(s.env.messages.lock().unwrap().len(), 2, "a dropped message came back after a new token");
     }
 
     #[tokio::test]

@@ -232,6 +232,8 @@ pub mod fake {
         pub fail_sends: std::sync::atomic::AtomicBool,
         /// How many times `send` was called, failed or not.
         pub send_attempts: std::sync::atomic::AtomicUsize,
+        /// While set, `send` waits after it was called: a slow network, held by the test.
+        pub hold_sends: std::sync::atomic::AtomicBool,
     }
 
     pub type Feed = mpsc::UnboundedSender<Result<Vec<Inbound>, AdapterError>>;
@@ -252,6 +254,7 @@ pub mod fake {
                 waiting: std::sync::atomic::AtomicUsize::new(0),
                 fail_sends: std::sync::atomic::AtomicBool::new(false),
                 send_attempts: std::sync::atomic::AtomicUsize::new(0),
+                hold_sends: std::sync::atomic::AtomicBool::new(false),
             };
             (std::sync::Arc::new(adapter), tx)
         }
@@ -272,6 +275,9 @@ pub mod fake {
         }
         async fn send(&self, chat: &str, text: &str) -> Result<String, AdapterError> {
             self.send_attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            while self.hold_sends.load(std::sync::atomic::Ordering::SeqCst) {
+                tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+            }
             if self.fail_sends.load(std::sync::atomic::Ordering::SeqCst) {
                 return Err(AdapterError::Transient("rete giù".into()));
             }
