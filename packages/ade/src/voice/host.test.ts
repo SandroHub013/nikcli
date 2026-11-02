@@ -757,6 +757,16 @@ describe("createAdeVoiceHost", () => {
     expect(currentWb().panes[0].browserUrl).toBe("http://localhost:5173")
   })
 
+  // MOD-1: «apri localhost 5173» with a Claude pane focused turned the agent's terminal into a browser.
+  test("browserNavigate leaves a session's pane a session", () => {
+    const { deps, currentWb } = createMockDeps()
+    deps.setWb((w) => ({ ...w, panes: [makePane({ id: "p1", title: "Claude", agent: "claude-code" })] }))
+    const host = createAdeVoiceHost(deps)
+
+    expect(host.browserNavigate("p1", "http://localhost:5173")).toBe(false)
+    expect(currentWb().panes[0].browserUrl).toBeUndefined()
+  })
+
   test("listPanes carries the agent of a session, so the planner can tell «Mimo» from «Dario»", () => {
     const { deps } = createMockDeps()
     deps.setWb((w) => ({

@@ -420,25 +420,39 @@ export async function dispatch(
 
       case "browser.navigate": {
         const panes = host.listPanes()
+        const browsers = panes.filter((p) => p.isBrowser)
         const hasExplicitPane =
           slots.paneIndex !== undefined || slots.paneTitle !== undefined || slots.paneId !== undefined
-        const candidatePanes =
-          hasExplicitPane || panes.filter((p) => p.isBrowser).length === 0 ? panes : panes.filter((p) => p.isBrowser)
-        const resolved = resolveTargetPane(slots, candidatePanes, ctx.focusedPaneId, isDestructive, lang)
-        if (resolved.error) {
-          return { success: false, spoken: resolved.error, error: "pane_not_found" }
-        }
         const url = slots.url || "http://localhost:3000"
-        if (host.browserNavigate(resolved.pane!.id, url) === false) {
+        const notFound = {
+          success: false,
+          spoken:
+            lang === "en" ? "Could not find browser panel to navigate." : "Non ho trovato il pannello browser da far navigare.",
+          error: "pane_not_found",
+        } as const
+        /*
+         * Only a browser is navigated (audit MOD-1). With none open, or a pane named that is not one, a new browser
+         * opens: a session's pane given an address turned into a browser, its agent gone from the sessions and from
+         * the restored workspace.
+         */
+        let target: PaneSummary | undefined
+        if (hasExplicitPane || browsers.length > 0) {
+          const resolved = resolveTargetPane(slots, hasExplicitPane ? panes : browsers, ctx.focusedPaneId, isDestructive, lang)
+          if (resolved.error) {
+            return { success: false, spoken: resolved.error, error: "pane_not_found" }
+          }
+          if (resolved.pane!.isBrowser) target = resolved.pane!
+        }
+        if (!target) {
+          await host.runCommand("browser.new")
+          target = host.listPanes().find((p) => p.isBrowser && !panes.some((before) => before.id === p.id))
+          if (!target || host.browserNavigate(target.id, url) === false) return notFound
           return {
-            success: false,
-            spoken:
-              lang === "en"
-                ? "Could not find browser panel to navigate."
-                : "Non ho trovato il pannello browser da far navigare.",
-            error: "pane_not_found",
+            success: true,
+            spoken: lang === "en" ? `New browser opened on ${url}.` : `Nuovo browser aperto su ${url}.`,
           }
         }
+        if (host.browserNavigate(target.id, url) === false) return notFound
         return {
           success: true,
           spoken: lang === "en" ? `Browser navigated to ${url}.` : `Browser navigato verso ${url}.`,

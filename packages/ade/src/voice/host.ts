@@ -418,7 +418,8 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
     },
 
     browserNavigate(paneId: string, url: string): boolean {
-      if (!deps.wb().panes.some((pane) => pane.id === paneId)) return false
+      // A browser only: an address given to a session's pane made it one, its agent gone from the sessions (MOD-1).
+      if (!deps.wb().panes.some((pane) => pane.id === paneId && pane.browserUrl)) return false
       deps.setWb((w) => updatePane(w, paneId, { browserUrl: url }))
       return true
     },
