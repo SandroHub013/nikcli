@@ -272,6 +272,12 @@ export interface VoiceSettings {
    * it speaks a brief announcement and opens a single 6-8s response window.
    */
   readonly spokenAlerts: boolean
+  /**
+   * After a permission alert, listen for a spoken answer: opens the microphone for 8 seconds and transcribes it, through
+   * the paid backend. Off by default and offered only with `spokenAlerts` on (audit MOD-16, the user's rule of
+   * 2026-11-02: paid voice does not start by itself). A profile saved before it existed has no such field and reads off.
+   */
+  readonly alertsListen: boolean
   /** Which voice reads them; see `REPLY_VOICES`. */
   readonly replyVoice: ReplyVoice
   /**
@@ -390,6 +396,7 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = Object.freeze({
   customWords: Object.freeze([]),
   speakReplies: true,
   spokenAlerts: false,
+  alertsListen: false,
   /*
    * Local, never the paid MAI voice (audit MOD-9, the user's decision of 2026-11-02): a new profile reads aloud with
    * Ugo, which is Piper's voice, and while Piper's pack is not installed the system voice reads in its place, so
@@ -856,6 +863,7 @@ export function normalizeSettings(
   } else if (candidate.speakReplies !== undefined) {
     corrections.push(t("vui.fix.speakReplies"))
   }
+  const alertsListen = candidate.alertsListen === true
   let spokenAlerts = DEFAULT_VOICE_SETTINGS.spokenAlerts
   if (typeof candidate.spokenAlerts === "boolean") {
     spokenAlerts = candidate.spokenAlerts
@@ -1028,6 +1036,7 @@ export function normalizeSettings(
     customWords,
     speakReplies,
     spokenAlerts,
+    alertsListen,
     replyVoice,
     replyBackend,
     ...(replyVoiceOffer ? { replyVoiceOffer } : {}),

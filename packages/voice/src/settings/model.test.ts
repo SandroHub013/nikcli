@@ -557,3 +557,12 @@ describe("the agent's speed", () => {
     expect(odd.corrections).toEqual([expect.stringContaining("lampo")])
   })
 })
+
+describe("listening for an answer after an alert (MOD-16)", () => {
+  test("is off by default, off for a profile saved with alerts on that never had it, and kept when chosen", () => {
+    expect(DEFAULT_VOICE_SETTINGS.alertsListen).toBe(false)
+    expect(normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, spokenAlerts: true, alertsListen: undefined } as never).settings.alertsListen).toBe(false)
+    expect(normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, spokenAlerts: true, alertsListen: "yes" } as never).settings.alertsListen).toBe(false)
+    expect(normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, spokenAlerts: true, alertsListen: true }).settings.alertsListen).toBe(true)
+  })
+})

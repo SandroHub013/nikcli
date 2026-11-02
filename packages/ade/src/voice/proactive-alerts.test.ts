@@ -57,6 +57,7 @@ describe("proactive-alerts", () => {
       speak: async (text) => {
         spoken.push(text)
       },
+      listensForAnswer: () => true,
       openResponseWindow: async (opts) => {
         windows.push(opts)
       },
@@ -80,6 +81,25 @@ describe("proactive-alerts", () => {
       durationMs: RESPONSE_WINDOW_MS,
       permission: { paneId: "p1", what: raw, kind: "shell" },
     })
+  })
+
+  test("a permission alert never opens the microphone unless listening for an answer is on (MOD-16)", async () => {
+    for (const listens of [undefined, () => false]) {
+      const windows: any[] = []
+      const spoken: string[] = []
+      const alerts = createProactiveAlerts({
+        now: () => 1000,
+        isLocked: async () => false,
+        isEnabled: () => true,
+        ...(listens ? { listensForAnswer: listens } : {}),
+        speak: async (text) => void spoken.push(text),
+        openResponseWindow: async (opts) => void windows.push(opts),
+      })
+      alerts.notifyPermission("p1", "Prova-voce", "ls", "shell")
+      await new Promise((r) => setTimeout(r, 20))
+      expect(spoken).toHaveLength(1)
+      expect(windows).toHaveLength(0)
+    }
   })
 
   test("an invalid runtime kind falls back to a generic action", async () => {

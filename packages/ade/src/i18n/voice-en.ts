@@ -149,6 +149,12 @@ export const voiceEn: VoiceMessages = {
   "vui.replies.silent.desc": "You read the answer in the panel",
   "vui.alerts.title": "Proactive voice alerts",
   "vui.alerts.on": "On",
+  "vui.alertsListen.title": "Listening for an answer after a permission alert",
+  "vui.alertsListen.on": "Listen",
+  "vui.alertsListen.on.desc":
+    "After a permission alert it opens the microphone for 8 seconds and transcribes the answer with the paid service (OpenRouter or xAI): up to 15 times an hour",
+  "vui.alertsListen.off": "Don't listen",
+  "vui.alertsListen.off.desc": "The permission is settled with the keyboard or the voice key (default)",
   "vui.alerts.on.desc": "Announces permissions, completions, and decisions",
   "vui.alerts.off": "Off",
   "vui.alerts.off.desc": "No proactive voice alerts (default)",

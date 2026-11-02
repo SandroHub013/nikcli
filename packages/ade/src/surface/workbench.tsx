@@ -6424,6 +6424,7 @@ export function Workbench() {
     now: () => Date.now(),
     isLocked: isScreenLocked,
     isEnabled: () => voiceSettings().spokenAlerts === true,
+    listensForAnswer: () => voiceSettings().alertsListen === true,
     isBusy: () => voiceEngine.isBusy(),
     speak: async (text) => {
       await speaker.speak(text)
