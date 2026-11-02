@@ -522,8 +522,12 @@ fn is_launcher_colour_switch(key: &str) -> bool {
  *
  * A page that never answers (a reload in progress, a listener that is gone) must not freeze the pane for ever, so a
  * wait that sees no acknowledgement for `FLOW_STALL` forgets the debt and goes on, as it did before this existed.
+ *
+ * The high water mark is also how far behind a key can fall. Events reach the page in order, so the echo of a key in
+ * another pane waits behind everything this one has in flight: a median of 172 ms at 4 MiB and 140 ms at 1 MiB, with
+ * a maximum of 326 ms and 198 ms, against 32 ms at rest.
  */
-const FLOW_HIGH_WATER: usize = 4 * 1024 * 1024;
+const FLOW_HIGH_WATER: usize = 1024 * 1024;
 const FLOW_STALL: Duration = Duration::from_secs(5);
 /// How many reads may wait between the reader and the sender (each is at most 8 KB): about a megabyte.
 const CHUNK_QUEUE: usize = 128;

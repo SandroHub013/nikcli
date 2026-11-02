@@ -35,7 +35,7 @@ export function deliverChunk(
   if (!deferred) written()
 }
 
-/** Acknowledgements are sent in batches of at least this many bytes: far under the host's 4 MiB high water mark. */
+/** Acknowledgements are sent in batches of at least this many bytes: well under the host's 1 MiB high water mark. */
 export const ACK_BATCH_BYTES = 256 * 1024
 
 /** Adds up what the terminal has written and calls `send` once there is a batch of it. */
