@@ -966,6 +966,7 @@ export function Workbench() {
   const [notice, setNotice] = createSignal<string>()
   // What the strip is showing: an error is announced as an alert, the rest are read in turn.
   const [noticeKind, setNoticeKind] = createSignal<NoticeKind>("error")
+  const noticeRole = (): "alert" | "status" => (noticeKind() === "error" ? "alert" : "status")
   // Where the last answer of a sheet went, once the sheet is gone (`surface/toast.ts`).
   const toast = createToast()
 
@@ -10794,7 +10795,7 @@ export function Workbench() {
               // Keyed on the role: a role changed on a live element is not reliably announced, so going from an info to
               // an error re-creates the strip and the reader hears the alert inserted. Not keyed on the text: info after
               // info must still be read.
-              <Show when={noticeKind() === "error" ? "alert" : "status"} keyed>
+              <Show when={noticeRole()} keyed>
                 {(role) => (
                   <div data-slot="ade-notice" role={role}>
                     <span data-slot="ade-notice-text">{text()}</span>

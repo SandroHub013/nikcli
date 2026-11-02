@@ -46,7 +46,8 @@ describe("the bell", () => {
     // reliably announced, so an info that turns into an error would be heard as nothing. Keyed on the role and not on
     // the text, because a status inserted with its content is often silent, and info after info must still be read.
     const before = source.slice(source.lastIndexOf("<Show", at), at)
-    expect(before).toContain('when={noticeKind() === "error" ? "alert" : "status"}')
+    expect(before).toContain("when={noticeRole()}")
+    expect(source).toContain('const noticeRole = (): "alert" | "status" => (noticeKind() === "error" ? "alert" : "status")')
     expect(before).toContain("keyed")
   })
 
