@@ -2828,19 +2828,25 @@ pub fn run() {
          */
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
-                use tauri::Manager;
-                app.state::<gateway::Gateway>().shutdown();
-                // Open transcription sockets end with the app, not at the server's timeout.
-                app.state::<stt_stream::Sessions>().close_all();
-                app.state::<serve::Server>().shutdown();
-                app.state::<frontend::DevServer>().shutdown();
-                app.state::<pty::Registry>().end_all();
-                // The resident voice hosts, killed and not left to notice the
-                // closed pipe: 219 MB of Kokoro and a Piper process do not wait for
-                // the EOF of a stdin nobody writes to again.
-                app.state::<tts::KokoroState>().stop();
+                end_everything(app);
             }
         });
+}
+
+/// What ADE ends on its way out: on `RunEvent::Exit`, and before an update's installer takes over (`update.rs`), where
+/// the updater's `exit(0)` means that event never comes.
+pub(crate) fn end_everything(app: &tauri::AppHandle) {
+    use tauri::Manager;
+    app.state::<gateway::Gateway>().shutdown();
+    // Open transcription sockets end with the app, not at the server's timeout.
+    app.state::<stt_stream::Sessions>().close_all();
+    app.state::<serve::Server>().shutdown();
+    app.state::<frontend::DevServer>().shutdown();
+    app.state::<pty::Registry>().end_all();
+    // The resident voice hosts, killed and not left to notice the
+    // closed pipe: 219 MB of Kokoro and a Piper process do not wait for
+    // the EOF of a stdin nobody writes to again.
+    app.state::<tts::KokoroState>().stop();
 }
 
 #[cfg(test)]

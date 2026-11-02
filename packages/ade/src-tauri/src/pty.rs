@@ -123,6 +123,11 @@ impl Registry {
         sessions.drain().map(|(_, session)| session).collect()
     }
 
+    /// The ids of the sessions running now.
+    pub fn ids(&self) -> Vec<String> {
+        self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).keys().cloned().collect()
+    }
+
     /*
      * Ends every session: for when the page that started them is gone.
      *
@@ -190,6 +195,14 @@ struct Chunk {
 struct Exit {
     id: String,
     code: Option<i32>,
+}
+
+/// Tells the page that these sessions have ended. Only for sessions ended behind its back: `Registry::end_all` says
+/// nothing, because it runs when the page is gone, or about to be.
+pub fn say_ended(app: &AppHandle, ids: Vec<String>) {
+    for id in ids {
+        let _ = app.emit("pty:exit", Exit { id, code: None });
+    }
 }
 
 /*

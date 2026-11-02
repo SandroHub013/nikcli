@@ -82,8 +82,28 @@ pub async fn ade_update_install(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(refusal) = install_refused(&app.config().identifier, cfg!(debug_assertions)) {
         return Err(refusal);
     }
+    use tauri::Manager;
     use tauri_plugin_updater::UpdaterExt;
-    let updater = app.updater().map_err(|e| e.to_string())?;
+    /*
+     * On Windows the plugin launches the setup and calls `exit(0)`, so `RunEvent::Exit` never comes: the agents' trees
+     * ran on headless, beside the new ADE (RS-3). The plugin runs this hook right before the setup. It replaces the
+     * plugin's own default, which is the `cleanup_before_exit` below. Elsewhere the hook does not run, and `restart`
+     * from this worker goes through `RunEvent::Exit`.
+     */
+    let ended_panes = std::sync::Arc::new(std::sync::Mutex::new(None::<Vec<String>>));
+    let updater = {
+        let (app, ended) = (app.clone(), ended_panes.clone());
+        app.clone()
+            .updater_builder()
+            .on_before_exit(move || {
+                let panes = app.state::<crate::pty::Registry>().ids();
+                *ended.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(panes);
+                crate::end_everything(&app);
+                app.cleanup_before_exit();
+            })
+            .build()
+            .map_err(|e| e.to_string())?
+    };
     let update = within(CHECK_AFTER, async { updater.check().await.map_err(|e| e.to_string()) })
         .await?
         .ok_or_else(|| "nessun aggiornamento installabile per questa piattaforma".to_string())?;
@@ -149,7 +169,19 @@ pub async fn ade_update_install(app: tauri::AppHandle) -> Result<(), String> {
     // Dropping the download future closes its connection: a download given
     // up here cannot finish later and run the installer unasked.
     tokio::select! {
-        result = download => result.map_err(|e| e.to_string())?,
+        result = download => {
+            if let Err(error) = result {
+                let ended = ended_panes.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take();
+                return Err(match ended {
+                    None => error.to_string(),
+                    // The setup refused to start after the hook ran (a blocked file, a refused UAC prompt).
+                    Some(panes) => {
+                        crate::pty::say_ended(&app, panes);
+                        format!("Il setup non è partito ({error}). Le sessioni sono già state chiuse: riapri ADE per riprenderle.")
+                    }
+                });
+            }
+        }
         (waited, started) = stalled => {
             return Err(if started {
                 format!("nessun dato ricevuto per {waited} secondi")
@@ -387,5 +419,31 @@ mod tests {
         let setup = &source[source.find(".setup(|app| {").unwrap()..];
         let setup = &setup[..setup.find("open_main_window(app.handle())").unwrap()];
         assert!(setup.contains("update::sweep_leftovers(app.handle())"));
+    }
+
+    /*
+     * RS-3. The plugin's `exit(0)` cannot run in a test, and neither can a window. What can be held still is the wiring:
+     * the install goes through a builder with our hook, the hook runs the very cleanup of `RunEvent::Exit`, and it
+     * keeps the plugin's own default, which it replaces.
+     */
+    #[test]
+    fn an_update_ends_what_an_exit_ends_before_the_setup_takes_over() {
+        let source = include_str!("update.rs");
+        let install = &source[source.find("pub async fn ade_update_install").unwrap()..];
+        let install = &install[..install.find("#[cfg(test)]").unwrap()];
+        assert!(!install.contains("app.updater()"), "the plugin's default hook only cleans up the tray");
+        let hook = &install[install.find(".on_before_exit(").expect("the hook")..];
+        let hook = &hook[..hook.find(".build()").expect("the builder")];
+        assert!(hook.contains("crate::end_everything(&app)"));
+        assert!(hook.contains("app.cleanup_before_exit()"));
+
+        let lib = include_str!("lib.rs");
+        let exit = &lib[lib.find("tauri::RunEvent::Exit = event").unwrap()..];
+        assert!(exit[..exit.find('}').unwrap()].contains("end_everything(app)"));
+        let cleanup = &lib[lib.find("pub(crate) fn end_everything").unwrap()..];
+        let cleanup = &cleanup[..cleanup.find("\n}\n").unwrap()];
+        for step in ["gateway::Gateway", "stt_stream::Sessions", "serve::Server", "pty::Registry", "tts::KokoroState"] {
+            assert!(cleanup.contains(step), "the cleanup lost {step}");
+        }
     }
 }
