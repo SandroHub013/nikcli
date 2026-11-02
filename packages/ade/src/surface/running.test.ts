@@ -338,7 +338,7 @@ describe("mail held by a line", () => {
   test("the pane tells its user once, and says it again only after the line has gone", () => {
     expect(source).toContain(codeOf("tellPane(target.pane.id, t(\"note.mailHeldByLine\"))"))
     expect(source).toContain(codeOf("if (byLine && !heldByLineNoted.has(target.pane.id)) {"))
-    expect(source).toContain(codeOf("heldStates.delete(id)\n    heldByLineNoted.delete(target.pane.id)"))
+    expect(source).toContain(codeOf("heldStates.delete(id)\n    if (heldByLineNoted.delete(target.pane.id)) {"))
     expect(source).toContain(codeOf("startRefusals.delete(id)\n    heldByLineNoted.delete(id)"))
   })
 
@@ -347,5 +347,12 @@ describe("mail held by a line", () => {
     const cut = body.slice(0, body.indexOf(codeOf("void closeSuspendedTree(old)")))
     expect(cut).toContain(codeOf("running.delete(pane.id)\n      // "))
     expect(cut).toContain(codeOf("records.typed.forget(pane.id)"))
+  })
+
+  // Re-review N12: the note stayed over the terminal after the message had come.
+  test("the note goes when the line has gone and the mail is delivered", () => {
+    const cleared = source.slice(source.indexOf(codeOf("if (heldByLineNoted.delete(target.pane.id)) {")))
+    expect(cleared.slice(0, 500)).toContain(codeOf('t("note.mailHeldByLine")'))
+    expect(cleared.slice(0, 500)).toContain("notices")
   })
 })

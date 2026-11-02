@@ -3382,11 +3382,6 @@ export function Workbench() {
     isQuestionOpen(permissions()[paneId], activityOf.get(paneId)) || modeTracker.heldOpen(paneId) || screenAsks(paneId)
 
   /*
-   * A menu drawn with the cursor (codex, OpenCode, ragu without its plugin, a trust dialog), which the line stream
-   * never sees whole: read off the pane's screen whenever typing is weighed (`session/screen-question.ts`, SES-3). It
-   * holds the Enter; it is not offered to the voice to answer, its keys are arrows.
-   */
-  /*
    * Whether a key typed now is the answer to a menu: for `typedAfter`, which then does not count the first key as a draft.
    * Narrower than `questionOpen`, which holds mail: the hook's `permission` stays in the file until the turn ends (the
    * hook writes nothing at the answer), so it counts only while the pane is still `waiting`, which the first key
@@ -3398,6 +3393,11 @@ export function Workbench() {
     return byHook || modeTracker.heldOpen(paneId) || screenAsks(paneId)
   }
 
+  /*
+   * A menu drawn with the cursor (codex, OpenCode, ragu without its plugin, a trust dialog), which the line stream
+   * never sees whole: read off the pane's screen whenever typing is weighed (`session/screen-question.ts`, SES-3). It
+   * holds the Enter; it is not offered to the voice to answer, its keys are arrows.
+   */
   const screenAsks = (paneId: string) => {
     if (!running.has(paneId) || !hasTerminal(paneId)) return false
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
@@ -5361,7 +5361,14 @@ export function Workbench() {
       return false
     }
     heldStates.delete(id)
-    heldByLineNoted.delete(target.pane.id)
+    if (heldByLineNoted.delete(target.pane.id)) {
+      // The line has gone and the mail is on its way: the note about it goes too (re-review N12).
+      const note = t("note.mailHeldByLine")
+      setWb((w) => {
+        const pane = w.panes.find((candidate) => candidate.id === target.pane.id)
+        return pane?.notices?.includes(note) ? updatePane(w, pane.id, { notices: pane.notices.filter((n) => n !== note) }) : w
+      })
+    }
 
     const targetDepth = depthOf(target.pane.id, parentOf)
     const context = {

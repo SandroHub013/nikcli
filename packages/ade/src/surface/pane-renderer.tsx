@@ -12,7 +12,7 @@ import { PluginPane } from "../plugin/pane"
 import type { AdePluginRuntime } from "../plugin/runtime"
 import { AgentMark } from "../session-new/agent-mark"
 import { formatCost, formatTokens } from "../session/metrics"
-import { isAnswerKey, typedAfter } from "../session/typed-line"
+import { isAnswerKey, isTyping, typedAfter } from "../session/typed-line"
 import { answersPrompt, isInterruptInput } from "../session/mailbox"
 import { showsSuspendButton, SUSPEND_REASON, type SuspendCheck } from "../session/suspend"
 import { formatDroppedPaths } from "../sidebar/file-drag"
@@ -507,7 +507,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
            * never asks what is running: see `session/typing.ts`.
            */
           // Asked before the key is written: a key that answers a menu on screen is not a line begun (F2).
-          const menuOpen = isAnswerKey(data) && deps.menuOpen(current().id)
+          const menuOpen = isAnswerKey(data) && !isTyping(deps.records.typed.get(current().id)) && deps.menuOpen(current().id)
           deps.records.typed.update(current().id, (line) => typedAfter(line, data, Date.now(), menuOpen))
           // Enter typed straight into the terminal submits a turn, exactly as
           // the composer does; the quiet timer brings the pane back to idle.

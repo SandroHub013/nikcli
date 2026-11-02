@@ -395,8 +395,9 @@ function list(): void {
     .map((line) => line.slice("worktree ".length))
   let found = 0
   for (const tree of trees) {
-    const target = planTestApp({ root: tree, branch: "", env: process.env })
-    const record = readRecord(target.recordPath)
+    const own = planTestApp({ root: tree, branch: "", env: process.env })
+    const record = readRecord(own.recordPath)
+    const target = planOfRecord(own, record)
     if (!instanceRunning(instanceProcesses(rows, target, tree, record?.port), target, tree)) continue
     found++
     console.log((record ? describe(record) : `  ${target.name}`) + "\n")

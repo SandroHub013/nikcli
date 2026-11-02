@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { describe, expect, test } from "bun:test"
 import {
   TEST_APP_CLOSE_TIMEOUT_MS,
@@ -246,4 +247,11 @@ describe("host/test-app start and stop", () => {
     expect(killed).toEqual([])
     expect(removed).toBe(false)
   })
+})
+
+// Re-review N13: `list` took the plan of its own shell's environment, so an instance built into a shared folder was not found.
+test("list reads each instance's build folder from its record", () => {
+  const script = readFileSync(new URL("../../scripts/test-app.ts", import.meta.url), "utf8")
+  const list = script.slice(script.indexOf("const own = planTestApp({ root: tree"))
+  expect(list.slice(0, 600)).toContain("planOfRecord(own, record)")
 })
