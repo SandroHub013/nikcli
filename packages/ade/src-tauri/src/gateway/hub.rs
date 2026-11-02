@@ -1541,16 +1541,16 @@ impl Task {
                     // A gateway switched off while the batch is in hand delivers no more of it (B1): the rest
                     // is counted as left behind, like a batch that was stopped on its way in.
                     let mut batch = batch.into_iter();
-                    let mut switched_off = false;
                     while let Some(message) = batch.next() {
                         if *stopped.borrow() {
                             left_behind = 1 + batch.len();
-                            switched_off = true;
                             break;
                         }
                         self.deliver(message).await;
                     }
-                    if switched_off {
+                    // Also when the stop came during the last message: `deliver` may have dropped it, and the
+                    // position must not be saved past it (R2-1).
+                    if *stopped.borrow() {
                         break;
                     }
                     if self.pending.lock().unwrap().iter().all(|entry| entry.acked) {
