@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process"
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { describe, expect, test } from "bun:test"
@@ -41,7 +41,10 @@ function flagsOf(args: string[]): Promise<string> {
     let out = ""
     child.stdout.on("data", (data) => (out += String(data)))
     child.on("error", reject)
-    child.on("close", () => resolve(out.trim()))
+    child.on("close", () => {
+      rmSync(dir, { recursive: true, force: true })
+      resolve(out.trim())
+    })
   })
 }
 
