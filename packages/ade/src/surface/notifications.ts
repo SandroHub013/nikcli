@@ -36,6 +36,8 @@ export interface Notice {
   readonly approval?: string
   /** The gateway attention this notice is about; goes when the link no longer requires attention. */
   readonly gatewayAttention?: string
+  /** The unreadable copy of the saved sessions that can be read now: the bell offers to put it back. */
+  readonly restore?: string
   readonly at: number
   readonly read: boolean
 }
@@ -69,6 +71,7 @@ export interface NoticeInput {
   readonly platform?: string
   readonly approval?: string
   readonly gatewayAttention?: string
+  readonly restore?: string
   readonly at: number
 }
 
@@ -110,6 +113,7 @@ export function addNotice(list: readonly Notice[], input: NoticeInput): Notice[]
     ...(input.platform !== undefined ? { platform: input.platform } : {}),
     ...(input.approval !== undefined ? { approval: input.approval } : {}),
     ...(input.gatewayAttention !== undefined ? { gatewayAttention: input.gatewayAttention } : {}),
+    ...(input.restore !== undefined ? { restore: input.restore } : {}),
     at: input.at,
     read: false,
   }

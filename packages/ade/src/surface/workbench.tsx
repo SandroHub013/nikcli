@@ -58,7 +58,8 @@ import {
 } from "../record/prefs"
 import { syncOpenRouterKey } from "../host/openrouter-key-sync"
 import { createSttStreamTransport } from "../host/stt-stream"
-import { serializeWorkspace, parseWorkspace, type WorkspaceState } from "../session/persist"
+import { serializeWorkspace, type WorkspaceState } from "../session/persist"
+import { ignoreRestore, readSavedWorkspace, restorableCopy, restoreCopy, retryUnreadableCopy } from "../session/unreadable"
 import { DEFAULT_BINDINGS, FROM_TERMINALS, NOT_FROM_TEXT_FIELDS, resolveDefaultBindings } from "../keyboard/bindings"
 import { formatChord, parseChord } from "../keyboard/keymap"
 import { CommandPalette } from "../command/palette"
@@ -932,6 +933,8 @@ export function Workbench() {
    */
   const [notices, setNotices] = createSignal<Notice[]>([])
   const [noticesOpen, setNoticesOpen] = createSignal(false)
+  // The copy of the saved sessions whose «Ripristina» is waiting for the user's yes.
+  const [restoreAsking, setRestoreAsking] = createSignal<string>()
   const [newPaneOpen, setNewPaneOpen] = createSignal(false)
   // The buttons the two menus give the focus back to on Esc (`bindMenu`).
   let newPaneButton: HTMLButtonElement | undefined
@@ -941,6 +944,25 @@ export function Workbench() {
   const report = (text: string, kind: NoticeKind = "error", paneId?: string) => {
     setNotice(text)
     setNotices((list) => addNotice(list, { kind, text, at: Date.now(), ...(paneId ? { paneId } : {}) }))
+  }
+  /** The kept copy of the saved sessions put back as the workspace, and the page reloaded to read it. After the user's yes only. */
+  const restoreSessions = (copyKey: string) => {
+    setRestoreAsking(undefined)
+    // The browser's «leave this page?» no longer appears on this path (it would come after the data changed), so what it
+    // protected is checked here: a file with unsaved changes would be lost with the reload.
+    if (Object.values(buffers()).some((buffer) => buffer.dirty)) {
+      report(t("workspace.restore.saveFirst"))
+      return
+    }
+    // Nothing may write the current workbench over it, on the way out either (`pagehide`).
+    workspaceRestoring = true
+    persistMail()
+    if (!restoreCopy(localStorage, copyKey)) {
+      workspaceRestoring = false
+      report(t("workspace.restore.failed"))
+      return
+    }
+    window.location.reload()
   }
   /*
    * A bot waits for the user (the user's choice 4): a line in the bell for each new request, gone when the request is
@@ -3751,6 +3773,8 @@ export function Workbench() {
     take: mailPart((host) => takeMail(host)),
     move: mailPart((host) => moveMail(host)),
     watch: mailPart((host) => watchMail(host)),
+    // Stops the timer and the native signal alike while an update installs.
+    paused: () => updating(),
     onStuck: (part, afterMs) => {
       console.error(`ADE: la posta (${part}) non ha finito in ${afterMs} ms`)
       report(t("mail.stepStuck"))
@@ -5479,6 +5503,8 @@ export function Workbench() {
     setUpdateProgress(undefined)
     setUpdating(true)
     autosave.flush()
+    // The mail waiting for a session is lost with the process otherwise.
+    persistMail()
     // localStorage reaches WebView2's disk store a moment after setItem.
     await new Promise((resolve) => setTimeout(resolve, 1500))
     try {
@@ -6607,6 +6633,13 @@ export function Workbench() {
     void pluginRuntime.dispose()
   })
 
+  // True while the saved workspace could not be read and has no copy: the autosave leaves it alone (`session/unreadable.ts`).
+  let workspaceSaveBlocked = false
+  // A restore of the kept copy is under way: nothing may write over it before the page reloads.
+  let workspaceRestoring = false
+  // The full-storage notice is said once until a save works again.
+  let saveFailedTold = false
+
   // Load recents and workspace on mount
   onMount(async () => {
     const startedAt = Date.now()
@@ -6634,16 +6667,26 @@ export function Workbench() {
     setBooting(t("boot.restore"))
 
     // Load workspace
-    const savedWs = localStorage.getItem("ade.workspace")
+    // A save that does not parse is copied aside before the autosave can write (`session/unreadable.ts`).
+    const savedWorkspace = readSavedWorkspace(localStorage, Date.now())
     let restored: WorkspaceState | undefined
-    if (savedWs) {
-      const state = parseWorkspace(savedWs)
-      if (state) {
-        restored = state
-        setWb(fromWorkspaceState(state))
-        // The suspended sessions' queues, now that their panes are back (P1-C6).
-        // Also for a pane resumed just before ADE closed: its mail waits for the session to start again.
-        heldLines.push(...parseSuspendedMail(readStored(SUSPENDED_MAIL_KEY)).filter((line) => paneExists(line.paneId)))
+    if (savedWorkspace.state) {
+      restored = savedWorkspace.state
+      setWb(fromWorkspaceState(savedWorkspace.state))
+      // The suspended sessions' queues, now that their panes are back (P1-C6).
+      // Also for a pane resumed just before ADE closed: its mail waits for the session to start again.
+      heldLines.push(...parseSuspendedMail(readStored(SUSPENDED_MAIL_KEY)).filter((line) => paneExists(line.paneId)))
+    }
+    if (savedWorkspace.unreadable) {
+      workspaceSaveBlocked = savedWorkspace.saveBlocked
+      report(t(savedWorkspace.saveBlocked ? "workspace.unreadableNoCopy" : "workspace.unreadable"), "warning")
+    } else {
+      // A copy kept by an older build that this one reads: offered back, never put back by itself.
+      const copy = restorableCopy(localStorage)
+      if (copy) {
+        setNotices((list) =>
+          addNotice(list, { kind: "info", text: t("workspace.restore.offer"), restore: copy.key, at: Date.now() }),
+        )
       }
     }
     // The messages held for a busy session when ADE closed, and the lines held for one that was running (`restoreMail`).
@@ -6767,11 +6810,27 @@ export function Workbench() {
     // because a store is tracked per property and the save cares about all of
     // them.
     changed: revision,
-    write: () =>
+    write: () => {
+      if (workspaceRestoring) return
+      // The save that could not be read has no copy: it is tried again, and stays as it is until it has one.
+      if (workspaceSaveBlocked) {
+        if (!retryUnreadableCopy(localStorage, Date.now())) return
+        workspaceSaveBlocked = false
+      }
       // Unwrapped: serialising walks every pane and every line, and doing that
       // through the store's proxy would subscribe whatever happens to be
       // tracking to the entire workbench.
-      localStorage.setItem("ade.workspace", serializeWorkspace(toWorkspaceState(unwrap(wbStore)))),
+      try {
+        localStorage.setItem("ade.workspace", serializeWorkspace(toWorkspaceState(unwrap(wbStore))))
+        saveFailedTold = false
+      } catch {
+        // Full storage: said once. It must not escape (a timer or `pagehide` has nobody to catch it, and `runUpdate` would stop).
+        if (!saveFailedTold) {
+          saveFailedTold = true
+          report(t("workspace.saveFailed"))
+        }
+      }
+    },
   })
 
   // Keydown listener
@@ -6868,7 +6927,8 @@ export function Workbench() {
      * running agent (`mustConfirmLeaving`).
      */
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (closingConfirmed) return
+      // A restore asked its own question first; a second one would come after the saved sessions were put back.
+      if (closingConfirmed || workspaceRestoring) return
       const unsavedBuffers = Object.values(buffers()).filter((buffer) => buffer.dirty).length
       if (!mustConfirmLeaving({ unsavedBuffers, runningSessions: running.size })) return
       event.preventDefault()
@@ -9986,7 +10046,7 @@ export function Workbench() {
               notice={shotSource.notice()}
               load={shotSource.load}
               onDismiss={shotSource.dismiss}
-              onDelete={(path) => void shotSource.remove(path)}
+              onDelete={shotSource.remove}
             />
           }
           /*
@@ -10157,6 +10217,39 @@ export function Workbench() {
                         {(notice) => (
                           <div data-slot="ade-notice-row" data-kind={notice.kind}>
                             <span data-slot="ade-notice-text">{notice.text}</span>
+                            <Show when={notice.restore}>
+                              {(copy) => (
+                                <Show
+                                  when={restoreAsking() === copy()}
+                                  fallback={
+                                    <>
+                                      <button type="button" data-slot="ade-notice-link" onClick={() => setRestoreAsking(copy())}>
+                                        {t("workspace.restore.action")}
+                                      </button>
+                                      {/* The offer is not made again for this copy; the copy itself stays. */}
+                                      <button
+                                        type="button"
+                                        data-slot="ade-notice-link"
+                                        onClick={() => {
+                                          ignoreRestore(localStorage, copy())
+                                          setNotices((list) => dismissNotice(list, notice.id))
+                                        }}
+                                      >
+                                        {t("workspace.restore.ignore")}
+                                      </button>
+                                    </>
+                                  }
+                                >
+                                  <span data-slot="ade-notice-text">{t("workspace.restore.confirm")}</span>
+                                  <button type="button" data-slot="ade-notice-link" onClick={() => restoreSessions(copy())}>
+                                    {t("workspace.restore.yes")}
+                                  </button>
+                                  <button type="button" data-slot="ade-notice-link" onClick={() => setRestoreAsking(undefined)}>
+                                    {t("workspace.restore.no")}
+                                  </button>
+                                </Show>
+                              )}
+                            </Show>
                             <Show when={notice.bot}>
                               {(bot) => (
                                 <button
