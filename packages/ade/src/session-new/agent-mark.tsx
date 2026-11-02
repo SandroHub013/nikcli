@@ -417,7 +417,7 @@ const MARKS: Record<string, (size: () => number, colored: () => boolean) => JSX.
         height="16"
         rx="2.4"
         fill={colored() ? "#0F172A" : "none"}
-        stroke={colored() ? "#334155" : "currentColor"}
+        stroke={colored() ? "light-dark(#334155, #94A3B8)" : "currentColor"}
         stroke-width="1.4"
       />
       {colored() && (

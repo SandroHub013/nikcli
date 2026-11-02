@@ -22,7 +22,8 @@
   /* Written by the component from the microphone amplitude, 0…1. */
   --orb-level: 0;
   --orb-ink: var(--ade-text, #111);
-  --orb-lit: var(--ade-bg, #fff);
+  /* `--ade-on-ink` first: in glass `--ade-bg` is transparent, and every lit part of the orb (the mark, the iris, the arcs) went with it. */
+  --orb-lit: var(--ade-on-ink, var(--ade-bg, #fff));
 
   position: relative;
   display: block;

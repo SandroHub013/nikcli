@@ -396,7 +396,7 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--ade-accent);
+  color: var(--ade-accent-text);
   font: inherit;
   cursor: pointer;
 }

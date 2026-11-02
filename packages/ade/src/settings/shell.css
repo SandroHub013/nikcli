@@ -91,7 +91,7 @@
 [data-slot="category-button"][data-active="true"] {
   background-color: var(--ade-raised);
   border-color: var(--ade-border);
-  color: var(--ade-accent);
+  color: var(--ade-accent-text);
   font-weight: var(--ade-weight-semibold);
   box-shadow: var(--ade-shadow-sm);
 }
@@ -201,7 +201,7 @@
 }
 
 [data-slot="settings-tab"][data-active="true"] {
-  color: var(--ade-accent);
+  color: var(--ade-accent-text);
   /* Not the accent: no accent contour without an accent fill (contorni.test.ts). */
   border-bottom-color: var(--ade-text);
   font-weight: var(--ade-weight-semibold);

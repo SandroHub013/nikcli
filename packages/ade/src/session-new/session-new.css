@@ -75,7 +75,7 @@
   padding: 1px var(--ade-space-3);
   border-radius: var(--ade-radius-sm);
   background: var(--ade-accent-soft);
-  color: var(--ade-accent);
+  color: var(--ade-accent-text);
   font-family: var(--ade-mono);
   font-size: var(--ade-font-sm);
 }
@@ -130,7 +130,9 @@
 
 [data-slot="new-launch-hint"] {
   font-family: var(--ade-mono);
-  opacity: 0.65;
+  /* 0.95, not 0.65: the dimmed ⏎ was 3.3 to 3.6:1 on the accent fill (live measure), and 0.9 was 4.35 on the hover fill
+     (--ade-accent-strong, dark and glass). At 0.95 it is 4.56 or more on both fills. */
+  opacity: 0.95;
 }
 
 /* ── refinements ───────────────────────────────────────────────────────────── */
@@ -309,13 +311,18 @@
 
 /* …and it is a way in, not a dead end: the card opens the panel that installs it. Dimmer than an installed
    agent, still clickable, and marked while its panel is open. */
-[data-slot="new-agent"][data-availability="assente"] {
+[data-slot="new-agent"][data-availability="assente"] [data-slot="new-agent-glyph"] {
   opacity: 0.6;
   filter: grayscale(0.35);
 }
 
-[data-slot="new-agent"][data-availability="assente"]:hover,
-[data-slot="new-agent"][data-installing] {
+/* The words are the soft text, not the strong text at 60%: that was 2.3 to 4.3:1 (live measure), and a card that opens a panel is not a disabled one. */
+[data-slot="new-agent"][data-availability="assente"] [data-slot="new-agent-label"] {
+  color: var(--ade-text-soft);
+}
+
+[data-slot="new-agent"][data-availability="assente"]:hover [data-slot="new-agent-glyph"],
+[data-slot="new-agent"][data-installing] [data-slot="new-agent-glyph"] {
   opacity: 1;
   filter: none;
 }
@@ -389,7 +396,7 @@
   padding: 1px 5px;
   border-radius: var(--ade-radius-full);
   background: var(--ade-active);
-  color: var(--ade-text-weak);
+  color: var(--ade-text-soft);
   font-family: var(--ade-mono);
   font-size: var(--ade-font-xs);
   line-height: 1.2;
@@ -607,7 +614,7 @@
   padding: 0 4px;
   border: 0;
   background: transparent;
-  color: var(--ade-accent);
+  color: var(--ade-accent-text);
   font: inherit;
   cursor: pointer;
   text-decoration: underline;
@@ -705,7 +712,7 @@
 }
 
 [data-slot="hook-state"][data-on="true"] {
-  color: var(--ade-accent);
+  color: var(--ade-accent-text);
 }
 
 /* Installed but not working is not the same as off, and must not look it. */
@@ -718,7 +725,7 @@
 }
 
 [data-slot="hook-details"] summary {
-  color: var(--ade-accent);
+  color: var(--ade-accent-text);
   font-size: var(--ade-font-xs);
   cursor: pointer;
   user-select: none;
