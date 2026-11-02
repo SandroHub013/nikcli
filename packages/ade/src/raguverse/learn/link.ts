@@ -5,7 +5,7 @@
  * `MessageChannel` port, offered once after it proved with the nonce that it is that page (`handshake.ts`). What travels on it is the
  * whole of what it is allowed to say, and there is very little:
  *
- * - **ADE → page:** `progress`, once, when the page says it is there.
+ * - **ADE → page:** `progress`, once, when the page says it is there, and `theme` whenever ADE's theme changes while it is open.
  * - **page → ADE:** `ready`, `learn-save` with the progress after an answer, and `close` when the learner leaves with Esc (the lesson
  *   is a layer over the world, and the page cannot close it itself).
  *
@@ -15,8 +15,8 @@
 
 import { parseProgress } from "./progress"
 
-/** ADE → page. */
-export type ToPage = { type: "progress"; progress: unknown }
+/** ADE → page: the progress, once, and the scheme whenever ADE's theme changes while the page is open. */
+export type ToPage = { type: "progress"; progress: unknown } | { type: "theme"; theme: "light" | "dark" }
 
 /** page → ADE, once read defensively: anything that is not one of these three shapes is nothing. */
 export type FromPage = { type: "ready" } | { type: "learn-save"; progress: unknown } | { type: "close" }
@@ -40,6 +40,8 @@ export function ignoredReason(data: unknown, extra?: string): string {
 export interface LearnLink {
   /** The page is there: it is given the progress, read now so the panel opens on what is on disk. */
   onReady: () => void
+  /** ADE's theme changed: the page open now wears it too, without being reloaded (it keeps the lesson it is on). */
+  theme: (theme: "light" | "dark") => void
   /** A message arrived on the port. */
   receive: (data: unknown) => void
   /** The port is gone with the frame: nothing said by the old document may speak for a new one. */
@@ -87,6 +89,9 @@ export function createLearnLink(deps: {
     deps.unreadable?.()
   }
   return {
+    theme(theme) {
+      send({ type: "theme", theme })
+    },
     onReady() {
       // Once: a `ready` replayed on a port that is already open must not read the file again.
       if (given || closed) return
