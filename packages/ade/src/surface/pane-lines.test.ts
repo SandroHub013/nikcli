@@ -177,7 +177,7 @@ describe("a flood's chunk, written to the transcript", () => {
 })
 
 /*
- * A chunk of `yes` is 85,000 lines, and the search for a question per line took 80% of the page's time on it: blocks of
+ * A chunk of `yes` is 85,000 lines, and the search for a question per line took 60% of the page's time on it: blocks of
  * 0.6 s, and a key in another pane took 0.8 s to appear (live test of 2026-11-02, E2).
  */
 describe("the search for a question in a chunk", () => {
