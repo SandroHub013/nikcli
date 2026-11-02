@@ -2,7 +2,7 @@ import type { JSX } from "solid-js"
 import "./empty-icon.css"
 
 /**
- * The neutral line icon an empty view carries (DS-17): 24 grid, 1.5 stroke, round ends, `currentColor`, so the
+ * The neutral line icon an empty view carries (DS-17), in the soft circle of the approved mock: 24 grid, 1.5 stroke, round ends, `currentColor`, so the
  * sheet decides its colour and size. One per view. The pixel pot is not here on purpose: it is for the screen
  * with no project (`surface/empty-project.tsx`), and anywhere else it would stop meaning «this is Ragu Code».
  *
@@ -26,19 +26,20 @@ export type EmptyIconName = keyof typeof EMPTY_ICONS
 
 export function EmptyIcon(props: { name: EmptyIconName }): JSX.Element {
   return (
-    <svg
-      data-slot="empty-icon"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.5"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      aria-hidden="true"
-    >
-      {EMPTY_ICONS[props.name].split(" M").map((part, index) => (
-        <path d={index === 0 ? part : `M${part}`} />
-      ))}
-    </svg>
+    <span data-slot="empty-icon" aria-hidden="true">
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        {EMPTY_ICONS[props.name].split(" M").map((part, index) => (
+          <path d={index === 0 ? part : `M${part}`} />
+        ))}
+      </svg>
+    </span>
   )
 }

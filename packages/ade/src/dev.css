@@ -1032,15 +1032,12 @@
   text-align: center;
 }
 
+/* The pixel pot at 40px (a multiple of its 16 grid), with no tile around it: the mock's first-start mark (DS-17). */
 [data-slot="empty-mark"] {
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: var(--ade-radius-lg);
-  background: var(--ade-surface);
-  border: 1px solid var(--ade-border);
-  color: var(--ade-text-weak);
+  width: 40px;
+  height: 40px;
 }
 
 [data-slot="empty-title"] {

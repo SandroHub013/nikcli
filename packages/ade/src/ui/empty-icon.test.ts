@@ -34,7 +34,8 @@ describe("EmptyIcon (DS-17)", () => {
       expect(svg.getAttribute("stroke")).toBe("currentColor")
       expect(svg.getAttribute("stroke-width")).toBe("1.5")
       expect(svg.getAttribute("fill")).toBe("none")
-      expect(container.querySelector('[data-slot="empty-icon"]')).not.toBeNull()
+      // The approved mock (DS-audit-vuoti/B): the icon sits in a soft circle, not bare.
+      expect(container.querySelector('[data-slot="empty-icon"] > svg')).toBe(svg)
     } finally {
       dispose()
       container.remove()
@@ -50,7 +51,11 @@ describe("EmptyIcon (DS-17)", () => {
   test("the sheet carries the colour and the size, not the markup", () => {
     const css = read("ui/empty-icon.css")
     expect(css).toMatch(/\[data-slot="empty-icon"\]\s*\{[^}]*color:\s*var\(--ade-text-weak\)/)
-    expect(css).toMatch(/\[data-slot="empty-icon"\]\s*\{[^}]*width:\s*24px/)
+    expect(css).toMatch(/\[data-slot="empty-icon"\]\s*\{[^}]*width:\s*44px/)
+    expect(css).toMatch(/\[data-slot="empty-icon"\]\s*\{[^}]*height:\s*44px/)
+    expect(css).toMatch(/\[data-slot="empty-icon"\]\s*\{[^}]*border-radius:\s*var\(--ade-radius-full\)/)
+    expect(css).toMatch(/\[data-slot="empty-icon"\]\s*\{[^}]*background:\s*var\(--ade-active\)/)
+    expect(css).toMatch(/\[data-slot="empty-icon"\] svg\s*\{[^}]*width:\s*22px/)
   })
 })
 
@@ -67,6 +72,13 @@ describe("where the icons are (DS-17)", () => {
     const empty = read("surface/empty-project.tsx")
     expect(empty).toMatch(/<RaguPotMark/)
     expect(empty).not.toMatch(/M3 6\.5A1\.5/)
+  })
+
+  test("the pot is 40px with no tile, as in the mock", () => {
+    expect(read("surface/empty-project.tsx")).toMatch(/<RaguPotMark size=\{40\}/)
+    const rule = /\[data-slot="empty-mark"\]\s*\{([^}]*)\}/.exec(read("dev.css"))?.[1] ?? ""
+    expect(rule).toMatch(/width:\s*40px/)
+    for (const tile of ["background", "border", "border-radius"]) expect(rule).not.toContain(`${tile}:`)
   })
 
   test("the pot is not on any other empty view", () => {

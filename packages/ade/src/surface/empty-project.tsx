@@ -21,7 +21,7 @@ export function EmptyProject(props: EmptyProjectProps) {
       <div data-slot="empty-card">
         <span data-slot="empty-mark" aria-hidden="true">
           {/* The pixel pot is for this screen only: the first one a new user sees (DS-17). */}
-          <RaguPotMark size={28} />
+          <RaguPotMark size={40} />
         </span>
 
         <h2 data-slot="empty-title">{t("empty.title")}</h2>
