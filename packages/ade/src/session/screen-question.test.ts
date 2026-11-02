@@ -4,7 +4,7 @@ import { Terminal } from "@xterm/xterm"
 import { createLineAccumulator } from "../host/line-stream"
 import { codeOf } from "../test-support/source-text"
 import { detectPermission } from "./permission"
-import { bottomRows, screenQuestion } from "./screen-question"
+import { bottomRows, folderTrust, openingTrust, screenQuestion } from "./screen-question"
 
 /*
  * Audit 2026-11-02, SES-3. Codex (ratatui) and OpenCode/ragu (opentui) place every row with `CSI row;col H` and write
@@ -216,5 +216,50 @@ describe("what is not a menu stays not one", () => {
   test("the screen's menus are never read from the line stream", () => {
     expect(detectPermission(CODEX_APPROVAL, "codex")).toBeUndefined()
     expect(detectPermission(OPENCODE_PERMISSION, "opencode")).toBeUndefined()
+  })
+})
+
+/*
+ * Review of invio-giusto, point 3: since SES-3 an opening task waits behind a folder-trust dialog, and a session
+ * spawned with --worktree sat there until a click came, then gave its task up after a minute.
+ */
+describe("a folder-trust dialog in front of the opening task", () => {
+  test("is told apart from any other question, with its yes selected", async () => {
+    expect(folderTrust(bottomRows(await screenOf(CLAUDE_TRUST)), "claude-code")).toEqual({ yesSelected: true })
+    expect(folderTrust(bottomRows(await screenOf(CODEX_TRUST)), "codex")).toEqual({ yesSelected: true })
+    expect(folderTrust(bottomRows(await screenOf(CODEX_APPROVAL)), "codex")).toBeUndefined()
+    expect(folderTrust(bottomRows(await screenOf(CODEX_IDLE)), "codex")).toBeUndefined()
+  })
+
+  test("with the cursor moved to «No», its yes is not selected", async () => {
+    const moved = CLAUDE_TRUST.map((row) =>
+      row === " ❯ 1. Yes, I trust this folder"
+        ? "   1. Yes, I trust this folder"
+        : row === "   2. No, exit"
+          ? " ❯ 2. No, exit"
+          : row,
+    )
+    expect(folderTrust(bottomRows(await screenOf(moved)), "claude-code")).toEqual({ yesSelected: false })
+  })
+
+  test("is confirmed only in a worktree ADE made for the spawn, and only on its yes", () => {
+    expect(openingTrust({ yesSelected: true }, true)).toBe("accept")
+    expect(openingTrust({ yesSelected: true }, false)).toBe("ask")
+    expect(openingTrust({ yesSelected: false }, true)).toBe("ask")
+  })
+
+  test("the opening poll confirms it with one Enter there, and says to confirm it everywhere else", () => {
+    const source = codeOf(readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8"))
+    const poll = source.slice(source.indexOf(codeOf("if (starting.typesTask) {")))
+    const tick = poll.slice(0, poll.indexOf(codeOf("const decision = decideOpening({")))
+    expect(tick).toContain(
+      codeOf("const ownWorktree = launched?.worktree !== undefined && sameFolder(workDir, launched.worktree)"),
+    )
+    expect(tick).toContain(codeOf("folderTrust(bottomRows(getTerminal(paneId).terminal), agentId)"))
+    expect(tick).toContain(
+      codeOf(
+        'if (openingTrust(trust, ownWorktree) === "accept") { session.write("\\r") appendLine(paneId, t("task.trustAccepted"), "note", "ade") } else tellPane(paneId, t("task.confirmTrust"))',
+      ),
+    )
   })
 })

@@ -313,7 +313,7 @@ import {
   permissionIdentity,
   type PermissionAnswer,
 } from "../session/permission"
-import { screenQuestion } from "../session/screen-question"
+import { bottomRows, folderTrust, openingTrust, screenQuestion } from "../session/screen-question"
 import { readReportLine } from "../session/report"
 import { asOneLine, asSubmittedLine, confirmDeadline, pasteSettled, submitCheck } from "../session/typing"
 import { searchPaths, walkProject } from "../search"
@@ -630,7 +630,7 @@ import {
   writeToTerminal,
 } from "../terminal/registry"
 import type { LinkRequest } from "../terminal/links"
-import { decideOpening } from "../session/opening"
+import { OPENING_QUIET_MS, decideOpening } from "../session/opening"
 import { cleanTranscriptLine } from "../session/transcript-line"
 import { createRawWindows } from "../session/raw-window"
 import { NEW_PANE_ITEMS, showsNewPane, type NewPaneItem } from "./new-pane"
@@ -8867,6 +8867,9 @@ export function Workbench() {
       // job a second time.
       if (starting.typesTask) {
         const startedAt = Date.now()
+        // A folder-trust dialog in front of the task: answered or pointed out once (`openingTrust`).
+        let trustHandled = false
+        const ownWorktree = launched?.worktree !== undefined && sameFolder(workDir, launched.worktree)
         const poll = setInterval(() => {
           /*
            * The pane was closed, the process died, or a relaunch put another
@@ -8875,6 +8878,22 @@ export function Workbench() {
            */
           if (running.get(paneId) !== session) {
             stopOpeningPoll(poll)
+            return
+          }
+
+          // Read once the screen is drawn: a dialog read half painted has no cursor yet.
+          const drawn = lastByteAt !== undefined && Date.now() - lastByteAt >= OPENING_QUIET_MS
+          const trust =
+            !trustHandled && drawn && hasTerminal(paneId)
+              ? folderTrust(bottomRows(getTerminal(paneId).terminal), agentId)
+              : undefined
+          if (trust) {
+            trustHandled = true
+            if (openingTrust(trust, ownWorktree) === "accept") {
+              session.write("\r")
+              appendLine(paneId, t("task.trustAccepted"), "note", "ade")
+            } else tellPane(paneId, t("task.confirmTrust"))
+            // The dialog is still on screen until the CLI redraws: the next pass reads it again.
             return
           }
 
