@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
+import postcss from "postcss"
 import { translate } from "../i18n"
 
 /**
@@ -36,6 +37,22 @@ describe("the bell", () => {
     expect(panel).toContain('label={t("bell.dismiss.named", notice.text)}')
     expect(translate("it", "bell.dismiss.named", "Aggiornamento pronto")).toBe("Togli: Aggiornamento pronto")
     expect(translate("en", "bell.dismiss.named", "Update ready")).toBe("Dismiss: Update ready")
+  })
+})
+
+describe("the bell's ground in the glass theme", () => {
+  test("a panel that is no longer role=menu still takes the overlay ground", () => {
+    // The glass rule is keyed on roles, and the bell's panel stopped being a `menu` (it is a region): without its slot
+    // in the list the panel is a 6% lift again, with terminal lines running through the notices.
+    const css = readFileSync(new URL("../index.css", import.meta.url), "utf8").replace(/\r\n/g, "\n")
+    const grounded: string[] = []
+    postcss.parse(css).walkRules((rule) => {
+      const sets = rule.nodes.some((node) => node.type === "decl" && node.prop === "background" && node.value === "var(--ade-overlay)")
+      if (sets) grounded.push(...rule.selectors.map((selector) => selector.replace(/\s+/g, " ")))
+    })
+    expect(grounded).toContain('[data-component="ade-shell"][data-theme="glass"] [data-slot="ade-menu"]')
+    // The role-keyed shape stays.
+    expect(grounded).toContain('[data-component="ade-shell"][data-theme="glass"] [role="menu"]')
   })
 })
 

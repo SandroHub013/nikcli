@@ -257,7 +257,8 @@ body[data-theme="glass"] #root,
  * a menu says `role="menu"`, a dialog `role="dialog"`, a picker
  * `role="listbox"`, a tip `role="tooltip"`, and the platform's own layer is
  * `[popover]`. A menu written next week is covered because it is a menu, not
- * because someone remembered this file.
+ * because someone remembered this file. The one named slot is the bell's panel:
+ * a region (it holds text and buttons, not menu items), so no role names it.
  *
  * `--ade-overlay` deliberately ignores the glass slider: see the token block.
  */
@@ -265,7 +266,8 @@ body[data-theme="glass"] #root,
 [data-component="ade-shell"][data-theme="glass"] [role="dialog"],
 [data-component="ade-shell"][data-theme="glass"] [role="listbox"],
 [data-component="ade-shell"][data-theme="glass"] [role="tooltip"],
-[data-component="ade-shell"][data-theme="glass"] [popover] {
+[data-component="ade-shell"][data-theme="glass"] [popover],
+[data-component="ade-shell"][data-theme="glass"] [data-slot="ade-menu"] {
   background: var(--ade-overlay);
 }
 
