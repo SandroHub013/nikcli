@@ -541,6 +541,8 @@ export const voiceIt = {
   "voice.msg.program.insertFailed": "Errore durante l'inserimento del testo trascritto nel pannello.",
   "voice.msg.program.hostFailed": "Errore durante l'esecuzione del comando sul VoiceHost.",
   "voice.msg.program.noSuchPane": (paneId: string) => `Non trovo il pannello ${paneId}: la dettatura non è stata inviata.`,
+  "voice.msg.program.paneGone": "Il pannello a cui dettavi è stato chiuso: la dettatura non è stata inviata.",
+  "voice.msg.program.keptText": (text: string) => `Il testo dettato: «${text}»`,
   "voice.msg.program.noPaneOpen": "Nessun pannello aperto: la dettatura non è stata inviata.",
   "voice.msg.program.heardWhileThinking": (words: string) =>
     `Sentito mentre pensavo: «${words}». Di' «invia questa» per mandarla dopo, o lasciala: si scarta.`,
@@ -562,6 +564,12 @@ export const voiceIt = {
   "voice.msg.host.noProject": "Non c'è nessun progetto aperto: dimmi in quale progetto avviare la sessione.",
   "voice.msg.host.noProcess": (paneId: string) => `Il pannello '${paneId}' non ha un processo vivo a cui inviare il messaggio.`,
   "voice.msg.host.noSession": (paneId: string) => `Nessuna sessione attiva per il pannello '${paneId}'.`,
+  "voice.msg.host.typingPending":
+    "In quel pannello c'è una riga scritta a metà: inviala o cancellala prima. Il testo non è stato inviato, lo trovi nel pannello.",
+  "voice.msg.host.askingHeld": (text: string) =>
+    `Voce: non inviato, il pannello sta facendo una domanda. Rispondi nel terminale, poi ripeti. Il testo era: «${text}»`,
+  "voice.msg.host.typingHeld": (text: string) =>
+    `Voce: non inviato, qui c'è una riga scritta a metà. Inviala o cancellala, poi ripeti. Il testo era: «${text}»`,
   "voice.msg.host.searchDesktopOnly": "la ricerca nel progetto funziona solo nell'app desktop",
   "voice.msg.host.searchNoProject": "non c'è nessun progetto aperto in cui cercare",
   "voice.msg.host.searchUnreadable": (why: string) => `non riesco a leggere i file del progetto (${why})`,

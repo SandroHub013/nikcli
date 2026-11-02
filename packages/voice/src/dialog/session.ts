@@ -1057,7 +1057,25 @@ export function transition(
 
       // Dictation mode initiation
       if (intent.intent === "dictation.start") {
-        const targetPane = parsed.slots.paneIndex ? String(parsed.slots.paneIndex) : undefined
+        /*
+         * The pane is taken now, by its id: the one named, or the one in focus (audit MOD-3). Resolved when the
+         * dictation ended, a long dictation to pane 2 went to whichever pane was 2, or focused, by then: the user
+         * had closed pane 1, or clicked another session to read it, and the prompt was submitted to another agent.
+         */
+        const { paneIndex, paneTitle } = parsed.slots
+        const isNamed = paneIndex !== undefined || paneTitle !== undefined
+        const named =
+          paneIndex !== undefined
+            ? ctx.panes?.find((p) => p.index === Number(paneIndex))
+            : paneTitle !== undefined
+              ? ctx.panes?.find((p) => p.title.toLowerCase() === String(paneTitle).toLowerCase())
+              : undefined
+        if (isNamed && ctx.panes && !named) {
+          return withSpoken(state, `Non trovo il pannello ${paneIndex ?? paneTitle}: la dettatura non è partita.`)
+        }
+        const focused = ctx.panes?.find((p) => p.id === ctx.focusedPaneId) ?? ctx.panes?.[0]
+        // Without the panes (a caller that gives none), the number said, resolved at the end as before.
+        const targetPane = named?.id ?? (isNamed ? String(paneIndex ?? paneTitle) : focused?.id)
         return withSpoken(
           {
             ...state,

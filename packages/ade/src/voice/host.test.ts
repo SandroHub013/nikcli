@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { codeOf } from "../test-support/source-text"
 import { resetLocaleForTests } from "../i18n/locale"
 import { createAdeVoiceHost, type AdeVoiceHostDeps } from "./host"
 import type { VoiceAgent } from "./agent"
@@ -190,6 +192,30 @@ describe("createAdeVoiceHost", () => {
     await host.sendPrompt("p1", `innocuo${CR}git push --force`)
 
     expect(writtenLines[0].split(CR).length - 1).toBe(1)
+  })
+
+  /*
+   * MOD-2: the user had typed «rm -rf build && » and not pressed Enter; the voice sent «esegui i test», and the agent
+   * got «rm -rf build && esegui i test», submitted.
+   */
+  test("sendPrompt does not submit on top of the user's half-typed line, and says so with the words", async () => {
+    const writtenLines: string[] = []
+    const { deps, told } = createMockDeps({
+      isRunning: () => true,
+      getRunningSession: () => ({ write: (line: string) => writtenLines.push(line) }),
+      isTyping: (id) => id === "p1",
+    })
+    const host = createAdeVoiceHost(deps)
+
+    await expect(host.sendPrompt("p1", "esegui i test")).rejects.toThrow("riga scritta a metà")
+    expect(writtenLines).toEqual([])
+    expect(told).toHaveLength(1)
+    expect(told[0]!.paneId).toBe("p1")
+    expect(told[0]!.text).toContain("esegui i test")
+
+    // Another pane, with nothing typed in it: sent.
+    await host.sendPrompt("p2", "esegui i test")
+    expect(writtenLines).toEqual([`esegui i test${String.fromCharCode(13)}`])
   })
 
   /*
@@ -757,6 +783,16 @@ describe("createAdeVoiceHost", () => {
     expect(currentWb().panes[0].browserUrl).toBe("http://localhost:5173")
   })
 
+  // MOD-1: «apri localhost 5173» with a Claude pane focused turned the agent's terminal into a browser.
+  test("browserNavigate leaves a session's pane a session", () => {
+    const { deps, currentWb } = createMockDeps()
+    deps.setWb((w) => ({ ...w, panes: [makePane({ id: "p1", title: "Claude", agent: "claude-code" })] }))
+    const host = createAdeVoiceHost(deps)
+
+    expect(host.browserNavigate("p1", "http://localhost:5173")).toBe(false)
+    expect(currentWb().panes[0].browserUrl).toBeUndefined()
+  })
+
   test("listPanes carries the agent of a session, so the planner can tell «Mimo» from «Dario»", () => {
     const { deps } = createMockDeps()
     deps.setWb((w) => ({
@@ -1119,6 +1155,28 @@ describe("no voice text into a pane asking a permission", () => {
     expect(writtenLines).toEqual([])
   })
 
+  /*
+   * Review of invio-giusto, B1: a codex or OpenCode menu is read off the screen and never enters `permissions`. The
+   * voice wrote anyway, the workbench held the write in silence, and the voice said «inviata» over text that was gone.
+   */
+  test("sendPrompt refuses on a question only the screen or the hook knows, and keeps the words over the pane", async () => {
+    const writtenLines: string[] = []
+    const { deps, told } = createMockDeps({
+      isRunning: () => true,
+      getRunningSession: () => ({ write: (line: string) => void writtenLines.push(line) }),
+      permissions: () => ({}),
+      questionOpen: (id) => id === "p1",
+    })
+    const host = createAdeVoiceHost(deps)
+
+    await expect(host.sendPrompt("p1", "rifai la migrazione")).rejects.toThrow("permesso")
+    await expect(host.insertText("p1", "e poi i test")).rejects.toThrow("permesso")
+    expect(writtenLines).toEqual([])
+    expect(told.map((note) => note.paneId)).toEqual(["p1", "p1"])
+    expect(told[0]!.text).toContain("rifai la migrazione")
+    expect(told[1]!.text).toContain("e poi i test")
+  })
+
   test("insertText into the terminal refuses too", async () => {
     const writtenLines: string[] = []
     const { deps } = createMockDeps({
@@ -1129,5 +1187,18 @@ describe("no voice text into a pane asking a permission", () => {
     const host = createAdeVoiceHost(deps)
     await expect(host.insertText("p1", "sistema i test")).rejects.toThrow("permesso")
     expect(writtenLines).toEqual([])
+  })
+})
+
+describe("the workbench's voice host", () => {
+  const source = codeOf(readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8"))
+  const call = source.slice(source.indexOf(codeOf("const voiceHost = createAdeVoiceHost({")))
+
+  test("is told when the user has a line pending, by the rule the mail queue uses (MOD-2)", () => {
+    expect(call.slice(0, 1500)).toContain(codeOf("isTyping: (id) => isTyping(records.typed.get(id)),"))
+  })
+
+  test("asks the workbench's own question gate, screen and hook included (B1)", () => {
+    expect(call.slice(0, 1500)).toContain(codeOf("questionOpen: (id) => questionOpen(id),"))
   })
 })

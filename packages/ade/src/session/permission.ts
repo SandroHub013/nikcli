@@ -303,6 +303,12 @@ export interface PermissionSchema {
   name: string
   agentId?: string
   priority?: number
+  /**
+   * Read only from the screen's rows (`detectPermission(rows, agent, { screen: true })`), never from the line stream.
+   * These menus are drawn with the cursor: their rows exist only on the screen, and what they are answered with is an
+   * arrow or a highlighted choice, not a key ADE could type. They hold typing; nothing answers them but the user.
+   */
+  screen?: boolean
   match: (lines: string[]) => PermissionRequest | undefined
 }
 
@@ -326,6 +332,43 @@ const DRAWN_CURSOR_RE = /^\s*[❯›▶➤]\s?/
 const BOX_EDGE_RE = /^[\s╭╮╰╯┌┐└┘─━═]*$/
 const unframe = (line: string) => line.replace(FRAME_RE, "").replace(CURSOR_RE, "$1")
 const YN_PATTERN_RE = /(?:\[|\()([yYnN](?:\s*\/\s*[yYnN](?:\s*\/\s*[aAcCdD])?)?)(?:\]|\))\s*[:?]?\s*$/
+
+/*
+ * The hint a drawn menu writes under its choices: a key, then what it does. Codex's «Press enter to confirm or esc to
+ * cancel» and «Press enter to continue», Claude Code's «Enter to confirm · Esc to cancel» and «Esc to cancel · Tab to
+ * amend», opentui's «⇆ select  enter confirm». Codex's composer footer, «⏎ send  ⌃C quit», names no choice.
+ */
+const HINT_KEY_RE = /^\s*(?:press\s+)?(?:enter|esc|tab|↑|↓|←|→|⇆|↵|⏎)(?![a-z])/i
+const HINT_DOES_RE = /\b(?:confirm|cancel|continue|select|exit|navigate|choose|reject)\b/i
+const isMenuHint = (line: string) => line.trim().length <= 120 && HINT_KEY_RE.test(line) && HINT_DOES_RE.test(line)
+/** An option's first word when the options are answers (the same words `numbered-choices` takes). */
+const CHOICE_START_RE =
+  /^(?:yes|no|allow|deny|approve|reject|cancel|skip|proceed|always|once|sì|nega|rifiuta|annulla|salta|always allow|allow always)\b/i
+/** Rows a long option may wrap onto, on a screen. */
+const WRAP_ROWS = 2
+/** How far above its options a drawn menu's question may be: a command, a reason and blank rows in between. */
+const QUESTION_ROWS = 12
+// opentui's choices on one row, «Allow once   Allow always   Reject», each a box of its own.
+const ROW_CHOICE_RE = /^(?:allow once|allow always|always allow|allow|reject|deny|confirm|cancel|yes|no|approve|skip)$/i
+const ROW_HINT_RE = /\benter\s+confirm\b/i
+// The title opentui draws over a permission: «△ Permission required».
+const TITLE_MARK_RE = /^\s*△\s+(\S.*?)(?:\s{3,}.*)?$/
+
+/** The answers of a numbered menu, as `numbered-choices` builds them. */
+function numberedAnswers(options: readonly { num: string; text: string }[]): PermissionAnswer[] {
+  return options.map((opt, idx) => {
+    const text = opt.text.trim()
+    const labelKey = recognisedLabel(text)
+    const isNegative = /^(?:no|deny|reject|cancel|abort|nega|rifiuta|annulla)$/i.test(text.toLowerCase())
+    return {
+      intent: classifyAnswer(text),
+      label: text,
+      ...(labelKey ? { labelKey } : {}),
+      send: opt.num,
+      tone: idx === 0 && !isNegative ? ("primary" as const) : ("secondary" as const),
+    }
+  })
+}
 
 export const PERMISSION_SCHEMAS: readonly PermissionSchema[] = [
   // 1. Numbered choices list (e.g. 1. Yes, 2. Yes and don't ask again, 3. No)
@@ -406,26 +449,11 @@ export const PERMISSION_SCHEMAS: readonly PermissionSchema[] = [
       const contextLines = lines.slice(Math.max(0, questionIndex - 4), questionIndex)
       const { kind, target } = extractKindAndTarget(whatLine, contextLines)
 
-      const answers: PermissionAnswer[] = options.map((opt, idx) => {
-        const text = opt.text.trim()
-        const labelKey = recognisedLabel(text)
-        const t = opt.text.toLowerCase()
-        const isNegative = /^(?:no|deny|reject|cancel|abort|nega|rifiuta|annulla)$/i.test(t)
-        const tone: "primary" | "secondary" = idx === 0 && !isNegative ? "primary" : "secondary"
-        return {
-          intent: classifyAnswer(text),
-          label: text,
-          ...(labelKey ? { labelKey } : {}),
-          send: opt.num,
-          tone,
-        }
-      })
-
       return {
         what: whatLine,
         kind,
         target,
-        answers,
+        answers: numberedAnswers(options),
       }
     },
   },
@@ -544,6 +572,131 @@ export const PERMISSION_SCHEMAS: readonly PermissionSchema[] = [
       }
     },
   },
+
+  /*
+   * 4. A menu drawn on the screen with its key hint under it (audit SES-3).
+   *
+   * Codex's approval modal and folder-trust dialog, Claude Code's trust dialog: a numbered list with the cursor on one
+   * option, then «Press enter to confirm or esc to cancel». `numbered-choices` wants the last line to be an option, and
+   * the question several rows above (the command and a reason come between). The hint is the drawing's own word that
+   * this is a menu, so no question mark is needed; the options still have to be answers, or carry exactly one cursor —
+   * a numbered list in a reply has neither, nor a hint under it (the 10-29 case stays prose).
+   */
+  {
+    id: "hinted-menu",
+    name: "Drawn menu with a key hint",
+    priority: 90,
+    screen: true,
+    match: (drawn: string[]): PermissionRequest | undefined => {
+      const lines = drawn.map(unframe)
+      let end = lines.length - 1
+      let hinted = false
+      // The hint rows, and the blank rows and box edges around them.
+      while (end >= 0 && (BOX_EDGE_RE.test(lines[end]) || isMenuHint(lines[end]))) {
+        if (isMenuHint(lines[end])) hinted = true
+        end--
+      }
+      if (!hinted || end < 1) return undefined
+
+      // The options, bottom up, numbered one after the other; a long label's wrapped rows belong to the option above.
+      const options: { num: string; text: string; cursor: boolean }[] = []
+      let i = end
+      while (i >= 0) {
+        const m = lines[i].match(NUMBERED_OPTION_RE)
+        if (m && (options.length === 0 || Number(m[1]) === Number(options[0].num) - 1)) {
+          options.unshift({ num: m[1], text: m[2].trim(), cursor: DRAWN_CURSOR_RE.test(drawn[i].replace(FRAME_RE, "")) })
+          i--
+          continue
+        }
+        if (m || lines[i].trim() === "") break
+        let j = i - 1
+        while (j >= 0 && i - j < WRAP_ROWS && lines[j].trim() !== "" && !NUMBERED_OPTION_RE.test(lines[j])) j--
+        const above = j >= 0 ? lines[j].match(NUMBERED_OPTION_RE) : null
+        if (!above || (options.length > 0 && Number(above[1]) !== Number(options[0].num) - 1)) break
+        i = j
+      }
+      if (options.length < 2) return undefined
+      const cursors = options.filter((opt) => opt.cursor).length
+      if (cursors !== 1 && !options.every((opt) => CHOICE_START_RE.test(opt.text))) return undefined
+
+      // The question: the nearest row above that asks one, else the nearest row with words.
+      let questionIndex = -1
+      for (let k = i; k >= 0 && i - k < QUESTION_ROWS; k--) {
+        const text = lines[k].trim()
+        if (text.endsWith("?")) {
+          questionIndex = k
+          break
+        }
+        if (questionIndex < 0 && text && !BOX_EDGE_RE.test(lines[k])) questionIndex = k
+      }
+      const whatLine = questionIndex >= 0 ? lines[questionIndex].trim() : ""
+      const contextLines = lines.slice(Math.max(0, questionIndex), i + 1).filter((line) => line.trim())
+      const { kind, target } = extractKindAndTarget(whatLine, contextLines)
+      return { what: whatLine, kind, target, answers: numberedAnswers(options) }
+    },
+  },
+
+  /*
+   * 5. opentui's permission prompt (OpenCode, and ragu without ADE's plugin), drawn with the cursor (audit SES-3).
+   *
+   *   △ Permission required
+   *     # Runs the tests
+   *     $ bun test
+   *    Allow once   Allow always   Reject              ⇆ select  enter confirm
+   *
+   * The choices sit on one row, the highlighted one picked by Enter; Esc rejects.
+   */
+  {
+    id: "option-row",
+    name: "Choices on one row (opentui)",
+    priority: 85,
+    screen: true,
+    match: (drawn: string[]): PermissionRequest | undefined => {
+      const lines = drawn.map(unframe)
+      let end = lines.length - 1
+      while (end >= 0 && lines[end].trim() === "") end--
+      for (let i = end, seen = 0; i >= 0 && seen < 8; i--) {
+        if (!lines[i].trim()) continue
+        seen++
+        const tokens = lines[i].trim().split(/\s{2,}/)
+        const choices: string[] = []
+        for (const token of tokens) {
+          if (!ROW_CHOICE_RE.test(token)) break
+          choices.push(token)
+        }
+        if (choices.length < 2) continue
+        if (!lines.slice(i, i + 3).some((line) => ROW_HINT_RE.test(line))) continue
+        let title: string | undefined
+        let titleIndex = -1
+        for (let k = i - 1; k >= 0 && i - k <= 15; k--) {
+          const m = lines[k].match(TITLE_MARK_RE)
+          if (m) {
+            title = m[1]!.trim()
+            titleIndex = k
+            break
+          }
+        }
+        if (!title) continue
+        const { kind, target } = extractKindAndTarget(
+          title,
+          lines.slice(titleIndex + 1, i).filter((line) => line.trim()),
+        )
+        return {
+          what: title,
+          kind,
+          target,
+          // Never typed by ADE (`PermissionSchema.screen`): Esc is opentui's own key for «Reject».
+          answers: choices.map((label, idx) => ({
+            intent: classifyAnswer(label),
+            label,
+            send: /^(?:reject|deny|cancel|no)$/i.test(label) ? "\x1b" : "",
+            tone: idx === 0 ? ("primary" as const) : ("secondary" as const),
+          })),
+        }
+      }
+      return undefined
+    },
+  },
 ]
 
 // ---------------------------------------------------------------------------
@@ -555,7 +708,12 @@ export const PERMISSION_SCHEMAS: readonly PermissionSchema[] = [
  * Nessuna euristica inventata: ogni schema riconosciuto deve corrispondere a
  * un formato che un agente reale emette davvero.
  */
-export function detectPermission(lines: string[], agentId: string): PermissionRequest | undefined {
+export function detectPermission(
+  lines: string[],
+  agentId: string,
+  /** `screen`: `lines` are a screen's rows, read bottom to top; the menus drawn with the cursor are looked for too. */
+  options: { screen?: boolean } = {},
+): PermissionRequest | undefined {
   if (!lines || lines.length === 0) return undefined
 
   // 1. Strip ANSI escape codes
@@ -576,7 +734,7 @@ export function detectPermission(lines: string[], agentId: string): PermissionRe
   }
 
   // 4. Sort schemas prioritizing those specifically defined for this agentId
-  const sortedSchemas = [...PERMISSION_SCHEMAS].sort((a, b) => {
+  const sortedSchemas = PERMISSION_SCHEMAS.filter((schema) => !schema.screen || options.screen).sort((a, b) => {
     const aAgent = a.agentId === agentId ? 1 : 0
     const bAgent = b.agentId === agentId ? 1 : 0
     if (aAgent !== bAgent) return bAgent - aAgent

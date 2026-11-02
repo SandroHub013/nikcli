@@ -46,6 +46,13 @@ export interface AdeVoiceHostDeps {
   /** A note the user has to read, over the terminal as well as in the transcript. */
   tellPane: (paneId: string, text: string) => void
   permissions: () => Record<string, PermissionRequest>
+  /** The user has begun a line in the pane and not sent it (`session/typing.ts`), the rule a delivery waits on. */
+  isTyping?: (paneId: string) => boolean
+  /**
+   * Whether a question is open in the pane by every source ADE has: the screen's drawn menus and the hook's
+   * `permission` state, which `permissions` alone does not carry (review of invio-giusto, B1).
+   */
+  questionOpen?: (paneId: string) => boolean
   answerPermission: (paneId: string, answer: PermissionAnswer) => void
   /**
    * The spoken decision on a `send` the voice agent wrote: deliver it, or
@@ -144,8 +151,13 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
    * Enter of «invia» picks the highlighted option — a grant nobody said. The
    * question is answered first, by voice or by hand.
    */
-  const refuseWhileAsking = (paneId: string) => {
-    if (!deps.permissions()[paneId]) return
+  const refuseWhileAsking = (paneId: string, words?: string) => {
+    if (!deps.permissions()[paneId] && !deps.questionOpen?.(paneId)) return
+    /*
+     * The words over the pane, as for a half-typed line: refused, they would otherwise be gone from the user's
+     * view (a menu read off the screen held the write in silence while the voice said «inviata», B1).
+     */
+    if (words) deps.tellPane(paneId, t("voice.msg.host.askingHeld", words))
     const currentLocale = deps.locale ? deps.locale() : locale()
     throw new Error(
       currentLocale === "en"
@@ -352,8 +364,17 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
        * `replace(/\n/g, " ")` left carriage returns alone, which a tty reads
        * as Enter — one dictated sentence could arrive as two submissions.
        */
-      refuseWhileAsking(paneId)
       const singleLine = asOneLine(text)
+      refuseWhileAsking(paneId, singleLine)
+      /*
+       * Not on top of the user's half-typed line (MOD-2): «rm -rf build && » and a dictated «esegui i test» went in
+       * as one command, and its Enter submitted it. The mail queue waits on the same rule. Refused, said aloud and
+       * over the pane, with the words, so nothing dictated is lost.
+       */
+      if (deps.isTyping?.(paneId)) {
+        deps.tellPane(paneId, t("voice.msg.host.typingHeld", singleLine))
+        throw new Error(t("voice.msg.host.typingPending"))
+      }
       deps.setWb((w) => updatePane(w, paneId, { status: "working", activity: "running" }))
       deps.appendLine(paneId, `> ${singleLine}`, "shell")
       session.write(asSubmittedLine(singleLine))
@@ -418,7 +439,8 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
     },
 
     browserNavigate(paneId: string, url: string): boolean {
-      if (!deps.wb().panes.some((pane) => pane.id === paneId)) return false
+      // A browser only: an address given to a session's pane made it one, its agent gone from the sessions (MOD-1).
+      if (!deps.wb().panes.some((pane) => pane.id === paneId && pane.browserUrl)) return false
       deps.setWb((w) => updatePane(w, paneId, { browserUrl: url }))
       return true
     },
@@ -564,7 +586,7 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
               : "Il pannello selezionato non ha dove ricevere il testo.",
         )
       }
-      refuseWhileAsking(paneId)
+      refuseWhileAsking(paneId, trimmed)
       // A trailing space, not a carriage return: the next dictated phrase must
       // not run into this one, and nothing is submitted until the user says so.
       session.write(`${trimmed} `)

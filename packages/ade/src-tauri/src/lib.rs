@@ -2483,6 +2483,8 @@ fn follow_window_visibility(window: &tauri::WebviewWindow) {
         if applied.swap(state, Ordering::SeqCst) == state {
             return;
         }
+        // Off screen the page's timers are throttled, so the mail takes its pace from the native side.
+        mailbox::set_page_hidden(!on_screen);
         let result = target.with_webview(move |webview| unsafe {
             if let Err(error) = webview.controller().SetIsVisible(on_screen) {
                 eprintln!("ADE: visibilità della webview non cambiata: {error}");
@@ -2658,6 +2660,8 @@ pub fn run() {
             agent_link::sweep(app.handle());
             // `ade-msg` on disk before any session can look for it.
             mailbox::install(app.handle());
+            // The mail round's signal, which a hidden page's throttled timers do not have to wait for.
+            mailbox::watch_outbox(app.handle().clone());
             // The installer an earlier update left in the temp folder, removed in the background.
             update::sweep_leftovers(app.handle());
             // The bots' gateways the user left on; they read once the page listens.

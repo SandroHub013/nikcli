@@ -448,6 +448,9 @@ export const en: Messages = {
   "keys.unread": (problem) => `Couldn't read the API keys, so the session starts without them: ${problem}`,
   "task.notSent":
     "ADE didn't send the initial task because the session never settled. Type it yourself once it's ready.",
+  "task.confirmTrust":
+    "The session is asking you to trust this folder: confirm it in the terminal and ADE will type the initial task.",
+  "task.trustAccepted": "A work folder ADE made for this session: trust confirmed, then the task.",
   "task.stepNotSent": (text) => `ADE didn't type “${text}” because the connection never settled. Type it yourself.`,
   "task.agentMissing": (command) =>
     `“${command}” isn't installed on the server, so ADE didn't type the task: the remote shell would have run it as a command.`,
@@ -998,6 +1001,8 @@ export const en: Messages = {
   "gateway.panel.connecting": "On · connecting",
   "gateway.panel.reconnecting": "On · reconnecting",
   "gateway.panel.attentionTimeout": "Could not connect for over 10 minutes",
+  "gateway.panel.attentionQueueFull":
+    "Chat messages are piling up faster than ADE handles them, and new ones are being dropped. Reload ADE's window; if it comes back, switch the gateway off and on.",
   "gateway.panel.retry": "Retry",
   "gateway.panel.changeCode": "Change code",
   "gateway.panel.openPlatforms": "Open platforms",
@@ -1674,6 +1679,9 @@ export const en: Messages = {
   "note.replySentTo": (to, ref) => `Reply sent to ${to} (request ${ref})`,
   "note.replyFrom": (from, text) => `Reply from ${from}: ${text}`,
   "note.keptOpen": (problem) => `Kept open: ${problem}`,
+  "mail.stuck": (kind, id) =>
+    `Mail between sessions: ${kind} ${id} gave no result. ADE moved on; the sender will hear of it if still open`,
+  "mail.stepStuck": "Mail between sessions: a step does not finish. ADE keeps trying; if mail stays stuck, restart ADE",
   "note.closedAfterReply": (closed) => `Closed after replying: ${closed}`,
   "note.updateFrom": (from, state, text) => `Update from ${from}: ${state} — ${text}`,
   "note.memory": (line) => `Memory: ${line}`,

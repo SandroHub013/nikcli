@@ -101,6 +101,22 @@ export type Message = { from: string; token?: string; text: string } &
 export const KV_OPS = ["get", "set", "del", "list", "lock", "unlock"] as const
 export type KvOpName = (typeof KV_OPS)[number]
 
+/** The receipt for a lock that came too late (`lockCameTooLate`): a client still reading it learns the lock is not its own. */
+export function lateLockReceipt(key: string): string {
+  return `errore: richiesta di lock su ${key} arrivata troppo tardi: il lock non è stato preso. Riprova`
+}
+
+/** The receipt for a message past its deadline. It may still finish by itself, so whoever reads this looks before repeating it. */
+export function hungReceipt(kind: Message["kind"], id: string, afterMs: number): string {
+  const seconds = Math.round(afterMs / 1000)
+  return `errore: ${kind} ${id} senza esito dopo ${seconds} s: ADE è andata avanti, ma può ancora finire da solo; controlla prima di ripeterlo`
+}
+
+/** The receipt for a message whose delivery threw. */
+export function failedReceipt(error: unknown): string {
+  return `errore: interno: ${error instanceof Error ? error.message : String(error)}`
+}
+
 /** The registers `ade-msg registro` writes, and the operations each takes: `rimandata` is only for decisions. */
 export const REGISTERS = ["decisioni", "design"] as const
 export type RegisterName = (typeof REGISTERS)[number]
@@ -1065,10 +1081,16 @@ export function isFree(
      * hooks, or one whose hook has said nothing (a plugin not yet current) — a hook's word is not a guess.
      */
     quarantined?: boolean
+    /**
+     * The pane's screen cannot be read (no terminal yet). Without hooks the screen is the only place a menu drawn with
+     * the cursor shows (SES-3), so a pane whose screen is unread is not taken as free on its silence alone.
+     */
+    screenUnread?: boolean
   },
   now: number,
 ): boolean {
   if (target.permissionPending || target.typing) return false
+  if (!target.hooked && target.screenUnread) return false
   if (target.quarantined && !target.activity) return true
   const quietFor = target.lastOutputAt === undefined ? Infinity : now - target.lastOutputAt
   if (target.hooked) {

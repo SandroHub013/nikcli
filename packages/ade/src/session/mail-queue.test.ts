@@ -82,11 +82,17 @@ describe("a replayed message waits for its pane's process instead of being dropp
 describe("lint: the workbench writes the queue and reads it back", () => {
   const source = readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8")
 
-  test("written at the end of the pass that delivers it, and nothing before it was read back", () => {
-    const delivered = source.indexOf("const done = await deliverOne(host, item.id, item.message)")
-    const written = source.indexOf("persistMail()", delivered)
-    expect(delivered).toBeGreaterThan(0)
-    expect(written).toBeGreaterThan(delivered)
+  test("written before any delivery starts and again when one ends, and nothing before it was read back", () => {
+    // WB-6: the take deleted it from the outbox, so a crash during a long `close` must not lose what was told «in coda».
+    const taken = source.indexOf("mailQueue.push({ id, message, at: Date.now() })")
+    const written = source.indexOf("persistMail()", taken)
+    const started = source.indexOf("mailLanes.start(mailQueue)", taken)
+    expect(taken).toBeGreaterThan(0)
+    expect(written).toBeGreaterThan(taken)
+    expect(started).toBeGreaterThan(written)
+    const done = source.indexOf("done: (item) => {")
+    expect(done).toBeGreaterThan(0)
+    expect(source.indexOf("persistMail()", done)).toBeLessThan(source.indexOf("hung: (item, afterMs)", done))
     expect(source).toContain("if (!mailRestored) return")
   })
 
@@ -119,30 +125,15 @@ describe("the lines held for a running session are saved too, not only those of 
  */
 describe("the data-safety wiring in the workbench", () => {
   const source = readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8")
-  test("a delivered message leaves storage at once, inside the loop that delivers it", () => {
-    const delivered = source.indexOf("const done = await deliverOne(host, item.id, item.message)")
-    const splice = source.indexOf("mailQueue.splice(mailQueue.indexOf(item), 1)", delivered)
-    const written = source.indexOf("persistMail()", splice)
-    const loopEnd = source.indexOf("expireOutputClaims(Date.now())", delivered)
-    expect(splice).toBeGreaterThan(delivered)
-    expect(written).toBeGreaterThan(splice)
-    expect(written).toBeLessThan(source.indexOf("    persistMail()\n    expireOutputClaims", delivered))
-    expect(loopEnd).toBeGreaterThan(written)
-  })
-
-  test("the pickup writes the queue right after taking, through intakeMail", () => {
-    expect(source).toContain("persist: persistMail,")
-    expect(source).toContain("await intakeMail({")
-  })
-
-  test("the update persists the mail and the tick waits for the install", () => {
+  test("the update persists the mail and the mail round waits for the install", () => {
     const run = source.indexOf("const runUpdate = async () => {")
     const flush = source.indexOf("autosave.flush()", run)
     const persisted = source.indexOf("persistMail()", flush)
     const install = source.indexOf('invoke("ade_update_install")', run)
     expect(persisted).toBeGreaterThan(flush)
     expect(install).toBeGreaterThan(persisted)
-    expect(source).toContain("if (updating()) return\n          mailPass++")
+    // One pause for the timer and the native signal alike (`createMailRound`), not a line in the timer only.
+    expect(source).toContain("paused: () => updating(),")
   })
 
   test("the reload prompt does not come after a restore, and a restore refuses an unsaved file first", () => {

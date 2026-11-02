@@ -463,6 +463,9 @@ export const it = {
   "keys.unread": (problem: string) => `Chiavi API non lette, la sessione parte senza: ${problem}`,
   "task.notSent":
     "ADE non ha inviato il compito iniziale: la sessione non si è stabilizzata. Scrivilo tu quando è pronta.",
+  "task.confirmTrust":
+    "La sessione chiede la fiducia per questa cartella: confermala nel terminale e ADE scriverà il compito iniziale.",
+  "task.trustAccepted": "Cartella di lavoro creata da ADE per questa sessione: fiducia confermata, poi il compito.",
   "task.stepNotSent": (text: string) =>
     `ADE non ha scritto «${text}»: la connessione non si è stabilizzata. Scrivilo tu.`,
   "task.agentMissing": (command: string) =>
@@ -1019,6 +1022,8 @@ export const it = {
   "gateway.panel.connecting": "Acceso · in collegamento",
   "gateway.panel.reconnecting": "Acceso · riconnessione in corso",
   "gateway.panel.attentionTimeout": "Impossibile connettersi da oltre 10 minuti",
+  "gateway.panel.attentionQueueFull":
+    "I messaggi della chat si accumulano più in fretta di quanto ADE li gestisca, e i nuovi vengono scartati. Ricarica la finestra di ADE; se ricapita, spegni e riaccendi il gateway.",
   "gateway.panel.retry": "Riprova",
   "gateway.panel.changeCode": "Cambia il codice",
   "gateway.panel.openPlatforms": "Apri piattaforme",
@@ -1717,6 +1722,9 @@ export const it = {
   "note.replySentTo": (to: string, ref: string) => `Risposta inviata a ${to} (richiesta ${ref})`,
   "note.replyFrom": (from: string, text: string) => `Risposta ricevuta da ${from}: ${text}`,
   "note.keptOpen": (problem: string) => `Resta aperta: ${problem}`,
+  "mail.stuck": (kind: string, id: string) =>
+    `Posta tra le sessioni: ${kind} ${id} non ha dato esito. ADE è andata avanti; il mittente lo saprà, se è ancora aperto`,
+  "mail.stepStuck": "Posta tra le sessioni: un passo non finisce. ADE lo riprova; se la posta resta ferma, riavvia ADE",
   "note.closedAfterReply": (closed: string) => `Chiusa dopo la risposta: ${closed}`,
   "note.updateFrom": (from: string, state: string, text: string) => `Aggiornamento da ${from}: ${state} — ${text}`,
   "note.memory": (line: string) => `Memoria: ${line}`,

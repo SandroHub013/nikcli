@@ -17,6 +17,7 @@ import { runBotTurn } from "../serve-turn"
 import { startGatewayController, type GatewayBridge, type GatewayController, type GatewayMessage } from "./controller"
 import type { GatewayPanelApi, GatewayPanelDeps, LinkStatus as LiveStatus, PairingRequest } from "./panel-state"
 import { recheckTrust, scopeOf } from "./policy"
+import { projectOfLink } from "./project-of"
 import { localAccountStore } from "../account"
 import { localRemoteStore, remoteKey } from "./remote"
 import { appMemoryStore } from "../memory-app"
@@ -33,6 +34,7 @@ interface LinkStatus {
   readonly bot: string
   readonly platform: string
   readonly project?: string | null
+  readonly enabled?: boolean
   readonly connected?: boolean
   readonly connectedAtMs?: number | null
 }
@@ -65,8 +67,7 @@ export function tauriGatewayBridge(): GatewayBridge {
     previewEnd: (bot, platform, chat, fallback) =>
       invoke<void>("gateway_preview_end", { bot, platform, chat, fallback: fallback ?? null }),
     async project(bot, platform) {
-      const links = await invoke<LinkStatus[]>("gateway_status")
-      return links.find((link) => link.bot === bot && link.platform === platform)?.project ?? undefined
+      return projectOfLink(await invoke<LinkStatus[]>("gateway_status"), bot, platform)
     },
     async linkStatus(bot, platform) {
       const links = await invoke<LinkStatus[]>("gateway_status")
@@ -79,16 +80,35 @@ export function tauriGatewayBridge(): GatewayBridge {
 /** The controller listening now, so a revocation from the panel reaches its queued turns (S13). */
 let activeController: GatewayController | undefined
 
+/** A bot was deleted: every gateway of it stops, with what it had queued or running here (BOT-2). */
+export function switchOffBotGateways(bot: string): void {
+  activeController?.off(bot)
+}
+
 /** The panel's side of the Rust commands. No command returns a token. */
 export function tauriGatewayPanelApi(): GatewayPanelApi {
   return {
     status: () => invoke("gateway_status"),
     setToken: (bot, platform, token, kind) => invoke("gateway_set_token", { bot, platform, token, kind: kind ?? null }),
     slackManifest: (name) => invoke("gateway_slack_manifest", { name }),
-    clearToken: (bot, platform) => invoke("gateway_clear_token", { bot, platform }),
+    clearToken: async (bot, platform) => {
+      try {
+        await invoke("gateway_clear_token", { bot, platform })
+      } finally {
+        // Rust halts the link before it touches the keychain: no token, no gateway, so what it had queued or
+        // running here stops whether or not the clearing succeeded (BOT-2).
+        activeController?.off(bot, platform)
+      }
+    },
     probe: (bot, platform) => invoke("gateway_probe", { bot, platform }),
-    setEnabled: (bot, platform, enabled, project) =>
-      invoke("gateway_set_enabled", { bot, platform, enabled, project: project ?? null }),
+    setEnabled: async (bot, platform, enabled, project) => {
+      try {
+        await invoke("gateway_set_enabled", { bot, platform, enabled, project: project ?? null })
+      } finally {
+        // «Off» is a kill switch: Rust dropped its pending store, and the queued and running turns here stop (BOT-2).
+        if (!enabled) activeController?.off(bot, platform)
+      }
+    },
     pairingList: (bot, platform) => invoke("gateway_pairing_list", { bot, platform }),
     pairingApprove: (bot, platform, code) => invoke("gateway_pairing_approve", { bot, platform, code }),
     pairingReject: (bot, platform, request) => invoke("gateway_pairing_reject", { bot, platform, request }),

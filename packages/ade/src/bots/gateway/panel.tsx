@@ -19,6 +19,7 @@ import { remoteNeverKey } from "../permissions-facts"
 import { formatClock, formatConnectedDay } from "../format"
 import type { AgentFile } from "../ragu"
 import { runnerById } from "../runners"
+import { attentionText, QUEUE_FULL_REASON } from "./attention"
 import { PairLink } from "./pair-link"
 import { StateAsideNotice } from "./state-aside-notice"
 import { createGatewayPanel, type GatewayPanelDeps, type ProblemArea } from "./panel-state"
@@ -203,20 +204,23 @@ export function GatewaySection(props: {
             <Show when={panel.link().attentionReason}>
               {(reason) => (
                 <p data-slot="gateway-attention-reason">
-                  {reason() === "timeout_10m" ? t("gateway.panel.attentionTimeout") : reason()}
+                  {attentionText(reason())}
                 </p>
               )}
             </Show>
             <div data-slot="gateway-attention-actions">
-              <button
-                type="button"
-                data-slot="bots-btn"
-                data-tone="primary"
-                disabled={panel.busy()}
-                onClick={() => void panel.retry()}
-              >
-                {t("gateway.panel.retry")}
-              </button>
+              {/* «Retry» wakes a connection that waits to try again; it does nothing for a full queue. */}
+              <Show when={panel.link().attentionReason !== QUEUE_FULL_REASON}>
+                <button
+                  type="button"
+                  data-slot="bots-btn"
+                  data-tone="primary"
+                  disabled={panel.busy()}
+                  onClick={() => void panel.retry()}
+                >
+                  {t("gateway.panel.retry")}
+                </button>
+              </Show>
               <button
                 type="button"
                 data-slot="bots-btn"
