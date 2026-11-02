@@ -462,6 +462,7 @@ export interface AgentHookFiles {
 export { stripAnsi } from "./ansi"
 
 import { createLineAccumulator } from "./line-stream"
+import { orderedWrites } from "./ordered-writes"
 import type { TokenUsage } from "../session/shared"
 import type { InstallProgress, PackStatus } from "@ragu/voice"
 import { keyError, type KeyDraft, type KeyInfo } from "../secrets/keys"
@@ -696,6 +697,7 @@ export async function getHost(): Promise<Host | undefined> {
         onExit(null)
       }
 
+      const sendToPane = orderedWrites((data) => invoke("pty_write", { id, data }))
       return {
         kill: (options) => {
           if (dead) return Promise.resolve(true)
@@ -708,7 +710,7 @@ export async function getHost(): Promise<Host | undefined> {
         },
         write: (data) => {
           if (dead) return
-          void invoke("pty_write", { id, data }).catch(() => undefined)
+          sendToPane(data)
         },
         resize: (nextCols, nextRows) => {
           if (dead) return
