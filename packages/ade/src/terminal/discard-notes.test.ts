@@ -1,5 +1,9 @@
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import { describe, expect, test } from "bun:test"
 import { createDiscardNotes } from "./discard-notes"
+
+const WORKBENCH = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
 
 /*
  * Review of ade/flood-pagina, point 6. The notice that xterm threw output away was said once per pane for the life of
@@ -62,5 +66,12 @@ describe("the notice that output was discarded", () => {
     back()
     discard.refused("a")
     expect(said).toEqual(["a"])
+  })
+
+  test("lint: the workbench says a refusal, and each start of a pane forgets the one before", () => {
+    expect(WORKBENCH).toContain("if (!writeToTerminal(paneId, chunk, written)) discardNotes.refused(paneId)")
+    const starts = WORKBENCH.split("startOnCleanScreen(paneId)").slice(1)
+    expect(starts.length).toBe(2)
+    for (const after of starts) expect(after.trimStart().startsWith("discardNotes.started(paneId)")).toBe(true)
   })
 })
