@@ -3,7 +3,7 @@ import { compileSolidJsx } from "../test-support/solid-jsx"
 import type { Host } from "../host/shell"
 import { typedInstallLine, installExit, watchInstall } from "./install-follow"
 import { detectAgents } from "./availability"
-import { INSTALLS, commandFor, terminalLine } from "./install"
+import { INSTALLS, commandFor, isSavedInstallPane, terminalLine } from "./install"
 import { addPane, createWorkbench, toWorkspaceState } from "../surface/state"
 
 compileSolidJsx()
@@ -127,6 +127,31 @@ describe("an install pane is never run again by ADE (B3)", () => {
       const outside = terminalLine(command).replace(/"[^"]*"/g, '""').replace(/'[^']*'/g, "''")
       expect([entry.agentId, /[|&;]/.test(outside)]).toEqual([entry.agentId, false])
     }
+  })
+})
+
+describe("an install pane saved by 0.18.0 is not brought back (R1)", () => {
+  test("a Terminal whose task is exactly a catalogue line is recognised, for every system, and nothing else is", () => {
+    for (const entry of INSTALLS)
+      for (const os of ["windows", "macos", "linux"] as const) {
+        const command = commandFor(entry, os)
+        if (!command) continue
+        const line = terminalLine(command)
+        expect([entry.agentId, os, isSavedInstallPane({ agent: "terminal", task: line })]).toEqual([entry.agentId, os, true])
+        expect(isSavedInstallPane({ agent: "terminal", task: `${line} && exit` })).toBe(true)
+        // Another agent, or the same text typed by hand into a session that is not a terminal, is not one.
+        expect(isSavedInstallPane({ agent: "claude-code", task: line })).toBe(false)
+      }
+    expect(isSavedInstallPane({ agent: "terminal", task: "ls" })).toBe(false)
+    expect(isSavedInstallPane({ agent: "terminal" })).toBe(false)
+  })
+
+  test("the workbench drops them before either restore path reads the saved list", async () => {
+    const src = await Bun.file(new URL("../surface/workbench.tsx", import.meta.url)).text()
+    const at = src.indexOf("!isSavedInstallPane(pane)")
+    expect(at).toBeGreaterThan(-1)
+    expect(at).toBeLessThan(src.indexOf("setWb(fromWorkspaceState(state))"))
+    expect(src).not.toContain("setWb(fromWorkspaceState(savedWorkspace.state))")
   })
 })
 

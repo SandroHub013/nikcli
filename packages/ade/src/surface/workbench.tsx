@@ -65,6 +65,7 @@ import { formatChord, parseChord } from "../keyboard/keymap"
 import { CommandPalette } from "../command/palette"
 import { paletteStep } from "../command/palette-keys"
 import { SessionNew } from "../session-new/session-new"
+import { isSavedInstallPane } from "../session-new/install"
 import { watchInstall, installExit, typedInstallLine, type InstallWatch } from "../session-new/install-follow"
 import { recheckAgents } from "../session-new/availability"
 import { AGENTS, agentById, agentLabel } from "../session-new/agents"
@@ -6714,8 +6715,16 @@ export function Workbench() {
     const savedWorkspace = readSavedWorkspace(localStorage, Date.now())
     let restored: WorkspaceState | undefined
     if (savedWorkspace.state) {
-      restored = savedWorkspace.state
-      setWb(fromWorkspaceState(savedWorkspace.state))
+      /*
+       * An install pane saved by 0.18.0 has no `installFor` and its task is the install line: both boot paths would
+       * type it again. Dropped here, once, before either reads the list; the next save writes it without them.
+       */
+      const state: WorkspaceState = {
+        ...savedWorkspace.state,
+        panes: savedWorkspace.state.panes.filter((pane) => !isSavedInstallPane(pane)),
+      }
+      restored = state
+      setWb(fromWorkspaceState(state))
       // The suspended sessions' queues, now that their panes are back (P1-C6).
       // Also for a pane resumed just before ADE closed: its mail waits for the session to start again.
       heldLines.push(...parseSuspendedMail(readStored(SUSPENDED_MAIL_KEY)).filter((line) => paneExists(line.paneId)))
