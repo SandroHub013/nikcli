@@ -14,7 +14,7 @@
  * script in `scripts/test-app.ts` does the spawning.
  */
 
-import { basename, join } from "node:path"
+import { basename, join, resolve } from "node:path"
 
 /** Dev ports are taken from 5200–5599, clear of Vite's 5173 and ADE's 5177. */
 export const TEST_APP_PORT_BASE = 5200
@@ -41,6 +41,14 @@ export interface TestAppPlan {
    * instance rewrote the other's `ade-msg.ps1` mid-test (S25).
    */
   mailboxDir: string
+  /**
+   * The folder cargo builds into: `CARGO_TARGET_DIR` when it is set (resolved from `src-tauri`, where `tauri dev` runs
+   * cargo), else this worktree's own `src-tauri/target`. A team that shares one build folder between worktrees sets it,
+   * and then the app binary's path says nothing about whose it is.
+   */
+  targetDir: string
+  /** The build folder is not this worktree's own: its binary is every worktree's, and proves nothing alone. */
+  sharedTarget: boolean
 }
 
 /** What a started instance left behind, so `status` and `list` can describe it. */
@@ -103,14 +111,21 @@ export function instanceProcesses(
   const norm = (text: string | undefined) => (text ?? "").replace(/\\/g, "/").toLowerCase()
   const config = norm(plan.configPath)
   const profile = norm(plan.profileDir)
-  const target = norm(join(root, "packages", "ade", "src-tauri", "target"))
+  const target = norm(plan.targetDir ?? join(root, "packages", "ade", "src-tauri", "target"))
   const tree = norm(root)
+  /*
+   * In a build folder shared with other worktrees the binary is theirs as much as ours: it counts only as the parent of
+   * a WebView2 process that carries this worktree's profile (`tauri dev` being gone, the app is orphaned), or, through
+   * the descendants below, as a child of this worktree's `tauri dev`. Never by its path alone, or `stop` here would
+   * close another worktree's window.
+   */
+  const profileParents = new Set(rows.filter((row) => norm(row.cmd).includes(profile)).map((row) => row.ppid))
 
   const isRoot = (row: ProcessRow) => {
     const cmd = norm(row.cmd)
     const exe = norm(row.exe)
     if (cmd.includes(config) || cmd.includes(profile)) return true
-    if (exe.startsWith(`${target}/`)) return true
+    if (exe.startsWith(`${target}/`)) return !plan.sharedTarget || profileParents.has(row.pid)
     // `${tree}/`: `ragu-ade` is a prefix of `ragu-ade-testapp`.
     return port !== undefined && cmd.includes(`${tree}/`) && cmd.includes("vite") && cmd.includes(`--port ${port}`)
   }
@@ -163,7 +178,7 @@ export function killOrder(members: readonly ProcessRow[]): ProcessRow[] {
 export function instanceRunning(members: readonly ProcessRow[], plan: TestAppPlan, root: string): boolean {
   const norm = (text: string | undefined) => (text ?? "").replace(/\\/g, "/").toLowerCase()
   const config = norm(plan.configPath)
-  const target = norm(join(root, "packages", "ade", "src-tauri", "target"))
+  const target = norm(plan.targetDir ?? join(root, "packages", "ade", "src-tauri", "target"))
   return members.some((row) => norm(row.cmd).includes(config) || norm(row.exe).startsWith(`${target}/`))
 }
 
@@ -184,10 +199,25 @@ export function hashPath(path: string): number {
   return hash
 }
 
-export function planTestApp(input: { root: string; branch: string }): TestAppPlan {
+function isSameFolder(a: string, b: string): boolean {
+  const norm = (text: string) => text.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()
+  return norm(a) === norm(b)
+}
+
+export function planTestApp(input: {
+  root: string
+  branch: string
+  /** The environment the launcher runs in: its `CARGO_TARGET_DIR` says where cargo builds. */
+  env?: Record<string, string | undefined>
+}): TestAppPlan {
   const name = basename(input.root.replace(/[\\/]+$/, ""))
   const stateDir = join(input.root, ".ade-test")
+  const own = join(input.root, "packages", "ade", "src-tauri", "target")
+  const chosen = input.env?.CARGO_TARGET_DIR?.trim()
+  const targetDir = chosen ? resolve(join(input.root, "packages", "ade", "src-tauri"), chosen) : own
   return {
+    targetDir,
+    sharedTarget: chosen ? !isSameFolder(targetDir, own) : false,
     name,
     label: input.branch ? `${name} · ${input.branch}` : name,
     port: TEST_APP_PORT_BASE + (hashPath(input.root) % TEST_APP_PORT_SPAN),
@@ -246,9 +276,53 @@ export function tauriDevArgs(configPath: string, cargoToml: string, options: { w
   return args
 }
 
+/** What the command line of `test:app` asks for. */
+export interface TestAppArgs {
+  command: string
+  cdp: boolean
+  watch: boolean
+  /** Compile, and run, below normal priority: the machine has a benchmark going (`--low`). */
+  low: boolean
+  /** The `-j` of cargo, as `CARGO_BUILD_JOBS` (`--jobs N`). */
+  jobs?: number
+  error?: string
+}
+
+/**
+ * Reads `test:app`'s arguments. `--jobs 2` takes its value, which is not the command: `2` once read as the command name
+ * would have been «comando sconosciuto».
+ *
+ * `--low` and `--jobs` exist because `tauri dev` recompiles the app crate on its own when the environment changed
+ * since the prebuild, outside whatever priority the prebuild ran at (live test 2026-11-02: four starts in seven, at
+ * normal priority and on every core, on a machine running a benchmark).
+ */
+export function parseTestAppArgs(argv: readonly string[]): TestAppArgs {
+  const out: TestAppArgs = { command: "start", cdp: false, watch: false, low: false }
+  let command: string | undefined
+  for (let index = 0; index < argv.length; index++) {
+    const arg = argv[index]!
+    if (arg === "--cdp") out.cdp = true
+    else if (arg === "--watch") out.watch = true
+    else if (arg === "--low") out.low = true
+    else if (arg === "--jobs" || arg.startsWith("--jobs=")) {
+      const value = arg === "--jobs" ? argv[++index] : arg.slice("--jobs=".length)
+      const jobs = value !== undefined && /^\d+$/.test(value) ? Number(value) : NaN
+      if (!Number.isInteger(jobs) || jobs < 1 || jobs > 64) out.error = `--jobs vuole un numero da 1 a 64, non «${value ?? ""}»`
+      else out.jobs = jobs
+    } else if (!arg.startsWith("-") && command === undefined) command = arg
+  }
+  if (command !== undefined) out.command = command
+  return out
+}
+
 /** Whether `tauri dev`'s output says the app binary is running, under either name. */
 export function appStarted(log: string): boolean {
-  return /Running `target[\\/]debug[\\/]ade-(desktop|test)/.test(log)
+  /*
+   * Cargo writes the path relative to where it ran when the binary is under it, and the whole path when it is not: a
+   * `CARGO_TARGET_DIR` outside the worktree gave Running `C:\...\debug\ade-test.exe`, which the old pattern, written for
+   * `target\debug`, never matched, so the supervisor never saw the window and stopped the instance at its timeout.
+   */
+  return /Running `[^`\r\n]*?[\\/]debug[\\/]ade-(desktop|test)(\.exe)?`/.test(log)
 }
 
 export function parseRecord(text: string): TestAppRecord | undefined {
@@ -296,9 +370,9 @@ export type StopOutcome =
 export const TEST_APP_CLOSE_TIMEOUT_MS = 10_000
 
 /** Whether a process is the app itself: the binary built into this worktree's `target`. */
-export function isAppProcess(row: ProcessRow, root: string): boolean {
+export function isAppProcess(row: ProcessRow, root: string, targetDir?: string): boolean {
   const norm = (text: string | undefined) => (text ?? "").replace(/\\/g, "/").toLowerCase()
-  return norm(row.exe).startsWith(`${norm(join(root, "packages", "ade", "src-tauri", "target"))}/`)
+  return norm(row.exe).startsWith(`${norm(targetDir ?? join(root, "packages", "ade", "src-tauri", "target"))}/`)
 }
 
 /**
@@ -340,7 +414,7 @@ export function stopInstance(input: {
   }
   let members = instanceProcesses(rows, plan, root, record.port, record.startedAt)
   const closed: number[] = []
-  const apps = members.filter((row) => isAppProcess(row, root) && row.pid !== input.selfPid).map((row) => row.pid)
+  const apps = members.filter((row) => isAppProcess(row, root, plan.targetDir) && row.pid !== input.selfPid).map((row) => row.pid)
   if (input.close && input.waitExit && apps.length > 0) {
     for (const pid of apps) input.close(pid)
     const alive = new Set(input.waitExit(apps, input.closeTimeoutMs ?? TEST_APP_CLOSE_TIMEOUT_MS))

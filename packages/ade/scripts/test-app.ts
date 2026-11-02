@@ -5,6 +5,8 @@
  *   bun run test:app --cdp      same, with WebView2 remote debugging for an agent to drive
  *   bun run test:app --watch    same, rebuilding and restarting on every Rust change
  *                               (the window closes and reopens: only while writing Rust)
+ *   bun run test:app --low      compile, and run, below normal priority (a machine busy with something else)
+ *   bun run test:app --jobs 2   cargo's -j (CARGO_BUILD_JOBS) for this start
  *   bun run test:app stop       stop this worktree's instance, and nothing else
  *   bun run test:app status     this worktree's instance
  *   bun run test:app list       every worktree's instance
@@ -17,6 +19,7 @@
 import { spawn, spawnSync } from "node:child_process"
 import { existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { createServer } from "node:net"
+import { constants as osConstants, setPriority } from "node:os"
 import { join } from "node:path"
 import {
   TEST_APP_CDP_OFFSET,
@@ -24,6 +27,7 @@ import {
   instanceProcesses,
   instanceRunning,
   parseRecord,
+  parseTestAppArgs,
   planTestApp,
   stopInstance,
   superviseStart,
@@ -47,17 +51,22 @@ if (!root) {
   console.error("ADE Test: non trovo la radice del repository git.")
   process.exit(1)
 }
-const plan = planTestApp({ root, branch: git(["branch", "--show-current"]) })
+// The environment too: a shared `CARGO_TARGET_DIR` says where the app binary is, and so how `start` sees it and `stop` closes it.
+const plan = planTestApp({ root, branch: git(["branch", "--show-current"]), env: process.env })
 
-const args = process.argv.slice(2)
-const command = args.find((arg) => !arg.startsWith("-")) ?? "start"
-const wantCdp = args.includes("--cdp")
+const parsed = parseTestAppArgs(process.argv.slice(2))
+if (parsed.error) {
+  console.error(`ADE Test: ${parsed.error}`)
+  process.exit(1)
+}
+const command = parsed.command
+const wantCdp = parsed.cdp
 /*
  * A change to the Rust sources rebuilds and restarts the app, which closes
  * the window whoever is using it is looking at. Off unless asked for: see
  * `tauriDevArgs`.
  */
-const wantWatch = args.includes("--watch")
+const wantWatch = parsed.watch
 
 // ---------------------------------------------------------------------------
 
@@ -225,10 +234,24 @@ async function start(): Promise<void> {
         VITE_ADE_TEST_LABEL: plan.name,
         // Read only by a test build (mailbox.rs): its own mailbox, not the one all test builds share.
         ADE_MAILBOX_ROOT: plan.mailboxDir,
+        // cargo's `-j`, for a machine that is busy with something else (`--jobs N`).
+        ...(parsed.jobs ? { CARGO_BUILD_JOBS: String(parsed.jobs) } : {}),
       },
     },
   )
   child.unref()
+  /*
+   * `--low`: set at once, before `tauri dev` starts cargo, so cargo and rustc are created below normal priority too
+   * (a child takes its creator's class). The app is a child as well, so the window runs below normal: for builds, not
+   * for measurements.
+   */
+  if (parsed.low && child.pid !== undefined) {
+    try {
+      setPriority(child.pid, osConstants.priority.PRIORITY_BELOW_NORMAL)
+    } catch (error) {
+      console.error(`ADE Test: non riesco ad abbassare la priorità: ${error instanceof Error ? error.message : error}`)
+    }
+  }
 
   const record: TestAppRecord = { port, cdpPort, label: plan.label, root, startedAt }
   writeFileSync(plan.recordPath, JSON.stringify(record, null, 2))
@@ -362,7 +385,7 @@ function list(): void {
     .map((line) => line.slice("worktree ".length))
   let found = 0
   for (const tree of trees) {
-    const target = planTestApp({ root: tree, branch: "" })
+    const target = planTestApp({ root: tree, branch: "", env: process.env })
     const record = readRecord(target.recordPath)
     if (!instanceRunning(instanceProcesses(rows, target, tree, record?.port), target, tree)) continue
     found++
@@ -385,6 +408,6 @@ switch (command) {
     list()
     break
   default:
-    console.error(`Comando sconosciuto: ${command}. Usa start, stop, status o list.`)
+    console.error(`Comando sconosciuto: ${command}. Usa start, stop, status o list (con --cdp, --watch, --low, --jobs N).`)
     process.exit(1)
 }
