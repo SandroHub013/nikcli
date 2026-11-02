@@ -272,6 +272,12 @@ export const it = {
   "new.launch": (count: number) => (count === 1 ? "Avvia 1 sessione" : `Avvia ${count} sessioni`),
   "new.agent": "Agente",
   "new.missing": "assente",
+  "new.looking": "Cerco gli agenti installati…",
+  "new.noneInstalled":
+    "Nessun agente installato su questo computer. Scegline uno qui sotto per vedere come installarlo.",
+  "new.noAgentChosen": "nessun agente scelto",
+  "pane.noAgent":
+    "Questa sessione non può partire: non è stato scelto nessun agente. Chiudila e scegline uno in Nuova sessione.",
   "install.cardHint": "non installato: clicca per installarlo",
   "install.title": (agent: string) => `Installa ${agent}`,
   "install.command": "Comando ufficiale",
@@ -289,7 +295,11 @@ export const it = {
   "install.requiresPage": (program: string) => `Come installare ${program}`,
   "install.found": (agent: string) => `${agent} trovato: ora si può avviare.`,
   "install.notFound":
-    "Ancora non lo trovo. Quando l'installazione nel terminale è finita, premi di nuovo Ricontrolla.",
+    "Non lo trovo ancora. Se il terminale mostra un errore, l'installazione non è finita: correggi e riprova. Se è finita, chiudi e riapri Nuova sessione.",
+  "install.paneNote": (agent: string) =>
+    `A installazione finita ADE ricontrolla da sola e riapre Nuova sessione con ${agent} pronto. Se c'è un errore il terminale resta aperto.`,
+  "install.stillMissing": "Non lo trovo ancora. Apri Nuova sessione e premi Ricontrolla sulla sua scheda.",
+  "install.autoFound": (agent: string) => `${agent} installato: ora puoi avviarlo da Nuova sessione.`,
   "install.source": (source: string, date: string) => `Fonte: ${source}, controllata il ${date}`,
   "install.caveat.subscription": "Per usarlo serve un abbonamento GitHub Copilot.",
   "install.caveat.wsl": "Su Windows la documentazione consiglia WSL per l'esperienza migliore.",

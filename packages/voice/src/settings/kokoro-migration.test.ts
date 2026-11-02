@@ -186,10 +186,10 @@ describe("Kokoro con una lingua che non può parlare", () => {
 })
 
 describe("un profilo nuovo", () => {
-  test("parte su Rosa, che è la voce cloud", () => {
+  test("parte su Ugo, che è locale: la voce a pagamento è una scelta (MOD-9)", () => {
     const res = normalizeSettings(undefined)
-    expect(res.replyVoice).toBe("it-IT-Rosa")
-    expect(res.replyBackend).toBe("mai")
+    expect(res.replyVoice).toBe("ugo")
+    expect(res.replyBackend).toBe("piper")
     expect(res.ttsLocale).toBe("it-IT")
   })
 
@@ -205,8 +205,8 @@ describe("un profilo nuovo", () => {
   test("i valori di default sono una coppia che può parlare", () => {
     const { replyVoice, replyBackend, ttsLocale }: Pick<VoiceSettings, "replyVoice" | "replyBackend" | "ttsLocale"> =
       normalizeSettings(undefined).settings
-    expect(replyBackend).toBe("mai")
+    expect(replyBackend).toBe("piper")
     expect(ttsLocale).toBe("it-IT")
-    expect(replyVoice).toBe("it-IT-Rosa")
+    expect(replyVoice).toBe("ugo")
   })
 })

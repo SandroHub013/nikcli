@@ -37,14 +37,21 @@ describe("la migrazione a v9", () => {
     }
   })
 
-  test("un profilo nuovo parte su Rosa, e ADE Test resta su Piper", () => {
-    const fresh = normalizeSettings(null)
-    expect(fresh.replyBackend).toBe("mai")
-    expect(fresh.replyVoice).toBe("it-IT-Rosa")
-    expect(fresh.ttsLocale).toBe("it-IT")
-    const test = normalizeSettings(null, { testIdentity: true })
-    expect(test.replyBackend).toBe("piper")
-    expect(test.replyVoice).toBe("ugo")
+  test("un profilo nuovo parte su Ugo, locale, come ADE Test: nessuna voce a pagamento di default (MOD-9)", () => {
+    for (const options of [{}, { testIdentity: true }]) {
+      const fresh = normalizeSettings(null, options)
+      expect(fresh.replyBackend).toBe("piper")
+      expect(fresh.replyVoice).toBe("ugo")
+      expect(fresh.ttsLocale).toBe("it-IT")
+    }
+  })
+
+  test("un profilo che ha già scelto Rosa con MAI tiene la sua scelta", () => {
+    for (const version of [9, CURRENT_SETTINGS_VERSION]) {
+      const res = normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, version, replyVoice: "it-IT-Rosa", replyBackend: "mai" })
+      expect(res.replyVoice).toBe("it-IT-Rosa")
+      expect(res.replyBackend).toBe("mai")
+    }
   })
 
   test("un profilo che aveva già una voce la tiene", () => {
@@ -163,11 +170,11 @@ describe("un profilo che c'era non passa al cloud da solo", () => {
     }
   })
 
-  test("nuovo è solo un profilo vuoto, anche se ha già la chiave", () => {
+  test("nuovo è solo un profilo vuoto: parte su Ugo anche se ha già la chiave, che non basta a scegliere Rosa", () => {
     for (const raw of [null, undefined, { openRouterApiKey: "sk-finta" }]) {
       const res = normalizeSettings(raw)
-      expect(res.replyVoice).toBe("it-IT-Rosa")
-      expect(res.replyBackend).toBe("mai")
+      expect(res.replyVoice).toBe("ugo")
+      expect(res.replyBackend).toBe("piper")
     }
   })
 

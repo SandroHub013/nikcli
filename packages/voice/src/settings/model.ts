@@ -145,8 +145,8 @@ export const REPLY_BACKEND_BY_VOICE: Readonly<Record<ReplyVoice, ReplyBackend>> 
  * it: naming a cloud voice for someone who never asked is a purchase they did
  * not make, and the one question a profile on Piper/Ugo is asked lives in
  * `replyVoiceOffer`. A profile with no voice at all is a new one, and a new
- * one starts on Rosa — except ADE Test, which stays on Piper so a test run
- * never spends a key. See `toMai`.
+ * one started on Rosa until 2026-11-02 (audit MOD-9): it now starts on Ugo, as
+ * ADE Test always did, so nothing paid is the default. See `toMai`.
  *
  * 10: live transcription over the streaming socket (xAI Grok). The backend a
  * profile on OpenRouter had is moved to the streaming one without a word: it
@@ -390,8 +390,14 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = Object.freeze({
   customWords: Object.freeze([]),
   speakReplies: true,
   spokenAlerts: false,
-  replyVoice: "it-IT-Rosa",
-  replyBackend: "mai",
+  /*
+   * Local, never the paid MAI voice (audit MOD-9, the user's decision of 2026-11-02): a new profile reads aloud with
+   * Ugo, which is Piper's voice, and while Piper's pack is not installed the system voice reads in its place, so
+   * there is always a voice that costs nothing. MAI through OpenRouter is a choice made in the voice settings, and
+   * only then is a key looked for.
+   */
+  replyVoice: "ugo",
+  replyBackend: "piper",
   /*
    * Italian, because the default voice is Ugo and the default language of the
    * profile is Italian: a new profile speaks what it has always spoken. A
@@ -486,24 +492,20 @@ function toKokoro(candidate: Record<string, unknown>): Record<string, unknown> {
  * is the panel's to answer.
  *
  * A profile that names no voice is still a profile: of any version, it was
- * speaking Ugo, and it goes on speaking Ugo. Only `fresh` — nothing stored but
- * the key that lives in its own slot — is a new one, and a new one starts on
- * Rosa. ADE Test is the exception: a test run that spent a key would be a test
- * run that billed someone, so it stays on Piper. The key itself is not consulted
- * here, because this function cannot see it — a profile without one is still
- * Rosa, and the speaker reads it locally until a key appears.
+ * speaking Ugo, and it goes on speaking Ugo. `fresh` — nothing stored but
+ * the key that lives in its own slot — is a new one. It used to start on Rosa,
+ * which spends the user's OpenRouter key on every reply, «Prova» and alert; since
+ * 2026-11-02 a new profile starts on Ugo like every other (audit MOD-9), and Rosa
+ * is a choice. A profile that already names Rosa keeps it. `fresh` and
+ * `testIdentity` no longer change the answer, and stay so the callers do not.
  */
 function toMai(candidate: Record<string, unknown>, testIdentity: boolean, fresh: boolean): Record<string, unknown> {
   // A voice that is there and not one of ours is a repair, and it falls back
   // below — it is not a profile that asked for Rosa.
   if (!("replyVoice" in candidate)) {
-    if (testIdentity || !fresh) return { ...candidate, replyVoice: "ugo", replyBackend: "piper" }
-    return {
-      ...candidate,
-      replyVoice: "it-IT-Rosa",
-      replyBackend: "mai",
-      ttsLocale: "it-IT",
-    }
+    void testIdentity
+    void fresh
+    return { ...candidate, replyVoice: "ugo", replyBackend: "piper" }
   }
   // `toKokoro` writes piper for every profile that had no backend, including a
   // new one that has since been given Rosa. The voice decides, so the backend

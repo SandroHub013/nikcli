@@ -266,6 +266,11 @@ export const en: Messages = {
   "new.launch": (count) => (count === 1 ? "Start 1 session" : `Start ${count} sessions`),
   "new.agent": "Agent",
   "new.missing": "missing",
+  "new.looking": "Looking for the installed agents…",
+  "new.noneInstalled": "No agent is installed on this computer. Pick one below to see how to install it.",
+  "new.noAgentChosen": "no agent chosen",
+  "pane.noAgent":
+    "This session can't start: no agent was chosen. Close it and pick one in New session.",
   "install.cardHint": "not installed: click to install it",
   "install.title": (agent) => `Install ${agent}`,
   "install.command": "Official command",
@@ -283,7 +288,11 @@ export const en: Messages = {
   "install.requiresPage": (program) => `How to install ${program}`,
   "install.found": (agent) => `${agent} found: it can be started now.`,
   "install.notFound":
-    "Still not found. When the install in the terminal has finished, press Check again.",
+    "I can't find it yet. If the terminal shows an error, the install isn't finished: fix it and try again. If it is finished, close and reopen New session.",
+  "install.paneNote": (agent) =>
+    `When the install ends, ADE checks by itself and reopens New session with ${agent} ready. On an error the terminal stays open.`,
+  "install.stillMissing": "I can't find it yet. Open New session and press Check again on its card.",
+  "install.autoFound": (agent) => `${agent} is installed: you can start it from New session now.`,
   "install.source": (source, date) => `Source: ${source}, checked on ${date}`,
   "install.caveat.subscription": "Using it needs a GitHub Copilot subscription.",
   "install.caveat.wsl": "On Windows the documentation recommends WSL for the best experience.",

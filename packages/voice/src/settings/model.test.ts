@@ -400,8 +400,9 @@ describe("settings/model agentEngine", () => {
 })
 
 describe("settings/model replyVoice", () => {
-  test("Rosa by default, an unknown voice repaired to Ugo, a known one kept", () => {
-    expect(DEFAULT_VOICE_SETTINGS.replyVoice).toBe("it-IT-Rosa")
+  test("Ugo by default (never the paid voice), an unknown voice repaired to Ugo, a known one kept", () => {
+    expect(DEFAULT_VOICE_SETTINGS.replyVoice).toBe("ugo")
+    expect(DEFAULT_VOICE_SETTINGS.replyBackend).toBe("piper")
     const absent = normalizeSettings({
       ...DEFAULT_VOICE_SETTINGS,
       replyVoice: undefined,
