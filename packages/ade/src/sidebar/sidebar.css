@@ -1703,8 +1703,9 @@ aside[data-component="ade-sidebar"] {
 @container (max-width: 230px) {
   [data-slot="sidebar-settings"],
   [data-slot="sidebar-footer-actions"] [data-slot="ade-icon"] {
-    width: 22px;
-    height: 22px;
+    /* 24px, the WCAG 2.5.8 minimum: they were 22 here (UX-18). */
+    width: 24px;
+    height: 24px;
   }
 
   [data-slot="sidebar-stats"] {
