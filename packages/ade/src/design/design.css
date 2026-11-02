@@ -484,7 +484,7 @@
   font-size: var(--ade-font-sm);
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--ade-track-caps);
   color: var(--ade-text-weak);
   background: none;
   border: 0;

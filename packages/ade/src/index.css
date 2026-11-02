@@ -562,7 +562,7 @@ body[data-theme="glass"] #root,
   --ade-ansi-brightWhite: light-dark(#120d0b, #f4e7cd);
 
   /* ── type scale ─────────────────────────────────────────────────────────── */
-  --ade-font-xs: 10px;
+  --ade-font-xs: 11px;
   --ade-font-sm: 11px;
   --ade-font-md: 12px;
   --ade-font-lg: 13px;
@@ -574,7 +574,9 @@ body[data-theme="glass"] #root,
    * sidebar. The density the user chose (DS-B = compact) puts it at 12px;
    * one token, so a denser or roomier ADE is one line.
    */
-  --ade-font-body: 12px;
+  --ade-font-body: var(--ade-font-md);
+  /* The tracking of an uppercase label: one value where twelve were in use (0.04em to 0.1em, and 0.5px). */
+  --ade-track-caps: 0.06em;
 
   /*
    * ── icons ──────────────────────────────────────────────────────────────────
@@ -633,8 +635,16 @@ body[data-theme="glass"] #root,
   --ade-space-8: 20px;
   --ade-space-9: 24px;
 
-  --ade-mono: "IBM Plex Mono", "SF Mono", "Cascadia Mono", ui-monospace, monospace;
-  --ade-sans: "Inter", -apple-system, "Segoe UI", system-ui, sans-serif;
+  /*
+   * The faces of the machine, said as such: ADE ships no font file. Segoe UI
+   * Variable and Cascadia Mono on Windows, SF and SF Mono on a Mac. The mono
+   * is the terminal's too (`MONO_STACK` in terminal/registry.ts must read the
+   * same, a test holds them together); "Segoe UI Symbol" is there so the
+   * spinners and marks an agent draws (✻ ⏺ ⎿) that Cascadia lacks come from a
+   * symbol face and not as empty boxes.
+   */
+  --ade-mono: "Cascadia Mono", "SF Mono", Consolas, "Segoe UI Symbol", ui-monospace, monospace;
+  --ade-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
 }
 
 /* ── resets ─────────────────────────────────────────────────────────────────── */

@@ -385,7 +385,7 @@
   font: inherit;
   font-size: var(--ade-font-xs);
   font-weight: 500;
-  letter-spacing: 0.07em;
+  letter-spacing: var(--ade-track-caps);
   text-transform: uppercase;
   color: var(--ade-text-weak);
   text-align: left;

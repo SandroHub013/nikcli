@@ -237,7 +237,7 @@
   color: var(--ade-text-weak);
   font-size: var(--ade-font-xs);
   font-weight: var(--ade-weight-medium);
-  letter-spacing: 0.09em;
+  letter-spacing: var(--ade-track-caps);
   text-transform: uppercase;
 }
 

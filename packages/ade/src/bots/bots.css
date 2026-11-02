@@ -197,7 +197,7 @@
   font-family: var(--ade-mono);
   font-size: var(--ade-font-xs);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--ade-track-caps);
   color: var(--ade-text-weak);
 }
 
@@ -218,7 +218,7 @@
   font-family: var(--ade-mono);
   font-size: var(--ade-font-xs);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--ade-track-caps);
   color: var(--ade-warning);
 }
 
@@ -1058,7 +1058,7 @@
   font-size: var(--ade-font-xs);
   font-weight: var(--ade-weight-medium);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--ade-track-caps);
   color: var(--ade-text-weak);
 }
 
@@ -1213,7 +1213,7 @@
   font-family: var(--ade-mono);
   font-size: var(--ade-font-xs);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--ade-track-caps);
   color: var(--ade-text-weak);
 }
 

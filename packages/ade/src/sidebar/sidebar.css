@@ -295,7 +295,7 @@
   font-family: var(--ade-sans);
   font-size: var(--ade-font-xs);
   font-weight: var(--ade-weight-medium);
-  letter-spacing: 0.07em;
+  letter-spacing: var(--ade-track-caps);
   text-transform: uppercase;
   color: var(--ade-text-weak);
   background: transparent;
@@ -390,7 +390,7 @@
   font-family: var(--ade-sans);
   font-size: var(--ade-font-xs);
   font-weight: var(--ade-weight-medium);
-  letter-spacing: 0.07em;
+  letter-spacing: var(--ade-track-caps);
   text-transform: uppercase;
 }
 

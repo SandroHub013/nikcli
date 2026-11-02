@@ -1137,7 +1137,7 @@
   background: var(--ade-surface);
   color: var(--ade-text-soft);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--ade-track-caps);
   user-select: none;
 }
 
