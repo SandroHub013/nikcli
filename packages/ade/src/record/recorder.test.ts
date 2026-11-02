@@ -370,6 +370,18 @@ describe("settled: a take is finished before ADE goes (review of the 2026-11-02 
     expect(await isSettled(recorder.settled())).toBe(true)
   })
 
+  test("a stop just asked already counts as closing: an update can stop a take and wait for it in the same breath", async () => {
+    const stalled = stalledStop()
+    const { recorder } = setup({ stop: stalled.stop })
+    await recorder.start({ kind: "window" })
+    const stopping = recorder.stop()
+    expect(recorder.state().status).toBe("stopping")
+    expect(await isSettled(recorder.settled())).toBe(false)
+    stalled.finish("C:/video/ADE.mp4")
+    await stopping
+    expect(await isSettled(recorder.settled())).toBe(true)
+  })
+
   test("a close that fails settles too: nothing stays waiting for it", async () => {
     const { recorder } = setup({ stop: () => Promise.reject(new Error("encoder")) })
     await recorder.start({ kind: "window" })

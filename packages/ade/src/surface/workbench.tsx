@@ -5526,8 +5526,13 @@ export function Workbench() {
       const { invoke } = await import("@tauri-apps/api/core")
       await updateInSteps({
         download: () => invoke("ade_update_download"),
+        settle: () => {
+          // A take still recording would be left a file nobody can play. Stopping does nothing if none is, and
+          // `takeFinished` is what puts a limit on the wait and says why ADE is not closing yet.
+          void recorder.stop().then((problem) => problem && report(problem))
+          return takeFinished()
+        },
         stopMail: () => setInstallingUpdate(true),
-        settle: () => takeFinished(),
         save: () => {
           autosave.flush()
           // The mail waiting for a session is lost with the process otherwise.

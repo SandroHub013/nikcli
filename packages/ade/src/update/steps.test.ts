@@ -19,10 +19,10 @@ function recording(overrides: { download?: () => Promise<unknown>; install?: () 
 }
 
 describe("updateInSteps", () => {
-  test("the mail stops only once the download is done, and the state is saved after it stopped", async () => {
+  test("the mail stops as late as it can, after the download and the take, and the state is saved after it stopped", async () => {
     const { steps, run } = recording()
     await run
-    expect(steps).toEqual(["download", "stopMail", "settle", "save", "waitForDisk", "install"])
+    expect(steps).toEqual(["download", "settle", "stopMail", "save", "waitForDisk", "install"])
   })
 
   test("a download that takes its time leaves the mail moving", async () => {
@@ -53,8 +53,18 @@ describe("the wiring in the workbench", () => {
   test("an update asks for the download and the install apart, and a take is finished before the install", () => {
     const run = source.slice(source.indexOf("const runUpdate = async () => {"))
     expect(run.indexOf('invoke("ade_update_download")')).toBeGreaterThan(-1)
-    expect(run.indexOf("settle: () => takeFinished()")).toBeGreaterThan(run.indexOf('invoke("ade_update_download")'))
-    expect(run.indexOf('invoke("ade_update_install")')).toBeGreaterThan(run.indexOf("settle: () => takeFinished()"))
+    const settle = run.indexOf("settle: () => {")
+    expect(settle).toBeGreaterThan(run.indexOf('invoke("ade_update_download")'))
+    expect(run.indexOf('invoke("ade_update_install")')).toBeGreaterThan(settle)
+  })
+
+  test("a take still recording is stopped and waited for before the install, or the install leaves a file nobody can play", () => {
+    const run = source.slice(source.indexOf("const runUpdate = async () => {"))
+    const settle = run.slice(run.indexOf("settle: () => {"))
+    const end = settle.indexOf("save: () => {")
+    expect(settle.slice(0, end)).toContain("recorder.stop()")
+    expect(settle.indexOf("return takeFinished()")).toBeGreaterThan(settle.indexOf("recorder.stop()"))
+    expect(settle.indexOf("return takeFinished()")).toBeLessThan(end)
   })
 
   test("closing ADE waits for a take that is finishing", () => {
