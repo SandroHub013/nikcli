@@ -265,6 +265,12 @@ describe("dispatch", () => {
       expect(outcome.spoken).toStartWith("Non c'è")
     })
 
+    test("opening the palette is said as «Cerca comandi», not «tavolozza» (B5)", async () => {
+      const { outcome } = await run("palette.open", {})
+      expect(outcome.success).toBe(true)
+      expect(outcome.spoken).toBe("Cerca comandi aperto.")
+    })
+
     test("progetto recente senza nome apre la scelta del progetto", async () => {
       const { outcome, host } = await run("project.recent", {})
       expect(outcome.success).toBe(true)
