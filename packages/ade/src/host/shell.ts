@@ -220,6 +220,8 @@ export interface Host {
   /** Whether pane `pane` has read message `name` (the file left its inbox). */
   /** Where a long message is: still in the inbox, moved to `handled/` by `ade-msg inbox`, or in neither. */
   mailboxInboxRead?: (pane: string, name: string) => Promise<InboxFileState>
+  /** The text of a message still in the inbox as it is on disk, `null` once it has gone. */
+  mailboxInboxText?: (pane: string, name: string) => Promise<string | null>
   /** The answer to request `id`, for the `ade-msg ask|spawn|wait` blocked on it. */
   mailboxResult?: (id: string, text: string) => Promise<void>
   /** Takes back an answer no waiter claimed; its text, or null if one did. */
@@ -469,10 +471,11 @@ export interface AgentHookFiles {
 // which would be a cycle. Re-exported because callers already import it here.
 export { stripAnsi } from "./ansi"
 
+import { openReclaimed, sealForPane, sealForRequest } from "../session/mail-seal"
 import { createLineAccumulator } from "./line-stream"
 import { orderedWrites } from "./ordered-writes"
 import type { TokenUsage } from "../session/shared"
-import type { InstallProgress, PackStatus } from "@ragu/voice"
+import type { InstallProgress, PackStatus } from "@ragu/voice/light"
 import { keyError, type KeyDraft, type KeyInfo } from "../secrets/keys"
 import type { QualityLevel, RecordTarget, RecordingState } from "../record/recording"
 import type { AssetsStatus } from "../raguverse/assets"
@@ -1012,7 +1015,7 @@ export async function getHost(): Promise<Host | undefined> {
 
     async mailboxReceipt(id, text) {
       const { invoke } = await import("@tauri-apps/api/core")
-      await invoke("mailbox_receipt", { id, text })
+      await invoke("mailbox_receipt", { id, text: await sealForRequest("receipt", id, text) })
     },
 
     async visionAllowed() {
@@ -1048,7 +1051,9 @@ export async function getHost(): Promise<Host | undefined> {
 
     async mailboxState(id, text, kind) {
       const { invoke } = await import("@tauri-apps/api/core")
-      await invoke("mailbox_state", { id, text, kind: kind ?? null })
+      // Empty removes the file: nothing to sign.
+      const sealed = text ? await sealForRequest(kind ?? "state", id, text) : text
+      await invoke("mailbox_state", { id, text: sealed, kind: kind ?? null })
     },
 
     async recordStart(target, dir, name, quality) {
@@ -1080,7 +1085,12 @@ export async function getHost(): Promise<Host | undefined> {
 
     async mailboxInboxPut(pane, name, text) {
       const { invoke } = await import("@tauri-apps/api/core")
-      await invoke("mailbox_inbox_put", { pane, name, text })
+      await invoke("mailbox_inbox_put", { pane, name, text: await sealForPane(pane, name, text) })
+    },
+
+    async mailboxInboxText(pane, name) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<string | null>("mailbox_inbox_text", { pane, name })
     },
 
     async mailboxInboxRead(pane, name) {
@@ -1091,12 +1101,13 @@ export async function getHost(): Promise<Host | undefined> {
 
     async mailboxResult(id, text) {
       const { invoke } = await import("@tauri-apps/api/core")
-      await invoke("mailbox_result", { id, text })
+      await invoke("mailbox_result", { id, text: await sealForRequest("result", id, text) })
     },
 
     async mailboxResultReclaim(id, kind) {
       const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<string | null>("mailbox_result_reclaim", { id, kind: kind === "update" ? "update" : null })
+      const text = await invoke<string | null>("mailbox_result_reclaim", { id, kind: kind === "update" ? "update" : null })
+      return text === null ? null : openReclaimed(kind === "update" ? "update" : "result", id, text)
     },
 
     async pickDirectory(title) {

@@ -27,7 +27,7 @@ import type { Speaker } from "./tts/speaker"
 import { playCue, type CueKind } from "./audio/cue"
 import type { MicMeter } from "./audio/meter"
 import { createTranscriberFor, type SelectTranscriberOptions, type TranscriberBackend } from "./asr/select"
-import { CURRENT_SETTINGS_VERSION, normalizeSettings, type VoiceMode, type VoiceSettings } from "./settings/model"
+import { CURRENT_SETTINGS_VERSION, holdsToTalk, normalizeSettings, type VoiceMode, type VoiceSettings } from "./settings/model"
 import { matchesWakeWord } from "./settings/wake-word"
 import { voiceStorage } from "./settings/storage"
 import { createSpendTally, formatSpendCost, type DaySpend, type SpendTally } from "./settings/spend"
@@ -342,16 +342,8 @@ export const CREDIT_CHECK_MS = 60 * 60_000
  */
 export const PTT_TAP_MS = 350
 
-/**
- * Whether this shortcut is held while speaking, rather than pressed once.
- *
- * The assistant's shortcut follows the activation. Dictation is always held:
- * with the name as the way in, a pressed-once dictation stayed open with no
- * filter after the key came up, and sent whatever the room said to the pane.
- */
-export function holdsToTalk(settings: Pick<VoiceSettings, "activation">, mode: VoiceMode): boolean {
-  return settings.activation === "push-to-talk" || mode === "transcription"
-}
+// `holdsToTalk` moved to `settings/model.ts` so the key handler can ask it without loading this engine.
+export { holdsToTalk }
 const DRAIN_POLL_MS = 25
 
 type TauriInvoke = (cmd: string, args?: Record<string, unknown>) => Promise<unknown>

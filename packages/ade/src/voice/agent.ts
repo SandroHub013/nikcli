@@ -22,7 +22,7 @@ import { answerSoFar, type RunnerId } from "../bots/runners"
 import type { Talk } from "../bots/talk"
 import type { TurnRequest, TurnResult } from "../bots/turn"
 import { locale as currentAppLocale, t, translate } from "../i18n"
-import { PLANNER_SYSTEM } from "@ragu/voice/core"
+import { PLANNER_SYSTEM } from "@ragu/voice/light"
 
 export type VoiceAgentEngine = "auto" | "claude" | "codex" | "ragu"
 

@@ -59,6 +59,26 @@ export function effectiveSpan(tile: { span?: Span }, gridColumns: number): Span 
 }
 
 /**
+ * The size a tile gets from an arrow pressed on its resize handle, or `undefined` when the key changes nothing.
+ *
+ * One cell per press, from the size the tile is drawn at: Right and Down add a column and a row, Left and Up take
+ * one away, the way dragging the corner right and down makes a tile larger. The result is kept inside the grid
+ * (`effectiveSpan`), so a press at the limit answers `undefined` rather than storing a size the grid would clamp.
+ */
+export function resizeByKey(current: Span, key: string, gridColumns: number): Span | undefined {
+  const delta: Record<string, Span> = {
+    ArrowRight: { columns: 1, rows: 0 },
+    ArrowLeft: { columns: -1, rows: 0 },
+    ArrowDown: { columns: 0, rows: 1 },
+    ArrowUp: { columns: 0, rows: -1 },
+  }
+  const step = delta[key]
+  if (!step) return undefined
+  const next = effectiveSpan({ span: { columns: current.columns + step.columns, rows: current.rows + step.rows } }, gridColumns)
+  return next.columns === current.columns && next.rows === current.rows ? undefined : next
+}
+
+/**
  * The size each tile is laid out at, given how many tiles there are.
  *
  * A pane alone in the grid — the only session, or the one that was enlarged —

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { registerWrite, withPlace, type RegisterWriteDeps } from "./register-write"
+import { registerAuthor } from "./mailbox"
 
 const NOW = new Date("2026-09-23T12:00:00.000Z")
 
@@ -236,5 +237,30 @@ describe("the reply says which project's register (audit 0.7.7, MEDIO 4)", () =>
     expect(withPlace("errore: manca la chiave k", "design", { written: sito, shown: ragu })).toBe(
       "errore: manca la chiave k",
     )
+  })
+})
+
+describe("a session cannot sign an answer as the user", () => {
+  test("whatever the json says, the event keeps the session's name and pane", async () => {
+    const lines = [
+      JSON.stringify({ type: "aperta", k: "D1", title: "t", at: NOW.toISOString(), by: "Master" }),
+    ]
+    const deps: RegisterWriteDeps = {
+      read: async () => lines.map((line) => line + "\n").join(""),
+      append: async (text) => {
+        lines.push(text.trim())
+        return null
+      },
+      now: () => new Date(NOW.getTime() + 1000),
+      sender: registerAuthor("utente", "p7"),
+      fromPane: "p7",
+    }
+    const reply = await registerWrite(deps, {
+      register: "decisioni",
+      op: "risposta",
+      text: JSON.stringify({ k: "D1", words: "ok", by: "utente", fromPane: "" }),
+    })
+    expect(reply.startsWith("ok")).toBe(true)
+    expect(JSON.parse(lines.at(-1)!)).toMatchObject({ type: "risposta", by: "p7", fromPane: "p7" })
   })
 })

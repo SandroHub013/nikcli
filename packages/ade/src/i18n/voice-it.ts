@@ -319,6 +319,7 @@ export const voiceIt = {
   "vui.device.mic": (position: number) => `Microfono ${position}`,
   "vui.device.output": (position: number) => `Uscita audio ${position}`,
   "vui.device.missing": "Dispositivo non collegato",
+  "vui.load.failed": "La voce non si è caricata. Riprova tra un momento.",
   "vui.backend.title": "Riconoscimento",
   "vui.backend.desc": "Come la tua voce diventa testo",
   "vui.backend.readyLocal": "Pronto (in locale)",

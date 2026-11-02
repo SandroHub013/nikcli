@@ -11,6 +11,46 @@ function tristate(key: string): boolean | undefined {
   return undefined
 }
 
+/**
+ * `Bun.spawn` with no `env` hands the child the environment this process started with, not `process.env`: removing a
+ * variable from `process.env` does not reach it. So once a secret has been taken out, those spawns are pointed at
+ * `process.env`, what the docs say they use anyway. Per thread, as each thread has its own `Bun`.
+ */
+function spawnsFollowProcessEnv() {
+  if (typeof Bun === "undefined") return
+  type Spawn = (...args: unknown[]) => unknown
+  const follow =
+    (spawn: Spawn) =>
+    (first: string[] | { env?: unknown }, options?: { env?: unknown }) =>
+      Array.isArray(first)
+        ? spawn(first, { ...options, env: options?.env ?? process.env })
+        : spawn({ ...first, env: first.env ?? process.env })
+  const bun = Bun as unknown as Record<"spawn" | "spawnSync", Spawn>
+  bun.spawn = follow(bun.spawn) as Spawn
+  bun.spawnSync = follow(bun.spawnSync) as Spawn
+}
+
+let spawnsFollow = false
+
+/**
+ * Read a secret and take it out of the environment at the same moment, under both names (ragu keeps an old NIKCLI_X
+ * in place for whatever still reads it). Everything this process starts inherits its environment: a shell command of
+ * one of its agents, a test it runs, an MCP server or an LSP. With the server's password a prompt-injected command
+ * could answer its own permission requests through the server's API.
+ */
+function takeSecret(name: string) {
+  const old = name.replace(/^RAGU_/, "NIKCLI_")
+  const value = process.env[name] ?? process.env[old]
+  if (value === undefined) return undefined
+  delete process.env[name]
+  delete process.env[old]
+  if (!spawnsFollow) {
+    spawnsFollow = true
+    spawnsFollowProcessEnv()
+  }
+  return value
+}
+
 export namespace Flag {
   /**
    * Whether permission prompts are auto-approved for this process.
@@ -168,8 +208,8 @@ export namespace Flag {
   export declare const RAGU_DISABLE_PROJECT_CONFIG: boolean
   export const RAGU_FAKE_VCS = process.env["RAGU_FAKE_VCS"]
   export const RAGU_CLIENT = process.env["RAGU_CLIENT"] ?? "cli"
-  export const RAGU_SERVER_PASSWORD = process.env["RAGU_SERVER_PASSWORD"]
-  export const RAGU_SERVER_USERNAME = process.env["RAGU_SERVER_USERNAME"]
+  export const RAGU_SERVER_PASSWORD = takeSecret("RAGU_SERVER_PASSWORD")
+  export const RAGU_SERVER_USERNAME = takeSecret("RAGU_SERVER_USERNAME")
   // Max HTTP request body in bytes (defaults applied at the serve site).
   export const RAGU_SERVER_MAX_BODY = process.env["RAGU_SERVER_MAX_BODY"]
     ? parseInt(process.env["RAGU_SERVER_MAX_BODY"]!, 10)

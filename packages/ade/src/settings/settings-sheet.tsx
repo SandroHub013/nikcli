@@ -34,6 +34,7 @@ import {
   GridSection,
   LanguageSection,
   RecordVideoSection,
+  ShortcutsSection,
   SkillsSection,
   ThemeSection,
   UpdatesSection,
@@ -261,6 +262,9 @@ export function SettingsSheet(props: SettingsSheetProps): JSX.Element {
               onChange={(columns) => props.setWb((w) => setColumns(w, columns))}
             />
           )
+        }
+        if (tab === "general/shortcuts") {
+          return <ShortcutsSection platform={navigator.userAgent.includes("Mac") ? "mac" : "other"} />
         }
         return (
           <ThemeSection

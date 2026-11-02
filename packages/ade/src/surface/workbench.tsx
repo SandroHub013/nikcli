@@ -1,4 +1,15 @@
-import { onMount, onCleanup, on, createSignal, createEffect, createMemo, createResource, Show, For, Suspense } from "solid-js"
+import {
+  onMount,
+  onCleanup,
+  on,
+  createSignal,
+  createEffect,
+  createMemo,
+  createResource,
+  Show,
+  For,
+  Suspense,
+} from "solid-js"
 import { createStore, produce, reconcile, unwrap } from "solid-js/store"
 import { getHost, stripAnsi, type SpawnedSession } from "../host/shell"
 import {
@@ -60,7 +71,13 @@ import { syncOpenRouterKey } from "../host/openrouter-key-sync"
 import { createSttStreamTransport } from "../host/stt-stream"
 import { serializeWorkspace, type WorkspaceState } from "../session/persist"
 import { ignoreRestore, readSavedWorkspace, restorableCopy, restoreCopy, retryUnreadableCopy } from "../session/unreadable"
-import { DEFAULT_BINDINGS, FROM_TERMINALS, NOT_FROM_TEXT_FIELDS, resolveDefaultBindings } from "../keyboard/bindings"
+import {
+  DEFAULT_BINDINGS,
+  NOT_FROM_TEXT_FIELDS,
+  firesOnPress,
+  resolveDefaultBindings,
+  runsFromTerminal,
+} from "../keyboard/bindings"
 import { formatChord, parseChord } from "../keyboard/keymap"
 import { CommandPalette } from "../command/palette"
 import { paletteStep } from "../command/palette-keys"
@@ -165,6 +182,8 @@ import { defaultPaneTitle } from "./pane-title"
 import { Sidebar } from "../sidebar"
 import { SessionGrid } from "../grid/session-grid"
 import { requestRename } from "../grid/rename"
+import { focusResizeGrip } from "../grid/focus-input"
+import { lazyComponent } from "../ui/lazy-component"
 import { EmptyProject } from "./empty-project"
 import { ProjectBar } from "./project-bar"
 import { SidebarToggle, readSidebarHidden, writeSidebarHidden } from "./sidebar-toggle"
@@ -277,6 +296,8 @@ import { scrubSecrets } from "../bots/terms"
 import type { AgentFile } from "../bots/ragu"
 import type { Runner } from "../bots/runners"
 import { senderToken } from "../session/senders"
+import { followInboxRound, inboxNamesOf, rearmInbox } from "../session/mail-inbox"
+import { firstTime, resealUnread, sealedBy, splitSealed, useMailKeys } from "../session/mail-seal"
 import { createActivityReads, type ActivityReads } from "../session/activity-reads"
 import { boardCandidates, parseOwners, whoOwns } from "../session/owners"
 import { mayReroute, pickProvider, setProviderPicker } from "../session/provider-pick"
@@ -317,7 +338,8 @@ import { parseCommandId } from "../plugin/trust"
 import { CONSENT_KEY, consentQuestion, hasConsent, withConsent } from "../plugin/consent"
 import { toPluginSession } from "../plugin/session"
 import type { DiscoveryIO } from "../plugin/discovery"
-import { binaryFromHost, markSaved, openBuffer, saveBlockedReason, toLf, withEol } from "../editor"
+import { binaryFromHost } from "../editor/binary-file"
+import { markSaved, openBuffer, saveBlockedReason, toLf, withEol } from "../editor/buffer"
 import {
   answerLabel,
   detectPermission,
@@ -378,6 +400,8 @@ import {
   resolveAgent,
   resolveTarget,
   sessionsTable,
+  UNSEALED_MAIL,
+  claimedSender,
   verifySender,
   unverifiedSenderRefusal,
   voiceConfirmationFor,
@@ -399,7 +423,6 @@ import {
   openDecisions,
   type OpenDecision,
   goesToInbox,
-  inboxAction,
   inboxName,
   parseInbox,
   failedReceipt,
@@ -550,8 +573,6 @@ import { createDecisionsRegister } from "../decisions/register"
 import { askerLedger } from "../session/asker-ledger"
 import { decisionsPath } from "../decisions/store"
 import { formatMoment as formatDesignMoment } from "../design/answer"
-import { DesignSheet } from "../design/design-sheet"
-import { SettingsSheet } from "../settings/settings-sheet"
 import { Sheet } from "../ui/sheet"
 import {
   OUTBOX_KEY as DESIGN_OUTBOX_KEY,
@@ -597,16 +618,12 @@ import { formatNotesFile, formatNotesLine, notesFilePath, notesFileRelative } fr
 import { registerWrite, withPlace } from "../session/register-write"
 import {
   AgentOrb,
-  createMicMeter,
   createPlaybackMeter,
-  createVoiceEngine,
   createWebSpeechSpeaker,
   createFakeSpeaker,
-  createNaturalSpeaker,
   activeReplyVoice,
   speakingReplyVoice,
   isKokoroVoice,
-  type ReplyVoice,
   interfaceLocale,
   replyLocale,
   g2pLocale,
@@ -626,23 +643,23 @@ import {
   shortcutActivationEnabled,
   describeShortcut,
   holdsToTalk,
-  type VoiceEngine,
-  type VoiceMode,
-  type VoiceSettings,
-  type InstallProgress,
-  type PackState,
   kokoroVoice,
   KOKORO_DOWNLOAD_BYTES,
-  createMaiSpeaker,
-  createSpendTally,
   isMaiVoice,
   localReplyVoice,
-  maiFallbackNotice,
   maiReplyVoice,
-  settleMai,
-  type MaiFailureKind,
-  type StreamState,
+} from "@ragu/voice/light"
+// Types only: the engine itself comes in with `import()` when the voice is first used (`buildVoiceRuntime`).
+import type {
+  InstallProgress,
+  MaiFailureKind,
+  PackState,
+  ReplyVoice,
+  StreamState,
+  VoiceMode,
+  VoiceSettings,
 } from "@ragu/voice"
+import { createLazyVoiceEngine } from "../voice/lazy-engine"
 import { createPackController, followInstall, installCancelled } from "./voice-pack-controller"
 import { ShotTray, createShotSource } from "../shots"
 import {
@@ -686,6 +703,14 @@ import {
 import { createListenGuard, pollListenGuard } from "../voice/listen-guard"
 import { createProactiveAlerts } from "../voice/proactive-alerts"
 
+/*
+ * The settings panel is loaded when it is first opened. It holds every settings page and, with the voice's, the voice package's
+ * components and Effect runtime: none of it is needed to draw the first screen.
+ */
+const SettingsSheet = lazyComponent(() => import("../settings/settings-sheet").then((module) => ({ default: module.SettingsSheet })))
+/* The design register's sheet is loaded when it is first opened: the register itself (the hub) is not, it listens from the start. */
+const DesignSheet = lazyComponent(() => import("../design/design-sheet").then((module) => ({ default: module.DesignSheet })))
+
 const DEFAULT_PREVIEW_URL = "http://localhost:3000"
 
 /** Every command `runCommand` below actually implements. */
@@ -696,6 +721,7 @@ const HANDLED_COMMANDS = new Set([
   "pane.close",
   "pane.expand",
   "pane.rename",
+  "pane.resize",
   "view.toggle",
   "theme.toggle",
   "sidebar.toggle",
@@ -703,6 +729,7 @@ const HANDLED_COMMANDS = new Set([
   "process.kill",
   "voice.toggle",
   "voice.settings",
+  "shortcuts.open",
   "panes.closeGone",
   "recents.forgetGone",
 ])
@@ -3081,9 +3108,11 @@ export function Workbench() {
       // Its sender was told «in coda» before the restart: the outcome is reported where it listens now (`deliverOne`).
       held.add(item.id)
       replayedMail.add(item.id)
+      rememberMailSender(item.id, item.message.from)
       mailQueue.push(item)
     }
     for (const { id, message } of expired) {
+      rememberMailSender(id, message.from)
       const to = message.kind === "send" || message.kind === "ask" ? message.to : ""
       const title = wb().panes.find((pane) => pane.id === to)?.title ?? to
       const text = `[ade-msg] errore: il messaggio ${id} per "${title}" era in coda da più di dodici ore, quando ADE è stato riavviato: non è stato consegnato`
@@ -3178,78 +3207,38 @@ export function Workbench() {
 
   /** Rings again for unread inbox messages, and tells the sender of one never read. */
   const followInbox = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, now: number) => {
-    if (!host.mailboxInboxRead || inboxPending.length === 0) return
-    let changed = false
-    for (const entry of [...inboxPending]) {
-      const session = running.get(entry.paneId)
-      const state = session
-        ? await host.mailboxInboxRead(entry.paneId, entry.name).catch(() => "unread" as const)
-        : "unread"
-      if (state === "lost") {
-        /*
-         * Gone before it was read: said as lost, to the sender and, for a
-         * request, to whoever waits on it, so nobody believes it arrived. A
-         * file the reader moved is "read"; only a file in neither place is this.
-         */
-        if (!dropFrom(inboxPending, entry)) continue
-        const reader = mailPanes().find((pane) => pane.id === entry.paneId)
-        appendLine(entry.paneId, t("note.inboxLost", entry.id), "note", "ade")
-        if (entry.kind === "ask" || entry.kind === "spawn") {
-          if (openRequests.has(entry.id)) await settle(host, entry.id, formatLost(entry, reader))
-        } else {
-          tellSender(entry.from, formatLost(entry, reader))
-        }
-        changed = true
-        continue
-      }
-      const read = state === "read"
-      const free = session && !read ? (await freeNow(host, entry.paneId)) && !linesInFlight.has(entry.paneId) : false
-      const action = inboxAction(
-        entry,
-        { running: Boolean(session), free, read, typing: isTyping(records.typed.get(entry.paneId)) },
-        now,
-      )
-      if (action === "wait") continue
-      const panes = mailPanes()
-      if (action === "tell") {
-        entry.told = true
-        tellSender(
-          entry.from,
-          formatHeld(
-            entry,
-            panes.find((pane) => pane.id === entry.paneId),
-          ),
-        )
-        changed = true
-        continue
-      }
-      if (action === "ring" && session) {
-        entry.rings += 1
-        entry.ringAt = now
-        void typeLine(
-          session,
-          formatBell(
-            entry,
-            panes.find((pane) => pane.id === entry.from),
-            entry.chars,
-          ),
-        )
-        appendLine(entry.paneId, t("note.rang", entry.rings), "note", "ade")
-      } else {
-        if (!dropFrom(inboxPending, entry)) continue
-        if (action === "warn") {
-          tellSender(
-            entry.from,
-            formatUnread(
-              entry,
-              panes.find((pane) => pane.id === entry.paneId),
-            ),
-          )
-        }
-      }
-      changed = true
-    }
-    if (changed) saveInbox()
+    const inboxRead = host.mailboxInboxRead
+    if (!inboxRead) return
+    const paneNamed = (paneId: string) => mailPanes().find((pane) => pane.id === paneId)
+    await followInboxRound(
+      inboxPending,
+      {
+        restored: () => mailRestored,
+        paneExists,
+        stillWanted: (entry) => (entry.kind !== "ask" && entry.kind !== "spawn") || openRequests.has(entry.id),
+        session: (paneId) => running.get(paneId),
+        readState: (entry) => inboxRead(entry.paneId, entry.name).catch(() => "unread" as const),
+        free: async (paneId) => (await freeNow(host, paneId)) && !linesInFlight.has(paneId),
+        typing: (paneId) => isTyping(records.typed.get(paneId)),
+        lost: async (entry) => {
+          const reader = paneNamed(entry.paneId)
+          appendLine(entry.paneId, t("note.inboxLost", entry.id), "note", "ade")
+          if (entry.kind === "ask" || entry.kind === "spawn") {
+            if (openRequests.has(entry.id)) await settle(host, entry.id, formatLost(entry, reader))
+          } else {
+            tellSender(entry.from, formatLost(entry, reader))
+          }
+        },
+        held: (entry) => tellSender(entry.from, formatHeld(entry, paneNamed(entry.paneId))),
+        ring: (entry, session) => {
+          void typeLine(session, formatBell(entry, paneNamed(entry.from), entry.chars))
+          appendLine(entry.paneId, t("note.rang", entry.rings), "note", "ade")
+        },
+        unread: (entry) => tellSender(entry.from, formatUnread(entry, paneNamed(entry.paneId))),
+        save: saveInbox,
+      },
+      now,
+    )
   }
   /*
    * Restored requests count their grace from now, not from when they were
@@ -3386,11 +3375,61 @@ export function Workbench() {
    * only when the token that came with it is this pane's.
    */
   const paneTokens = new Map<string, string>()
+  /** A pane's tokens of its earlier processes, newest first: they open what was sealed then, and prove nothing now. */
+  const retiredTokens = new Map<string, string[]>()
+  const MAX_RETIRED_TOKENS = 8
   const mintPaneToken = (paneId: string) => {
+    const old = paneTokens.get(paneId)
+    if (old) retiredTokens.set(paneId, [old, ...(retiredTokens.get(paneId) ?? [])].slice(0, MAX_RETIRED_TOKENS))
     const token = newNonce()
     paneTokens.set(paneId, token)
     return token
   }
+  /**
+   * The token for a pane's new process. Its unread long messages were sealed for the process before: sealed again here,
+   * before it starts, or it would take them for false and ADE would close its requests as lost.
+   */
+  const freshPaneToken = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, paneId: string) => {
+    const token = mintPaneToken(paneId)
+    if (rearmInbox(inboxPending, paneId)) saveInbox()
+    const names = inboxNamesOf(inboxPending, paneId)
+    const { mailboxInboxText: read, mailboxInboxPut: put } = host
+    if (names.length > 0 && read && put) {
+      await resealUnread(names, retiredTokens.get(paneId) ?? [], {
+        read: (name) => read(paneId, name),
+        write: (name, body) => put(paneId, name, body),
+      })
+    }
+    return token
+  }
+  /** A pane's token, or a background turn's (voice agent, bot) registered for its length. What proves a sender. */
+  const tokenOfSender = (paneId: string) => (running.has(paneId) ? paneTokens.get(paneId) : senderToken(paneId))
+  /** What seals for a pane: its last token even while it is not running, since it may start again and read this. */
+  const sealingToken = (paneId: string) => paneTokens.get(paneId) ?? senderToken(paneId)
+  /** Who sent each message taken: what ADE writes for a message's id is sealed with that sender's key (`mail-seal.ts`). */
+  const mailSenders = new Map<string, string>()
+  const rememberMailSender = (id: string, from: string) => {
+    if (!from) return
+    mailSenders.set(id, from)
+    if (mailSenders.size > 5000) mailSenders.delete(mailSenders.keys().next().value!)
+  }
+  /** The ids of the messages taken lately: a copy of one posted again is not carried out twice (`firstTime`). */
+  const mailSeen = new Map<string, number>()
+  // The asker first: a message's id is the sender's to choose, and one posted with the id of an open request must not get its answer.
+  const paneOfMail = (id: string) =>
+    openRequests.get(id)?.from || mailSenders.get(id) || designWaiters().find((waiter) => waiter.id === id)?.from
+  useMailKeys({
+    forRequest: (id) => {
+      const pane = paneOfMail(id)
+      return pane ? sealingToken(pane) : undefined
+    },
+    everyForRequest: (id) => {
+      const pane = paneOfMail(id)
+      const current = pane && sealingToken(pane)
+      return pane ? [...(current ? [current] : []), ...(retiredTokens.get(pane) ?? [])] : []
+    },
+    forPane: sealingToken,
+  })
 
   /** How long a reply may sit unclaimed before it is typed into the caller instead. */
   const CLAIM_WINDOW_MS = 3000
@@ -3613,6 +3652,9 @@ export function Workbench() {
     result?: string,
   ): Promise<boolean> =>
     settleOnce(id, async () => {
+      // Its file outlives the request, and is sealed and checked for the same pane after it (after a restart nothing else says whose).
+      const asker = openRequests.get(id)?.from
+      if (asker) rememberMailSender(id, asker)
       /*
        * The answer first, the closing after. Closing first meant a result that
        * failed to be written left a closed request and, since a closed request
@@ -3809,10 +3851,26 @@ export function Workbench() {
     const taken = (await host.mailboxTake?.().catch(() => [])) ?? []
     if (taken.length === 0) return
     for (const { id, body } of taken) {
-      const parsed = parseMessage(body)
-      // A pane's token, or a background turn's (voice agent, bot) registered for its length.
-      const message =
-        parsed && verifySender(parsed, (paneId) => (running.has(paneId) ? paneTokens.get(paneId) : senderToken(paneId)))
+      const sealed = splitSealed(body)
+      if (!sealed) {
+        void host.mailboxReceipt?.(id, UNSEALED_MAIL).catch(() => {})
+        continue
+      }
+      const claimed = claimedSender(sealed.body)
+      const proven = await sealedBy(claimed ? tokenOfSender(claimed) : undefined, "outbox", id, sealed).catch(() => false)
+      // After the proof: a copy forged with an id anybody can read must not burn that id for the real message.
+      const age = proven ? firstTime(mailSeen, id, Date.now()) : "new"
+      if (age === "seen") {
+        console.error(`ADE: posta ${id}: già presa, non la eseguo di nuovo`)
+        continue
+      }
+      if (proven) rememberMailSender(id, claimed)
+      if (age === "old") {
+        void host.mailboxReceipt?.(id, "errore: messaggio di più di un'ora fa: non eseguito").catch(() => {})
+        continue
+      }
+      const parsed = parseMessage(sealed.body)
+      const message = parsed && verifySender(parsed, proven)
       if (message) mailQueue.push({ id, message, at: Date.now() })
       else void host.mailboxReceipt?.(id, "errore: messaggio non valido").catch(() => {})
     }
@@ -3829,7 +3887,7 @@ export function Workbench() {
       } else if (await freeNow(host, item.callerId)) {
         if (!dropFrom(lateReplies, item)) continue
         const text = await host.mailboxResultReclaim?.(item.ref).catch(() => null)
-        if (text != null) {
+        if (text) {
           heldLines.push({
             paneId: item.callerId,
             text: formatLateReply(item.ref, text, item.sender),
@@ -4217,7 +4275,7 @@ export function Workbench() {
       setTimeout(() => {
         void host.mailboxResultReclaim?.(message.ref).then((text) => {
           // Held until the caller's turn ends, like every other message.
-          if (text != null && caller && running.has(caller.id)) {
+          if (text && caller && running.has(caller.id)) {
             heldLines.push({
               paneId: caller.id,
               text: formatLateReply(message.ref, text, sender),
@@ -4273,7 +4331,7 @@ export function Workbench() {
       // Nobody woke on it: typed into the caller, which is not waiting any more.
       setTimeout(() => {
         void host.mailboxResultReclaim?.(request.id, "update").then((text) => {
-          if (text != null && caller && running.has(caller.id)) {
+          if (text && caller && running.has(caller.id)) {
             heldLines.push({ paneId: caller.id, text, inbox: { id: request.id, kind: "update", from: message.from } })
           }
         })
@@ -4365,7 +4423,7 @@ export function Workbench() {
     }
 
     if (message.kind === "whoowns") {
-      const owner = message.from ? await projectOfPane(host, message.from) : project()
+      const owner = await projectOfPane(host, message.from)
       if (!owner || owner.remote || !host.readTextFile) {
         await answer("errore: la bacheca del team si legge solo nei progetti locali")
         return true
@@ -4384,7 +4442,7 @@ export function Workbench() {
     }
 
     if (message.kind === "memory") {
-      const owner = message.from ? await projectOfPane(host, message.from) : project()
+      const owner = await projectOfPane(host, message.from)
       if (!owner || owner.remote) {
         await answer("errore: la memoria condivisa esiste solo per i progetti locali")
         return true
@@ -4427,7 +4485,7 @@ export function Workbench() {
      * the file and the host's I/O.
      */
     if (message.kind === "registro") {
-      const owner = message.from ? await projectOfPane(host, message.from) : project()
+      const owner = await projectOfPane(host, message.from)
       if (!owner || owner.remote || !host.readTextFile) {
         await answer("errore: i registri esistono solo per i progetti locali")
         return true
@@ -5970,129 +6028,6 @@ export function Workbench() {
       return false
     }
   }
-  const naturalSpeaker = createNaturalSpeaker({
-    mayDownload: () => downloadConsented(),
-    /*
-     * Which voice speaks, and in which language — one answer, because the voice
-     * is chosen *for* the language and two of them could come apart. The
-     * language is the one of the reply as its text says it, and the setting is
-     * what answers when the text says nothing: a reply in Italian is read in
-     * Italian, which is what keeps a Kokoro voice from reading it with an
-     * English mouth. See `replyLocale`.
-     */
-    voiceFor: (detected) => {
-      const settings = voiceSettings()
-      // Under MAI this speaker reads what MAI does not, in the profile's local voice.
-      const local = localReplyVoice(settings)
-      // Not called `locale`: that is the language of the window, and it is asked
-      // for one line below.
-      const spoken = replyLocale(local, detected, interfaceLocale(locale(), settings.ttsLocale))
-      return { voice: speakingReplyVoice(local, spoken, locale()), locale: spoken }
-    },
-    status: async (voice) => {
-      const host = await getHost()
-      // Which backend reads the voice decides which command answers: Piper's
-      // voices are files of their own, Kokoro's four are one 219 MB download, and
-      // asking the wrong backend about a voice it does not have is a question
-      // with no answer.
-      if (isKokoroVoice(voice as ReplyVoice)) {
-        // The panel's shape: undefined means this build cannot run Kokoro at all,
-        // which is not the same as a pack that is not there yet.
-        const pack = host?.ttsLocalStatus ? await host.ttsLocalStatus("kokoro") : undefined
-        return { supported: pack !== undefined, installed: pack?.installed ?? false }
-      }
-      if (host?.ttsPiperStatus) return host.ttsPiperStatus(voice)
-      return { supported: false, installed: false }
-    },
-    install: async (voice) => {
-      const host = await getHost()
-      if (isKokoroVoice(voice as ReplyVoice)) {
-        if (host?.ttsLocalInstall) return host.ttsLocalInstall("kokoro")
-      } else if (host?.ttsPiperInstall) {
-        return host.ttsPiperInstall(voice)
-      }
-      throw new Error(t("voice.noHost.download"))
-    },
-    synthesize: async (voice, text, token, ttsLocale) => {
-      const host = await getHost()
-      // The locale goes across as what the G2P is asked for, not as the setting:
-      // `en-GB` is `en` for espeak, and K1 measured that asking for `en-gb` fails
-      // outright. This is the boundary where that becomes true.
-      const lang = g2pLocale(ttsLocale)
-      // A Kokoro voice is read by the other backend, and it takes the voice id
-      // too: its four voices are speaker numbers inside one model, not four files.
-      if (isKokoroVoice(voice as ReplyVoice)) {
-        if (host?.ttsLocalSpeak) return host.ttsLocalSpeak("kokoro", voice, text, token, lang)
-        throw new Error(t("voice.noHost"))
-      }
-      if (!host?.ttsPiperSpeak) throw new Error(t("voice.noHost"))
-      return host.ttsPiperSpeak(voice, text, token, lang)
-    },
-    cancel: async (tokens) => {
-      const host = await getHost()
-      // L'annullamento di Kokoro e' solo qui: l'host non ha un comando e una
-      // richiesta gia' mandata finisce. Il segno arriva lo stesso e la frase che
-      // non e' ancora partita non parte.
-      await host?.ttsPiperCancel?.(tokens)
-    },
-    stop: async () => {
-      const host = await getHost()
-      // I due figli sono uno per backend: fermare quello che stava parlando, e la
-      // catena si rimette sola al turno dopo.
-      await host?.ttsLocalStop?.()
-      return (await host?.ttsPiperStop?.()) ?? { busy: false }
-    },
-    stopOnCreate: true,
-    play: (wav, signal) => {
-      // A take keeps the assistant's voice as its own track (S36).
-      recorder.noteVoice(wav)
-      return playWav(wav, signal, voiceSettings().outputDeviceId, playbackMeter, () => {
-        // The device the user picked is not there: the answer comes out of the
-        // default speakers, and it says so once instead of never.
-        report(t("vui.device.missing"), "warning")
-      })
-    },
-    fallback: systemSpeaker,
-    fallbackNotice: () => t("vui.reply.fallbackNotice"),
-    // Said once for the profile, not at every start of ADE.
-    fallbackNoticeSeen: () => {
-      try {
-        return localStorage.getItem("ade.voice.fallback-notice") === "1"
-      } catch {
-        return false
-      }
-    },
-    onFallbackNotice: () => {
-      try {
-        localStorage.setItem("ade.voice.fallback-notice", "1")
-      } catch {
-        // Said again next time, which is harmless.
-      }
-    },
-    onInstall: (voice, state, problem) => {
-      if (voice !== speakingVoice()) return
-      if (state === "ready") {
-        setVoiceInstalled(true)
-        setVoiceDownloading(false)
-        clearVoiceFailure(voice)
-      } else if (state === "downloading") {
-        setVoiceDownloading(true)
-      } else if (state === "failed") {
-        setVoiceInstalled(false)
-        setVoiceDownloading(false)
-        // A download the user cancelled from the panel is not a failure (K6 review).
-        void getHost().then(async (host) => {
-          if (!(await installCancelled(host, "piper"))) failNaturalVoice(voice, problem)
-        })
-      }
-    },
-  })
-  /*
-   * What the voice spends in a day, made once: listening and the replies write
-   * the same day under the same key, and two tallies on one key would each
-   * write over the other's figure.
-   */
-  const voiceSpend = createSpendTally(typeof localStorage !== "undefined" ? localStorage : null, Date.now())
   const [maiBlocked, setMaiBlocked] = createSignal<MaiFailureKind | undefined>(undefined)
   /** Why the streaming transcription is or is not writing, as the open transcriber last said. */
   const [streamState, setStreamState] = createSignal<StreamState | undefined>(undefined)
@@ -6121,107 +6056,273 @@ export function Workbench() {
     fetchFn: (input: string, init: RequestInit) => fetch(input, init),
   }
   /*
-   * MAI in front of the local voices: an Italian reply on a MAI voice goes to
-   * MAI, everything else — and whatever MAI cannot read — to the speaker above,
-   * which falls from Piper to the system voice as before.
+   * The heavy half of the voice: the speakers, the microphone meter, what the voice spends, and the engine.
+   *
+   * Built the first time something asks for them (`voiceEngine` and `speaker` below), never at start: they are most of
+   * the voice package, with its Effect runtime, and a user who has not turned the voice on has no use for a byte of it.
+   * The package is taken with `import()` here, so the bundler keeps it out of the first load.
    */
-  const maiSpeaker = createMaiSpeaker({
-    voiceFor: (text) => {
-      const settings = voiceSettings()
-      const voice = maiReplyVoice({ text, ui: locale(), chosen: settings.replyVoice, local: localReplyVoice(settings) })
-      return { voice, locale: "it-IT" }
-    },
-    hasKey: () => Boolean(maiClient.apiKey()),
-    client: maiClient,
-    local: naturalSpeaker,
-    play: (wav, signal) => {
-      recorder.noteVoice(wav)
-      return playWav(wav, signal, voiceSettings().outputDeviceId, playbackMeter, () => {
-        report(t("vui.device.missing"), "warning")
-      })
-    },
-    notice: maiFallbackNotice,
-    spend: { tally: voiceSpend, settle: (id) => settleMai(id, maiClient) },
-    onState: setMaiBlocked,
-  })
-  /*
-   * The whole reply counts for the sphere, synthesis included: a long first
-   * sentence takes Piper longer than the sphere waits, and it flew home and
-   * back before the voice started.
-   */
-  const speaker = {
-    ...naturalSpeaker,
-    speak: async (text: string) => {
-      const stop = playbackMeter.reply()
-      try {
-        await maiSpeaker.speak(text)
-      } finally {
-        stop()
-      }
-    },
-    cancel: () => maiSpeaker.cancel(),
-    prefetch: (text: string) => maiSpeaker.prefetch?.(text),
-    // Opening the microphone warms the voice that will answer: under a MAI voice that can answer, none.
-    prepare: () => {
-      if (isMaiVoice(voiceSettings().replyVoice) && maiSpeaker.available()) return
-      naturalSpeaker.prepare()
-    },
+  const buildVoiceRuntime = async () => {
+    const voice = await import("@ragu/voice")
+    const naturalSpeaker = voice.createNaturalSpeaker({
+      mayDownload: () => downloadConsented(),
+      /*
+       * Which voice speaks, and in which language — one answer, because the voice
+       * is chosen *for* the language and two of them could come apart. The
+       * language is the one of the reply as its text says it, and the setting is
+       * what answers when the text says nothing: a reply in Italian is read in
+       * Italian, which is what keeps a Kokoro voice from reading it with an
+       * English mouth. See `replyLocale`.
+       */
+      voiceFor: (detected) => {
+        const settings = voiceSettings()
+        // Under MAI this speaker reads what MAI does not, in the profile's local voice.
+        const local = localReplyVoice(settings)
+        // Not called `locale`: that is the language of the window, and it is asked
+        // for one line below.
+        const spoken = replyLocale(local, detected, interfaceLocale(locale(), settings.ttsLocale))
+        return { voice: speakingReplyVoice(local, spoken, locale()), locale: spoken }
+      },
+      status: async (voice) => {
+        const host = await getHost()
+        // Which backend reads the voice decides which command answers: Piper's
+        // voices are files of their own, Kokoro's four are one 219 MB download, and
+        // asking the wrong backend about a voice it does not have is a question
+        // with no answer.
+        if (isKokoroVoice(voice as ReplyVoice)) {
+          // The panel's shape: undefined means this build cannot run Kokoro at all,
+          // which is not the same as a pack that is not there yet.
+          const pack = host?.ttsLocalStatus ? await host.ttsLocalStatus("kokoro") : undefined
+          return { supported: pack !== undefined, installed: pack?.installed ?? false }
+        }
+        if (host?.ttsPiperStatus) return host.ttsPiperStatus(voice)
+        return { supported: false, installed: false }
+      },
+      install: async (voice) => {
+        const host = await getHost()
+        if (isKokoroVoice(voice as ReplyVoice)) {
+          if (host?.ttsLocalInstall) return host.ttsLocalInstall("kokoro")
+        } else if (host?.ttsPiperInstall) {
+          return host.ttsPiperInstall(voice)
+        }
+        throw new Error(t("voice.noHost.download"))
+      },
+      synthesize: async (voice, text, token, ttsLocale) => {
+        const host = await getHost()
+        // The locale goes across as what the G2P is asked for, not as the setting:
+        // `en-GB` is `en` for espeak, and K1 measured that asking for `en-gb` fails
+        // outright. This is the boundary where that becomes true.
+        const lang = g2pLocale(ttsLocale)
+        // A Kokoro voice is read by the other backend, and it takes the voice id
+        // too: its four voices are speaker numbers inside one model, not four files.
+        if (isKokoroVoice(voice as ReplyVoice)) {
+          if (host?.ttsLocalSpeak) return host.ttsLocalSpeak("kokoro", voice, text, token, lang)
+          throw new Error(t("voice.noHost"))
+        }
+        if (!host?.ttsPiperSpeak) throw new Error(t("voice.noHost"))
+        return host.ttsPiperSpeak(voice, text, token, lang)
+      },
+      cancel: async (tokens) => {
+        const host = await getHost()
+        // L'annullamento di Kokoro e' solo qui: l'host non ha un comando e una
+        // richiesta gia' mandata finisce. Il segno arriva lo stesso e la frase che
+        // non e' ancora partita non parte.
+        await host?.ttsPiperCancel?.(tokens)
+      },
+      stop: async () => {
+        const host = await getHost()
+        // I due figli sono uno per backend: fermare quello che stava parlando, e la
+        // catena si rimette sola al turno dopo.
+        await host?.ttsLocalStop?.()
+        return (await host?.ttsPiperStop?.()) ?? { busy: false }
+      },
+      stopOnCreate: true,
+      play: (wav, signal) => {
+        // A take keeps the assistant's voice as its own track (S36).
+        recorder.noteVoice(wav)
+        return playWav(wav, signal, voiceSettings().outputDeviceId, playbackMeter, () => {
+          // The device the user picked is not there: the answer comes out of the
+          // default speakers, and it says so once instead of never.
+          report(t("vui.device.missing"), "warning")
+        })
+      },
+      fallback: systemSpeaker,
+      fallbackNotice: () => t("vui.reply.fallbackNotice"),
+      // Said once for the profile, not at every start of ADE.
+      fallbackNoticeSeen: () => {
+        try {
+          return localStorage.getItem("ade.voice.fallback-notice") === "1"
+        } catch {
+          return false
+        }
+      },
+      onFallbackNotice: () => {
+        try {
+          localStorage.setItem("ade.voice.fallback-notice", "1")
+        } catch {
+          // Said again next time, which is harmless.
+        }
+      },
+      onInstall: (voice, state, problem) => {
+        if (voice !== speakingVoice()) return
+        if (state === "ready") {
+          setVoiceInstalled(true)
+          setVoiceDownloading(false)
+          clearVoiceFailure(voice)
+        } else if (state === "downloading") {
+          setVoiceDownloading(true)
+        } else if (state === "failed") {
+          setVoiceInstalled(false)
+          setVoiceDownloading(false)
+          // A download the user cancelled from the panel is not a failure (K6 review).
+          void getHost().then(async (host) => {
+            if (!(await installCancelled(host, "piper"))) failNaturalVoice(voice, problem)
+          })
+        }
+      },
+    })
+    /*
+     * What the voice spends in a day, made once: listening and the replies write
+     * the same day under the same key, and two tallies on one key would each
+     * write over the other's figure.
+     */
+    const voiceSpend = voice.createSpendTally(typeof localStorage !== "undefined" ? localStorage : null, Date.now())
+    /*
+     * MAI in front of the local voices: an Italian reply on a MAI voice goes to
+     * MAI, everything else — and whatever MAI cannot read — to the speaker above,
+     * which falls from Piper to the system voice as before.
+     */
+    const maiSpeaker = voice.createMaiSpeaker({
+      voiceFor: (text) => {
+        const settings = voiceSettings()
+        const voice = maiReplyVoice({ text, ui: locale(), chosen: settings.replyVoice, local: localReplyVoice(settings) })
+        return { voice, locale: "it-IT" }
+      },
+      hasKey: () => Boolean(maiClient.apiKey()),
+      client: maiClient,
+      local: naturalSpeaker,
+      play: (wav, signal) => {
+        recorder.noteVoice(wav)
+        return playWav(wav, signal, voiceSettings().outputDeviceId, playbackMeter, () => {
+          report(t("vui.device.missing"), "warning")
+        })
+      },
+      notice: voice.maiFallbackNotice,
+      spend: { tally: voiceSpend, settle: (id) => voice.settleMai(id, maiClient) },
+      onState: setMaiBlocked,
+    })
+    /*
+     * The whole reply counts for the sphere, synthesis included: a long first
+     * sentence takes Piper longer than the sphere waits, and it flew home and
+     * back before the voice started.
+     */
+    const speaker = {
+      ...naturalSpeaker,
+      speak: async (text: string) => {
+        const stop = playbackMeter.reply()
+        try {
+          await maiSpeaker.speak(text)
+        } finally {
+          stop()
+        }
+      },
+      cancel: () => maiSpeaker.cancel(),
+      prefetch: (text: string) => maiSpeaker.prefetch?.(text),
+      // Opening the microphone warms the voice that will answer: under a MAI voice that can answer, none.
+      prepare: () => {
+        if (isMaiVoice(voiceSettings().replyVoice) && maiSpeaker.available()) return
+        naturalSpeaker.prepare()
+      },
+    }
+
+    /*
+     * The level meter drives the mic ring and the settings panel's waveform, and
+     * nothing else. A second getUserMedia stream is the one part of starting up
+     * that can fail on its own — a headless webview, a denied prompt — so its
+     * failure is swallowed here: losing the animation must never cost the user
+     * the ability to speak.
+     */
+    const rawMicMeter = voiceAvailable ? voice.createMicMeter() : undefined
+    const micMeter = rawMicMeter
+      ? {
+          start: async () => {
+            try {
+              await rawMicMeter.start()
+            } catch {
+              // level display only; recognition runs on its own stream
+            }
+          },
+          onLevel: (cb: (level: number) => void) => rawMicMeter.onLevel(cb),
+          // Passed through: the engine tells the meter which microphone to open
+          // so the ring animates off the same device recognition is reading.
+          setDevice: (deviceId: string | undefined) => rawMicMeter.setDevice(deviceId),
+          stop: () => rawMicMeter.stop(),
+          get isRunning() {
+            return rawMicMeter.isRunning
+          },
+        }
+      : undefined
+
+    const voiceEngine = voice.createVoiceEngine({
+      host: voiceHost,
+      spendTally: voiceSpend,
+      settings: voiceSettings(),
+      // The socket the streaming backend speaks over: built here, over the Rust
+      // host, and handed to whichever backend the settings chose.
+      backendOptions: { grokStreamOptions: { transport: sttTransport, onStreamState: setStreamState } },
+      // A tap on a dictation chord held to speak closed it unseen: said, so the press is not dead.
+      onDictationTap: () =>
+        report(t("vui.dictation.tapHint", describeShortcut(voiceSettings().transcriptionChord, platform)), "info"),
+      ...(voiceAvailable ? {} : { transcriber: noMicrophone }),
+      speaker,
+      micMeter,
+      now: () => Date.now(),
+      /*
+       * What the planning provider said, beside the sentence the user heard. It
+       * is the only way to tell a "riprova fra un momento" that keeps coming back
+       * because of a rate limit from one that will because the key is wrong, and
+       * a 401 quotes the key it refused — so it is scrubbed before it is shown,
+       * and the Italian sentence is the only thing said out loud.
+       */
+      onProviderError: (detail) => report(scrubSecrets(detail)),
+      getContext: () => ({
+        focusedPaneId: wb().focusedId,
+      }),
+    })
+    return { engine: voiceEngine, speaker, maiSpeaker, naturalSpeaker }
   }
 
   /*
-   * The level meter drives the mic ring and the settings panel's waveform, and
-   * nothing else. A second getUserMedia stream is the one part of starting up
-   * that can fail on its own — a headless webview, a denied prompt — so its
-   * failure is swallowed here: losing the animation must never cost the user
-   * the ability to speak.
+   * The engine as the bar, the agent view and the keys hold it: idle until it is asked to start (`voice/lazy-engine`).
+   *
+   * The runtime is reached only through it (`voiceEngine.runtime()`): a speaker taken some other way would build an engine
+   * this stand-in does not know about, and the settings changed afterwards would never reach it.
    */
-  const rawMicMeter = voiceAvailable ? createMicMeter() : undefined
-  const micMeter = rawMicMeter
-    ? {
-        start: async () => {
-          try {
-            await rawMicMeter.start()
-          } catch {
-            // level display only; recognition runs on its own stream
-          }
-        },
-        onLevel: (cb: (level: number) => void) => rawMicMeter.onLevel(cb),
-        // Passed through: the engine tells the meter which microphone to open
-        // so the ring animates off the same device recognition is reading.
-        setDevice: (deviceId: string | undefined) => rawMicMeter.setDevice(deviceId),
-        stop: () => rawMicMeter.stop(),
-        get isRunning() {
-          return rawMicMeter.isRunning
-        },
-      }
-    : undefined
-
-  const voiceEngine = createVoiceEngine({
-    host: voiceHost,
-    spendTally: voiceSpend,
-    settings: voiceSettings(),
-    // The socket the streaming backend speaks over: built here, over the Rust
-    // host, and handed to whichever backend the settings chose.
-    backendOptions: { grokStreamOptions: { transport: sttTransport, onStreamState: setStreamState } },
-    // A tap on a dictation chord held to speak closed it unseen: said, so the press is not dead.
-    onDictationTap: () =>
-      report(t("vui.dictation.tapHint", describeShortcut(voiceSettings().transcriptionChord, platform)), "info"),
-    ...(voiceAvailable ? {} : { transcriber: noMicrophone }),
-    speaker,
-    micMeter,
-    now: () => Date.now(),
-    /*
-     * What the planning provider said, beside the sentence the user heard. It
-     * is the only way to tell a "riprova fra un momento" that keeps coming back
-     * because of a rate limit from one that will because the key is wrong, and
-     * a 401 quotes the key it refused — so it is scrubbed before it is shown,
-     * and the Italian sentence is the only thing said out loud.
-     */
-    onProviderError: (detail) => report(scrubSecrets(detail)),
-    getContext: () => ({
-      focusedPaneId: wb().focusedId,
-    }),
+  const voiceEngine = createLazyVoiceEngine({
+    settings: voiceSettings,
+    load: buildVoiceRuntime,
+    // A chord, the orb or a spoken alert that finds the voice did not load must say so, not do nothing.
+    onLoadError: () => report(t("vui.load.failed"), "warning"),
   })
+  /** The reply voice, for the places that speak or warm it up; the speakers themselves are built with the runtime. */
+  const speaker = {
+    speak: async (text: string) => (await voiceEngine.runtime()).speaker.speak(text),
+    prepare: () => {
+      void voiceEngine
+        .runtime()
+        .then((runtime) => runtime.speaker.prepare())
+        .catch(() => {})
+    },
+  }
+  /** MAI's speaker, for the settings panel's «Riprova». */
+  const maiSpeaker = {
+    retry: () => {
+      void voiceEngine
+        .runtime()
+        .then((runtime) => runtime.maiSpeaker.retry())
+        .catch(() => {})
+    },
+  }
 
   const downloadNaturalVoice = async () => {
     if (voiceDownloading()) return
@@ -6332,6 +6433,11 @@ export function Workbench() {
         if (open) preloadNaturalVoice()
         // What the host has of Kokoro, asked when the panel opens: it can change under ADE.
         if (open) void kokoro.refresh()
+        /*
+         * The panel shows today's spend, a stop for spending and the warning, and they are the engine's: a stand-in reads them as
+         * zero and blank, which hides a real spend. Building the engine opens no microphone.
+         */
+        if (open) void voiceEngine.ensure().catch(() => {})
       },
       { defer: true },
     ),
@@ -6975,7 +7081,7 @@ export function Workbench() {
        * daily occurrence.
        */
       const isTerminal = Boolean(target?.closest?.('[data-slot="pane-terminal"]'))
-      if (isTerminal && resolution.type === "ade" && !FROM_TERMINALS.has(resolution.commandId ?? "")) return
+      if (isTerminal && resolution.type === "ade" && !runsFromTerminal(resolution.commandId ?? "", platform)) return
       // And inside the palette, its Ctrl+N and Ctrl+P walk the list (`paletteStep`).
       if (target?.closest?.('[data-component="palette"]') && paletteStep(e) !== 0) return
 
@@ -6996,6 +7102,8 @@ export function Workbench() {
         if (resolution.commandId && isHandledCommand(resolution.commandId)) {
           e.preventDefault()
           e.stopPropagation()
+          // Held down, the key repeats: the command ran on the press.
+          if (!firesOnPress(e)) return
           void runCommand(resolution.commandId)
         }
         return
@@ -7340,6 +7448,14 @@ export function Workbench() {
     } else if (id === "pane.rename") {
       // Handled by the pane itself: the title is edited where it is shown.
       requestRename(wb().focusedId)
+    } else if (id === "pane.resize") {
+      /*
+       * The grip is where the arrows resize, and a terminal keeps Tab, so a session pane cannot be tabbed to it: the palette
+       * is the way in, and Esc on the grip the way back. After a tick: the palette is still closing, and its trap and its
+       * hand-back of the focus would take the grip's.
+       */
+      const tile = wb().focusedId
+      if (tile) setTimeout(() => focusResizeGrip(tile), 0)
     } else if (id === "view.toggle") {
       setWb((w) => ({ ...w, view: nextView(w.view) }))
     } else if (id.startsWith("view.")) {
@@ -7489,6 +7605,8 @@ export function Workbench() {
       openVoiceSettings("voice-sec-mode")
     } else if (id === "settings.open") {
       openVoiceSettings()
+    } else if (id === "shortcuts.open") {
+      openVoiceSettings("general/shortcuts")
     } else if (id === "panes.closeGone") {
       await closer.closeAll(
         wb()
@@ -7844,6 +7962,7 @@ export function Workbench() {
     claims.forget(id)
     usageOf.delete(id)
     paneTokens.delete(id)
+    retiredTokens.delete(id)
     paneNonces.delete(id)
     formerNonces.delete(id)
     activityOf.delete(id)
@@ -9016,6 +9135,7 @@ export function Workbench() {
       )
       // Born at the pane's size, not the host's 120x30 (S77); undefined for a pane not yet fitted.
       const bornAt = ptySize(paneId)
+      const paneToken = await freshPaneToken(host, paneId)
       const session = await host.spawn({
         ...bornAt,
         command: agent.command,
@@ -9069,7 +9189,7 @@ export function Workbench() {
         },
         ...(nonce ? { link: { pane: paneId, nonce } } : {}),
         pane: paneId,
-        paneToken: mintPaneToken(paneId),
+        paneToken,
         ...(secretNames.length > 0 ? { secrets: secretNames } : {}),
       })
 
@@ -9329,6 +9449,7 @@ export function Workbench() {
       startOnCleanScreen(paneId)
       // Born at the pane's size, not the host's 120x30 (S77); undefined for a pane not yet fitted.
       const bornAt = ptySize(paneId)
+      const paneToken = await freshPaneToken(host, paneId)
       const session = await host.spawn({
         ...bornAt,
         command: "ssh",
@@ -9353,7 +9474,7 @@ export function Workbench() {
           tellPane(paneId, t("pane.connectFailed", reason))
         },
         pane: paneId,
-        paneToken: mintPaneToken(paneId),
+        paneToken,
       })
       // As for a local session: closed or started again meanwhile, the connection is ended (SES-2).
       if (!wb().panes.some((pane) => pane.id === paneId)) running.cancelStart(paneId)
@@ -10677,19 +10798,21 @@ export function Workbench() {
       </Show>
 
       <Show when={designOpen()}>
-        <DesignSheet
-          hub={designHub}
-          start={choiceStart()}
-          onDone={(_next, said) => {
-            setDesignOpen(false)
-            if (said) toast.show(said)
-          }}
-          onClose={() => setDesignOpen(false)}
-          onOpenPanel={() => {
-            setDesignOpen(false)
-            openDesignPane()
-          }}
-        />
+        <Suspense>
+          <DesignSheet
+            hub={designHub}
+            start={choiceStart()}
+            onDone={(_next, said) => {
+              setDesignOpen(false)
+              if (said) toast.show(said)
+            }}
+            onClose={() => setDesignOpen(false)}
+            onOpenPanel={() => {
+              setDesignOpen(false)
+              openDesignPane()
+            }}
+          />
+        </Suspense>
       </Show>
 
       <Show when={keyRequest() && keysHost()}>
@@ -10721,82 +10844,84 @@ export function Workbench() {
         panel, one gear, one answer to "where are the settings".
       */}
       <Show when={voiceSettingsOpen()}>
-        <SettingsSheet
-          onClose={closeVoiceSettings}
-          initialTarget={voiceSettingsSection()}
-          version={installedVersion()}
-          onCheckUpdates={() => void checkForUpdates()}
-          voiceEngine={voiceEngine}
-          voiceSettings={voiceSettings()}
-          onVoiceSettingsChange={handleVoiceSettingsChange}
-          shortcutRefusals={shortcutRefusals()}
-          onOpenVoiceSource={(voice) => void getHost().then((host) => host?.ttsOpenVoiceSource?.(voice))}
-          naturalVoiceError={voiceError()}
-          naturalVoiceDownloading={voiceDownloading()}
-          naturalVoiceInstalled={voiceInstalled()}
-          onDownloadNaturalVoice={() => void downloadNaturalVoice()}
-          naturalVoiceProgress={piperProgress() ?? undefined}
-          onCancelInstall={(provider) =>
-            void (provider === "kokoro"
-              ? kokoro.cancel()
-              : getHost().then((host) => host?.ttsInstallCancel?.(provider)))
-          }
-          kokoroPack={kokoroPack()}
-          onInstallKokoro={() => void kokoro.install()}
-          onDeleteKokoro={() => void kokoro.remove()}
-          onTestVoice={testReplyVoice}
-          maiBlocked={maiBlocked()}
-          onRetryMai={() => maiSpeaker.retry()}
-          xaiKeyMasked={xaiKeyMasked()}
-          streamState={streamState()}
-          onRetryStream={() => {
-            voiceEngine.retryStream()
-            setStreamState({ kind: "ready" })
-          }}
-          testIdentity={testBuild}
-          bindings={bindings}
-          voiceSettingsNotice={voiceSettingsNotice()}
-          themeState={themeState}
-          glassStatus={glassStatus}
-          project={project}
-          wb={wb}
-          setWb={setWb}
-          hookHost={hookHost}
-          hookStates={hookStates}
-          refreshHooks={refreshHooks}
-          openLoginSession={(runner) => openLoginSession(runner)}
-          keysHost={keysHost}
-          voiceKeyConflict={voiceKeyConflict() ? answerVoiceKeyConflict : undefined}
-          onManageKeys={() => {
-            // Through undefined, so asking twice for the same tab still moves the sheet.
-            setVoiceSettingsSection(undefined)
-            setVoiceSettingsSection("agents/keys")
-          }}
-          extensionsIo={extensionsIo}
-          pluginRuntime={pluginRuntime}
-          openGuide={openGuide}
-          askYesNo={askYesNo}
-          record={{
-            quality: recordQuality,
-            onQuality: applyRecordQuality,
-            mic: recordMic,
-            onMic: applyRecordMic,
-            dir: recordDir,
-            onPickFolder: () => void pickRecordDir(),
-            onExport: () => void exportLastTake(),
-          }}
-          updates={{
-            checking: checkingUpdate,
-            available: latestUpdate,
-            onInstall: () => {
-              const update = latestUpdate()
-              if (!update) return
-              // The dialog takes the window over: the sheet steps aside so the two never stack.
-              closeVoiceSettings()
-              installUpdate(update.url)
-            },
-          }}
-        />
+        <Suspense>
+          <SettingsSheet
+            onClose={closeVoiceSettings}
+            initialTarget={voiceSettingsSection()}
+            version={installedVersion()}
+            onCheckUpdates={() => void checkForUpdates()}
+            voiceEngine={voiceEngine}
+            voiceSettings={voiceSettings()}
+            onVoiceSettingsChange={handleVoiceSettingsChange}
+            shortcutRefusals={shortcutRefusals()}
+            onOpenVoiceSource={(voice) => void getHost().then((host) => host?.ttsOpenVoiceSource?.(voice))}
+            naturalVoiceError={voiceError()}
+            naturalVoiceDownloading={voiceDownloading()}
+            naturalVoiceInstalled={voiceInstalled()}
+            onDownloadNaturalVoice={() => void downloadNaturalVoice()}
+            naturalVoiceProgress={piperProgress() ?? undefined}
+            onCancelInstall={(provider) =>
+              void (provider === "kokoro"
+                ? kokoro.cancel()
+                : getHost().then((host) => host?.ttsInstallCancel?.(provider)))
+            }
+            kokoroPack={kokoroPack()}
+            onInstallKokoro={() => void kokoro.install()}
+            onDeleteKokoro={() => void kokoro.remove()}
+            onTestVoice={testReplyVoice}
+            maiBlocked={maiBlocked()}
+            onRetryMai={() => maiSpeaker.retry()}
+            xaiKeyMasked={xaiKeyMasked()}
+            streamState={streamState()}
+            onRetryStream={() => {
+              voiceEngine.retryStream()
+              setStreamState({ kind: "ready" })
+            }}
+            testIdentity={testBuild}
+            bindings={bindings}
+            voiceSettingsNotice={voiceSettingsNotice()}
+            themeState={themeState}
+            glassStatus={glassStatus}
+            project={project}
+            wb={wb}
+            setWb={setWb}
+            hookHost={hookHost}
+            hookStates={hookStates}
+            refreshHooks={refreshHooks}
+            openLoginSession={(runner) => openLoginSession(runner)}
+            keysHost={keysHost}
+            voiceKeyConflict={voiceKeyConflict() ? answerVoiceKeyConflict : undefined}
+            onManageKeys={() => {
+              // Through undefined, so asking twice for the same tab still moves the sheet.
+              setVoiceSettingsSection(undefined)
+              setVoiceSettingsSection("agents/keys")
+            }}
+            extensionsIo={extensionsIo}
+            pluginRuntime={pluginRuntime}
+            openGuide={openGuide}
+            askYesNo={askYesNo}
+            record={{
+              quality: recordQuality,
+              onQuality: applyRecordQuality,
+              mic: recordMic,
+              onMic: applyRecordMic,
+              dir: recordDir,
+              onPickFolder: () => void pickRecordDir(),
+              onExport: () => void exportLastTake(),
+            }}
+            updates={{
+              checking: checkingUpdate,
+              available: latestUpdate,
+              onInstall: () => {
+                const update = latestUpdate()
+                if (!update) return
+                // The dialog takes the window over: the sheet steps aside so the two never stack.
+                closeVoiceSettings()
+                installUpdate(update.url)
+              },
+            }}
+          />
+        </Suspense>
       </Show>
 
       {/*

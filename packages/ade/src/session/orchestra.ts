@@ -13,6 +13,19 @@ export const MAX_NAME = 40
 export const DEFAULT_MAX_DEPTH = 2
 
 /**
+ * «utente» is who the Decisions and Design registers say answered from ADE's
+ * own buttons. Compared without case, spacing, accents or invisible characters,
+ * since all of those read the same in the panel.
+ */
+export function isReservedName(raw: string): boolean {
+  const bare = raw
+    .normalize("NFKD")
+    .replace(/[\p{M}\p{Cf}\s]/gu, "")
+    .toLowerCase()
+  return bare === "utente"
+}
+
+/**
  * A name as the user will see it and type it, or an error.
  *
  * Refused rather than repaired: the agent that chose it is about to address
@@ -28,6 +41,7 @@ export function checkName(raw: string): { name: string } | { error: string } {
     return { error: "il nome non può essere solo un numero (i numeri sono le posizioni in ade-msg list)" }
   // eslint-disable-next-line no-control-regex
   if (/[\\/\u0000-\u001f"]/.test(name)) return { error: 'il nome non può contenere / \\ " o caratteri di controllo' }
+  if (isReservedName(name)) return { error: `il nome "${name}" è riservato: nei registri indica l'utente` }
   return { name }
 }
 
