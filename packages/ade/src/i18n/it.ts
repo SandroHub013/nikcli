@@ -61,8 +61,8 @@ export const it = {
     `Design: apri la variante — ${title ? `${k} · ${title}` : k} · Variante ${variant}${name ? ` «${name}»` : ""}`,
   "confirm.forgetGone": (n: number) =>
     n === 1
-      ? "Togliere dai recenti e dagli Spaces 1 cartella sparita?"
-      : `Togliere dai recenti e dagli Spaces ${n} cartelle sparite?`,
+      ? "Togliere dai recenti e dai progetti 1 cartella sparita?"
+      : `Togliere dai recenti e dai progetti ${n} cartelle sparite?`,
   "palette.pane.shrink": "Riduci pannello",
   "palette.pane.expand": "Espandi pannello",
   "palette.pane.rename": "Rinomina sessione",
@@ -95,7 +95,7 @@ export const it = {
   "palette.design.pane": "Apri pannello Design",
   "palette.raguverse.pane": "Apri pannello RagùVerse",
   "palette.update.check": "Controlla aggiornamenti",
-  "palette.process.kill": "Uccidi processo",
+  "palette.process.kill": "Termina il processo",
   "palette.process.none": "Il pannello a fuoco non ha un processo vivo",
 
   // Updates, presence, pane states, presets, new-pane menu, restore
@@ -107,7 +107,8 @@ export const it = {
   "update.current": (version: string) => `Nessun aggiornamento: ADE ${version} è l'ultima versione.`,
   "update.none": "Nessun aggiornamento disponibile.",
   "update.dev": "Questa è una build di sviluppo: non c'è una versione installata da aggiornare.",
-  "update.failed": (problem: string) => `Non sono riuscito a controllare gli aggiornamenti: ${problem}`,
+  "update.failed": (problem: string) =>
+    `Non sono riuscita a controllare gli aggiornamenti: il server delle release non ha risposto (${problem}). Riprova più tardi da Notifiche → Controlla aggiornamenti.`,
   "presence.off": "Microfono spento",
   "presence.asleep": "In attesa della parola di richiamo",
   "presence.idle": "Pronto",
@@ -137,7 +138,7 @@ export const it = {
   "preset.workbench": "Banco di lavoro",
   "preset.workbench.desc": "Un agente più una shell per git e test.",
   "preset.swarm": "Sciame",
-  "preset.swarm.desc": "Quattro agenti si distribuiscono su task paralleli.",
+  "preset.swarm.desc": "Quattro agenti si distribuiscono su compiti in parallelo.",
   "hooks.unavailable": "non disponibile in questa build",
   "stats.who": (processes: number) => `ADE e i suoi ${processes} processi (webview e agenti)`,
   "stats.cpu": (who: string, percent: string) => `CPU usata da ${who}: ${percent}%`,
@@ -193,11 +194,11 @@ export const it = {
   // Sidebar
   "sidebar.project": "progetto",
   "sidebar.elapsed": "Tempo trascorso",
-  "sidebar.spaces": "Spaces",
+  "sidebar.spaces": "Progetti",
   "sidebar.openProjectSessions": "Apri le sessioni del progetto",
-  "sidebar.addSpace": "Aggiungi space",
+  "sidebar.addSpace": "Aggiungi progetto",
   "sidebar.addRemote": "Aggiungi ambiente remoto (ssh)",
-  "sidebar.noSpaces": "Nessuno space aperto.",
+  "sidebar.noSpaces": "Nessun progetto aperto.",
   /** The status icon's name: `status` is the state's word in this language (`paneState.*`), from the one list in `grid/pane-state.ts`. */
   "sidebar.agentStatus": (status: string) => `Stato: ${status}`,
   "sidebar.agents": "Agenti attivi",
@@ -221,7 +222,7 @@ export const it = {
   "sidebar.stats": "Risorse usate da ADE",
   "sidebar.resize": "Ridimensiona barra laterale",
   "sidebar.menu.session": "Azioni sulla sessione",
-  "sidebar.menu.workspace": "Azioni sullo space",
+  "sidebar.menu.workspace": "Azioni sul progetto",
   "sidebar.menu.rename": "Rinomina",
   "sidebar.menu.restart": "Riavvia",
   "sidebar.menu.resume": "Riprendi",
@@ -238,7 +239,7 @@ export const it = {
   "pane.tree.full": "Albero isolato che contiene il lavoro corrente",
   "pane.tree.stale": "Albero isolato dall'ultimo commit: le modifiche non salvate non ci sono",
   "pane.tree.noDeps": "Albero isolato senza dipendenze collegate: l'agente può modificare ma non eseguire",
-  "pane.tree.project": "Nessun albero isolato: l'agente lavora direttamente nel progetto",
+  "pane.tree.project": "Nessuna copia di lavoro: l'agente lavora direttamente nel progetto",
   "pane.tree.preparing": "Preparazione albero…",
   "pane.tree.preparing.short": "preparazione albero…",
   "pane.session": "Sessione",
@@ -252,21 +253,39 @@ export const it = {
   "pane.input": "Scrivi all'agente…",
   "pane.input.none": "nessun processo in ascolto",
   "pane.notDelivered": (text: string) => `Nessun processo in ascolto: ${text} non è stato consegnato.`,
-  "pane.startFailed": (error: string) => `La sessione non è partita: ${error}`,
-  "pane.connectFailed": (error: string) => `La connessione non è riuscita: ${error}`,
+  "pane.startFailed": (error: string) =>
+    `La sessione non è partita: ${error}. Premi Riavvia; se succede di nuovo, controlla l'accesso in Impostazioni → Agenti e account.`,
+  "pane.startFailed.notFound": (agent: string, command: string) =>
+    `${agent} non è partito: il comando «${command}» non è installato su questo computer. Installalo dalla sua scheda in Nuova sessione, poi premi Riavvia.`,
+  "pane.connectFailed": (error: string) => `La connessione non è riuscita: ${error}. Controlla l'indirizzo e la rete, poi riprova.`,
+  "pane.reason.cantRun": (command: string, why: string) => `${command} non si avvia (${why})`,
+  "pane.reason.noPty": (why: string) => `il terminale non si è aperto (${why})`,
+  "pane.reason.optionRefused": (command: string, flag: string) => `ADE non avvia ${command} con l'opzione ${flag}`,
+  "pane.reason.commandRefused": (command: string) => `ADE non può avviare «${command}»`,
+  "pane.reason.needsTerminal": (command: string) => `${command} si avvia solo in un terminale`,
+  "pane.reason.keyMissing": "è scelta la modalità a chiave, ma manca la chiave",
+  "pane.reason.keyAnthropic": "la modalità a chiave vuole la variabile ANTHROPIC_API_KEY",
+  "pane.reason.keyOpenAi": "la modalità a chiave vuole la variabile CODEX_API_KEY o OPENAI_API_KEY",
+  "pane.reason.subscriptionNoKey": "un abbonamento non usa chiavi: scegli la modalità a chiave o togli la chiave",
+  "pane.reason.sshArgument": (argument: string) => `ADE non accetta l'argomento ssh ${argument}`,
+  "pane.reason.sshPort": (port: string) => `la porta ssh ${port} non è valida`,
+  "pane.reason.sshValue": (value: string) => `il valore ssh ${value} non è valido`,
+  "pane.reason.sshNoDestination": "manca la destinazione ssh",
+  "pane.reason.shellArgument": (argument: string) => `ADE non accetta l'argomento ${argument} per la shell`,
+  "pane.reason.unsafeArgument": (name: string, shown: string) => `l'argomento per ${name} contiene ${shown}, che cmd.exe interpreta`,
   "pane.pluginGone": "Il plugin non è più caricato.",
   "grid.resize": "Ridimensiona il pannello",
   "grid.resize.tip": "Trascina per ridimensionare · doppio clic per la dimensione predefinita",
-  "palette.label": "Palette dei comandi",
+  "palette.label": "Cerca comandi",
   "palette.search": "Cerca un comando…",
   "palette.empty": "Nessun comando trovato.",
   "preview.binary": "File binario o codifica non supportata.",
-  "preview.loading": "Caricamento in corso...",
+  "preview.loading": "Caricamento in corso…",
   "empty.title": "Nessun progetto aperto",
   "empty.browser":
     "Nel browser ADE non può leggere il disco né avviare processi: gli alberi di lavoro e le sessioni reali esistono solo nell'app desktop.",
   "empty.desktop":
-    "Scegli una cartella per iniziare. Se è un repository git, ogni sessione riceve una copia di lavoro isolata; altrimenti gli agenti scrivono direttamente nella cartella.",
+    "Scegli una cartella per iniziare. Se è un repository git, ogni sessione riceve una copia di lavoro (worktree git); altrimenti gli agenti scrivono direttamente nella cartella.",
   "empty.open": "Apri progetto",
   "projectBar.noGit": "Non è un repository git: gli agenti modificano direttamente i file del progetto.",
   "projectBar.noGit.short": "senza isolamento",
@@ -465,19 +484,28 @@ export const it = {
   "boot.host": "avvio di ADE",
   "boot.restore": "ripristino le sessioni",
   "boot.project": "apro il progetto",
-  "pane.closeRunning": (agent: string) =>
-    `${agent}\n\nL'agente è ancora in esecuzione. Chiudendo il pannello, si ferma.\n\nChiudere comunque?`,
+  "pane.closeRunning": (session: string) => `Chiudere «${session}»? L'agente è ancora al lavoro e si ferma.`,
+  "pane.closeRunning.saved": "La conversazione resta salvata e si può riprendere.",
+  "pane.closeRunning.ok": "Chiudi e ferma",
+  "pane.closeRunning.cancel": "Lascia aperta",
   "pane.closeWorktree": (reason: string) =>
     `${reason}\n\nChiudendo, la cartella resta su disco con il suo branch.\n\nChiudere comunque?`,
-  "pane.worktreeKept": (reason: string) => `La worktree resta su disco: ${reason}`,
-  "editor.closeDirty": (path: string) =>
-    `${path}\n\nCi sono modifiche non salvate. Chiudendo, vengono perse.\n\nChiudere comunque?`,
+  "pane.closeWorktree.ok": "Chiudi comunque",
+  "pane.closeWorktree.cancel": "Lascia aperta",
+  "pane.worktreeKept": (reason: string) => `La copia di lavoro resta su disco: ${reason}`,
+  "editor.closeDirty": (file: string) => `Chiudere ${file} senza salvare? Le modifiche non salvate vanno perse.`,
+  "editor.closeDirty.ok": "Chiudi senza salvare",
+  "editor.closeDirty.cancel": "Torna al file",
   "editor.saveUnreadable": (path: string, problem: string) =>
     `${path}\n\nNon riesco a rileggere il file per controllare se è cambiato (${problem}).\n\nSalvare comunque, sostituendo quello che c'è sul disco?`,
+  "editor.saveUnreadable.ok": "Salva comunque",
+  "editor.saveUnreadable.cancel": "Annulla",
   "editor.saveCancelled.unreadable": (problem: string) =>
     `Salvataggio annullato: non ho potuto rileggere il file (${problem}).`,
-  "editor.saveChanged": (path: string) =>
-    `${path}\n\nIl file è cambiato su disco da quando l'hai aperto. Salvando, quelle modifiche vengono sostituite dalle tue.\n\nProcedere?`,
+  "editor.saveChanged": (file: string) =>
+    `${file} è cambiato su disco dopo che l'hai aperto. Salvando, le tue modifiche sostituiscono quelle.`,
+  "editor.saveChanged.ok": "Sostituisci",
+  "editor.saveChanged.cancel": "Annulla",
   "editor.saveCancelled.changed": "Salvataggio annullato: il file è cambiato su disco.",
   "keys.unread": (problem: string) => `Chiavi API non lette, la sessione parte senza: ${problem}`,
   "task.notSent":
@@ -489,10 +517,10 @@ export const it = {
     `ADE non ha scritto «${text}»: la connessione non si è stabilizzata. Scrivilo tu.`,
   "task.agentMissing": (command: string) =>
     `«${command}» non è installato sul server: ADE non ha scritto il compito, la shell remota lo avrebbe eseguito come comando.`,
-  "task.none": "Nessun task iniziale",
+  "task.none": "Nessun compito iniziale",
   "bar.newPane": "Nuovo pannello",
   "bar.windowControls": "Controlli finestra",
-  "bar.dismissNotice": "Chiudi avviso",
+  "bar.dismissNotice": "Togli l'avviso",
   "bell.empty": "Nessuna notifica.",
   "settings.title": "Impostazioni",
   "settings.subtitle": "Voce, routine, codice, MCP, plugin e competenze",
@@ -556,7 +584,7 @@ export const it = {
   "space.empty": "Non c'è niente da togliere.",
   "space.group.voices": "Voci locali",
   "space.group.assets": "Asset di RagùVerse",
-  "space.group.worktrees": "Worktree delle sessioni finite",
+  "space.group.worktrees": "Copie di lavoro delle sessioni finite",
   "space.group.branches": "Branch di ADE già integrati",
   "space.group.project": "Catture e risultati vecchi",
   "space.refresh": "Ricontrolla",
@@ -570,11 +598,11 @@ export const it = {
   "space.raguverse.again": "Si riscaricano alla prossima apertura del mondo",
   "space.worktree.remove": "Togli",
   "space.worktree.unknown": "Non riesco a controllare se il lavoro è integrato",
-  "space.worktree.locked": "La worktree è bloccata",
+  "space.worktree.locked": "La copia di lavoro è bloccata",
   "space.branches": (a: string) => `${a} branch`,
   "space.prune": (a: string) => `${a}: file di .ade/`,
   "space.prune.detail": (a: string) => `${a} file: le catture oltre le ultime 50 e i risultati e le note oltre i 30 giorni`,
-  "space.prune.action": "Pota",
+  "space.prune.action": "Pulisci",
   "space.confirm.frees": (a: string) => `Libera circa ${a}.`,
   "space.confirm.frees.none": "Libera pochissimo spazio: toglie solo il nome.",
   "space.confirm.ask": "Procedere?",
@@ -625,7 +653,7 @@ export const it = {
   "settings.providers.switchContinue": "Continua",
   "settings.providers.switchCancel": "Annulla",
   "settings.providers.login": "Accedi",
-  "settings.providers.checkAgain": "Controlla di nuovo",
+  "settings.providers.checkAgain": "Ricontrolla",
 
   // Splash & logo
   "splash.aria": "Presentazione di ADE — tipografia ASCII 3D",
@@ -661,7 +689,7 @@ export const it = {
   "pane.expand": "Ingrandisci",
   "pane.restore": "Riduci",
   "pane.copied": "Copiato",
-  "pane.noticeDismiss": "Chiudi la nota",
+  "pane.noticeDismiss": "Togli la nota",
   "pane.copyBlocked": "Non copiato: durante la ripresa la selezione tocca una riga coperta",
   "file.preview": "Anteprima",
   "file.text": "Testo",
@@ -735,12 +763,12 @@ export const it = {
   "choices.age.hours": (count: number) => `${count} h fa`,
   "choices.age.days": (count: number) => `${count} ${count === 1 ? "giorno" : "giorni"} fa`,
   "bar.sections": "Sezioni",
-  "bar.palette": "Cerca o esegui",
+  "bar.palette": "Cerca comandi",
   "window.minimize": "Riduci a icona",
   "window.maximize": "Ingrandisci o ripristina",
   "window.close": "Chiudi",
   "window.closeConfirm.message": (count: number) =>
-    `${count} ${count === 1 ? "sessione sta lavorando" : "sessioni stanno lavorando"}. Chiudere lo stesso?`,
+    `${count} ${count === 1 ? "sessione sta lavorando" : "sessioni stanno lavorando"}. Chiudere comunque?`,
   "window.closeConfirm.ok": "Chiudi",
   "window.closeConfirm.cancel": "Annulla",
   "window.closeConfirm.gatewayOn": "I bot smettono di rispondere finché non riapri ADE.",
@@ -754,13 +782,14 @@ export const it = {
   "tray.hide.notice":
     "ADE resta nella tray finché un gateway è acceso, così le chat continuano a raggiungere i bot. Il microfono si chiude finché la finestra è nascosta. Per riaprirla: clic sull'icona; per chiudere ADE: Esci, nel menu dell'icona.",
   "bell.title": "Notifiche",
-  "bell.dismiss": "Scarta",
+  "bell.dismiss": "Togli",
 
   // Export, stuck note
   "record.export.busy": "Un'esportazione è già in corso.",
   "record.export.desktopOnly": "L'esportazione funziona solo nell'app desktop.",
   "record.export.done": (path: string) => `Video pronto: ${path}`,
-  "record.export.failed": (problem: string) => `Esportazione non riuscita: ${problem}`,
+  "record.export.failed": (problem: string) =>
+    `Esportazione non riuscita: ${problem}. La registrazione originale non è stata toccata: riprova da Impostazioni → Registrazione.`,
   "pane.maybeStuck": (request: string) =>
     `Forse bloccata: al lavoro da oltre un'ora senza output né modifiche (richiesta ${request})`,
 
@@ -781,7 +810,7 @@ export const it = {
   "activity.sshConnecting": "Connessione ssh",
   "activity.connected": "Connesso",
   "activity.connectFailed": "Connessione fallita",
-  "pane.killed": "Processo ucciso",
+  "pane.killed": "Processo terminato",
   "pane.suspend": "Sospendi",
   "pane.suspend.tip": "Chiude i processi della sessione e ne tiene la conversazione: si riprende da qui",
   "pane.suspend.no": (why: string) => `Sospendi non disponibile: ${why}`,
@@ -817,7 +846,7 @@ export const it = {
   "browser.fidelity.native": "Nativo (Bridge attivo)",
   "browser.fidelity.mirror": "Mirror (Copia isolata)",
   "browser.fidelity.none": "Sola lettura",
-  "browser.fidelity.pending": "Connessione...",
+  "browser.fidelity.pending": "Connessione…",
   "browser.fluid": "Fluido",
   "browser.grip": "Trascina per spostare il pannello",
   "browser.back": "Indietro",
@@ -1203,8 +1232,8 @@ export const it = {
   "browser.noCopy.back": "Torna a Naviga",
   "browser.context": "Contesto catturato:",
   "browser.clearSelection": "Deseleziona tutto",
-  "browser.prompt.selected": "Descrivi cosa modificare...",
-  "browser.prompt.empty": "Punta un elemento nella pagina o scrivi un'istruzione...",
+  "browser.prompt.selected": "Descrivi cosa modificare…",
+  "browser.prompt.empty": "Punta un elemento nella pagina o scrivi un'istruzione…",
   "browser.selection.none": "Nessun elemento selezionato",
   "browser.selection.count": (count: number) =>
     count === 1 ? "1 elemento selezionato" : `${count} elementi selezionati`,
@@ -1262,7 +1291,7 @@ export const it = {
   "date.monday": "lunedì",
   "date.inDays": (days: number) => `fra ${days} giorni`,
   "decisions.title": "Decisioni",
-  "decisions.shortTitle": "Dec",
+  "decisions.shortTitle": "Decisioni",
   "decisions.notice.toTake": (title: string) => `Decisione da prendere: ${title}`,
   "decisions.openCount": (count: number) => `${count} ${count === 1 ? "aperta" : "aperte"}`,
   "decisions.count": (count: number) => (count === 1 ? "1 decisione" : `${count} decisioni`),
@@ -1283,7 +1312,8 @@ export const it = {
   "decisions.submitNext": "Registra e avanti",
   "decisions.noProject": "Nessun progetto aperto.",
   "decisions.noProject.hint": "Il registro delle decisioni sta in .ade/decisions.jsonl del progetto.",
-  "decisions.unreadable": (problem: string) => `Registro non leggibile: ${problem}`,
+  "decisions.unreadable": (problem: string) =>
+    `Non riesco a leggere le decisioni del progetto: il file .ade/decisions.jsonl ha una riga rovinata (${problem}). Correggi quella riga e riapri il pannello.`,
   "decisions.ignored": (count: number) => `${count === 1 ? "1 riga ignorata" : `${count} righe ignorate`} nel registro`,
   "decisions.section.open": "Da decidere, in ordine",
   "decisions.section.answered": "Risposte, in attesa di esecuzione",
@@ -1435,7 +1465,7 @@ export const it = {
   "editor.truncatedSave": "Il file è troncato in lettura: il salvataggio distruggerebbe i dati non caricati.",
   "editor.nothingToSave": "Nessuna modifica da salvare.",
   "editor.noFile": "Nessun file aperto.",
-  "editor.loading": "Caricamento file in corso...",
+  "editor.loading": "Caricamento file in corso…",
   "editor.truncatedBanner":
     "Il file è troppo grande ed è stato troncato in lettura. Il salvataggio è disabilitato per proteggere il file su disco.",
   "editor.modified": "Modificato",
@@ -1467,7 +1497,7 @@ export const it = {
   "plugins.commands": (count: number) => `${count} ${count === 1 ? "comando" : "comandi"}`,
   "plugins.panes": (count: number) => `${count} ${count === 1 ? "pannello" : "pannelli"}`,
   "plugins.sections": (count: number) => `${count} ${count === 1 ? "sezione" : "sezioni"}`,
-  "review.loading": "Caricamento modifiche in corso...",
+  "review.loading": "Caricamento modifiche in corso…",
   "review.empty": "Nessuna modifica da mostrare.",
   "review.header": (added: number, removed: number) => `Modifiche (${added} aggiunte, ${removed} rimozioni)`,
   "review.truncated": "Il diff è troppo grande ed è stato troncato. Stai visualizzando solo l'elenco dei file.",
@@ -1480,7 +1510,7 @@ export const it = {
   "review.error.status": "Impossibile leggere lo stato del repository.",
   "review.error.stats": "Impossibile calcolare le statistiche delle modifiche.",
   "review.error.files": "Impossibile calcolare l'elenco dei file modificati.",
-  "shots.dismiss": "Togli dal vassoio",
+  "shots.dismiss": "Togli dalle Schermate",
   "shots.dismiss.named": (name: string) => `Togli ${name}`,
   "shots.hint": "trascinala su una sessione per darla all'agente",
   "shots.delete": "Elimina",
@@ -2415,7 +2445,7 @@ export const it = {
   "bots.codex.tooOld": (since: string, found: string) =>
     `Il turno non è partito. Da chat e nelle routine Codex parte solo dalla versione ${since}, la prima che sa leggere soltanto il progetto; qui c'è la ${found}. Aggiorna Codex, per esempio con «npm install -g @openai/codex».`,
   "bots.codex.versionUnknown":
-    "Il turno non è partito: ADE non è riuscito a leggere la versione di Codex («codex --version»). Da chat e nelle routine Codex parte solo con una versione che sa leggere soltanto il progetto.",
+    "Il turno non è partito: ADE non è riuscita a leggere la versione di Codex («codex --version»). Da chat e nelle routine Codex parte solo con una versione che sa leggere soltanto il progetto.",
   "bots.codex.projectConfig":
     "Il progetto ha un .codex/config.toml, che Codex legge nei progetti fidati con i suoi server MCP. Per tenerli spenti questo turno è partito senza la tua configurazione di Codex: anche senza il provider e i profili del tuo ~/.codex/config.toml.",
   "bots.codex.withoutUserConfig":
@@ -2588,8 +2618,8 @@ export const it = {
   "worktree.close.mergedCheckError": (title: string, branch: string) => `"${title}": git non riesce a dire se il branch ${branch} è integrato`,
   "worktree.close.unmerged": (title: string, branch: string) => `"${title}" ha commit sul branch ${branch} non ancora integrati`,
   "worktree.close.noRescue": "questo host non può mettere al sicuro i rapporti della sessione",
-  "worktree.close.noRoot": (title: string, worktree: string) => `"${title}": non trovo il progetto da cui è nata la worktree ${worktree}`,
-  "worktree.close.rescueFailed": (title: string, worktree: string, error: string) => `"${title}": non riesco a mettere al sicuro i rapporti della sessione, la worktree resta in ${worktree} (${error})`,
+  "worktree.close.noRoot": (title: string, worktree: string) => `"${title}": non trovo il progetto da cui è nata la copia di lavoro ${worktree}`,
+  "worktree.close.rescueFailed": (title: string, worktree: string, error: string) => `"${title}": non riesco a mettere al sicuro i rapporti della sessione, la copia di lavoro resta in ${worktree} (${error})`,
   "worktree.close.gitRefused": "git ha rifiutato",
   "worktree.close.removeFailed": (title: string, worktree: string, error: string) => `"${title}": git non toglie ${worktree} (${error})`,
 
@@ -2599,7 +2629,7 @@ export const it = {
   "pane.simulator.title": "Simulatore",
   "pane.mcpGuide.title": "Guida MCP",
   "pane.tree.workingIn": (cwd: string) => `Lavora in ${cwd}`,
-  "pane.tree.worktree": (path: string) => `Worktree ${path}`,
+  "pane.tree.worktree": (path: string) => `Copia di lavoro ${path}`,
   "bell.unread": (n: number) => `Notifiche, ${n} da leggere`,
 
   // F7a: Grid and pane details
@@ -2672,7 +2702,7 @@ export const it = {
   "keys.error.noKeyring": "questa versione di ADE non ha il portachiavi",
   "workbench.error.noOpenProject": "nessun progetto aperto in cui salvare",
   "session.cannotClose": (reasons: string) =>
-    `non chiudo: ${reasons}. Integra o committa prima, oppure usa --force (la worktree resta su disco)`,
+    `non chiudo: ${reasons}. Integra o committa prima, oppure usa --force (la copia di lavoro resta su disco)`,
   "plugins.error.noDesktopHost": "nessun host desktop",
   "host.error.cannotReadBinary": "questo host non può leggere file binari",
   "host.error.cannotReveal": "questo host non può mostrare i file nella loro cartella",

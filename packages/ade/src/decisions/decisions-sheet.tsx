@@ -9,6 +9,7 @@ import type { DecisionsHub } from "./hub"
 import { bucketDecisions, type Decision } from "./state"
 import "./decisions.css"
 import { t } from "../i18n"
+import { errorMessage } from "../session-new/start-failure"
 
 /**
  * The open decisions, one at a time, in the order they matter.
@@ -156,7 +157,7 @@ export function DecisionsSheet(props: {
       <div data-slot="sheet-body">
         <Show when={props.hub.register.error()}>
           <div data-slot="decision-problem" role="alert">
-            {t("decisions.unreadable", String(props.hub.register.error()))}
+            {t("decisions.unreadable", errorMessage(props.hub.register.error()))}
           </div>
         </Show>
         <Show

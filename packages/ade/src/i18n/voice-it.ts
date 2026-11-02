@@ -359,7 +359,7 @@ export const voiceIt = {
   "vui.stream.how":
     "Con Grok le parole arrivano mentre parli, su una connessione a xAI che si apre per ogni frase. La chiave xAI resta nel portachiavi e la legge solo ADE, mai la pagina. Quando lo streaming non può scrivere la frase (nessuna chiave, chiave rifiutata, credito finito, tetto del giorno raggiunto, rete giù), la frase va a MAI-Transcribe-2 con la chiave OpenRouter, e nessuna parola si perde. Il tetto conta solo i secondi in streaming, a 0,20 $ l'ora; quello che spende OpenRouter è nella riga sotto, a parte.",
   "vui.intent.session.new": "Nuova sessione",
-  "vui.intent.palette.open": "Apri la tavolozza dei comandi",
+  "vui.intent.palette.open": "Apri Cerca comandi",
   "vui.intent.project.open": "Apri un progetto",
   "vui.intent.project.recent": "Apri un progetto recente",
   "vui.intent.pane.close": "Chiudi il pannello",
@@ -468,7 +468,7 @@ export const voiceIt = {
   "vui.fix.streamCap": (value: string, fallback: number) =>
     `Tetto giornaliero della trascrizione in tempo reale '${value}' non valido: usato ${fallback} $.`,
   "vui.fix.codexFallback": "Impostazione ricaduta su Codex non valida: ripristinata disattivata.",
-  "vui.command.palette": "Tavolozza comandi",
+  "vui.command.palette": "Cerca comandi",
   "vui.command.sessionNew": "Nuova sessione",
   "vui.command.paneClose": "Chiudi pannello",
   "vui.command.paneExpand": "Espandi pannello",

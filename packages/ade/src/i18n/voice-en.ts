@@ -354,7 +354,7 @@ export const voiceEn: VoiceMessages = {
   "vui.stream.how":
     "With Grok the words arrive while you speak, over a connection to xAI opened for each sentence. The xAI key stays in the keychain and only ADE reads it, never the page. When streaming cannot write the sentence (no key, key refused, credit used up, today's cap reached, network down), the sentence goes to MAI-Transcribe-2 with the OpenRouter key, and no word is lost. The cap counts streamed seconds only, at $0.20 an hour; what OpenRouter spends is on the line below, apart.",
   "vui.intent.session.new": "New session",
-  "vui.intent.palette.open": "Open the command palette",
+  "vui.intent.palette.open": "Open Search commands",
   "vui.intent.project.open": "Open a project",
   "vui.intent.project.recent": "Open a recent project",
   "vui.intent.pane.close": "Close the pane",
@@ -458,7 +458,7 @@ export const voiceEn: VoiceMessages = {
   "vui.fix.streamCap": (value, fallback) =>
     `Invalid daily cap '${value}' for live transcription: used $${fallback}.`,
   "vui.fix.codexFallback": "Invalid Codex fallback setting: turned back off.",
-  "vui.command.palette": "Command palette",
+  "vui.command.palette": "Search commands",
   "vui.command.sessionNew": "New session",
   "vui.command.paneClose": "Close panel",
   "vui.command.paneExpand": "Expand panel",
