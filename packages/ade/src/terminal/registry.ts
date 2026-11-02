@@ -547,9 +547,21 @@ export function hasTerminal(id: string): boolean {
   return terminals.has(id)
 }
 
-/** `written` is called once xterm has parsed the chunk: the page's answer to the host's flow control (RS-7). */
-export function writeToTerminal(id: string, chunk: string, written?: () => void): void {
-  getTerminal(id).terminal.write(chunk, written)
+/**
+ * `written` is called once xterm has parsed the chunk: the page's answer to the host's flow control (RS-7).
+ *
+ * Returns false when xterm refused the data: its `write` throws once 50 MB are waiting to be parsed (a hidden page
+ * parses on throttled timers), and the output is gone. The chunk is paid anyway, so the host is not left waiting for
+ * an answer that will never come; the caller says so, since output must not be lost silently.
+ */
+export function writeToTerminal(id: string, chunk: string, written?: () => void): boolean {
+  try {
+    getTerminal(id).terminal.write(chunk, written)
+    return true
+  } catch {
+    written?.()
+    return false
+  }
 }
 
 /**

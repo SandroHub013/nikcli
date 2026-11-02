@@ -2607,6 +2607,7 @@ export const en: Messages = {
     `This take would make a clip of about ${size} MB, and ADE can export up to ${limit} MB without risking the window. Lower the quality in Settings › Recording, or record a shorter take.`,
   "settings.record.export.progress": (percent: number) => `Exporting… ${percent}%`,
   "settings.record.export.waiting": "Export on hold: it goes on when the window is back in front.",
+  "terminal.outputDiscarded": "The terminal could not keep up and some output was discarded. Lines may be missing here.",
   "settings.record.export.cancel": "Cancel the export",
 
   // F7a: 3D Model state

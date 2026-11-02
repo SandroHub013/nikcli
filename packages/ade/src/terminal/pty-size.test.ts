@@ -70,3 +70,29 @@ describe("createSizeSettler", () => {
     expect(sent).toEqual([])
   })
 })
+
+/*
+ * Review of ade/residui-gravi, RS-7 point 5: xterm's `write` throws once its buffer holds 50 MB it has not parsed
+ * (a hidden page parses on throttled timers). The throw skipped the rest of the chunk's handling and the host's
+ * acknowledgement, and the output was lost without a word.
+ */
+describe("writeToTerminal when xterm refuses the data", () => {
+  it("does not throw, pays the chunk and says the output was discarded", async () => {
+    const { disposeTerminal, getTerminal, writeToTerminal } = await import("./registry")
+    const { terminal } = getTerminal("rs7-discard")
+    const real = terminal.write.bind(terminal)
+    terminal.write = () => {
+      throw new Error("write data discarded, use flow control to avoid losing data")
+    }
+    let paid = 0
+    let result: boolean | undefined
+    expect(() => {
+      result = writeToTerminal("rs7-discard", "x", () => void paid++)
+    }).not.toThrow()
+    expect(result).toBe(false)
+    expect(paid).toBe(1)
+    terminal.write = real
+    expect(writeToTerminal("rs7-discard", "y")).toBe(true)
+    disposeTerminal("rs7-discard")
+  })
+})

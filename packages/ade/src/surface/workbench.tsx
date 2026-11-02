@@ -7824,6 +7824,7 @@ export function Workbench() {
   }
 
   /** `written` is called once the terminal has parsed the chunk, or at once when there is none: the host's flow control waits for it (RS-7). */
+  const discardNoted = new Set<string>()
   const feedTerminal = (paneId: string, chunk: string, written?: () => void) => {
     /*
      * Nothing is written to a pane that no longer exists.
@@ -7845,7 +7846,11 @@ export function Workbench() {
     else if (hooked(paneId) && interruptEnds(activityOf.get(paneId), interruptedAt.get(paneId))) settleWhenQuiet(paneId)
     else if (pane.status === "idle") noticeWorkFromOutput(pane)
 
-    writeToTerminal(paneId, chunk, written)
+    // xterm refused the data (50 MB unparsed): said once in the pane, not for every chunk after it.
+    if (!writeToTerminal(paneId, chunk, written) && !discardNoted.has(paneId)) {
+      discardNoted.add(paneId)
+      report(t("terminal.outputDiscarded"), "warning", paneId)
+    }
     screenRequests.fed(paneId)
     if (!liveTerminals().has(paneId)) {
       setLiveTerminals((ids) => new Set(ids).add(paneId))
