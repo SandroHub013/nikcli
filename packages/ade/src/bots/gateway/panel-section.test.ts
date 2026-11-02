@@ -11,7 +11,8 @@ compileSolidJsx()
 
 const { createComponent, render } = await import("solid-js/web")
 const { GatewaySection } = await import("./panel")
-const { setLocalePreference } = await import("../../i18n")
+const { setLocalePreference, t } = await import("../../i18n")
+const { attentionText } = await import("./attention")
 
 setLocalePreference("it")
 
@@ -301,5 +302,34 @@ describe("opening a tile starts the five steps", () => {
     const reasonEl = document.querySelector('[data-slot="gateway-attention-reason"]')
     expect(reasonEl).not.toBeNull()
     expect(reasonEl?.textContent).toBe("Impossibile connettersi da oltre 10 minuti")
+  })
+
+  test("N1: a full queue is said in ADE's language, not as its code, and offers no «Riprova» that does nothing", async () => {
+    await mount([
+      link("telegram", {
+        hasToken: true,
+        enabled: true,
+        running: true,
+        needsAttention: true,
+        attentionReason: "coda_piena",
+      }),
+    ])
+    const reasonEl = document.querySelector('[data-slot="gateway-attention-reason"]')
+    expect(reasonEl?.textContent).toBe(t("gateway.panel.attentionQueueFull"))
+    expect(reasonEl?.textContent).not.toContain("coda_piena")
+    const actions = document.querySelector('[data-slot="gateway-attention-actions"]')
+    expect(actions?.textContent).not.toContain(t("gateway.panel.retry"))
+    // The other way out stays.
+    expect(actions?.textContent).toContain(t("gateway.panel.changeCode"))
+  })
+})
+
+describe("the reason a link needs attention, as the bell says it (N1)", () => {
+  test("a known reason is translated in both languages, any other is shown as it is", () => {
+    const reasons = ["timeout_10m", "coda_piena"].map((reason) => attentionText(reason))
+    expect(reasons.every((text) => text !== undefined && !/timeout_10m|coda_piena/.test(text))).toBe(true)
+    expect(attentionText("token revocato")).toBe("token revocato")
+    expect(attentionText(null)).toBeUndefined()
+    expect(attentionText("coda_piena")).toBe(t("gateway.panel.attentionQueueFull"))
   })
 })
