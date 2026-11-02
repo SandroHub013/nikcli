@@ -84,15 +84,15 @@ describe("createAckBatcher: few calls, never a debt the host cannot bear", () =>
 
   /*
    * The host's window is how far behind a key in another pane can fall, since events reach the page in order: a median
-   * of 172 ms at 4 MiB and 140 ms at 1 MiB, against 32 ms at rest (live test of 2026-11-02). A batch has to fit in it
-   * more than once, or the host waits for an acknowledgement the page is still adding up.
+   * of 172 ms at 4 MiB, 140 ms at 1 MiB and 86 ms at 512 KiB, against 32 ms at rest (live test of 2026-11-02). A batch
+   * has to fit in it more than once, or the host waits for an acknowledgement the page is still adding up.
    */
   test("lint: the host's high water mark keeps a key close and has room for two batches", () => {
     const source = readFileSync(join(import.meta.dir, "..", "..", "src-tauri", "src", "pty.rs"), "utf8")
     const written = /const FLOW_HIGH_WATER: usize = ([\d* ]+);/.exec(source)?.[1]
     expect(written).toBeDefined()
     const high = written!.split("*").reduce((product, factor) => product * Number(factor), 1)
-    expect(high).toBeLessThanOrEqual(1024 * 1024)
+    expect(high).toBeLessThanOrEqual(512 * 1024)
     expect(high).toBeGreaterThanOrEqual(2 * ACK_BATCH_BYTES)
   })
 })
