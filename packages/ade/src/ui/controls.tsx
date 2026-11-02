@@ -5,7 +5,7 @@
  * matches, and passes every other prop through — so a surface keeps its `data-slot`, its `ref`, its handlers and
  * its tests when it moves onto the primitive, and only loses the hand-written copy of the styling.
  */
-import { Show, splitProps, type JSX, type ParentProps } from "solid-js"
+import { children, createUniqueId, Show, splitProps, type JSX, type ParentProps } from "solid-js"
 import { t } from "../i18n"
 import {
   buttonAttrs,
@@ -75,7 +75,9 @@ type FieldProps = JSX.InputHTMLAttributes<HTMLInputElement> & {
 /** A single-line text field with the ring, the sunken ground and an error state. */
 export function Field(props: FieldProps) {
   const [own, rest] = splitProps(props, ["size", "shape", "invalid", "message"])
-  const messageId = () => (rest.id ? `${rest.id}-message` : undefined)
+  // The message's id is derived from the field's, or made up when the field has none: it has to be referable.
+  const fallbackId = createUniqueId()
+  const messageId = () => `${rest.id ?? fallbackId}-message`
   return (
     <>
       <input
@@ -139,12 +141,14 @@ type EmptyStateProps = ParentProps<
 /** What a view shows when it has nothing: a mark, a title, a line of help and at most one action. */
 export function EmptyState(props: EmptyStateProps) {
   const [own, rest] = splitProps(props, ["mark", "title", "action", "children"])
+  // Resolved once: a bare `own.children` in the `when` and again in the body builds the help's nodes twice.
+  const help = children(() => own.children)
   return (
     <div {...emptyStateAttrs()} {...rest}>
       {own.mark}
       <p data-ui="empty-title">{own.title}</p>
-      <Show when={own.children}>
-        <p data-ui="empty-body">{own.children}</p>
+      <Show when={help()}>
+        <p data-ui="empty-body">{help()}</p>
       </Show>
       <Show when={own.action}>
         {(action) => (

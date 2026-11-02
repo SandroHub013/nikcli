@@ -272,6 +272,17 @@ describe("Field", () => {
     expect(host.querySelector("#name-message")?.textContent).toBe("Obbligatorio")
   })
 
+  test("a field without an id still ties its message to itself", () => {
+    // Without an id the message had nothing to be referenced by: a screen reader read the field with no reason.
+    const host = mount(() => createComponent(Field, { invalid: true, message: "Obbligatorio", value: "" }))
+    const input = host.querySelector("input")!
+    const described = input.getAttribute("aria-describedby")
+    expect(described).toBeTruthy()
+    const message = host.querySelector('[data-ui="field-message"]')!
+    expect(message.id).toBe(described!)
+    expect(message.textContent).toBe("Obbligatorio")
+  })
+
   test("a valid field has neither the flag nor the message", () => {
     const host = mount(() => createComponent(Field, { id: "name", message: "Obbligatorio", value: "" }))
     const input = host.querySelector("input")!
@@ -347,6 +358,21 @@ describe("EmptyState", () => {
     expect(action.getAttribute("data-variant")).toBe("primary")
     action.click()
     expect(pressed).toBe(1)
+  })
+
+  test("the help is read once, not once to decide and once to draw", () => {
+    let reads = 0
+    const host = mount(() =>
+      createComponent(EmptyState, {
+        title: "Niente qui",
+        get children() {
+          reads++
+          return "Non c'è ancora nulla."
+        },
+      }),
+    )
+    expect(host.querySelector('[data-ui="empty-body"]')!.textContent).toBe("Non c'è ancora nulla.")
+    expect(reads).toBe(1)
   })
 
   test("without help or action it is just the title", () => {
