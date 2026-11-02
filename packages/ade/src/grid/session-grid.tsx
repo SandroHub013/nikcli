@@ -16,6 +16,7 @@ import {
 } from "./arrange"
 import { isDragHandle } from "./drag-handle"
 import { focusAfterClose, moveFocus } from "./focus"
+import { leaveResizeGrip } from "./focus-input"
 import { GRID_GAP, MIN_PANE_HEIGHT, gridColumns } from "./layout"
 import { t } from "../i18n"
 
@@ -327,6 +328,14 @@ export function SessionGrid(props: SessionGridProps) {
    */
   const resizeFromKey = (id: string, event: KeyboardEvent) => {
     if (!props.onResize || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+    // Esc gives the keyboard back to the session: a terminal keeps Tab, so Esc is the way out of the grip.
+    if (event.key === "Escape") {
+      if (leaveResizeGrip(event.currentTarget as Element)) {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+      return
+    }
     if (event.key === "Home") {
       event.preventDefault()
       event.stopPropagation()
@@ -396,6 +405,9 @@ export function SessionGrid(props: SessionGridProps) {
                   role="separator"
                   tabindex={0}
                   aria-label={t("grid.resize")}
+                  aria-valuemin={1}
+                  aria-valuemax={columns()}
+                  aria-valuenow={spanOf(pane.id).columns}
                   aria-valuetext={t("grid.resize.size", spanOf(pane.id).columns, spanOf(pane.id).rows)}
                   title={t("grid.resize.tip")}
                   onKeyDown={(event) => resizeFromKey(pane.id, event)}

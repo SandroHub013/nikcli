@@ -50,8 +50,8 @@ function setup() {
     settings: () => settings,
     load: () => {
       loads++
-      return new Promise<VoiceEngine>((resolve) => {
-        release = () => resolve(real.engine)
+      return new Promise<{ engine: VoiceEngine; speaker: string }>((resolve) => {
+        release = () => resolve({ engine: real.engine, speaker: "the speakers" })
         // Loaded at once unless a test wants to hold the load.
         if (!holdLoad) release()
       })
@@ -133,16 +133,20 @@ describe("asking it to do something", () => {
 
   test("a failed load is not kept: the next request tries again", async () => {
     let attempts = 0
+    const told: string[] = []
     const real = fakeEngine()
     const lazy = createLazyVoiceEngine({
       settings: () => DEFAULT_VOICE_SETTINGS,
       load: async () => {
         attempts++
         if (attempts === 1) throw new Error("chunk missing")
-        return real.engine
+        return { engine: real.engine }
       },
+      onLoadError: (error) => told.push(String(error)),
     })
     await expect(lazy.start("agent")).rejects.toThrow("chunk missing")
+    // The user is told once per failed load, not left with a chord that did nothing.
+    expect(told).toEqual(["Error: chunk missing"])
     expect(lazy.loaded()).toBe(false)
     await lazy.start("agent")
     expect(attempts).toBe(2)
@@ -164,5 +168,34 @@ describe("a key let go while the engine is still loading", () => {
     } finally {
       holdLoad = false
     }
+  })
+})
+
+describe("the speakers and the engine are one build", () => {
+  test("the speakers are taken through the same door, so the engine they build is the one that is updated", async () => {
+    const { lazy, real, loads } = setup()
+    // «Prova», a voice download or a spoken alert asks for the speakers before anything asks for the microphone.
+    const runtime = await lazy.runtime()
+    expect(runtime.speaker).toBe("the speakers")
+    expect(lazy.loaded()).toBe(true)
+    // A key or a microphone saved afterwards must reach the engine the orb will start.
+    await lazy.updateSettings({ speakReplies: false })
+    expect(real.calls).toEqual(["updateSettings:[object Object]"])
+    expect(loads()).toBe(1)
+  })
+
+  test("asking for the speakers and for the engine builds once, whichever comes first", async () => {
+    const { lazy, loads } = setup()
+    const [runtime, engine] = await Promise.all([lazy.runtime(), lazy.ensure()])
+    expect(engine).toBe(runtime.engine)
+    expect(loads()).toBe(1)
+  })
+
+  test("opening the settings panel builds the engine, so the spend it shows is the engine's and not a zero", async () => {
+    const { lazy, loads } = setup()
+    expect(lazy.listenSpend().calls).toBe(0)
+    await lazy.ensure()
+    expect(loads()).toBe(1)
+    expect(lazy.loaded()).toBe(true)
   })
 })

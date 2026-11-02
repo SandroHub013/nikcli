@@ -104,6 +104,17 @@ export function runsFromTerminal(commandId: string, platform: Platform): boolean
   return platform === "mac" && FROM_TERMINALS_ON_MAC.has(commandId)
 }
 
+/**
+ * Whether a key event runs its command.
+ *
+ * Only the first press: held down, the key repeats, and an expanded pane flipping at the repeat rate resizes the pty in a
+ * storm and redraws every TUI in it, a theme flips back and forth, and a new session opens dozens of times. The repeat is
+ * still swallowed, so it does not reach what has the focus.
+ */
+export function firesOnPress(event: { repeat?: boolean }): boolean {
+  return event.repeat !== true
+}
+
 /*
  * Moving focus between panes is deliberately absent from this list. The grid
  * measures its own columns and already answers Alt+Arrow with the real

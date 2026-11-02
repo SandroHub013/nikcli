@@ -1,4 +1,5 @@
-import { Show, Suspense, createMemo, lazy } from "solid-js"
+import { Show, Suspense, createMemo } from "solid-js"
+import { lazyComponent } from "../ui/lazy-component"
 import { editBuffer, revertBuffer } from "../editor/buffer"
 import type { ArchiveListing } from "../editor/binary-file"
 import { SessionPane } from "../grid/pane"
@@ -46,15 +47,15 @@ import { t } from "../i18n"
  * styles and libraries, and a user who has not opened one has no use for it. A pane's chunk arrives in a few milliseconds from
  * the app's own files; the grid draws nothing in its tile until it does.
  */
-const FilePane = lazy(() => import("../editor/file-pane").then((module) => ({ default: module.FilePane })))
-const BrowserPane = lazy(() => import("../browser/browser-pane").then((module) => ({ default: module.BrowserPane })))
-const VideoPane = lazy(() => import("../video/video-pane").then((module) => ({ default: module.VideoPane })))
-const ModelPane = lazy(() => import("../model3d/model-pane").then((module) => ({ default: module.ModelPane })))
-const SimulatorPane = lazy(() =>
+const FilePane = lazyComponent(() => import("../editor/file-pane").then((module) => ({ default: module.FilePane })))
+const BrowserPane = lazyComponent(() => import("../browser/browser-pane").then((module) => ({ default: module.BrowserPane })))
+const VideoPane = lazyComponent(() => import("../video/video-pane").then((module) => ({ default: module.VideoPane })))
+const ModelPane = lazyComponent(() => import("../model3d/model-pane").then((module) => ({ default: module.ModelPane })))
+const SimulatorPane = lazyComponent(() =>
   import("../simulator/simulator-pane").then((module) => ({ default: module.SimulatorPane })),
 )
-const DesignPane = lazy(() => import("../design/design-pane").then((module) => ({ default: module.DesignPane })))
-const RaguversePane = lazy(() =>
+const DesignPane = lazyComponent(() => import("../design/design-pane").then((module) => ({ default: module.DesignPane })))
+const RaguversePane = lazyComponent(() =>
   import("../raguverse/raguverse-pane").then((module) => ({ default: module.RaguversePane })),
 )
 

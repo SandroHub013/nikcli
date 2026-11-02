@@ -22,19 +22,28 @@
 import { createSignal } from "solid-js"
 import type { VoiceEngine, VoiceMode, VoiceSettings } from "@ragu/voice/core"
 
-export interface LazyVoiceEngine extends VoiceEngine {
+export interface LazyVoiceEngine<R extends { engine: VoiceEngine } = { engine: VoiceEngine }> extends VoiceEngine {
   /** Builds the real engine if it is not built yet, and gives it. */
   ensure(): Promise<VoiceEngine>
+  /**
+   * Everything `load` built (the engine and what was built beside it), through the same door as `ensure`.
+   *
+   * The only way to reach the speakers: taking them by another way would build an engine this stand-in does not
+   * know about, and every `updateSettings` after that would be dropped as "nothing to update".
+   */
+  runtime(): Promise<R>
   /** Whether the real engine exists. Reactive. */
   readonly loaded: () => boolean
 }
 
-export interface LazyVoiceEngineOptions {
+export interface LazyVoiceEngineOptions<R extends { engine: VoiceEngine }> {
   /**
-   * Builds the real engine. Called once, the first time a method needs it; a failure is not kept, so the next
-   * request tries again.
+   * Builds the real engine and what goes with it. Called once, the first time a method needs it; a failure is not
+   * kept, so the next request tries again.
    */
-  load: () => Promise<VoiceEngine>
+  load: () => Promise<R>
+  /** Told when a load failed, for the user: a chord that did nothing is not an answer. */
+  onLoadError?: (error: unknown) => void
   /** The settings the engine would start with: what `settings()` answers until it exists. */
   settings: () => VoiceSettings
 }
@@ -42,25 +51,32 @@ export interface LazyVoiceEngineOptions {
 /** The engine's `DaySpend` before it has counted anything. */
 const NO_SPEND = { day: "", calls: 0, cost: 0 } as const
 
-export function createLazyVoiceEngine(options: LazyVoiceEngineOptions): LazyVoiceEngine {
+export function createLazyVoiceEngine<R extends { engine: VoiceEngine }>(
+  options: LazyVoiceEngineOptions<R>,
+): LazyVoiceEngine<R> {
   const [engine, setEngine] = createSignal<VoiceEngine | undefined>(undefined)
   /** The load in flight or done; cleared on failure so a later request tries again. */
-  let loading: Promise<VoiceEngine> | undefined
+  let loading: Promise<R> | undefined
 
-  const ensure = (): Promise<VoiceEngine> => {
-    const ready = engine()
-    if (ready) return Promise.resolve(ready)
+  const runtime = (): Promise<R> => {
     loading ??= options
       .load()
       .then((built) => {
-        setEngine(built)
+        setEngine(built.engine)
         return built
       })
       .catch((error) => {
         loading = undefined
+        options.onLoadError?.(error)
         throw error
       })
     return loading
+  }
+
+  const ensure = async (): Promise<VoiceEngine> => {
+    const ready = engine()
+    if (ready) return ready
+    return (await runtime()).engine
   }
 
   /** Runs `call` on the engine once it is built, loading it if need be. */
@@ -70,13 +86,15 @@ export function createLazyVoiceEngine(options: LazyVoiceEngineOptions): LazyVoic
   const ifEngine = async (call: (built: VoiceEngine) => Promise<void>): Promise<void> => {
     const ready = engine()
     if (ready) return call(ready)
-    if (loading) return call(await loading)
+    // Through `ensure`, as a press does: the same number of waits, so a release stays behind the press it follows.
+    if (loading) return call(await ensure())
   }
 
   const settings = (): VoiceSettings => engine()?.settings() ?? options.settings()
 
   return {
     ensure,
+    runtime,
     loaded: () => engine() !== undefined,
 
     // Reactive state: the silent voice's answer until the engine exists, then the engine's own.

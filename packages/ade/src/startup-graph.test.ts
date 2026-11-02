@@ -77,10 +77,15 @@ function staticImports(file: string, text: string): ValueImport[] {
   return found
 }
 
-/** Every file the entry reaches statically, and who imported each package specifier that names the voice's barrels. */
+/**
+ * Every file the entry reaches statically, who imported each package specifier that names the voice's barrels, the
+ * stylesheets that come with them (by the file that imports each), and who imports `effect`.
+ */
 function walk(entry: string) {
   const seen = new Set<string>()
   const barrelImporters: string[] = []
+  const styles = new Map<string, string[]>()
+  const effectImporters: string[] = []
   const stack = [entry]
   while (stack.length > 0) {
     const file = stack.pop()!
@@ -88,11 +93,17 @@ function walk(entry: string) {
     seen.add(file)
     for (const { specifier } of staticImports(file, readFileSync(file, "utf8"))) {
       if (specifier === "@ragu/voice" || specifier === "@ragu/voice/core") barrelImporters.push(relative(ADE_SRC, file))
+      if (specifier === "effect" || specifier.startsWith("effect/")) effectImporters.push(file)
+      if (specifier.endsWith(".css")) {
+        const sheet = resolve(dirname(file), specifier)
+        styles.set(sheet, [...(styles.get(sheet) ?? []), file])
+        continue
+      }
       const next = resolveSpecifier(file, specifier)
       if (next) stack.push(next)
     }
   }
-  return { seen, barrelImporters }
+  return { seen, barrelImporters, styles, effectImporters }
 }
 
 const graph = walk(ENTRY)
@@ -151,6 +162,22 @@ describe("the main entry", () => {
     ]) {
       expect(inGraph(path)).toBe(true)
     }
+  })
+})
+
+describe("the stylesheets that come with the main bundle", () => {
+  /*
+   * A stylesheet imported only by a lazy chunk is not on the page until the chunk is. The key-request dialog is in the
+   * main bundle and opens before the settings panel ever has, and its buttons are the panel's (`settings-choice`): they
+   * lost their styles when `sections.css` moved into the panel's chunk.
+   */
+  test("the key-request dialog brings the settings panel's button styles with it", () => {
+    const importers = graph.styles.get(join(ADE_SRC, "settings", "sections.css")) ?? []
+    expect(importers.map((file) => relative(ADE_SRC, file).replaceAll("\\", "/"))).toContain("secrets/keys-section.tsx")
+  })
+
+  test("nothing in the main bundle imports effect", () => {
+    expect(graph.effectImporters.map((file) => relative(ADE_SRC, file))).toEqual([])
   })
 })
 

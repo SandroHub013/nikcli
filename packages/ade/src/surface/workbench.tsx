@@ -6,7 +6,6 @@ import {
   createEffect,
   createMemo,
   createResource,
-  lazy,
   Show,
   For,
   Suspense,
@@ -72,7 +71,13 @@ import { syncOpenRouterKey } from "../host/openrouter-key-sync"
 import { createSttStreamTransport } from "../host/stt-stream"
 import { serializeWorkspace, type WorkspaceState } from "../session/persist"
 import { ignoreRestore, readSavedWorkspace, restorableCopy, restoreCopy, retryUnreadableCopy } from "../session/unreadable"
-import { DEFAULT_BINDINGS, NOT_FROM_TEXT_FIELDS, resolveDefaultBindings, runsFromTerminal } from "../keyboard/bindings"
+import {
+  DEFAULT_BINDINGS,
+  NOT_FROM_TEXT_FIELDS,
+  firesOnPress,
+  resolveDefaultBindings,
+  runsFromTerminal,
+} from "../keyboard/bindings"
 import { formatChord, parseChord } from "../keyboard/keymap"
 import { CommandPalette } from "../command/palette"
 import { paletteStep } from "../command/palette-keys"
@@ -177,6 +182,8 @@ import { defaultPaneTitle } from "./pane-title"
 import { Sidebar } from "../sidebar"
 import { SessionGrid } from "../grid/session-grid"
 import { requestRename } from "../grid/rename"
+import { focusResizeGrip } from "../grid/focus-input"
+import { lazyComponent } from "../ui/lazy-component"
 import { EmptyProject } from "./empty-project"
 import { ProjectBar } from "./project-bar"
 import { SidebarToggle, readSidebarHidden, writeSidebarHidden } from "./sidebar-toggle"
@@ -697,9 +704,9 @@ import { createProactiveAlerts } from "../voice/proactive-alerts"
  * The settings panel is loaded when it is first opened. It holds every settings page and, with the voice's, the voice package's
  * components and Effect runtime: none of it is needed to draw the first screen.
  */
-const SettingsSheet = lazy(() => import("../settings/settings-sheet").then((module) => ({ default: module.SettingsSheet })))
+const SettingsSheet = lazyComponent(() => import("../settings/settings-sheet").then((module) => ({ default: module.SettingsSheet })))
 /* The design register's sheet is loaded when it is first opened: the register itself (the hub) is not, it listens from the start. */
-const DesignSheet = lazy(() => import("../design/design-sheet").then((module) => ({ default: module.DesignSheet })))
+const DesignSheet = lazyComponent(() => import("../design/design-sheet").then((module) => ({ default: module.DesignSheet })))
 
 const DEFAULT_PREVIEW_URL = "http://localhost:3000"
 
@@ -711,6 +718,7 @@ const HANDLED_COMMANDS = new Set([
   "pane.close",
   "pane.expand",
   "pane.rename",
+  "pane.resize",
   "view.toggle",
   "theme.toggle",
   "sidebar.toggle",
@@ -6250,25 +6258,24 @@ export function Workbench() {
     return { engine: voiceEngine, speaker, maiSpeaker, naturalSpeaker }
   }
 
-  /** The runtime, built once; a build that failed is not kept, so the next request tries again. */
-  let voiceRuntimeBuild: Promise<Awaited<ReturnType<typeof buildVoiceRuntime>>> | undefined
-  const voiceRuntime = () => {
-    voiceRuntimeBuild ??= buildVoiceRuntime().catch((error) => {
-      voiceRuntimeBuild = undefined
-      throw error
-    })
-    return voiceRuntimeBuild
-  }
-  /** The engine as the bar, the agent view and the keys hold it: idle until it is asked to start (`voice/lazy-engine`). */
+  /*
+   * The engine as the bar, the agent view and the keys hold it: idle until it is asked to start (`voice/lazy-engine`).
+   *
+   * The runtime is reached only through it (`voiceEngine.runtime()`): a speaker taken some other way would build an engine
+   * this stand-in does not know about, and the settings changed afterwards would never reach it.
+   */
   const voiceEngine = createLazyVoiceEngine({
     settings: voiceSettings,
-    load: async () => (await voiceRuntime()).engine,
+    load: buildVoiceRuntime,
+    // A chord, the orb or a spoken alert that finds the voice did not load must say so, not do nothing.
+    onLoadError: () => report(t("vui.load.failed"), "warning"),
   })
   /** The reply voice, for the places that speak or warm it up; the speakers themselves are built with the runtime. */
   const speaker = {
-    speak: async (text: string) => (await voiceRuntime()).speaker.speak(text),
+    speak: async (text: string) => (await voiceEngine.runtime()).speaker.speak(text),
     prepare: () => {
-      void voiceRuntime()
+      void voiceEngine
+        .runtime()
         .then((runtime) => runtime.speaker.prepare())
         .catch(() => {})
     },
@@ -6276,7 +6283,8 @@ export function Workbench() {
   /** MAI's speaker, for the settings panel's «Riprova». */
   const maiSpeaker = {
     retry: () => {
-      void voiceRuntime()
+      void voiceEngine
+        .runtime()
         .then((runtime) => runtime.maiSpeaker.retry())
         .catch(() => {})
     },
@@ -6391,6 +6399,11 @@ export function Workbench() {
         if (open) preloadNaturalVoice()
         // What the host has of Kokoro, asked when the panel opens: it can change under ADE.
         if (open) void kokoro.refresh()
+        /*
+         * The panel shows today's spend, a stop for spending and the warning, and they are the engine's: a stand-in reads them as
+         * zero and blank, which hides a real spend. Building the engine opens no microphone.
+         */
+        if (open) void voiceEngine.ensure().catch(() => {})
       },
       { defer: true },
     ),
@@ -7055,6 +7068,8 @@ export function Workbench() {
         if (resolution.commandId && isHandledCommand(resolution.commandId)) {
           e.preventDefault()
           e.stopPropagation()
+          // Held down, the key repeats: the command ran on the press.
+          if (!firesOnPress(e)) return
           void runCommand(resolution.commandId)
         }
         return
@@ -7399,6 +7414,14 @@ export function Workbench() {
     } else if (id === "pane.rename") {
       // Handled by the pane itself: the title is edited where it is shown.
       requestRename(wb().focusedId)
+    } else if (id === "pane.resize") {
+      /*
+       * The grip is where the arrows resize, and a terminal keeps Tab, so a session pane cannot be tabbed to it: the palette
+       * is the way in, and Esc on the grip the way back. After a tick: the palette is still closing, and its trap and its
+       * hand-back of the focus would take the grip's.
+       */
+      const tile = wb().focusedId
+      if (tile) setTimeout(() => focusResizeGrip(tile), 0)
     } else if (id === "view.toggle") {
       setWb((w) => ({ ...w, view: nextView(w.view) }))
     } else if (id.startsWith("view.")) {

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { resolveVoiceOrAdeKey } from "../voice/shortcuts"
 import { DEFAULT_VOICE_SETTINGS } from "@ragu/voice/core"
-import { DEFAULT_BINDINGS, FROM_TERMINALS, resolveDefaultBindings, runsFromTerminal } from "./bindings"
+import { DEFAULT_BINDINGS, FROM_TERMINALS, firesOnPress, resolveDefaultBindings, runsFromTerminal } from "./bindings"
 import type { KeyInput, Platform } from "./keymap"
 
 /*
@@ -111,5 +111,14 @@ describe("the set", () => {
       if (!FROM_TERMINALS.has(entry.commandId)) continue
       expect(entry.chord).toMatch(/^mod\+shift\+[a-z]$/)
     }
+  })
+})
+
+describe("a chord held down", () => {
+  test("runs its command on the press and not on the key repeat", () => {
+    expect(firesOnPress({ repeat: false })).toBe(true)
+    expect(firesOnPress({})).toBe(true)
+    // Ctrl+Shift+M held in a session flipped the expanded pane at the repeat rate: a pty resize storm.
+    expect(firesOnPress({ repeat: true })).toBe(false)
   })
 })
