@@ -47,6 +47,26 @@ describe("targets of at least 24px (UX-18)", () => {
   })
 })
 
+describe("the pane header and composer (UX-18, UX-19)", () => {
+  const pane = read("./grid/pane.css")
+
+  test("the header's action buttons reach 24px by their hit area", () => {
+    // 18px buttons with 3px on every side; the session pane's 20px ones with 2px, so neighbours do not overlap.
+    expect(px(rule(pane, '[data-slot="pane-action"]'), "width") + 6).toBeGreaterThanOrEqual(24)
+    expect(rule(pane, '[data-slot="pane-action"]::before')).toContain("inset: -3px")
+    expect(px(rule(pane, '[data-component="session-pane"] [data-slot="pane-action"]'), "width") + 4).toBeGreaterThanOrEqual(24)
+    expect(rule(pane, '[data-component="session-pane"] [data-slot="pane-action"]::before')).toContain("inset: -2px")
+    expect(px(rule(pane, ".hA .act"), "width") + 4).toBeGreaterThanOrEqual(24)
+    expect(rule(pane, ".hA .act::before")).toContain("inset: -2px")
+  })
+
+  test("the composer shows its focus with a ring, not with a ground that moves by 1.1:1", () => {
+    const body = rule(pane, '[data-slot="pane-prompt"]:focus-within')
+    expect(body).toContain("box-shadow: inset 0 0 0 2px var(--ade-text-weak)")
+    expect(body).toContain("outline: 2px solid transparent")
+  })
+})
+
 describe("focus and edges you can see (UX-19)", () => {
   test("the decision note's edge is the control border, and its focus is the ring", () => {
     const decisions = read("./decisions/decisions.css")

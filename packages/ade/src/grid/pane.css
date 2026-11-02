@@ -322,6 +322,7 @@
 }
 
 [data-slot="pane-action"] {
+  position: relative;
   display: grid;
   place-items: center;
   /* Sized to sit inside the 22px header row with a pixel to spare, rather than
@@ -338,6 +339,13 @@
     background var(--ade-dur-fast) var(--ade-ease),
     color var(--ade-dur-fast) var(--ade-ease),
     transform var(--ade-dur-fast) var(--ade-ease);
+}
+
+/* 18px to look at, 24px to hit (WCAG 2.5.8, UX-18): the reach is drawn, not the glyph. */
+[data-slot="pane-action"]::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
 }
 
 [data-slot="pane-action"]:hover {
@@ -522,8 +530,13 @@
   transition: background var(--ade-dur-fast) var(--ade-ease);
 }
 
+/* The strip is the field: its focus is a ring, not a ground that moves by 1.1:1 (WCAG 1.4.11, UX-19). Inset, so the
+   pane's own edge cannot clip it; the transparent outline is for contrast themes that remove shadows. */
 [data-slot="pane-prompt"]:focus-within {
   background: var(--ade-surface);
+  box-shadow: inset 0 0 0 2px var(--ade-text-weak);
+  outline: 2px solid transparent;
+  outline-offset: -2px;
 }
 
 [data-slot="pane-caret"] {
@@ -895,6 +908,11 @@
   border-radius: var(--ade-radius-full);
 }
 
+/* 20 + 2 + 2: the same 24px reach, without the buttons' areas covering each other across the 2px between them. */
+[data-component="session-pane"] [data-slot="pane-action"]::before {
+  inset: -2px;
+}
+
 /*
  * Room for the pill.
  *
@@ -1217,6 +1235,7 @@
 }
 
 .hA .act {
+  position: relative;
   display: grid;
   place-items: center;
   width: 20px;
@@ -1231,6 +1250,13 @@
   transition:
     background var(--ade-dur-fast) var(--ade-ease),
     color var(--ade-dur-fast) var(--ade-ease);
+}
+
+/* 20 + 2 + 2: a 24px reach (WCAG 2.5.8, UX-18), kept off the neighbour's 2px gap. */
+.hA .act::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
 }
 
 .hA .act:hover {
