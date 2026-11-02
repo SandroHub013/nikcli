@@ -103,8 +103,8 @@
   color: var(--ade-text-weak);
   cursor: pointer;
   transition:
-    background 120ms ease,
-    color 120ms ease;
+    background var(--ade-dur-fast) ease,
+    color var(--ade-dur-fast) ease;
 }
 
 [data-slot="ade-win-btn"]:hover {

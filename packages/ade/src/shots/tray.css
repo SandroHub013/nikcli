@@ -365,7 +365,7 @@
 }
 
 [data-slot="shot-dismiss"]:active {
-  transform: scale(0.88);
+  background: var(--ade-active);
 }
 
 [data-slot="shot-dismiss"]:focus-visible {

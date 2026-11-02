@@ -307,10 +307,12 @@ body[data-theme="glass"] #root,
    * perceived thickness — the technique that makes a card read as a surface
    * rather than as a drawn rectangle.
    */
-  /* Ink into crema at 6/12/21% in light, crema into ink at 9/13/20% in dark. */
-  --ade-border-subtle: light-dark(#e6dac1, #26211c);
-  --ade-border: light-dark(#d9cdb6, #2f2924);
-  --ade-border-strong: light-dark(#c5b9a4, #3f3932);
+  /* Ink into crema at 6/12/21% in light. In dark the ramp is measured on a raised surface (#241e1b), where most
+     lines live: 1.17:1, 1.32:1 and 1.59:1, so the three steps are three (they were 1.03, 1.15 and 1.44, and the
+     first two could not be seen; DS-23). On the ground (#120d0b) they read 1.38, 1.55 and 1.86. */
+  --ade-border-subtle: light-dark(#e6dac1, #302b25);
+  --ade-border: light-dark(#d9cdb6, #39332c);
+  --ade-border-strong: light-dark(#c5b9a4, #463f37);
   --ade-highlight: light-dark(rgba(255, 250, 240, 0.6), rgba(244, 231, 205, 0.04));
 
   /* ── text ───────────────────────────────────────────────────────────────── */
@@ -903,7 +905,7 @@ body,
   border-right: 2px solid var(--ade-text-weak);
   border-bottom: 2px solid var(--ade-text-weak);
   border-bottom-right-radius: 10px;
-  transition: opacity 120ms ease;
+  transition: opacity var(--ade-dur-fast) ease;
 }
 
 [data-slot="grid-cell"]:hover > [data-slot="tile-resize"],

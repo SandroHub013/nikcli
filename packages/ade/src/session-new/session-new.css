@@ -879,7 +879,7 @@
   font-size: var(--ade-font-xs);
   cursor: pointer;
   transition:
-    background 120ms ease,
+    background var(--ade-dur-fast) ease,
     transform var(--ade-dur-fast) var(--ade-ease);
 }
 

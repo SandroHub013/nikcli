@@ -347,7 +347,6 @@
 
 [data-slot="pane-action"]:active {
   background: var(--ade-active);
-  transform: scale(0.88);
 }
 
 [data-slot="pane-action"]:focus-visible {
@@ -498,7 +497,7 @@
 }
 
 [data-slot="pane-tail"]:active {
-  transform: scale(0.97);
+  transform: var(--ade-press);
 }
 
 [data-slot="pane-tail"]:hover {
@@ -611,7 +610,7 @@
 }
 
 [data-slot="pane-answer"]:active {
-  transform: scale(0.97);
+  transform: var(--ade-press);
 }
 
 [data-slot="pane-answer"][data-tone="primary"] {
