@@ -8871,7 +8871,7 @@ export function Workbench() {
        * gone, where nothing could reach it and the opening task was typed in.
        */
       if (!wb().panes.some((pane) => pane.id === paneId)) running.cancelStart(paneId)
-      if (!running.adopt(paneId, start, session)) {
+      if (!running.adopt(paneId, start, session, refused)) {
         superseded = true
         return
       }
@@ -9149,7 +9149,7 @@ export function Workbench() {
       })
       // As for a local session: closed or started again meanwhile, the connection is ended (SES-2).
       if (!wb().panes.some((pane) => pane.id === paneId)) running.cancelStart(paneId)
-      if (!running.adopt(paneId, start, session)) {
+      if (!running.adopt(paneId, start, session, refused)) {
         superseded = true
         return
       }
