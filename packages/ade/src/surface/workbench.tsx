@@ -60,6 +60,7 @@ import { syncOpenRouterKey } from "../host/openrouter-key-sync"
 import { createSttStreamTransport } from "../host/stt-stream"
 import { serializeWorkspace, type WorkspaceState } from "../session/persist"
 import { readSavedWorkspace } from "../session/unreadable"
+import { intakeMail } from "../session/mail-intake"
 import { DEFAULT_BINDINGS, FROM_TERMINALS, NOT_FROM_TEXT_FIELDS, resolveDefaultBindings } from "../keyboard/bindings"
 import { formatChord, parseChord } from "../keyboard/keymap"
 import { CommandPalette } from "../command/palette"
@@ -3670,14 +3671,22 @@ export function Workbench() {
   const deliverPending = async () => {
     const host = await getHost()
     if (!host?.mailboxTake || !host.mailboxReceipt) return
-    for (const { id, body } of await host.mailboxTake().catch(() => [])) {
-      const parsed = parseMessage(body)
-      // A pane's token, or a background turn's (voice agent, bot) registered for its length.
-      const message =
-        parsed && verifySender(parsed, (paneId) => (running.has(paneId) ? paneTokens.get(paneId) : senderToken(paneId)))
-      if (message) mailQueue.push({ id, message, at: Date.now() })
-      else await host.mailboxReceipt(id, "errore: messaggio non valido").catch(() => {})
-    }
+    // The files are gone from the outbox once taken: the queue is written down before anything else is awaited (`session/mail-intake.ts`).
+    await intakeMail({
+      take: () => host.mailboxTake!(),
+      accept: (id, body) => {
+        const parsed = parseMessage(body)
+        // A pane's token, or a background turn's (voice agent, bot) registered for its length.
+        const message =
+          parsed &&
+          verifySender(parsed, (paneId) => (running.has(paneId) ? paneTokens.get(paneId) : senderToken(paneId)))
+        if (!message) return false
+        mailQueue.push({ id, message, at: Date.now() })
+        return true
+      },
+      persist: persistMail,
+      refuse: (id) => host.mailboxReceipt!(id, "errore: messaggio non valido"),
+    })
 
     for (const item of [...lateReplies]) {
       if (!running.has(item.callerId)) {
@@ -5359,6 +5368,8 @@ export function Workbench() {
     setUpdateProgress(undefined)
     setUpdating(true)
     autosave.flush()
+    // The mail waiting for a session is lost with the process otherwise.
+    persistMail()
     // localStorage reaches WebView2's disk store a moment after setItem.
     await new Promise((resolve) => setTimeout(resolve, 1500))
     try {
@@ -5386,6 +5397,8 @@ export function Workbench() {
       every(
         700,
         () => {
+          // The installer is about to kill every session: nothing new is taken or typed meanwhile (the outbox keeps it).
+          if (updating()) return
           mailPass++
           if (running.size === 0 && mailPass % 4 !== 0) return
           return deliverMail()
