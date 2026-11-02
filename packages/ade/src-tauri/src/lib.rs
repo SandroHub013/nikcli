@@ -2778,6 +2778,7 @@ pub fn run() {
             pty::pty_spawn,
             pty::pty_write,
             pty::pty_resize,
+            pty::pty_ack,
             pty::pty_kill,
             pty::pty_which,
             pty::pty_refresh_path,

@@ -222,6 +222,8 @@ struct Chunk {
     /// Raw terminal output, escape sequences included: the emulator on the other
     /// side needs them, so nothing here tries to be helpful and strip them.
     data: String,
+    /// How many bytes `data` is in UTF-8: what the page hands back to `pty_ack` once the terminal has written it.
+    bytes: usize,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -503,6 +505,80 @@ fn is_launcher_colour_switch(key: &str) -> bool {
     INHERITED_COLOUR_SWITCHES
         .iter()
         .any(|name| name.eq_ignore_ascii_case(key))
+}
+
+/*
+ * Flow control, page to sender (RS-7).
+ *
+ * `emit` never blocks, so the sender drained the reader as fast as the child wrote and every chunk waited in the
+ * event loop and the webview's script queue with no cap: a `cat` of a 2 GB log, or an agent stuck printing, while the
+ * terminal could not keep up, grew the memory of ADE and of the renderer by gigabytes. And xterm itself discards what
+ * is past its own write buffer (50 MB), which is output lost without a word.
+ *
+ * Now the sender counts the bytes it has handed to the page and the page says, from the terminal's own write
+ * callback, how many it has written (`pty_ack`). Past `FLOW_HIGH_WATER` in flight the sender waits, the bounded
+ * channel in front of it fills, the reader stops reading, and ConPTY applies backpressure to the child. Nothing is
+ * dropped anywhere: output waits, it is not thrown away.
+ *
+ * A page that never answers (a reload in progress, a listener that is gone) must not freeze the pane for ever, so a
+ * wait that sees no acknowledgement for `FLOW_STALL` forgets the debt and goes on, as it did before this existed.
+ */
+const FLOW_HIGH_WATER: usize = 4 * 1024 * 1024;
+const FLOW_STALL: Duration = Duration::from_secs(5);
+/// How many reads may wait between the reader and the sender (each is at most 8 KB): about a megabyte.
+const CHUNK_QUEUE: usize = 128;
+
+struct Flow {
+    in_flight: Mutex<usize>,
+    moved: std::sync::Condvar,
+}
+
+impl Flow {
+    fn new() -> Self {
+        Flow { in_flight: Mutex::new(0), moved: std::sync::Condvar::new() }
+    }
+
+    /// Counts `bytes` as on their way to the page, once fewer than `high` are; waits for acknowledgements until then.
+    fn admit(&self, bytes: usize, high: usize, stall: Duration) {
+        let mut in_flight = self.in_flight.lock().unwrap_or_else(|e| e.into_inner());
+        while *in_flight >= high {
+            let before = *in_flight;
+            let (guard, result) = self.moved.wait_timeout(in_flight, stall).unwrap_or_else(|e| e.into_inner());
+            in_flight = guard;
+            // No acknowledgement for the whole stall: the page is gone or not answering. Forget the debt, go on.
+            if result.timed_out() && *in_flight >= before {
+                *in_flight = 0;
+                break;
+            }
+        }
+        *in_flight += bytes;
+    }
+
+    /// The page wrote `bytes` into the terminal.
+    fn acknowledge(&self, bytes: usize) {
+        let mut in_flight = self.in_flight.lock().unwrap_or_else(|e| e.into_inner());
+        *in_flight = in_flight.saturating_sub(bytes);
+        self.moved.notify_all();
+    }
+}
+
+/// The flows of the sessions whose output is still being sent, by id: not in `Registry` (RS-8, see `pty_spawn`).
+fn flows() -> &'static Mutex<HashMap<String, Arc<Flow>>> {
+    static FLOWS: std::sync::OnceLock<Mutex<HashMap<String, Arc<Flow>>>> = std::sync::OnceLock::new();
+    FLOWS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Says that the page has written `bytes` of this session's output into its terminal (RS-7).
+///
+/// `async` like the rest, and it never touches the registry: it only wakes the sender.
+#[tauri::command]
+pub async fn pty_ack(id: String, bytes: usize) -> Result<(), String> {
+    let flow = flows().lock().map_err(|_| "registro bloccato")?.get(&id).cloned();
+    // A session whose output is all out has nothing left to hold back.
+    if let Some(flow) = flow {
+        flow.acknowledge(bytes);
+    }
+    Ok(())
 }
 
 /*
@@ -1173,6 +1249,9 @@ pub async fn pty_spawn(
     // without keeping it open once the session has gone.
     let answerer = Arc::downgrade(&writer);
     let spawned_at = Instant::now();
+    // The sender waits on it, and `pty_ack` wakes it through `flows()`.
+    let flow = Arc::new(Flow::new());
+    let sender_flow = Arc::clone(&flow);
 
     {
         let mut sessions = match registry.0.lock() {
@@ -1188,6 +1267,13 @@ pub async fn pty_spawn(
                 job,
             },
         );
+    }
+
+    // Not in the registry: the waiter holds its lock across `ClosePseudoConsole` (RS-8), and an acknowledgement that
+    // waited behind it would leave the sender, and with it the reader and the child, waiting for it. Taken out by
+    // the sender when it is done, so the page can go on acknowledging output that is still in flight after the exit.
+    if let Ok(mut map) = flows().lock() {
+        map.insert(id.clone(), flow);
     }
 
     /*
@@ -1208,14 +1294,14 @@ pub async fn pty_spawn(
      * in the buffer until it spoke again. The sender's `recv_timeout` has no
      * such problem: the wait ends on its own.
      */
-    let (chunk_tx, chunk_rx) = std::sync::mpsc::channel::<String>();
+    let (chunk_tx, chunk_rx) = std::sync::mpsc::sync_channel::<String>(CHUNK_QUEUE);
     /*
      * How the waiter wakes the sender when the child has exited: an empty chunk, which the readers never send. It is
      * kept in a slot, not held by the waiter, so that the channel still counts as closed when the readers are done:
      * the main reader empties the slot when it ends, and only then does the sender see the hang-up. Held by the
      * waiter, which lives until the child exits, it would have delayed every exit that EOF announces first.
      */
-    let wake: std::sync::Arc<Mutex<Option<std::sync::mpsc::Sender<String>>>> =
+    let wake: std::sync::Arc<Mutex<Option<std::sync::mpsc::SyncSender<String>>>> =
         std::sync::Arc::new(Mutex::new(Some(chunk_tx.clone())));
     let wake_reader = std::sync::Arc::clone(&wake);
     // A piped process's errors go to the same stream: that is where a terminal would have shown them.
@@ -1297,11 +1383,15 @@ pub async fn pty_spawn(
         drain_then_exit(
             &chunk_rx,
             |data| {
+                let bytes = data.len();
+                // Waits while the page is far behind (RS-7); the reader then stops reading and the child slows down.
+                sender_flow.admit(bytes, FLOW_HIGH_WATER, FLOW_STALL);
                 let _ = emitter.emit(
                     &topic,
                     Chunk {
                         id: stream_id.clone(),
                         data,
+                        bytes,
                     },
                 );
             },
@@ -1320,6 +1410,9 @@ pub async fn pty_spawn(
                 let _ = exit_emitter.emit("pty:exit", Exit { id: exit_id, code });
             },
         );
+        if let Ok(mut map) = flows().lock() {
+            map.remove(&stream_id);
+        }
     });
 
     /*
@@ -1362,7 +1455,8 @@ pub async fn pty_spawn(
         // The sender may be waiting for output that will never come (no EOF): it looks at the code when it is woken.
         if let Ok(slot) = wake.lock() {
             if let Some(tx) = slot.as_ref() {
-                let _ = tx.send(String::new());
+                // `try_send`: with the queue full the sender is busy, and looks at the exit before it waits again.
+                let _ = tx.try_send(String::new());
             }
         }
         break;
@@ -2206,6 +2300,155 @@ mod tests {
         let (held, talks) = resize.split_once("session.master.clone()").expect("the master taken out");
         assert!(!held.contains(".resize("));
         assert!(talks.split("pub ").next().unwrap().contains(".resize("));
+    }
+
+    // RS-7: the sender waits for the page once too much is in flight, and a page that never answers cannot freeze it.
+    #[test]
+    fn the_sender_waits_for_the_page_when_too_much_is_in_flight() {
+        let flow = Arc::new(Flow::new());
+        flow.admit(100, 100, Duration::from_secs(5));
+        let second = Arc::clone(&flow);
+        let admitted = Arc::new(AtomicBool::new(false));
+        let seen = Arc::clone(&admitted);
+        let waiter = std::thread::spawn(move || {
+            second.admit(50, 100, Duration::from_secs(5));
+            seen.store(true, Ordering::SeqCst);
+        });
+        std::thread::sleep(Duration::from_millis(150));
+        assert!(!admitted.load(Ordering::SeqCst), "admitted with the debt still unpaid");
+        flow.acknowledge(100);
+        waiter.join().unwrap();
+        assert!(admitted.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn under_the_high_water_mark_nothing_waits() {
+        let flow = Flow::new();
+        let started = Instant::now();
+        flow.admit(10, 100, Duration::from_secs(5));
+        flow.admit(10, 100, Duration::from_secs(5));
+        assert!(started.elapsed() < Duration::from_secs(1));
+    }
+
+    #[test]
+    fn a_page_that_never_answers_does_not_freeze_the_sender_for_ever() {
+        let flow = Flow::new();
+        flow.admit(100, 100, Duration::from_millis(50));
+        let started = Instant::now();
+        flow.admit(100, 100, Duration::from_millis(50));
+        let waited = started.elapsed();
+        assert!(waited >= Duration::from_millis(40), "did not wait at all: {waited:?}");
+        assert!(waited < Duration::from_secs(2), "waited far past the stall: {waited:?}");
+        // The debt was forgotten: the next one goes straight through.
+        let started = Instant::now();
+        flow.admit(1, 100, Duration::from_secs(5));
+        assert!(started.elapsed() < Duration::from_secs(1));
+    }
+
+    #[test]
+    fn an_acknowledgement_is_never_more_than_what_is_owed() {
+        let flow = Flow::new();
+        flow.admit(10, 100, Duration::from_secs(5));
+        flow.acknowledge(1_000);
+        let started = Instant::now();
+        flow.admit(100, 100, Duration::from_secs(5));
+        assert!(started.elapsed() < Duration::from_secs(1));
+    }
+
+    // RS-7, end to end without a window: a fast producer, a slow page, a bounded queue; every byte arrives, in order.
+    #[test]
+    fn a_slow_page_holds_the_reader_back_and_loses_nothing() {
+        let (tx, rx) = std::sync::mpsc::sync_channel::<String>(2);
+        let flow = Arc::new(Flow::new());
+        let sent = Arc::new(AtomicUsize::new(0));
+        let produced = Arc::clone(&sent);
+        let producer = std::thread::spawn(move || {
+            for number in 0..60 {
+                tx.send(format!("{number:04};")).unwrap();
+                produced.fetch_add(1, Ordering::SeqCst);
+            }
+        });
+        let consumer_flow = Arc::clone(&flow);
+        let acker_flow = Arc::clone(&flow);
+        let (note_tx, note_rx) = std::sync::mpsc::channel::<usize>();
+        // The page: acknowledges each frame a little after it arrives.
+        let acker = std::thread::spawn(move || {
+            while let Ok(bytes) = note_rx.recv() {
+                std::thread::sleep(Duration::from_millis(2));
+                acker_flow.acknowledge(bytes);
+            }
+        });
+        let mut received = String::new();
+        pump(&rx, |data| {
+            consumer_flow.admit(data.len(), 10, Duration::from_secs(5));
+            received.push_str(&data);
+            note_tx.send(data.len()).unwrap();
+        });
+        drop(note_tx);
+        producer.join().unwrap();
+        acker.join().unwrap();
+        let expected: String = (0..60).map(|number| format!("{number:04};")).collect();
+        assert_eq!(received, expected);
+        assert_eq!(sent.load(Ordering::SeqCst), 60);
+    }
+
+    // RS-7: the queue in front of the sender has a bound, so a reader that outruns it waits instead of piling up.
+    #[test]
+    fn a_reader_that_outruns_the_sender_waits_at_the_queue_bound() {
+        let (tx, rx) = std::sync::mpsc::sync_channel::<String>(CHUNK_QUEUE);
+        let sent = Arc::new(AtomicUsize::new(0));
+        let produced = Arc::clone(&sent);
+        let producer = std::thread::spawn(move || {
+            for number in 0..CHUNK_QUEUE * 3 {
+                tx.send(number.to_string()).unwrap();
+                produced.fetch_add(1, Ordering::SeqCst);
+            }
+        });
+        std::thread::sleep(Duration::from_millis(200));
+        // Nothing is reading: the queue is full and the producer is held at its bound.
+        assert_eq!(sent.load(Ordering::SeqCst), CHUNK_QUEUE);
+        let mut got = Vec::new();
+        while let Ok(item) = rx.recv_timeout(Duration::from_secs(2)) {
+            got.push(item);
+            if got.len() == CHUNK_QUEUE * 3 {
+                break;
+            }
+        }
+        producer.join().unwrap();
+        let expected: Vec<String> = (0..CHUNK_QUEUE * 3).map(|number| number.to_string()).collect();
+        assert_eq!(got, expected);
+    }
+
+    // RS-7 and RS-8: an acknowledgement never waits behind the registry's lock, which the waiter holds across
+    // ClosePseudoConsole, and stays reachable until the sender has sent the last of the output.
+    #[test]
+    fn an_acknowledgement_does_not_go_through_the_registry() {
+        let source = include_str!("pty.rs");
+        let ack = source.split("pub async fn pty_ack(").nth(1).expect("the command").split("\n}\n").next().unwrap();
+        assert!(!ack.contains("registry"), "pty_ack takes the registry lock");
+        assert!(ack.contains("flows()"));
+        let sender = source.split("drain_then_exit(\n            &chunk_rx,").nth(1).expect("the sender");
+        let sender = sender.split("\n    });\n").next().unwrap();
+        assert!(sender.contains("map.remove(&stream_id)"), "the flow outlives its sender");
+    }
+
+    #[test]
+    fn the_flow_is_registered_before_the_sender_starts() {
+        let source = include_str!("pty.rs");
+        let spawn = source.split("pub async fn pty_spawn(").nth(1).expect("the command");
+        let registered = spawn.find("map.insert(id.clone(), flow)").expect("registered");
+        let sender = spawn.find("drain_then_exit(").expect("the sender");
+        assert!(registered < sender);
+    }
+
+    // RS-7: the pieces that no unit test above reaches are wired in the source.
+    #[test]
+    fn the_output_queue_is_bounded_and_the_page_has_a_way_to_acknowledge() {
+        let source = include_str!("pty.rs");
+        assert!(source.contains("sync_channel::<String>(CHUNK_QUEUE)"), "the reader's queue is unbounded");
+        assert!(source.contains("sender_flow.admit("), "the sender does not wait for the page");
+        let lib = include_str!("lib.rs");
+        assert!(lib.contains("pty::pty_ack,"), "pty_ack is not registered");
     }
 
     /// Whether `pid` is running, whatever its children do.
