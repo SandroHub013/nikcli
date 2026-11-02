@@ -473,6 +473,7 @@ export { stripAnsi } from "./ansi"
 
 import { openReclaimed, sealForPane, sealForRequest } from "../session/mail-seal"
 import { createLineAccumulator } from "./line-stream"
+import { DEFAULT_PTY_COLS, DEFAULT_PTY_ROWS } from "../terminal/pty-defaults"
 import { orderedWrites } from "./ordered-writes"
 import type { TokenUsage } from "../session/shared"
 import type { InstallProgress, PackStatus } from "@ragu/voice/light"
@@ -689,8 +690,8 @@ export async function getHost(): Promise<Host | undefined> {
           command,
           args,
           cwd,
-          cols: cols ?? 120,
-          rows: rows ?? 30,
+          cols: cols ?? DEFAULT_PTY_COLS,
+          rows: rows ?? DEFAULT_PTY_ROWS,
           link: link ?? null,
           pane: pane ?? null,
           paneToken: paneToken ?? null,
