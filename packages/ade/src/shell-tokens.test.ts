@@ -77,8 +77,86 @@ describe("the shell geometry (DS-4)", () => {
 
 describe("the shell shadows (DS-12)", () => {
   test("the shell and its focus have a token each", () => {
-    expect(value("--ade-shadow-shell")).toMatch(/^light-dark\(0 3px 10px rgba/)
-    expect(value("--ade-shadow-shell-focus")).toMatch(/var\(--ade-border-strong\), 0 8px 24px/)
+    expect(value("--ade-shadow-shell")).toMatch(/^0 3px 10px light-dark\(rgba/)
+    expect(value("--ade-shadow-shell-focus")).toMatch(/var\(--ade-border-strong\), 0 8px 24px light-dark\(rgba/)
+  })
+
+  /*
+   * `light-dark()` takes two colours and nothing else. A custom property accepts any text, so a token that wrapped a
+   * whole shadow (`light-dark(0 3px 10px rgba(...), 0 3px 10px rgba(...))`) declared without complaint and then made
+   * every `box-shadow` that read it invalid at computed-value time, which is `none`: the sidebar, the resting panes,
+   * the toast and the pill ring drew nothing (the review of this branch, B1; `-sm/-md/-lg` since 2026-08-21). The
+   * suite reads CSS as text, so the validity is checked here by rule.
+   */
+  const COLOUR = /^(#[0-9a-f]{3,8}|(?:rgb|rgba|hsl|hsla|color-mix|oklch|oklab|color)\(|var\(|transparent|currentcolor)/i
+
+  /** The two arguments of every `light-dark(` in `text`, honouring nested parentheses. */
+  function lightDarkArgs(text: string): string[][] {
+    const found: string[][] = []
+    for (let at = text.indexOf("light-dark("); at >= 0; at = text.indexOf("light-dark(", at + 1)) {
+      let depth = 0
+      let start = at + "light-dark(".length
+      const args: string[] = []
+      for (let i = start; i < text.length; i++) {
+        const c = text[i]
+        if (c === "(") depth++
+        else if (c === ")") {
+          if (depth === 0) {
+            args.push(text.slice(start, i).trim())
+            break
+          }
+          depth--
+        } else if (c === "," && depth === 0) {
+          args.push(text.slice(start, i).trim())
+          start = i + 1
+        }
+      }
+      found.push(args)
+    }
+    return found
+  }
+
+  test("light-dark() is given two colours wherever it is written under src", () => {
+    const bad = sheets.flatMap(({ file, text }) =>
+      lightDarkArgs(text)
+        .filter((args) => args.length !== 2 || args.some((arg) => !COLOUR.test(arg)))
+        .map((args) => `${file}: light-dark(${args.join(", ")})`),
+    )
+    expect(bad).toEqual([])
+  })
+
+  test("every shadow token is a valid box-shadow once its light-dark() colours are resolved", () => {
+    const LENGTH = /^-?\d*\.?\d+(px)?$/
+    for (const name of ["sm", "md", "lg", "shell", "shell-focus"]) {
+      const resolved = value(`--ade-shadow-${name}`).replace(/light-dark\(\s*((?:[^(),]|\([^()]*\))+),[^]*?\)(?=,|$)/g, "$1")
+      // Split the layers on top-level commas.
+      const layers: string[] = []
+      let depth = 0
+      let from = 0
+      for (let i = 0; i < resolved.length; i++) {
+        if (resolved[i] === "(") depth++
+        else if (resolved[i] === ")") depth--
+        else if (resolved[i] === "," && depth === 0) {
+          layers.push(resolved.slice(from, i).trim())
+          from = i + 1
+        }
+      }
+      layers.push(resolved.slice(from).trim())
+      for (const layer of layers) {
+        // Tokens at top level: lengths, an optional inset, and one colour (a function, a hex or a var).
+        const parts = layer.match(/(?:[^\s(]+\([^()]*(?:\([^()]*\)[^()]*)*\)|\S+)/g) ?? []
+        const lengths = parts.filter((part) => LENGTH.test(part))
+        const colours = parts.filter((part) => COLOUR.test(part))
+        const rest = parts.filter((part) => !LENGTH.test(part) && !COLOUR.test(part) && part !== "inset")
+        expect({ name, layer, lengths: lengths.length >= 2 && lengths.length <= 4, colours: colours.length, rest }).toEqual({
+          name,
+          layer,
+          lengths: true,
+          colours: 1,
+          rest: [],
+        })
+      }
+    }
   })
 
   test("the sidebar and the pane use them, not their own copies", () => {
