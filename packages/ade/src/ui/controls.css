@@ -77,9 +77,21 @@
   transform: var(--ade-press);
 }
 
-:where([data-ui="button"]:disabled) {
-  opacity: var(--ade-disabled-opacity);
+/*
+ * Disabled: a sunken ground and weak text, drawn from the variables, not a dimmed copy of the enabled look (a primary
+ * at 45% is a faded orange that still invites a press). A busy button keeps its own look: it is working, not unavailable.
+ */
+:where([data-ui="button"]:disabled:not([aria-busy="true"])) {
+  --ade-btn-bg: var(--ade-sunken);
+  --ade-btn-fg: var(--ade-text-weak);
+  --ade-btn-border: var(--ade-border);
   cursor: not-allowed;
+}
+
+/* A ghost has no ground to sink: it stays bare, with the weak text alone. */
+:where([data-ui="button"][data-variant="ghost"]:disabled:not([aria-busy="true"])) {
+  --ade-btn-bg: transparent;
+  --ade-btn-border: transparent;
 }
 
 /*
@@ -102,11 +114,6 @@
   border-right-color: transparent;
   border-radius: var(--ade-radius-full);
   animation: ade-button-spin var(--ade-loop) linear infinite var(--ade-loops, running);
-}
-
-/* A disabled button that is also busy reads as busy, not as unavailable. */
-:where([data-ui="button"][aria-busy="true"]:disabled) {
-  opacity: 1;
 }
 
 @keyframes ade-button-spin {

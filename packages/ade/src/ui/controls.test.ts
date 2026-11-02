@@ -107,13 +107,33 @@ describe("the stylesheet", () => {
     expect(index).toContain("--ade-control-lg: 32px")
   })
 
-  test("a disabled control is one opacity, from the token", () => {
-    // Every `:disabled` rule dims with the token; the spinner's reduced-motion opacity is not a disabled look.
-    const disabled = rules.split("}").filter((block) => /:disabled\)\s*\{/.test(block) && !block.includes("busy"))
-    expect(disabled.length).toBeGreaterThanOrEqual(3)
+  test("a disabled Button is a sunken ground with weak text, not a dimmed copy of its enabled look", () => {
+    // Opacity over a primary ground leaves a faded orange that still reads as a button to press; a sunken ground
+    // with weak text reads as unavailable, and keeps its label legible on any ground.
+    const disabled = rules.slice(rules.indexOf(':where([data-ui="button"]:disabled:not([aria-busy="true"]))'))
+    const body = disabled.slice(0, disabled.indexOf("}"))
+    expect(body).toContain("--ade-btn-bg: var(--ade-sunken)")
+    expect(body).toContain("--ade-btn-fg: var(--ade-text-weak)")
+    expect(body).toContain("--ade-btn-border: var(--ade-border)")
+    expect(body).toContain("cursor: not-allowed")
+    // No Button rule dims by opacity any more, and the generic `:disabled` rule does not name the button.
+    for (const block of rules.split("}")) {
+      if (/\[data-ui="button"\][^{]*:disabled/.test(block)) expect(block).not.toContain("opacity")
+    }
+    // A ghost has no ground to sink: it stays transparent, with the weak text alone.
+    const ghost = rules.slice(rules.indexOf('[data-variant="ghost"]:disabled'))
+    const ghostBody = ghost.slice(0, ghost.indexOf("}"))
+    expect(ghostBody).toContain("--ade-btn-bg: transparent")
+    expect(ghostBody).toContain("--ade-btn-border: transparent")
+  })
+
+  test("a disabled IconButton and Field are one opacity, from the token", () => {
+    const disabled = rules
+      .split("}")
+      .filter((block) => /:disabled\)\s*\{/.test(block) && /icon-button|field/.test(block))
+    expect(disabled.length).toBe(2)
     for (const block of disabled) expect(block).toContain("opacity: var(--ade-disabled-opacity)")
     expect(index).toContain("--ade-disabled-opacity: 0.45")
-    expect(rules.match(/opacity: var\(--ade-disabled-opacity\)/g)?.length).toBeGreaterThanOrEqual(3)
   })
 
   test("a press is the token, and an icon under 24px answers with the ground alone", () => {
