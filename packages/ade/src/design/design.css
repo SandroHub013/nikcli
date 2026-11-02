@@ -96,7 +96,7 @@
 
 [data-slot="design-key"] {
   flex: 0 0 auto;
-  font-family: var(--ade-font-mono, ui-monospace, monospace);
+  font-family: var(--ade-mono);
   font-size: var(--ade-font-sm);
   font-weight: 600;
   padding: 1px 6px;
@@ -221,7 +221,7 @@
   color: var(--ade-text-soft);
   font-size: var(--ade-font-xs);
   font-weight: 600;
-  font-family: var(--ade-font-mono, ui-monospace, monospace);
+  font-family: var(--ade-mono);
 }
 
 [data-slot="variant-pick-button"][data-on="true"] [data-slot="variant-key"] {

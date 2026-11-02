@@ -116,7 +116,7 @@
 
 [data-slot="decision-key"] {
   flex: 0 0 auto;
-  font-family: var(--ade-font-mono, ui-monospace, monospace);
+  font-family: var(--ade-mono);
   font-size: var(--ade-font-sm);
   /* The accent, not its hover fill: in dark that is pomodoro, 3.6:1 as text. */
   color: var(--ade-accent);
@@ -138,7 +138,7 @@
 }
 
 [data-slot="decision-unlocks"] {
-  font-family: var(--ade-font-mono, ui-monospace, monospace);
+  font-family: var(--ade-mono);
 }
 
 [data-slot="decision-context"] {

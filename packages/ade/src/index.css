@@ -584,6 +584,7 @@ body[data-theme="glass"] #root,
    * at their call sites.
    */
   --ade-leading: 1.5;
+  --ade-leading-tight: 1.25;
 
   /*
    * Spacing scale in 2px steps up to 12px, then in 4px steps for the structural

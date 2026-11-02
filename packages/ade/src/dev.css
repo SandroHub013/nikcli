@@ -100,7 +100,7 @@
   padding: 0;
   border: none;
   background: transparent;
-  color: var(--ade-text-subtle);
+  color: var(--ade-text-weak);
   cursor: pointer;
   transition:
     background 120ms ease,
