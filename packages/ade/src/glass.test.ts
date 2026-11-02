@@ -203,14 +203,17 @@ describe("il tema vetro vale per default", () => {
     expect(glassTokens).toContain("--ade-glass-veil")
   })
 
-  test("il blur sta col velo, non sui contenitori trasparenti", () => {
+  test("nessun blur: né sui contenitori trasparenti né sul velo", () => {
     /*
      * A `backdrop-filter` over an empty backdrop paints its own grey: with the
      * blur still on the bar and the sidebar, those read rgb(53,51,51) against
-     * the rgb(80,79,79) of the glass beside them.
+     * the rgb(80,79,79) of the glass beside them. And the one on the veil was a
+     * full-window filter layer with nothing to blur, re-sampled while any pane
+     * repainted under it (DS-6): it went too.
      */
     const blurred = glassRules().filter(({ body }) => /(^|\s|-)backdrop-filter:/.test(body))
-    expect(blurred.map((rule) => rule.selector)).toEqual(['[data-component="ade-shell"][data-theme="glass"]'])
+    expect(blurred.map((rule) => rule.selector)).toEqual([])
+    expect(glassRules().some(({ selector }) => selector === '[data-component="ade-shell"][data-theme="glass"]')).toBe(true)
   })
 })
 

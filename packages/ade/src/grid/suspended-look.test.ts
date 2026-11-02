@@ -15,7 +15,8 @@ import { resolvePaneState, STATE_SHORT } from "./pane-state"
  * of a state that must stay still is not one of them.
  */
 
-const css = readFileSync(join(import.meta.dir, "pane.css"), "utf-8")
+// The icon lives in its own sheet since DS-1; both are scanned.
+const css = ["pane.css", "state-icon.css"].map((name) => readFileSync(join(import.meta.dir, name), "utf-8")).join("\n")
 
 /** What a suspended session resolves to, and a closed one. */
 const SUSPENDED = resolvePaneState({
@@ -29,8 +30,12 @@ const CLOSED = resolvePaneState({
   hasActions: true,
 })
 
-/** The three states whose icon is meant to move, and only those. */
-const MAY_MOVE = [".ic-work", ".ic-perm", ".ic-ask .d1", ".ic-ask .d2", ".ic-ask .d3"]
+/*
+ * Motion lives in the sidebar only (DS-5, the user's choice of 2026-11-02): the
+ * pane's chip and its icon do not move for any state, so a suspended or a
+ * closed session cannot be the one that blinks. The sidebar's single breathing
+ * is checked in `state-list.test.ts`.
+ */
 
 /**
  * Every selector in the sheet that could match a state icon and declares an
@@ -39,7 +44,7 @@ const MAY_MOVE = [".ic-work", ".ic-perm", ".ic-ask .d1", ".ic-ask .d2", ".ic-ask
  */
 function animatedIconSelectors(sheet: string): string[] {
   return [...sheet.matchAll(/([^{}]+)\{([^}]*)\}/g)]
-    .filter(([, , body]) => /(^|[;\s])animation(?:-name)?\s*:\s*(?!none)/.test(body))
+    .filter(([, , body]) => /(^|[;\s])animation(?:-name)?\s*:(?!\s*none)/.test(body))
     .flatMap(([, selector]) => selector.split(",").map((one) => one.trim()))
     .filter((selector) => !selector.startsWith("@") && /(^|[\s>+~])\.ic\b/.test(selector))
 }
@@ -65,21 +70,20 @@ test("a session that ended well says «Chiusa», still, though its button is Rip
   expect(resolvePaneState({ status: "error", exited: true, hasActions: true })).toBe("err")
 })
 
-test("lint: the sheet animates the icon of the three states that may move, and of no other", () => {
-  const selectors = animatedIconSelectors(css)
-  // Rule 22: a cycle over a filtered list checks the list is not empty. An empty
-  // one would mean the sheet had stopped animating anything, and the two
-  // "does not move" checks below would then pass for the wrong reason.
-  expect(selectors.length).toBeGreaterThan(0)
-  expect([...selectors].sort()).toEqual([...MAY_MOVE].sort())
+test("lint: the sheet animates no state icon at all", () => {
+  expect(animatedIconSelectors(css)).toEqual([])
+})
+
+test("lint: the lint can see an animated icon (rule 22: an empty result must not pass by blindness)", () => {
+  const sheet = [".ic-work { animation: spin 1s infinite }", ".ic-ask .d1 { animation: dot 1s }"].join(" ")
+  expect(animatedIconSelectors(sheet)).toEqual([".ic-work", ".ic-ask .d1"])
+  expect(animatedIconSelectors(".ic-work { animation: none }")).toEqual([])
 })
 
 test("lint: neither a suspended nor a closed session's icon is a selector the sheet animates", () => {
-  const selectors = animatedIconSelectors(css)
-  expect(selectors.length).toBeGreaterThan(0)
   for (const state of [SUSPENDED, CLOSED]) {
     const icon = `ic-${state}`
-    for (const selector of selectors) {
+    for (const selector of animatedIconSelectors(css)) {
       expect([icon, selector, selector.includes(`.${icon}`)]).toEqual([icon, selector, false])
     }
   }

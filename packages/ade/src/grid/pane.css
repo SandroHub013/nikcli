@@ -41,37 +41,6 @@
   container-type: inline-size;
 }
 
-/*
- * The status edge, and the liveness signal, in one hairline across the top.
- *
- * It was a 2px edge plus a separate 2px "pulse" lane under the header — four
- * pixels of every pane spent saying something one line can say. Absolutely
- * positioned, so it overlays the header instead of taking a row of its own and
- * costs no layout height at all.
- */
-[data-component="session-pane"]::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 1px;
-  z-index: 2;
-  background: var(--pane-status);
-  opacity: 0.6;
-  pointer-events: none;
-}
-
-/* Work in progress needs a sign that is not a word: across six panes the eye
-   finds motion long before it reads six activity labels. */
-[data-component="session-pane"][data-status="working"]::before,
-[data-component="session-pane"][data-status="provisioning"]::before {
-  opacity: 1;
-  background-image: linear-gradient(to right, transparent, var(--pane-status), transparent);
-  background-color: color-mix(in srgb, var(--pane-status) 25%, transparent);
-  background-size: 35% 100%;
-  background-repeat: no-repeat;
-  animation: ade-pane-sweep 1.6s var(--ade-ease) infinite var(--ade-loops, running);
-}
-
 [data-component="session-pane"][data-status="working"],
 [data-component="session-pane"][data-status="provisioning"] {
   --pane-status: var(--ade-working);
@@ -388,20 +357,6 @@
 }
 
 /* ── liveness ──────────────────────────────────────────────────────────────── */
-
-/*
- * The band travels by moving its background rather than the element, because
- * the element it lives on is the pane's own ::before: there is no lane to
- * translate inside any more, and none to pay for either.
- */
-@keyframes ade-pane-sweep {
-  0% {
-    background-position: -35% 0;
-  }
-  100% {
-    background-position: 135% 0;
-  }
-}
 
 /* ── transcript ────────────────────────────────────────────────────────────── */
 
@@ -794,37 +749,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ── narrow cards ──────────────────────────────────────────────────────────── */
-
-/*
- * Four columns on a laptop leaves each card around 300px, and now every fact
- * the pane carries shares one row with the window buttons. Secondary facts go
- * first and the status word goes last: a card that cannot say what it is doing
- * has stopped being useful, while one without a token count has not. The two
- * buttons are never dropped — they are the only way to resize or close the
- * pane with a pointer.
- */
-@container (max-width: 420px) {
-  [data-slot="pane-cost"],
-  [data-slot="pane-tree-note"],
-  [data-slot="pane-mode"] {
-    display: none;
-  }
-}
-
-@container (max-width: 340px) {
-  [data-slot="pane-tokens"],
-  [data-slot="pane-meta"] {
-    display: none;
-  }
-}
-
-@container (max-width: 260px) {
-  [data-slot="pane-tree"] {
-    display: none;
-  }
-}
-
 /* ── reduced motion ────────────────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
@@ -835,15 +759,6 @@
   [data-slot="pane-prompt"] {
     transition: none;
   }
-
-  /* Liveness still has to be visible without movement: the edge fills instead
-     of sweeping. */
-  [data-component="session-pane"][data-status="working"]::before,
-  [data-component="session-pane"][data-status="provisioning"]::before {
-    background-image: none;
-    background-color: var(--pane-status);
-    animation: none;
-  }
 }
 
 /* ══ Conchiglia · C2 "Vetro" ══════════════════════════════════════════════════
@@ -853,15 +768,14 @@
  * what changes is the shape they are drawn in.
  *
  * The terminal takes the whole shell, out to the rounded corners. The header
- * no longer owns a row above it: it is a pill of frosted glass floating over
- * the first lines, and what scrolls past underneath shows through. That costs
+ * no longer owns a row above it: it is a near-opaque pill floating over
+ * the first lines (no blur since DS-6). That costs
  * about two rows of terminal at the top — the one price of this direction —
  * and buys a pane that reads as one object rather than as a bar with a
  * terminal hung under it.
  *
  * Status moves off the top edge and onto the agent's mark: a halo in the
- * status colour, which pulses while the session works. The sweep along the
- * edge is gone with the edge.
+ * status colour, steady (the one motion of a state is the sidebar's).
  *
  * At the end of the file and scoped to the session pane throughout: the base
  * rules above are shared with the file, browser and video panes, which keep
@@ -873,11 +787,6 @@
 [data-component="session-pane"] {
   --ade-pane-ground: var(--ade-terminal-bg, var(--ade-sunken));
   transition: box-shadow var(--ade-dur-fast) var(--ade-ease);
-}
-
-/* No edge: the status lives on the mark now. */
-[data-component="session-pane"]::before {
-  content: none;
 }
 
 /*
@@ -906,12 +815,7 @@
   gap: var(--ade-space-4);
   border: 0;
   border-radius: var(--ade-radius-full);
-  background: color-mix(in srgb, var(--ade-raised) 78%, transparent);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
-  box-shadow:
-    var(--ade-shadow-sm),
-    inset 0 0 0 1px light-dark(rgba(0, 0, 0, 0.05), rgba(255, 255, 255, 0.06));
+  /* Its ground and ring are `.pill.hA`'s: that rule comes later at the same weight, so it is the one that applies. */
   font-family: var(--ade-sans);
 }
 
@@ -921,7 +825,7 @@
 [data-component="session-pane"][data-focused] > [data-slot="pane-header"] {
   box-shadow:
     var(--ade-shadow-sm),
-    inset 0 0 0 1px var(--ade-border-subtle);
+    inset 0 0 0 1px light-dark(var(--ade-border), var(--ade-border-subtle));
 }
 
 /* The mark in a round chip, with the status as a halo around it. */
@@ -933,71 +837,7 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--pane-status) 10%, transparent);
 }
 
-/*
- * Work in progress still needs a sign that is not a word: the halo breathes.
- *
- * It used to breathe by animating the chip's own `box-shadow`, and a shadow is
- * paint: every working pane repainted its header pill on every frame for as
- * long as the agent ran, which with six busy panes is most of an idle window's
- * CPU. Now the two ends of the breath are drawn once, each on a pseudo-element
- * of its own — the resting ring on ::before, the wide one on ::after — and
- * the breath is a crossfade between them, which the compositor does alone.
- * At either end it is exactly one of the old keyframes; in between it is a
- * blend of the two rings rather than a ring of in-between width, which at
- * two pixels of difference reads the same.
- *
- * Shadows on an otherwise empty box, not filled discs: a shadow is not drawn
- * under its own box, so neither ring tints the translucent chip it surrounds.
- */
-[data-component="session-pane"][data-status="working"] [data-slot="pane-identity"],
-[data-component="session-pane"][data-status="provisioning"] [data-slot="pane-identity"] {
-  position: relative;
-  box-shadow: none;
-}
-
-[data-component="session-pane"][data-status="working"] [data-slot="pane-identity"]::before,
-[data-component="session-pane"][data-status="working"] [data-slot="pane-identity"]::after,
-[data-component="session-pane"][data-status="provisioning"] [data-slot="pane-identity"]::before,
-[data-component="session-pane"][data-status="provisioning"] [data-slot="pane-identity"]::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  animation: ade-pane-halo-rest 1.6s ease-in-out infinite var(--ade-loops, running);
-}
-
-[data-component="session-pane"][data-status="working"] [data-slot="pane-identity"]::before,
-[data-component="session-pane"][data-status="provisioning"] [data-slot="pane-identity"]::before {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--pane-status) 10%, transparent);
-}
-
-[data-component="session-pane"][data-status="working"] [data-slot="pane-identity"]::after,
-[data-component="session-pane"][data-status="provisioning"] [data-slot="pane-identity"]::after {
-  box-shadow: 0 0 0 5px color-mix(in srgb, var(--pane-status) 22%, transparent);
-  opacity: 0;
-  animation-name: ade-pane-halo-peak;
-}
-
-@keyframes ade-pane-halo-rest {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0;
-  }
-}
-
-@keyframes ade-pane-halo-peak {
-  0%,
-  100% {
-    opacity: 0;
-  }
-  50% {
-    opacity: 1;
-  }
-}
+/* The halo is steady: motion lives in the sidebar (DS-5), and the pane's chip and mark stay still. */
 
 [data-component="session-pane"] [data-slot="pane-title"] {
   font-weight: var(--ade-weight-semibold);
@@ -1081,120 +921,47 @@
   padding-top: 42px;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  /* The halo holds at its wider size instead of breathing: the wide ring on,
-     the resting one off, and nothing moving between them. */
-  [data-component="session-pane"][data-status="working"] [data-slot="pane-identity"]::before,
-  [data-component="session-pane"][data-status="working"] [data-slot="pane-identity"]::after,
-  [data-component="session-pane"][data-status="provisioning"] [data-slot="pane-identity"]::before,
-  [data-component="session-pane"][data-status="provisioning"] [data-slot="pane-identity"]::after {
-    animation: none;
-  }
-  [data-component="session-pane"][data-status="working"] [data-slot="pane-identity"]::before,
-  [data-component="session-pane"][data-status="provisioning"] [data-slot="pane-identity"]::before {
-    opacity: 0;
-  }
-  [data-component="session-pane"][data-status="working"] [data-slot="pane-identity"]::after,
-  [data-component="session-pane"][data-status="provisioning"] [data-slot="pane-identity"]::after {
-    opacity: 1;
-  }
-}
-
 /* ══ Proposta A · Barra densa (S8) ═════════════════════════════════════════ */
 
-:root {
-  --st-ask: var(--ade-ansi-magenta);
-  --st-limit: color-mix(in srgb, var(--ade-working) 45%, var(--ade-error));
-  --on-st: var(--ade-on-status);
-}
-
-/* Canonical 6-state status colors on session pane */
+/*
+ * The chip wears the state's colour from the one list (`--ade-state-*` in
+ * index.css, ids in pane-state.ts), the same the sidebar's icon wears.
+ */
 [data-component="session-pane"] {
   --st: var(--ade-text-weak);
 }
-[data-component="session-pane"][data-st="work"] {
-  --st: var(--ade-working);
-  --pane-status: var(--ade-working);
+[data-component="session-pane"][data-state="work"] {
+  --st: var(--ade-state-work);
+  --pane-status: var(--ade-state-work);
 }
-[data-component="session-pane"][data-st="perm"] {
-  --st: var(--ade-waiting);
-  --pane-status: var(--ade-waiting);
+[data-component="session-pane"][data-state="perm"] {
+  --st: var(--ade-state-perm);
+  --pane-status: var(--ade-state-perm);
 }
-[data-component="session-pane"][data-st="ask"] {
-  --st: var(--st-ask);
-  --pane-status: var(--st-ask);
+[data-component="session-pane"][data-state="ask"] {
+  --st: var(--ade-state-ask);
+  --pane-status: var(--ade-state-ask);
 }
-[data-component="session-pane"][data-st="err"] {
-  --st: var(--ade-error);
-  --pane-status: var(--ade-error);
+[data-component="session-pane"][data-state="err"] {
+  --st: var(--ade-state-err);
+  --pane-status: var(--ade-state-err);
 }
-[data-component="session-pane"][data-st="limit"] {
-  --st: var(--st-limit);
-  --pane-status: var(--st-limit);
+[data-component="session-pane"][data-state="limit"] {
+  --st: var(--ade-state-limit);
+  --pane-status: var(--ade-state-limit);
 }
-[data-component="session-pane"][data-st="idle"] {
-  --st: var(--ade-done);
-  --pane-status: var(--ade-done);
+[data-component="session-pane"][data-state="idle"] {
+  --st: var(--ade-state-idle);
+  --pane-status: var(--ade-state-idle);
 }
-
-/* State vector icons: stroke-based on 16px grid */
-.ic {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-  color: var(--st);
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  overflow: visible;
+[data-component="session-pane"][data-state="off"] {
+  --st: var(--ade-state-off);
 }
-.ic .f {
-  fill: currentColor;
-  stroke: none;
-}
-.ic-work {
-  animation: ade-spin 1s linear infinite var(--ade-loops, running);
-}
-.ic-perm {
-  animation: ade-attn 1.6s steps(1, end) infinite var(--ade-loops, running);
-}
-.ic-ask .d1,
-.ic-ask .d2,
-.ic-ask .d3 {
-  animation: ade-dot 1.2s ease-in-out infinite var(--ade-loops, running);
-}
-.ic-ask .d2 {
-  animation-delay: 0.2s;
-}
-.ic-ask .d3 {
-  animation-delay: 0.4s;
+[data-component="session-pane"][data-state="closed"] {
+  --st: var(--ade-state-closed);
 }
 
-@keyframes ade-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-@keyframes ade-attn {
-  0%,
-  70% {
-    opacity: 1;
-  }
-  85% {
-    opacity: 0.3;
-  }
-}
-@keyframes ade-dot {
-  0%,
-  100% {
-    opacity: 0.3;
-  }
-  40% {
-    opacity: 1;
-  }
-}
+/* The state icon is `state-icon.css`; it does not move here (DS-5). */
 
 /*
  * Dense header pill layout: the look of the pill, not where it sits.
@@ -1218,13 +985,18 @@
   padding: 0 var(--ade-space-3) 0 var(--ade-space-4);
   border: 0;
   border-radius: var(--ade-radius-full);
-  background: color-mix(in srgb, var(--ade-raised) 90%, transparent);
+  /*
+   * No blur (DS-6): the pill floats over a canvas that repaints at every line
+   * of output, and a backdrop filter over it is re-sampled every frame, GPU
+   * work and a flicker source in WebView2. A near-opaque ground does the job.
+   * In light it is a crema step with a ring of the border colour (DS-24), so it
+   * does not vanish on a pale terminal; in dark, `raised`.
+   */
+  background: color-mix(in srgb, light-dark(var(--ade-surface), var(--ade-raised)) 92%, transparent);
   box-shadow:
     var(--ade-shadow-sm),
-    inset 0 0 0 1px light-dark(rgba(0, 0, 0, 0.06), rgba(255, 255, 255, 0.06));
+    inset 0 0 0 1px light-dark(var(--ade-border), rgba(255, 255, 255, 0.06));
   white-space: nowrap;
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
   font-family: var(--ade-sans);
 }
 
@@ -1254,7 +1026,8 @@
   padding: 0 var(--ade-space-4) 0 var(--ade-space-2);
   border: 0;
   border-radius: var(--ade-radius-full);
-  background: color-mix(in srgb, var(--st) 14%, transparent);
+  /* 10%, not 14: the state word in its own colour on its own tint stays at 4.5:1 or more (state-contrast.test.ts). */
+  background: color-mix(in srgb, var(--st) 10%, transparent);
   color: var(--ade-text-soft);
   font: var(--ade-weight-medium) var(--ade-font-sm) / 1 var(--ade-sans);
   white-space: nowrap;
@@ -1304,6 +1077,26 @@
 
 .hA .a-state {
   flex: 0 100 auto;
+}
+
+/* The detail is bounded and ends in an ellipsis (DS-18): the chip used to
+   shrink below its text and cut it mid-word. The full text is in the tooltip. */
+.hA .a-det {
+  max-width: 24ch;
+  flex: 0 1 auto;
+}
+
+/* «Permesso · rispondi nel terminale»: the word, a drawn dot (no glyph from the font), then what to do. */
+.hA .lbl + .a-det:not(:empty)::before {
+  content: "";
+  display: inline-block;
+  width: 3px;
+  height: 3px;
+  margin-right: var(--ade-space-2);
+  border-radius: var(--ade-radius-full);
+  background: currentColor;
+  opacity: 0.6;
+  vertical-align: middle;
 }
 
 .hA .a-q {
@@ -1474,16 +1267,111 @@
   stroke: none;
 }
 
-/* ── Container queries (ordine di collasso Proposal A) ── */
+/*
+ * The card behind the info button (DS-19).
+ *
+ * Quota, mode, folder and tokens left the pill: it keeps the title, the state,
+ * the cost and the buttons, which are read at a glance. The others wait here,
+ * and the card opens on hover and on keyboard focus (WCAG 1.4.13: it stays
+ * while the pointer is on it, and Escape closes it). The card is the trigger's
+ * child, so the pointer crosses into it without leaving the wrapper; a
+ * transparent bridge covers the gap.
+ */
+.hA .info {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.hA .card {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 5;
+  min-width: 200px;
+  /* The card is anchored at the trigger's right edge and must not leave the pane's left edge: 120px is the room the
+     pill's other parts take at the right of it. */
+  max-width: min(320px, calc(100cqw - 120px));
+  padding: var(--ade-space-4);
+  flex-direction: column;
+  gap: var(--ade-space-3);
+  border-radius: var(--ade-radius-lg);
+  background: var(--ade-overlay);
+  box-shadow:
+    var(--ade-shadow-lg),
+    inset 0 0 0 1px var(--ade-border);
+  white-space: nowrap;
+}
+
+.hA .card::before {
+  content: "";
+  position: absolute;
+  inset: -8px 0 auto 0;
+  height: 8px;
+}
+
+.hA .info:hover .card,
+.hA .info:has(:focus-visible) .card {
+  display: flex;
+}
+
+.hA .info[data-dismissed] .card {
+  display: none;
+}
+
+.hA .card > * {
+  min-width: 0;
+}
+
+.hA .ct {
+  font: var(--ade-font-xs) var(--ade-mono);
+  color: var(--ade-text-weak);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The cost stays in the pill (the user's rule: it is always visible), a little firmer than the rest. */
+.hA .cost {
+  flex: 0 0 auto;
+  font: var(--ade-weight-semibold) var(--ade-font-sm) var(--ade-sans);
+  color: var(--ade-text-soft);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Where the pill has no room for it, the card has it too: it is listed there at every width. */
+.hA .card-cost {
+  font: var(--ade-weight-semibold) var(--ade-font-sm) var(--ade-sans);
+  color: var(--ade-text-soft);
+}
+
+/* A bare «auto» means nothing: the mode wears its name. */
+.hA .card .mode-row {
+  display: inline-flex;
+  gap: var(--ade-space-3);
+}
+
+/* Not a handle: the card's text can be selected and the cursor is not a grab. */
+.hA .card {
+  cursor: default;
+}
+
+/* The row is the first thing in the card or not; either way its separator dot separates nothing here. */
+.hA .card [data-slot="pane-tree"]::before {
+  content: none;
+}
+
+.hA .card .a-brt {
+  max-width: 28ch;
+}
+
+/* ── Container queries (collapse order, after DS-19) ──
+ * The header keeps four things. Narrow, it drops the mouse hint first, then the
+ * detail beside the state, and the cost last (below 300px the card lists it); the
+ * buttons are never dropped. Nothing is hidden inside the card. */
 @container (max-width: 720px) {
-  .hA .tok,
-  .hA .a-mode,
-  .hA .a-brt,
-  .hA .qr {
+  .hA .tok {
     display: none;
-  }
-  .hA [data-urg] .qr {
-    display: inline;
   }
   /*
    * The mouse hint stays, short: two columns are where Shift+drag is needed,
@@ -1510,9 +1398,6 @@
 @container (max-width: 400px) {
   .hA .a-det,
   .hA .a-el,
-  .hA .a-br,
-  .hA .qbar,
-  .hA .qk,
   .hA .acts {
     display: none;
   }
@@ -1521,6 +1406,17 @@
   }
   .hA .a-state {
     flex: 0 0 auto;
+  }
+}
+
+/*
+ * Down to 300px the pill keeps the cost. Below, the card lists it. The pill needs about 263px for its parts
+ * (padding, mark, title, the state word, cost, two buttons, gaps) against the pane's width minus 12, and a longer
+ * cost or word needs more, so 300px leaves room.
+ */
+@container (max-width: 300px) {
+  .hA > .cost {
+    display: none;
   }
 }
 
@@ -1538,22 +1434,6 @@
     width: 20px;
     justify-content: center;
     flex: 0 0 auto;
-  }
-  .hA [data-urg] .qv {
-    display: none;
-  }
-  .hA [data-urg] .qr {
-    display: inline;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .ic-work,
-  .ic-perm,
-  .ic-ask .d1,
-  .ic-ask .d2,
-  .ic-ask .d3 {
-    animation: none !important;
   }
 }
 

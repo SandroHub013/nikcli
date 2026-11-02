@@ -68,7 +68,6 @@ import {
   type SidebarSession,
   flattenWorkspaces,
   toggleWorkspaceExpansion,
-  mapAgentStatus,
   normalizeAgentId,
 } from "./workspace-tree"
 import { mergeChildren, markDirectoryError } from "./fs-tree"
@@ -76,6 +75,8 @@ import { describeStats, type StatView } from "./system-stats"
 import { bindMenu } from "../ui/menu"
 import { t } from "../i18n"
 import { activityLabel, isReadyActivity } from "../grid/activity"
+import { STATE_FULL, stateOfSession, type PaneState } from "../grid/pane-state"
+import { StateIcon } from "../grid/state-icon"
 
 export interface SidebarProps {
   workspaces: Workspace[]
@@ -303,13 +304,32 @@ function rangesWithin(ranges: [number, number][], start: number, end: number): [
   return out
 }
 
+/*
+ * A session's state, as a shape and a word: the same list and the same icons
+ * as the pane's chip (`grid/pane-state.ts`), never a colour alone (UX-7).
+ * A named image inside the row's button, so the button's own name says it.
+ */
+function StatusIcon(props: { state: PaneState }) {
+  return (
+    <span
+      data-slot="agent-status-dot"
+      data-state={props.state}
+      role="img"
+      title={t("sidebar.agentStatus", STATE_FULL[props.state])}
+      aria-label={t("sidebar.agentStatus", STATE_FULL[props.state])}
+    >
+      <StateIcon state={props.state} />
+    </span>
+  )
+}
+
 function SessionChildRow(props: {
   row: FlatSessionChildRow
   now: number
   onSelect?: (id: string) => void
   onMenu?: RowMenuHandler
 }) {
-  const displayStatus = () => mapAgentStatus(props.row.session.status, props.row.session.suspended)
+  const state = () => stateOfSession(props.row.session)
   const folder = () => {
     if (props.row.session.cwd) {
       const base = basename(props.row.session.cwd)
@@ -327,7 +347,7 @@ function SessionChildRow(props: {
       data-slot="session-row"
       data-selectable="true"
       data-status={props.row.session.status}
-      data-agent-status={displayStatus()}
+      data-state={state()}
       data-selected={props.row.isSelected ? "true" : undefined}
       aria-selected={props.row.isSelected}
       onClick={() => props.onSelect?.(props.row.id)}
@@ -345,13 +365,7 @@ function SessionChildRow(props: {
       <div data-slot="session-main">
         <div data-slot="session-top">
           <span data-slot="session-title">{props.row.session.title}</span>
-          <span
-            data-slot="agent-status-dot"
-            data-status={props.row.session.status}
-            data-agent-status={displayStatus()}
-            title={t("sidebar.agentStatus", displayStatus())}
-            aria-label={t("sidebar.agentStatus", displayStatus())}
-          />
+          <StatusIcon state={state()} />
         </div>
         <div data-slot="session-meta">
           <span data-slot="agent-card-loc">
@@ -403,7 +417,7 @@ function ActiveAgentRow(props: {
   onSelect?: (id: string) => void
   onMenu?: RowMenuHandler
 }) {
-  const displayStatus = () => mapAgentStatus(props.session.status, props.session.suspended)
+  const state = () => stateOfSession(props.session)
   const folder = () => {
     if (props.session.cwd) {
       const base = basename(props.session.cwd)
@@ -420,7 +434,7 @@ function ActiveAgentRow(props: {
       data-slot="active-agent-card"
       data-selectable="true"
       data-status={props.session.status}
-      data-agent-status={displayStatus()}
+      data-state={state()}
       data-selected={props.isSelected ? "true" : undefined}
       aria-selected={props.isSelected}
       onClick={() => props.onSelect?.(props.session.id)}
@@ -438,13 +452,7 @@ function ActiveAgentRow(props: {
       <div data-slot="active-agent-body">
         <div data-slot="active-agent-top">
           <span data-slot="active-agent-title">{props.session.title}</span>
-          <span
-            data-slot="agent-status-dot"
-            data-status={props.session.status}
-            data-agent-status={displayStatus()}
-            title={t("sidebar.agentStatus", displayStatus())}
-            aria-label={t("sidebar.agentStatus", displayStatus())}
-          />
+          <StatusIcon state={state()} />
         </div>
         <div data-slot="active-agent-meta">
           <span data-slot="agent-card-loc">

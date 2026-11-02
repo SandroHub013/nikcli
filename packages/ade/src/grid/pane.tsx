@@ -1,4 +1,4 @@
-import { For, Show, Switch, Match, createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, type JSX } from "solid-js"
 import { parseAnsi, type Span } from "../session/stream"
 import { dragCarriesPaths, readDraggedPaths } from "../sidebar/file-drag"
 import { focusPane, holdsFocus } from "./focus-input"
@@ -13,12 +13,19 @@ const SHOT_MIME = "application/x-ade-shot"
 import "@xterm/xterm/css/xterm.css"
 import "./pane.css"
 
-import { type PaneStatus, type PaneState, STATE_FULL, STATE_SHORT, resolvePaneState } from "./pane-state"
+import {
+  type PaneStatus,
+  type PaneState,
+  STATE_FULL,
+  STATE_SHORT,
+  chipDetail,
+  resolvePaneState,
+} from "./pane-state"
+import { StateIcon } from "./state-icon"
 import { t } from "../i18n"
-import { activityLabel } from "./activity"
 import { FolderGlyph, PaneActions } from "./pane-actions"
 
-export { type PaneStatus, type PaneState, STATE_FULL, STATE_SHORT, resolvePaneState }
+export { type PaneStatus, type PaneState, STATE_FULL, STATE_SHORT, resolvePaneState, StateIcon }
 
 /*
  * How faithfully the tree a session runs in matches what the user asked for.
@@ -131,8 +138,6 @@ export interface SessionPaneProps {
   state?: PaneState
   /** The process behind the pane has ended: a pane "done" is then closed, not asking. */
   exited?: boolean
-  /** Detailed reason or tool description (e.g. "Edit · pane.css", "Vuole eseguire Bash", "finestra 5h esaurita"). */
-  stateDetail?: string
   /** Live quota view for the session's provider. When omitted, derived from agent / quota module. */
   quota?: SessionQuota
   /** What the agent is doing, in the present tense. Empty when it is idle. */
@@ -268,51 +273,6 @@ function LineSpans(props: { text: string }) {
         </span>
       )}
     </For>
-  )
-}
-
-/** Vector icon for each of the 6 states, stroke-based on a 16px grid. */
-export function StateIcon(props: { state: PaneState }) {
-  return (
-    <svg class={`ic ic-${props.state}`} viewBox="0 0 16 16" aria-hidden="true">
-      <Switch>
-        <Match when={props.state === "work"}>
-          <circle cx="8" cy="8" r="5.5" opacity=".28" />
-          <path d="M8 2.5a5.5 5.5 0 0 1 5.5 5.5" />
-        </Match>
-        <Match when={props.state === "perm"}>
-          <path d="M8 1.8l5.2 2.1v3.7c0 3.1-2.2 5.5-5.2 6.6-3-1.1-5.2-3.5-5.2-6.6V3.9z" />
-          <path d="M6.5 6.4a1.6 1.6 0 1 1 2.3 1.4c-.5.3-.8.6-.8 1.1" />
-          <circle class="f" cx="8" cy="10.9" r=".85" />
-        </Match>
-        <Match when={props.state === "ask"}>
-          <path d="M2.5 3.2h11v7.3H8.2L5 13v-2.5H2.5z" />
-          <circle class="f d1" cx="5.5" cy="6.85" r=".9" />
-          <circle class="f d2" cx="8" cy="6.85" r=".9" />
-          <circle class="f d3" cx="10.5" cy="6.85" r=".9" />
-        </Match>
-        <Match when={props.state === "err"}>
-          <path d="M5.6 1.8h4.8l3.8 3.8v4.8l-3.8 3.8H5.6l-3.8-3.8V5.6z" />
-          <path d="M8 4.9v3.6" />
-          <circle class="f" cx="8" cy="11" r=".85" />
-        </Match>
-        <Match when={props.state === "limit"}>
-          <path d="M4 1.8h8M4 14.2h8" />
-          <path d="M5 1.8c0 3.2 3 3.9 3 6.2s-3 3-3 6.2M11 1.8c0 3.2-3 3.9-3 6.2s3 3 3 6.2" />
-          <path class="f" d="M6.3 13.3 8 11.7l1.7 1.6z" />
-        </Match>
-        <Match when={props.state === "idle"}>
-          <path d="M3.5 4.8 6.7 8l-3.2 3.2" />
-          <path d="M8.8 11.4h4" />
-        </Match>
-        <Match when={props.state === "off"}>
-          <path d="M6 4.5v7M10 4.5v7" />
-        </Match>
-        <Match when={props.state === "closed"}>
-          <rect x="4.5" y="4.5" width="7" height="7" rx="1" />
-        </Match>
-      </Switch>
-    </svg>
   )
 }
 
@@ -499,22 +459,61 @@ export function SessionPane(props: SessionPaneProps) {
     }),
   )
 
+  const cardId = createUniqueId()
+  const [cardDismissed, setCardDismissed] = createSignal(false)
+  let info: HTMLSpanElement | undefined
+  let infoTrigger: HTMLButtonElement | undefined
+  /*
+   * Escape closes the card (WCAG 1.4.13, dismissible). Heard on the document in
+   * the capture phase because a card opened by hover leaves the focus in the
+   * terminal, and an Escape that reached it would interrupt the agent's turn
+   * while the card stayed open. It is taken only while the card is open. With the
+   * focus on a row inside the card, the focus goes back to the trigger first, or
+   * hiding the row would drop it on the page.
+   */
+  const closeCardOnEscape = (event: KeyboardEvent) => {
+    if (event.key !== "Escape" || cardDismissed() || !info?.matches(":hover, :has(:focus-visible)")) return
+    event.preventDefault()
+    event.stopPropagation()
+    if (info.contains(document.activeElement) && document.activeElement !== infoTrigger)
+      infoTrigger?.focus({ preventScroll: true })
+    setCardDismissed(true)
+  }
+  document.addEventListener("keydown", closeCardOnEscape, true)
+  onCleanup(() => document.removeEventListener("keydown", closeCardOnEscape, true))
+  /** Whether the card has anything to say: every fact in it can be absent. */
+  const hasDetails = () =>
+    Boolean(
+      missing() || reading() || props.mode || props.tree || props.status === "provisioning" || props.tokens || props.cost,
+    )
+
+  /* Buttons of the pane's own (resume, retry) make a pane «perm» too; then the label is theirs. */
+  const hasActions = () => Boolean(props.actions && props.actions.length > 0)
+  /* A permission prompt in a live terminal is answered in the terminal itself, since the pane has no buttons for it. */
+  const answerInTerminal = () => state() === "perm" && !hasActions() && Boolean(props.terminalId)
+
+  /*
+   * What the chip says beside the state's word. For a permission prompt the
+   * words are fixed and say where the answer goes (UX-8); for the rest it is
+   * the agent's report, cleaned of spinner glyphs and repeats and dropped when
+   * it only restates the state (`chipDetail`, DS-18).
+   */
   const stateHead = createMemo(() => {
-    if (props.stateDetail) return props.stateDetail
-    // "Sospesa" is the label already: said twice it would read "Sospesa · Sospesa".
-    if (state() === "off") return ""
-    if (props.activity) return activityLabel(props.activity)
+    if (answerInTerminal()) return t("paneState.perm.here")
+    const detail = chipDetail({ activity: props.activity })
+    if (detail) return detail
     const st = state()
     if (st === "limit")
       return reading()?.countdown ? t("pane.limit.window", String(reading()?.bindingKey ?? "")) : t("pane.limit")
-    if (st === "work") return props.mode ?? t("activity.running")
-    if (st === "perm") return props.actions?.[0]?.label ?? t("paneState.short.perm")
-    if (st === "err") return t("paneState.err")
-    return STATE_FULL[st]
+    if (st === "perm") return props.actions?.[0]?.label ?? ""
+    return ""
   })
 
+  /* The full sentence, for the tooltip and the screen reader; the chip is the short one. */
   const stateDetail = createMemo(() => {
-    return props.stateDetail ?? activityLabel(props.activity) ?? STATE_FULL[state()]
+    const detail = chipDetail({ activity: props.activity }) || undefined
+    if (answerInTerminal()) return detail ? `${t("paneState.perm.tip")}\n${detail}` : t("paneState.perm.tip")
+    return detail ?? STATE_FULL[state()]
   })
 
   const tipAll = createMemo(() => {
@@ -540,7 +539,7 @@ export function SessionPane(props: SessionPaneProps) {
       data-component="session-pane"
       data-pane-id={props.id}
       data-status={props.status}
-      data-st={state()}
+      data-state={state()}
       data-focused={props.focused ? "true" : undefined}
       data-dropping={dropping() ? "true" : undefined}
       onPointerDown={() => props.onFocus?.()}
@@ -686,6 +685,7 @@ export function SessionPane(props: SessionPaneProps) {
         */}
         <span
           class="chip a-state"
+          role="img"
           tabIndex={0}
           title={tipState()}
           data-tip={tipState()}
@@ -701,91 +701,8 @@ export function SessionPane(props: SessionPaneProps) {
 
         <span class="sp"></span>
 
-        <Show when={missing()}>
-          {(none) => (
-            <span class="a-q" data-lv="na" tabIndex={0} title={none().tooltip} data-tip={none().tooltip}>
-              <span class="qk">{t("pane.quota")}</span>
-              <b class="qv">{t("pane.quota.na")}</b>
-            </span>
-          )}
-        </Show>
-
-        <Show when={reading()}>
-          {(q) => (
-            <span
-              class="a-q"
-              data-lv={q().level}
-              data-urg={state() === "limit" || (!q().stale && q().isLimit) ? "" : undefined}
-              data-stale={q().stale ? "" : undefined}
-              tabIndex={0}
-              title={q().tooltip}
-              data-tip={q().tooltip}
-            >
-              <span class="qbar" style={{ "--r": q().remainingRatio }}>
-                <i></i>
-              </span>
-              <span class="qk">{q().bindingKey}</span>
-              <b class="qv">{q().displayValue}</b>
-              {/* An old figure shows when it was read; a current one when it resets. */}
-              <Show
-                when={q().stale && q().readAt}
-                fallback={<Show when={q().countdown}>{(cd) => <span class="qr">↻ {cd()}</span>}</Show>}
-              >
-                {(at) => <span class="qr qat">{at()}</span>}
-              </Show>
-            </span>
-          )}
-        </Show>
-
-        <Show when={props.mode}>
-          <span class="a-mode" data-slot="pane-mode">
-            {props.mode}
-          </span>
-        </Show>
-
-        {/* While provisioning decides, the same slot holds a placeholder so the
-            handover to a real branch never reshapes the row. The fidelity note
-            stays on the row, not only in the title: a tree that is behind, or
-            has no dependencies, changes what the agent can do in it. */}
-        <Show
-          when={props.tree}
-          fallback={
-            <Show when={props.status === "provisioning"}>
-              <span class="a-br" data-slot="pane-tree" data-fidelity="pending" title={t("pane.tree.preparing")}>
-                <BranchGlyph />
-                <span class="a-brt trunc">{t("pane.tree.preparing.short")}</span>
-              </span>
-            </Show>
-          }
-        >
-          {(tree) => (
-            <span
-              class="a-br"
-              data-slot="pane-tree"
-              data-fidelity={tree().fidelity}
-              tabIndex={0}
-              title={`Branch ${tree().branch}\n${tree().note ?? FIDELITY_TITLE[tree().fidelity]}`}
-              data-tip={`Branch ${tree().branch}\n${tree().note ?? FIDELITY_TITLE[tree().fidelity]}`}
-            >
-              {tree().fidelity === "project" ? <FolderGlyph /> : <BranchGlyph />}
-              <span class="a-brt trunc">{tree().branch}</span>
-              <Show when={FIDELITY_LABEL[tree().fidelity]}>
-                {(label) => (
-                  <span class="a-brn" data-slot="pane-tree-note">
-                    {label()}
-                  </span>
-                )}
-              </Show>
-            </span>
-          )}
-        </Show>
-
-        <Show when={props.tokens}>
-          <span class="tok">{props.tokens}</span>
-        </Show>
-
         <Show when={props.cost}>
-          <span class="tok" data-slot="pane-cost">
+          <span class="cost" data-slot="pane-cost">
             {props.cost}
           </span>
         </Show>
@@ -794,6 +711,139 @@ export function SessionPane(props: SessionPaneProps) {
           <span class="tok" data-slot="pane-mouse-hint" title={t("pane.mouseHint.tip")}>
             <span class="hint-long">{t("pane.mouseHint")}</span>
             <span class="hint-short">{t("pane.mouseHint.short")}</span>
+          </span>
+        </Show>
+
+        {/*
+          DS-19. The header keeps what is read at a glance (title, state, cost,
+          buttons); quota, mode, folder and tokens wait in this card. It opens
+          on hover and on keyboard focus (not on a click, which would pin it)
+          and closes with Escape (see `closeCardOnEscape`). The card sits
+          inside the trigger's wrapper so the pointer can cross into it and
+          read it.
+        */}
+        <Show when={hasDetails()}>
+          <span
+            ref={info}
+            class="info"
+            data-slot="pane-info"
+            data-dismissed={cardDismissed() ? "" : undefined}
+            onPointerLeave={() => setCardDismissed(false)}
+            onFocusOut={(event) => {
+              if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget))
+                setCardDismissed(false)
+            }}
+          >
+            <button
+              ref={infoTrigger}
+              type="button"
+              class="act"
+              data-slot="pane-info-trigger"
+              aria-label={t("pane.details")}
+              aria-describedby={cardId}
+              /* A click must not take the keyboard from the terminal: the button opens nothing, the card is hover and focus. */
+              onMouseDown={(event) => event.preventDefault()}
+            >
+              <svg class="gi" viewBox="0 0 16 16" aria-hidden="true">
+                <circle cx="8" cy="8" r="5.8" />
+                <path d="M8 7.2v3.6" />
+                <circle class="f" cx="8" cy="5.2" r=".8" />
+              </svg>
+            </button>
+            <div class="card" id={cardId} data-slot="pane-card" role="group" aria-label={t("pane.details")}>
+              <Show when={missing()}>
+                {(none) => (
+                  <span class="a-q" data-lv="na" tabIndex={0} title={none().tooltip} data-tip={none().tooltip}>
+                    <span class="qk">{t("pane.quota")}</span>
+                    <b class="qv">{t("pane.quota.na")}</b>
+                  </span>
+                )}
+              </Show>
+
+              <Show when={reading()}>
+                {(q) => (
+                  <span
+                    class="a-q"
+                    data-lv={q().level}
+                    data-urg={state() === "limit" || (!q().stale && q().isLimit) ? "" : undefined}
+                    data-stale={q().stale ? "" : undefined}
+                    tabIndex={0}
+                    title={q().tooltip}
+                    data-tip={q().tooltip}
+                  >
+                    <span class="qbar" style={{ "--r": q().remainingRatio }}>
+                      <i></i>
+                    </span>
+                    <span class="qk">{q().bindingKey}</span>
+                    <b class="qv">{q().displayValue}</b>
+                    {/* An old figure shows when it was read; a current one when it resets. */}
+                    <Show
+                      when={q().stale && q().readAt}
+                      fallback={<Show when={q().countdown}>{(cd) => <span class="qr">↻ {cd()}</span>}</Show>}
+                    >
+                      {(at) => <span class="qr qat">{at()}</span>}
+                    </Show>
+                  </span>
+                )}
+              </Show>
+
+              <Show when={props.cost}>
+                <span class="card-cost" data-slot="pane-cost-card">
+                  {props.cost}
+                </span>
+              </Show>
+
+              <Show when={props.mode}>
+                <span class="mode-row">
+                  <span class="qk">{t("pane.mode")}</span>
+                  <span class="a-mode" data-slot="pane-mode">
+                    {props.mode}
+                  </span>
+                </span>
+              </Show>
+
+              {/* While provisioning decides, the same slot holds a placeholder so the
+                  handover to a real branch never reshapes the card. The fidelity note
+                  stays beside the branch, not only in the title: a tree that is behind, or
+                  has no dependencies, changes what the agent can do in it. */}
+              <Show
+                when={props.tree}
+                fallback={
+                  <Show when={props.status === "provisioning"}>
+                    <span class="a-br" data-slot="pane-tree" data-fidelity="pending" title={t("pane.tree.preparing")}>
+                      <BranchGlyph />
+                      <span class="a-brt trunc">{t("pane.tree.preparing.short")}</span>
+                    </span>
+                  </Show>
+                }
+              >
+                {(tree) => (
+                  <span
+                    class="a-br"
+                    data-slot="pane-tree"
+                    data-fidelity={tree().fidelity}
+                    tabIndex={0}
+                    title={`Branch ${tree().branch}\n${tree().note ?? FIDELITY_TITLE[tree().fidelity]}`}
+                    data-tip={`Branch ${tree().branch}\n${tree().note ?? FIDELITY_TITLE[tree().fidelity]}`}
+                  >
+                    {tree().fidelity === "project" ? <FolderGlyph /> : <BranchGlyph />}
+                    <span class="a-brt trunc">{tree().branch}</span>
+                    <Show when={FIDELITY_LABEL[tree().fidelity]}>
+                      {(label) => (
+                        <span class="a-brn" data-slot="pane-tree-note">
+                          {label()}
+                        </span>
+                      )}
+                    </Show>
+                  </span>
+                )}
+              </Show>
+
+              <Show when={props.tokens}>
+                <span class="ct" data-slot="pane-tokens">{props.tokens}</span>
+              </Show>
+
+            </div>
           </span>
         </Show>
 

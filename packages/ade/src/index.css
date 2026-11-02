@@ -198,18 +198,18 @@ body[data-theme="glass"] #root,
 }
 
 /*
- * The one place the floor is painted — and the one place it is blurred.
+ * The one place the floor is painted, and it is not blurred (DS-6).
  *
- * The blur used to sit on the bar, the sidebar and every grid cell. A
- * `backdrop-filter` samples what is behind the element, and behind these there
- * is nothing but the window itself: measured on white, blurring an empty
- * backdrop came back as rgb(53,51,51) against the rgb(80,79,79) of the glass
- * beside it — the blur was painting its own grey. It belongs to the veil.
+ * The blur used to sit on the bar, the sidebar and every grid cell, and then
+ * on this veil alone. A `backdrop-filter` samples what is behind the element,
+ * and behind a window's root there is nothing the page can see: measured on
+ * white, blurring an empty backdrop came back as rgb(53,51,51) against the
+ * rgb(80,79,79) of the glass beside it, the blur painting its own grey. And a
+ * full-window filter layer is re-sampled while any pane repaints under it:
+ * GPU work and a flicker source in WebView2 for nothing to blur.
  */
 [data-component="ade-shell"][data-theme="glass"] {
   background: var(--ade-glass-veil);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
 }
 
 /*
@@ -274,7 +274,7 @@ body[data-theme="glass"] #root,
  * a 6% lift would leave text over text. In glass it takes the overlay level.
  */
 [data-component="ade-shell"][data-theme="glass"] [data-component="session-pane"] > [data-slot="pane-header"] {
-  background: color-mix(in srgb, var(--ade-overlay) 88%, transparent);
+  background: color-mix(in srgb, var(--ade-overlay) 92%, transparent);
 }
 
 :root {
@@ -389,6 +389,27 @@ body[data-theme="glass"] #root,
   --ade-warning: light-dark(#845b00, #f1c14f);
   /* The words on a solid status fill (a badge, a check mark): panna in light, ink in dark. */
   --ade-on-status: light-dark(#fffaf0, #120d0b);
+
+  /*
+   * The one list of session states, as colours (the ids are `STATE_IDS` in
+   * grid/pane-state.ts). The sidebar's icon and the pane's chip both read
+   * these, so one session is one colour on the whole screen. «Needs you»
+   * (perm) is blue, the user's choice of 2026-11-02: pomodoro is for
+   * buttons, and a pomodoro dot beside a pomodoro button read as a control.
+   * Each state also has a shape (`grid/state-icon.tsx`), so none is told by
+   * colour alone.
+   */
+  --ade-state-work: var(--ade-working);
+  --ade-state-perm: var(--ade-waiting);
+  --ade-state-ask: var(--ade-ansi-magenta);
+  --ade-state-err: var(--ade-error);
+  --ade-state-limit: color-mix(in srgb, var(--ade-working) 45%, var(--ade-error));
+  --ade-state-idle: var(--ade-done);
+  --ade-state-off: var(--ade-text-weak);
+  --ade-state-closed: var(--ade-text-soft);
+  /* The one loop for a session's state: a slow breathe, the pace of «working» in the sidebar. Other loops (the caret, a recording, a progress bar) keep the rhythm of what they are. */
+  --ade-loop: 2.4s;
+  --ade-loop-ease: ease-in-out;
   /* What a recording paints over a secret: one opaque block in every theme, glass included. */
   --ade-redact: #2d2722;
 
@@ -854,30 +875,6 @@ body,
 }
 
 /* Pane rules live in grid/pane.css — the card owns its own stylesheet. */
-/*
- * Working and provisioning are the only statuses that change without user
- * input, so they are the only ones allowed to move: a slow opacity breathe
- * reads as liveness, not alarm.
- */
-@media (prefers-reduced-motion: no-preference) {
-  [data-status="working"] [data-slot="pane-dot"],
-  [data-status="working"] [data-slot="session-dot"],
-  [data-status="provisioning"] [data-slot="pane-dot"],
-  [data-status="provisioning"] [data-slot="session-dot"] {
-    animation: ade-dot-breathe 2.4s ease-in-out infinite var(--ade-loops, running);
-  }
-}
-
-@keyframes ade-dot-breathe {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.45;
-  }
-}
-
 /* ── sidebar ──────────────────────────────────────────────────────────────── */
 
 [data-component="ade-sidebar"] {
@@ -1101,27 +1098,6 @@ body,
 
 [data-slot="session-row"]:focus-visible {
   box-shadow: var(--ade-focus-ring);
-}
-
-[data-slot="session-dot"] {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--ade-radius-full);
-  flex: 0 0 auto;
-  background: var(--ade-text-weak);
-}
-
-[data-status="working"] [data-slot="session-dot"] {
-  background: var(--ade-working);
-}
-[data-status="waiting"] [data-slot="session-dot"] {
-  background: var(--ade-waiting);
-}
-[data-status="done"] [data-slot="session-dot"] {
-  background: var(--ade-done);
-}
-[data-status="error"] [data-slot="session-dot"] {
-  background: var(--ade-error);
 }
 
 [data-slot="session-title"] {

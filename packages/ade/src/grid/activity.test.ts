@@ -32,7 +32,7 @@ describe("pane activity", () => {
 
   test("the label follows the language; free text is shown as written", () => {
     expect(activityLabel("ready")).toBe("Disponibile")
-    expect(activityLabel(exitedActivity(2))).toBe("Uscito con 2")
+    expect(activityLabel(exitedActivity(2))).toBe("Terminata (codice 2)")
     resetLocaleForTests("en")
     expect(activityLabel("ready")).toBe("Ready")
     expect(activityLabel("Disponibile")).toBe("Ready")
