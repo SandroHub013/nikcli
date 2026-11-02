@@ -9,6 +9,8 @@ import type { DecisionsHub } from "./hub"
 import { bucketDecisions, type Decision } from "./state"
 import "./decisions.css"
 import { t } from "../i18n"
+import { EmptyIcon } from "../ui/empty-icon"
+import { EmptyState } from "../ui/controls"
 import { errorMessage } from "../session-new/start-failure"
 
 /**
@@ -164,10 +166,9 @@ export function DecisionsSheet(props: {
           when={current()?.k}
           keyed
           fallback={
-            <div data-slot="sheet-empty">
-              <b>{t("decisions.none")}</b>
-              <span>{t("decisions.sheet.empty")}</span>
-            </div>
+            <EmptyState data-slot="sheet-empty" mark={<EmptyIcon name="decisions" />} title={t("decisions.none")}>
+                {t("decisions.sheet.empty")}
+              </EmptyState>
           }
         >
           {(k) => {

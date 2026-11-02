@@ -113,3 +113,18 @@ for (const surface of SURFACES) {
     })
   })
 }
+
+describe("the sheets' and panes' empty views are the shared EmptyState", () => {
+  test("no hand-built sheet-empty <div> with a bold title and a span is left", () => {
+    for (const file of [
+      "decisions/decisions-pane.tsx",
+      "design/design-pane.tsx",
+      "decisions/decisions-sheet.tsx",
+      "design/design-sheet.tsx",
+    ]) {
+      const source = withoutComments(read(file))
+      expect({ file, built: /<div data-slot="sheet-empty">/.test(source) }).toEqual({ file, built: false })
+      expect({ file, uses: source.includes("<EmptyState data-slot=\"sheet-empty\"") }).toEqual({ file, uses: true })
+    }
+  })
+})

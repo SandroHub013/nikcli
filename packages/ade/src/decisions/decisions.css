@@ -88,13 +88,11 @@
   margin-left: auto;
 }
 
+/* An EmptyState laid out for a sheet: from the left, not centred in a page. */
 [data-slot="sheet-empty"] {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: flex-start;
   padding: var(--ade-space-5) 0;
-  font-size: var(--ade-font-body);
-  color: var(--ade-text-soft);
+  text-align: left;
 }
 
 /* The card. */
