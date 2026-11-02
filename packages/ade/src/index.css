@@ -472,6 +472,10 @@ body[data-theme="glass"] #root,
   --ade-dur-fast: 120ms;
   --ade-dur: 180ms;
   --ade-dur-slow: 280ms;
+  /* The launch screen's crossfade into the shell (DS-26); `FADE_MS` in splash/splash.tsx unmounts it when it ends. */
+  --ade-splash-fade: 400ms;
+  /* What the document is painted until the shell's first frame: ink, whichever theme is chosen, so nothing white or crema sits behind the dark launch screen. */
+  --ade-boot-ground: #120d0b;
   --ade-ease: cubic-bezier(0.25, 0.1, 0.25, 1);
   --ade-ease-out: cubic-bezier(0, 0, 0.2, 1);
   --ade-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -651,6 +655,12 @@ body[data-theme="glass"] #root,
 
 * {
   box-sizing: border-box;
+}
+
+html[data-boot],
+html[data-boot] body,
+html[data-boot] #root {
+  background: var(--ade-boot-ground);
 }
 
 html,

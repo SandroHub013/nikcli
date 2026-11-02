@@ -17,7 +17,7 @@
   overflow: hidden;
   color-scheme: dark;
   background: #211410;
-  transition: opacity var(--splash-fade, var(--ade-dur-slow, 280ms)) var(--ade-ease, ease);
+  transition: opacity var(--ade-splash-fade) var(--ade-ease, ease);
   opacity: 1;
   cursor: default;
   display: flex;
@@ -84,7 +84,7 @@
   line-height: normal;
   font-family: var(--ade-mono, monospace);
   font-size: var(--ade-font-xs);
-  color: #9a907f;
+  color: var(--ade-text-weak);
   letter-spacing: 0.5px;
   text-align: center;
   user-select: none;

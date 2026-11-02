@@ -14,7 +14,7 @@ export interface SplashProps {
   onDismiss?: () => void
 }
 
-const FADE_MS = 600
+export const FADE_MS = 400
 
 /**
  * ADE Splash Screen: Authentic Reference Cooking Scene ("Ragù Code").
@@ -36,6 +36,8 @@ export function Splash(props: SplashProps) {
   // Fade out smoothly when props.visible flips to false
   createEffect(() => {
     if (!props.visible) {
+      // The shell is painted under the splash by now: the document goes back to the theme's own ground as the fade begins (DS-26).
+      document.documentElement.removeAttribute("data-boot")
       const timer = setTimeout(() => setGone(true), FADE_MS)
       onCleanup(() => clearTimeout(timer))
     } else {
