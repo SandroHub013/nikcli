@@ -35,6 +35,7 @@
     "allow-ade-open-release",
     "allow-ade-prune",
     "allow-ade-tray-take",
+    "allow-ade-update-download",
     "allow-ade-update-install",
     "allow-ade-window-close",
     "allow-ade-window-minimize",

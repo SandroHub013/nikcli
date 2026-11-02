@@ -946,30 +946,52 @@ unsafe impl Sync for ChildTreeGuard {}
 #[cfg(windows)]
 impl ChildTreeGuard {
     pub(crate) fn new() -> Result<Self, String> {
-        use windows::Win32::Foundation::CloseHandle;
-        use windows::Win32::System::JobObjects::{
-            CreateJobObjectW, JobObjectExtendedLimitInformation, SetInformationJobObject,
-            JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
-        };
+        use windows::Win32::System::JobObjects::JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        Self::with_limits(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE)
+    }
+
+    /// The same for a pane, where anything the user runs may run: a program that asks to leave the job may. Without
+    /// BREAKAWAY_OK its `CreateProcess` with CREATE_BREAKAWAY_FROM_JOB would fail with access denied.
+    pub(crate) fn for_pane() -> Result<Self, String> {
+        use windows::Win32::System::JobObjects::{JOB_OBJECT_LIMIT_BREAKAWAY_OK, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE};
+        Self::with_limits(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_BREAKAWAY_OK)
+    }
+
+    /// Takes the kill back: from here on, closing the guard leaves the job's processes running.
+    pub(crate) fn release(&self) {
+        use windows::Win32::System::JobObjects::JOB_OBJECT_LIMIT_BREAKAWAY_OK;
+        let _ = self.set_limits(JOB_OBJECT_LIMIT_BREAKAWAY_OK);
+    }
+
+    fn with_limits(limits: windows::Win32::System::JobObjects::JOB_OBJECT_LIMIT) -> Result<Self, String> {
+        use windows::Win32::System::JobObjects::CreateJobObjectW;
 
         let handle =
             unsafe { CreateJobObjectW(None, None) }.map_err(|error| error.message().to_string())?;
-        let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+        // Dropped on the way out if the limits are refused, which closes the handle.
+        let guard = Self(handle);
         // Closing the guard also kills descendants left behind by a completed command.
-        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-        let result = unsafe {
+        guard.set_limits(limits)?;
+        Ok(guard)
+    }
+
+    fn set_limits(&self, limits: windows::Win32::System::JobObjects::JOB_OBJECT_LIMIT) -> Result<(), String> {
+        use windows::Win32::System::JobObjects::{
+            JobObjectExtendedLimitInformation, SetInformationJobObject,
+            JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        };
+
+        let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+        info.BasicLimitInformation.LimitFlags = limits;
+        unsafe {
             SetInformationJobObject(
-                handle,
+                self.0,
                 JobObjectExtendedLimitInformation,
                 &info as *const _ as *const std::ffi::c_void,
                 std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
             )
-        };
-        if let Err(error) = result {
-            let _ = unsafe { CloseHandle(handle) };
-            return Err(error.message().to_string());
         }
-        Ok(Self(handle))
+        .map_err(|error| error.message().to_string())
     }
 
     pub(crate) fn assign_pid(&self, pid: u32) -> Result<(), String> {
@@ -1002,6 +1024,12 @@ impl ChildTreeGuard {
     pub(crate) fn new() -> Result<Self, String> {
         Ok(Self)
     }
+
+    pub(crate) fn for_pane() -> Result<Self, String> {
+        Ok(Self)
+    }
+
+    pub(crate) fn release(&self) {}
 
     pub(crate) fn assign_pid(&self, _pid: u32) -> Result<(), String> {
         Ok(())
@@ -2600,6 +2628,7 @@ pub fn run() {
         .manage(pty::Registry::default())
         .manage(raguverse_assets::Assets::default())
         .manage(record::Recorder::default())
+        .manage(update::Pending::default())
         .manage(frontend::DevServer::default())
         .manage(serve::Server::default())
         .manage(serve_proxy::Requests::default())
@@ -2681,6 +2710,7 @@ pub fn run() {
             browser_shot::browser_shot,
             vision::capture_window,
             vision::vision_allowed,
+            update::ade_update_download,
             update::ade_update_install,
             record::record_start,
             record::record_stop,
@@ -2832,19 +2862,28 @@ pub fn run() {
          */
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
-                use tauri::Manager;
-                app.state::<gateway::Gateway>().shutdown();
-                // Open transcription sockets end with the app, not at the server's timeout.
-                app.state::<stt_stream::Sessions>().close_all();
-                app.state::<serve::Server>().shutdown();
-                app.state::<frontend::DevServer>().shutdown();
-                app.state::<pty::Registry>().end_all();
-                // The resident voice hosts, killed and not left to notice the
-                // closed pipe: 219 MB of Kokoro and a Piper process do not wait for
-                // the EOF of a stdin nobody writes to again.
-                app.state::<tts::KokoroState>().stop();
+                end_everything(app);
             }
         });
+}
+
+/// What ADE ends on its way out: on `RunEvent::Exit`, and before an update's installer takes over (`update.rs`), where
+/// the updater's `exit(0)` means that event never comes.
+pub(crate) fn end_everything(app: &tauri::AppHandle) {
+    use tauri::Manager;
+    // The net under the page, which waits for a take before it closes or updates: the process ending would kill the
+    // thread inside `encoder.finish()` and lose the MP4. With a limit, because `RunEvent::Exit` is on the main thread.
+    app.state::<record::Recorder>().wait_for_take(std::time::Duration::from_secs(60));
+    app.state::<gateway::Gateway>().shutdown();
+    // Open transcription sockets end with the app, not at the server's timeout.
+    app.state::<stt_stream::Sessions>().close_all();
+    app.state::<serve::Server>().shutdown();
+    app.state::<frontend::DevServer>().shutdown();
+    app.state::<pty::Registry>().end_all();
+    // The resident voice hosts, killed and not left to notice the
+    // closed pipe: 219 MB of Kokoro and a Piper process do not wait for
+    // the EOF of a stdin nobody writes to again.
+    app.state::<tts::KokoroState>().stop();
 }
 
 #[cfg(test)]

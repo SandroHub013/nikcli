@@ -284,11 +284,19 @@ import { pickByQuota } from "../session/quota-pick"
 import { freshSharedQuota } from "../session/quota-store"
 import { botLaunch } from "../bots/store"
 import { buildCommands, guardedBySheet, keepsPaletteOpen, parseDesignVariantCommand } from "./commands"
-import { createRecorder, eventsPathFor, micPathFor, voicePathFor, type StartOptions } from "../record/recorder"
+import {
+  createRecorder,
+  eventsPathFor,
+  micPathFor,
+  TAKE_CLOSE_LIMIT_MS,
+  voicePathFor,
+  type StartOptions,
+} from "../record/recorder"
 import { startMicTake } from "../record/mic"
 import { exportPromo } from "../record/export"
 import { RECORD_VERBS, runRecordRequest, type RecordConsent } from "../record/record-panel"
 import { RecordConsentDialog } from "../record/consent-dialog"
+import { updateInSteps } from "../update/steps"
 import { UpdateDialog } from "../update/update-dialog"
 import { BRAND } from "../brand"
 import { coverSecrets } from "../record/sensitive"
@@ -1338,6 +1346,16 @@ export function Workbench() {
    * The folder is not made a write root: Rust writes and serves only the
    * files of the takes it started (`record_write`, `ade-media`).
    */
+  /*
+   * A take still finishing, waited for before ADE closes or updates: finalising runs off the window's thread, so the
+   * user can press X meanwhile, and the process ending would lose the video and the tracks written after it.
+   */
+  const takeFinished = async () => {
+    if (recorder.state().status !== "stopping") return
+    report(t("record.closingFirst"))
+    await Promise.race([recorder.settled(), new Promise((resolve) => setTimeout(resolve, TAKE_CLOSE_LIMIT_MS))])
+  }
+
   const startRecording = async (target: Parameters<typeof recorder.start>[0], options: StartOptions) => {
     if (!recordDir() && !(await pickRecordDir())) return translate(options.language ?? locale(), "record.noFolder")
     return recorder.start(target, options)
@@ -3778,8 +3796,8 @@ export function Workbench() {
     take: mailPart((host) => takeMail(host)),
     move: mailPart((host) => moveMail(host)),
     watch: mailPart((host) => watchMail(host)),
-    // Stops the timer and the native signal alike while an update installs.
-    paused: () => updating(),
+    // Stops the timer and the native signal alike while an update installs: not during its download (`updateInSteps`).
+    paused: () => installingUpdate(),
     onStuck: (part, afterMs) => {
       console.error(`ADE: la posta (${part}) non ha finito in ${afterMs} ms`)
       report(t("mail.stepStuck"))
@@ -5422,6 +5440,8 @@ export function Workbench() {
    * release page, so the notice is never a dead end.
    */
   const [updating, setUpdating] = createSignal(false)
+  /** The download is done and the install is on its way: the mail has stopped. */
+  const [installingUpdate, setInstallingUpdate] = createSignal(false)
   /*
    * How far the download is, from the Rust side: the only sign of life ADE
    * gives between «Aggiorna e riavvia» and the window closing, so it must be
@@ -5507,16 +5527,28 @@ export function Workbench() {
     setUpdateError(undefined)
     setUpdateProgress(undefined)
     setUpdating(true)
-    autosave.flush()
-    // The mail waiting for a session is lost with the process otherwise.
-    persistMail()
-    // localStorage reaches WebView2's disk store a moment after setItem.
-    await new Promise((resolve) => setTimeout(resolve, 1500))
     try {
       const { invoke } = await import("@tauri-apps/api/core")
-      await invoke("ade_update_install")
+      await updateInSteps({
+        download: () => invoke("ade_update_download"),
+        settle: () => {
+          // A take still recording would be left a file nobody can play. Stopping does nothing if none is, and
+          // `takeFinished` is what puts a limit on the wait and says why ADE is not closing yet.
+          void recorder.stop().then((problem) => problem && report(problem))
+          return takeFinished()
+        },
+        stopMail: () => setInstallingUpdate(true),
+        save: () => {
+          autosave.flush()
+          // The mail waiting for a session is lost with the process otherwise.
+          persistMail()
+        },
+        waitForDisk: () => new Promise((resolve) => setTimeout(resolve, 1500)),
+        install: () => invoke("ade_update_install"),
+      })
     } catch (error) {
       setUpdating(false)
+      setInstallingUpdate(false)
       setUpdateProgress(undefined)
       setUpdateError(String(error))
       showUpdate()
@@ -7024,8 +7056,9 @@ export function Workbench() {
           } catch {}
           if (isHandlingClose) return
           isHandlingClose = true
-          const closeForGood = () =>
-            closeAfterSaving({
+          const closeForGood = async () => {
+            await takeFinished()
+            return closeAfterSaving({
               flush: () => autosave.flush(),
               close: async () => {
                 try {
@@ -7037,6 +7070,7 @@ export function Workbench() {
                 }
               },
             })
+          }
 
           try {
             const working = countWorkingSessions(wb().panes, running)

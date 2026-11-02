@@ -578,6 +578,59 @@ pub trait Synth: Send {
 #[derive(Default)]
 pub struct Kokoro {
     child: Mutex<Option<Box<dyn Synth>>>,
+    pub(crate) switch: KillSwitch,
+}
+
+/**
+ * The way to end the host without waiting for the sentence it is working on.
+ *
+ * A synthesis holds the child's lock for the whole sentence: the start and the handshake (up to 90 s), then the
+ * sentence (up to 45 s). A stop that waited for the lock, on the window's thread, froze ADE for all of that: no
+ * repaint and no IPC, so no mail either (RS-2). The kill therefore lives out here. A sentence whose host dies returns
+ * at once, with an error, and clears the child's place itself.
+ *
+ * The count is for the moment before there is a process to kill: a host started for a sentence asked before the last
+ * stop is ended as soon as it exists.
+ */
+#[derive(Default)]
+pub struct KillSwitch {
+    presses: std::sync::atomic::AtomicU64,
+    kill: Mutex<Option<Box<dyn Fn() + Send>>>,
+}
+
+impl KillSwitch {
+    fn slot(&self) -> std::sync::MutexGuard<'_, Option<Box<dyn Fn() + Send>>> {
+        self.kill.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// Kills the host, if there is one. Never waits for a sentence.
+    pub(crate) fn press(&self) {
+        self.presses.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if let Some(kill) = self.slot().as_ref() {
+            kill();
+        }
+    }
+
+    /// What a sentence notes before it queues for the lock.
+    fn ticket(&self) -> u64 {
+        self.presses.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    fn pressed_since(&self, ticket: u64) -> bool {
+        self.ticket() != ticket
+    }
+
+    /// Gives the switch the new host's kill. False, with the kill already done, if a stop came after `ticket`.
+    fn arm(&self, kill: Box<dyn Fn() + Send>, ticket: u64) -> bool {
+        // In this order against `press`, which counts and then reads the slot: one of the two sees the other.
+        let mut slot = self.slot();
+        let late = self.pressed_since(ticket);
+        if late {
+            kill();
+        }
+        *slot = Some(kill);
+        !late
+    }
 }
 
 impl Kokoro {
@@ -647,9 +700,22 @@ pub fn error_in(line: &str) -> Option<String> {
 
 /* -------------------------------------------------------------- the real child */
 
+/// The process, shared with the `KillSwitch`. This lock is held for a kill or a look at the exit, never for a sentence.
+type SharedChild = std::sync::Arc<Mutex<std::process::Child>>;
+
+fn locked(child: &SharedChild) -> std::sync::MutexGuard<'_, std::process::Child> {
+    child.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+fn end(child: &SharedChild) {
+    let mut child = locked(child);
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
 /// The resident process, with its pipes: one line out, one line in.
 struct Local {
-    child: std::process::Child,
+    child: SharedChild,
     stdin: std::process::ChildStdin,
     rx: std::sync::mpsc::Receiver<std::io::Result<String>>,
     /// True from the handshake until the first answer: the host loads the model
@@ -659,8 +725,7 @@ struct Local {
 
 impl Drop for Local {
     fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        end(&self.child);
     }
 }
 
@@ -709,12 +774,11 @@ impl Synth for Local {
     }
 
     fn alive(&mut self) -> bool {
-        matches!(self.child.try_wait(), Ok(None))
+        matches!(locked(&self.child).try_wait(), Ok(None))
     }
 
     fn stop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        end(&self.child);
     }
 }
 
@@ -724,7 +788,7 @@ impl Synth for Local {
 /// one sends fields ADE does not read, and a mismatch found at the handshake is a
 /// sentence in a log while a mismatch found on a reply is a sentence read in the
 /// wrong voice.
-fn start(root: &Path) -> Result<Box<dyn Synth>, String> {
+fn start(root: &Path, switch: &KillSwitch, ticket: u64) -> Result<Box<dyn Synth>, String> {
     use std::process::{Command, Stdio};
     let exe = host_exe(root);
     if !exe.is_file() {
@@ -766,7 +830,13 @@ fn start(root: &Path) -> Result<Box<dyn Synth>, String> {
     let rx = super::spawn_stdout_reader(stdout);
     // Le pipe sono prese: da qui la guardia puo' tenere il figlio, e copre le
     // uscite per errore che vengono dopo.
-    let mut spawned = Guarded::new(&mut child);
+    let child: SharedChild = std::sync::Arc::new(Mutex::new(child));
+    let mut spawned = Guarded::new(child.clone());
+    // Before the wait below, which is the longest of all: a stop ends a host that is still loading its model.
+    let killed = child.clone();
+    if !switch.arm(Box::new(move || { let _ = locked(&killed).kill(); }), ticket) {
+        return Err(super::FRASE_ANNULLATA.into());
+    }
     let first = match rx.recv_timeout(std::time::Duration::from_secs(90)) {
         Ok(Ok(line)) => line,
         _ => return Err("L'host di Kokoro non ha detto la sua versione.".into()),
@@ -801,13 +871,13 @@ fn start(root: &Path) -> Result<Box<dyn Synth>, String> {
 /// dropped on its own is a process that keeps running, and the host is 219 MB of
 /// model. `disarm` is called when the child has become the `Local` that owns it,
 /// and after that the guard does nothing and the `Local`'s own `Drop` applies.
-struct Guarded<'a> {
-    child: &'a mut std::process::Child,
+struct Guarded {
+    child: SharedChild,
     armed: bool,
 }
 
-impl<'a> Guarded<'a> {
-    fn new(child: &'a mut std::process::Child) -> Self {
+impl Guarded {
+    fn new(child: SharedChild) -> Self {
         Self { child, armed: true }
     }
 
@@ -816,11 +886,10 @@ impl<'a> Guarded<'a> {
     }
 }
 
-impl Drop for Guarded<'_> {
+impl Drop for Guarded {
     fn drop(&mut self) {
         if self.armed {
-            let _ = self.child.kill();
-            let _ = self.child.wait();
+            end(&self.child);
         }
     }
 }
@@ -876,11 +945,14 @@ pub trait Spawner: Send + Sync {
 }
 
 /// The process, for real.
-struct RealSpawn;
+struct RealSpawn<'a> {
+    switch: &'a KillSwitch,
+    ticket: u64,
+}
 
-impl Spawner for RealSpawn {
+impl Spawner for RealSpawn<'_> {
     fn spawn(&self, root: &Path) -> Result<Box<dyn Synth>, String> {
-        start(root)
+        start(root, self.switch, self.ticket)
     }
 }
 
@@ -897,8 +969,34 @@ pub fn speak_blocking(
     token: u64,
     locale: &str,
 ) -> Result<Vec<u8>, String> {
-    let mut guard = state.0.lock();
-    speak_locked(&mut guard, root, &RealSpawn, voice, text, token, locale)
+    let ticket = state.0.switch.ticket();
+    let spawn = RealSpawn { switch: &state.0.switch, ticket };
+    speak_unless_stopped(&state.0, ticket, root, &spawn, voice, text, token, locale)
+}
+
+/// `speak_locked`, for a sentence asked at `ticket`: a stop since then makes it an abandoned sentence, whether it was
+/// still queuing for the lock or lost its host on the way, and not a voice that failed.
+#[allow(clippy::too_many_arguments)]
+fn speak_unless_stopped(
+    kokoro: &Kokoro,
+    ticket: u64,
+    root: &Path,
+    spawn: &dyn Spawner,
+    voice: &str,
+    text: &str,
+    token: u64,
+    locale: &str,
+) -> Result<Vec<u8>, String> {
+    let mut guard = kokoro.lock();
+    if kokoro.switch.pressed_since(ticket) {
+        return Err(super::FRASE_ANNULLATA.into());
+    }
+    let spoken = speak_locked(&mut guard, root, spawn, voice, text, token, locale);
+    if spoken.is_err() && kokoro.switch.pressed_since(ticket) {
+        *guard = None;
+        return Err(super::FRASE_ANNULLATA.into());
+    }
+    spoken
 }
 
 /// The body of `speak_blocking`, with the child already locked and the spawn given.
@@ -971,8 +1069,15 @@ fn speak_locked(
 }
 
 /// Ends the child, for the idle timer, a page reload and the exit of ADE.
+///
+/// Does not wait for a sentence in progress: that one has just lost its host, and clears the place itself.
 pub fn stop(state: &crate::tts::KokoroState) {
-    let mut guard = state.0.lock();
+    state.0.switch.press();
+    let mut guard = match state.0.child.try_lock() {
+        Ok(guard) => guard,
+        Err(std::sync::TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+        Err(std::sync::TryLockError::WouldBlock) => return,
+    };
     if let Some(child) = guard.as_mut() {
         child.stop();
     }
@@ -1382,20 +1487,21 @@ mod tests {
             // `= root(&app)` and not `root(&app)`: the second matches inside
             // `kokoro_root(&app)`, which is the call we want.
             assert!(
-                !body.contains("= root(&app)"),
+                !body.contains("= root(&app)") && !body.contains("= root(app)"),
                 "un comando di Kokoro prende la root di Piper: i 219 MB finiscono dentro tts/piper"
             );
         }
-        assert_eq!(commands, 2, "i due comandi asincroni di Kokoro: install e speak");
+        assert_eq!(commands, 3, "i comandi asincroni di Kokoro con la sua cartella: delete, install e speak");
     }
 
     /// Review area 1, MEDIO 9: l'install di Kokoro girava su un worker async, e
     /// ogni clic su «Installa» ne teneva uno per minuti. Il comando vuole un
     /// `AppHandle` e non si chiama da un test: si legge, come quello sopra.
+    /// Stop e delete (RS-2): erano sincroni, sul thread della finestra.
     #[test]
     fn i_comandi_lunghi_di_kokoro_girano_sul_pool_bloccante() {
         let source = include_str!("../tts.rs");
-        for name in ["install", "speak"] {
+        for name in ["install", "speak", "stop", "delete"] {
             let chunk = source
                 .split(&format!("pub async fn tts_local_{name}("))
                 .nth(1)
@@ -1635,6 +1741,128 @@ mod tests {
         // Un secondo stop non trova niente e non è un errore: lo stop è chiesto
         // dal timer, dal reload e dall'uscita, e le tre possono coincidere.
         stop(&state);
+        assert!(state.0.lock().is_none());
+    }
+
+    /// A host in the middle of a sentence: it answers only once the switch has killed it.
+    struct Stuck {
+        started: std::sync::mpsc::Sender<()>,
+        killed: std::sync::mpsc::Receiver<()>,
+    }
+
+    impl Synth for Stuck {
+        fn hello(&self) -> Result<u32, String> {
+            Ok(PROTOCOL)
+        }
+
+        fn say(&mut self, _: u64, _: &str, _: u32, _: &str, _: &Path) -> Result<(), String> {
+            let _ = self.started.send(());
+            let _ = self.killed.recv();
+            Err("L'host di Kokoro si è chiuso.".into())
+        }
+
+        fn alive(&mut self) -> bool {
+            true
+        }
+
+        fn stop(&mut self) {}
+    }
+
+    /// A spawner that hands over a `Stuck` and gives the switch its kill, as `start` does.
+    struct StuckSpawn {
+        state: std::sync::Arc<crate::tts::KokoroState>,
+        ticket: u64,
+        started: std::sync::mpsc::Sender<()>,
+    }
+
+    impl Spawner for StuckSpawn {
+        fn spawn(&self, _root: &Path) -> Result<Box<dyn Synth>, String> {
+            let (kill, killed) = std::sync::mpsc::channel();
+            let kill = Mutex::new(kill);
+            let armed = self.state.0.switch.arm(
+                Box::new(move || {
+                    let _ = kill.lock().unwrap().send(());
+                }),
+                self.ticket,
+            );
+            if !armed {
+                return Err(super::super::FRASE_ANNULLATA.into());
+            }
+            Ok(Box::new(Stuck { started: self.started.clone(), killed }))
+        }
+    }
+
+    /// RS-2, the freeze itself: the stop comes back while a sentence holds the lock, and the sentence ends with it.
+    #[test]
+    fn lo_stop_non_aspetta_la_frase_in_corso_e_la_frase_finisce_subito() {
+        use std::time::Duration;
+        let state = std::sync::Arc::new(crate::tts::KokoroState::default());
+        let (started_tx, started) = std::sync::mpsc::channel();
+        let ticket = state.0.switch.ticket();
+        let speaking = {
+            let state = state.clone();
+            let spawn = StuckSpawn { state: state.clone(), ticket, started: started_tx };
+            std::thread::spawn(move || {
+                let root = test_root("kokoro-stop-non-aspetta");
+                speak_unless_stopped(&state.0, ticket, &root, &spawn, "af_heart", "ciao", 1, "en-us")
+            })
+        };
+        started.recv_timeout(Duration::from_secs(10)).expect("la frase non è partita");
+
+        let (done_tx, done) = std::sync::mpsc::channel();
+        {
+            let state = state.clone();
+            std::thread::spawn(move || {
+                stop(&state);
+                let _ = done_tx.send(());
+            });
+        }
+        done.recv_timeout(Duration::from_secs(5)).expect("lo stop ha aspettato la frase");
+
+        let spoken = speaking.join().expect("la frase");
+        assert_eq!(spoken.unwrap_err(), super::super::FRASE_ANNULLATA, "abbandonata, non una voce rotta");
+        assert!(state.0.lock().is_none(), "la frase libera il posto del bambino morto");
+    }
+
+    /// The moment before there is a process: the stop finds nothing to kill, and the host it missed ends as it starts.
+    #[test]
+    fn un_host_nato_dopo_lo_stop_finisce_appena_esiste() {
+        let switch = KillSwitch::default();
+        let ticket = switch.ticket();
+        switch.press();
+        let killed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let kill = {
+            let killed = killed.clone();
+            Box::new(move || killed.store(true, std::sync::atomic::Ordering::SeqCst))
+        };
+        assert!(!switch.arm(kill, ticket));
+        assert!(killed.load(std::sync::atomic::Ordering::SeqCst));
+    }
+
+    /// A sentence asked after the stop is a new one: the switch does not stop the next reply too.
+    #[test]
+    fn una_frase_chiesta_dopo_lo_stop_parla() {
+        let state = crate::tts::KokoroState::default();
+        stop(&state);
+        let root = test_root("kokoro-dopo-lo-stop");
+        let spawn = FakeSpawn { asked: Default::default() };
+        let ticket = state.0.switch.ticket();
+        let spoken = speak_unless_stopped(&state.0, ticket, &root, &spawn, "af_heart", "ciao", 2, "en-us");
+        assert_eq!(spoken.expect("la frase"), b"ciao");
+    }
+
+    /// A sentence still queuing behind the lock when the stop came does not start a host of 219 MB.
+    #[test]
+    fn una_frase_in_coda_prima_dello_stop_non_avvia_un_host() {
+        let state = crate::tts::KokoroState::default();
+        let ticket = state.0.switch.ticket();
+        stop(&state);
+        let root = test_root("kokoro-in-coda");
+        let asked: std::sync::Arc<std::sync::Mutex<Vec<(u64, String, u32, String)>>> = Default::default();
+        let spawn = FakeSpawn { asked: asked.clone() };
+        let spoken = speak_unless_stopped(&state.0, ticket, &root, &spawn, "af_heart", "ciao", 3, "en-us");
+        assert_eq!(spoken.unwrap_err(), super::super::FRASE_ANNULLATA);
+        assert!(asked.lock().unwrap().is_empty());
         assert!(state.0.lock().is_none());
     }
 

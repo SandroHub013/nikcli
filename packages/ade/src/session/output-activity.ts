@@ -131,7 +131,7 @@ export function stampingInput<
   const write = session.write.bind(session)
   session.write = (data: string) => {
     stamp()
-    write(data)
+    return write(data)
   }
   const resize = session.resize?.bind(session)
   if (resize) {

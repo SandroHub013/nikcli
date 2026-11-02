@@ -43,21 +43,30 @@ export function pressEnter(write: (data: string) => void, permissionOpen: () => 
  * `typedDuring` too, after the wait: the user who starts writing in the 2.5 to
  * 8 s between ADE's text and its Enter would have their half line sent with
  * it (review area 2). The Enter is held, as for a prompt, and the text stays.
+ *
+ * `write` answers false when the pane refused the bytes: its queue is full, or
+ * its pipe broke. Text refused is `not-typed`, with no Enter: an Enter on its own
+ * would submit whatever is in the box, and the message would count as delivered.
+ * An Enter refused leaves the text in the box, `typed-no-enter`.
  */
 export async function typeThenEnter(input: {
   text: string
-  write: (data: string) => void
+  write: (data: string) => unknown
   wait: () => Promise<void>
   alive: () => boolean
   permissionOpen: () => boolean
   typedDuring?: () => boolean
 }): Promise<LineOutcome> {
   if (input.permissionOpen()) return "not-typed"
-  input.write(input.text)
+  const taken = input.write(input.text)
   await input.wait()
+  if ((await taken) === false) return "not-typed"
   if (!input.alive()) return "not-typed"
   if (input.typedDuring?.()) return "typed-no-enter"
-  return pressEnter(input.write, input.permissionOpen) ? "sent" : "typed-no-enter"
+  const entered: unknown[] = []
+  const pressed = pressEnter((data) => void entered.push(input.write(data)), input.permissionOpen)
+  if (!pressed || (await entered[0]) === false) return "typed-no-enter"
+  return "sent"
 }
 
 /**

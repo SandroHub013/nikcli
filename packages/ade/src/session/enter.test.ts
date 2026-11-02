@@ -76,6 +76,50 @@ describe("no Enter over what the user started writing during the wait (review ar
   })
 })
 
+describe("a write the pane refused (review of the 2026-11-02 audit, B2)", () => {
+  const line = (write: (data: string) => unknown) =>
+    typeThenEnter({ text: "[Messaggio da A]: ciao", write, wait: async () => {}, alive: () => true, permissionOpen: () => false })
+
+  test("the text refused: not typed, and no Enter on its own to submit whatever is in the box", async () => {
+    const written: string[] = []
+    const outcome = await line((data) => {
+      written.push(data)
+      return Promise.resolve(false)
+    })
+    expect(outcome).toBe("not-typed")
+    expect(written).toEqual(["[Messaggio da A]: ciao"])
+    // A live session: the message goes back among the held ones, and the sender is not told «ok».
+    expect(deliveryResult(outcome, true)).toBe("held")
+  })
+
+  test("the Enter refused: the text is in the box, and the line waits for an Enter", async () => {
+    const outcome = await line((data) => Promise.resolve(data !== "\r"))
+    expect(outcome).toBe("typed-no-enter")
+  })
+
+  test("both taken: sent", async () => {
+    expect(await line(() => Promise.resolve(true))).toBe("sent")
+  })
+
+  test("the answer is waited for after the wait, not instead of it", async () => {
+    const steps: string[] = []
+    const outcome = await typeThenEnter({
+      text: "ciao",
+      write: (data) => {
+        steps.push(`write ${data}`)
+        return Promise.resolve(true)
+      },
+      wait: async () => {
+        steps.push("wait")
+      },
+      alive: () => true,
+      permissionOpen: () => false,
+    })
+    expect(outcome).toBe("sent")
+    expect(steps).toEqual(["write ciao", "wait", "write \r"])
+  })
+})
+
 describe("deliveryResult", () => {
   test("not typed on a live session is held for a later round, not a closed session", () => {
     expect(deliveryResult("not-typed", true)).toBe("held")

@@ -120,6 +120,11 @@ describe("output that says an agent without hooks is working (fix 5)", () => {
     expect(written).toEqual(["a", "\r", "80x24"])
     expect(stamps).toBe(3)
   })
+
+  test("stampingInput hands back the pane's answer: a refused write is not lost on the way (B2)", async () => {
+    const session = { write: (_data: string) => Promise.resolve(false) as void | Promise<boolean> }
+    expect(await stampingInput(session, () => {}).write("ciao")).toBe(false)
+  })
 })
 
 /*

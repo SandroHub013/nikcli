@@ -145,15 +145,26 @@ fn kokoro_status(root: &std::path::Path) -> LocalStatus {
 /// host is stopped and kept until the folder is gone, so a synthesis that arrives
 /// in between cannot start a new host with the model half deleted — which is a
 /// DLL locked on Windows and a cancellation that removes half of it.
+///
+/// `async` and on the blocking pool: the child's lock may be behind a sentence, and a synchronous command waits for
+/// it on the window's thread (RS-2). The switch is pressed first, so that sentence ends now.
 #[tauri::command]
-pub fn tts_local_delete(app: tauri::AppHandle, state: tauri::State<'_, KokoroState>) -> Result<u64, String> {
-    let root = kokoro_root(&app)?;
+pub async fn tts_local_delete(app: tauri::AppHandle) -> Result<u64, String> {
+    tauri::async_runtime::spawn_blocking(move || delete_kokoro(&app))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+fn delete_kokoro(app: &tauri::AppHandle) -> Result<u64, String> {
+    let root = kokoro_root(app)?;
     let installer = app.state::<Piper>();
     let slot = installer.installer.slot(kokoro::KOKORO);
+    let state = app.state::<KokoroState>();
     // Il lock dell'installer, e da subito il lock del figlio: in quest'ordine,
     // cosi' nessuno dei due può essere messo in mezzo fra il controllo e la
     // cancellazione.
     let _install = installer.installer.hold_for_removal(&slot)?;
+    state.0.switch.press();
     let mut child = state.0.lock();
     if let Some(host) = child.as_mut() {
         host.stop();
@@ -205,11 +216,13 @@ pub async fn tts_local_speak(
     Ok(tauri::ipc::Response::new(bytes))
 }
 
-/// Ends the resident host, for the idle timer, a page reload and the exit of ADE.
+/// Ends the resident host, for the idle timer and a page reload. Off the window's thread, and it does not wait for a
+/// sentence in progress either (RS-2, `kokoro::KillSwitch`).
 #[tauri::command]
-pub fn tts_local_stop(state: tauri::State<'_, KokoroState>) -> Result<(), String> {
-    kokoro::stop(&state);
-    Ok(())
+pub async fn tts_local_stop(app: tauri::AppHandle) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || kokoro::stop(&app.state::<KokoroState>()))
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// The resident host, kept by Tauri so there is one of it for the whole app.
