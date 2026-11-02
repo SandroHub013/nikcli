@@ -12,6 +12,8 @@ export interface DesignAnswer {
   readonly words: string
   readonly at: string
   readonly by: string
+  /** The session that wrote it: an answer with one is not the user's own click (`isUsersOwnAnswer`). */
+  readonly fromPane?: string
   /** Another round asked for, not a choice. */
   readonly again?: true
 }
@@ -156,6 +158,7 @@ export function foldProposals(
           words: event.words,
           at: event.at,
           by: event.by,
+          ...(event.fromPane ? { fromPane: event.fromPane } : {}),
           ...(event.again ? { again: true as const } : {}),
         }
         current.status = event.again ? "giro" : "risposta"

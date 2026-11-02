@@ -1,5 +1,6 @@
 import { For, Show, createMemo, createSignal } from "solid-js"
-import { formatDay, formatMoment } from "./answer"
+import { designAnswerByline, formatDay, formatMoment } from "./answer"
+import { isUsersOwnAnswer } from "../decisions/answer"
 import { submitControl } from "./card"
 import { DesignCard } from "./design-card"
 import { openExternally } from "../browser/host-bridge"
@@ -205,7 +206,11 @@ export function DesignPane(props: {
                         <span data-slot="design-key">{proposal.k}</span>
                         <h3 data-slot="design-title">{proposal.title}</h3>
                         <span data-slot="design-pill" data-tone="done">
-                          {t("design.pill.answered")}
+                          {t(
+                            proposal.answer && !isUsersOwnAnswer(proposal.answer)
+                              ? "design.pill.relayed"
+                              : "design.pill.answered",
+                          )}
                         </span>
                       </header>
                       <div data-slot="design-answer">
@@ -364,7 +369,7 @@ export function deliveryText(hub: DesignHub, proposal: DesignProposal, now: Date
     return t("design.delivery.done", delivery.to, formatMoment(delivery.at, now))
   }
   if (delivery.state === "in coda") return queuedText(hub.recipient())
-  return t("design.delivery.by", proposal.answer?.by ?? "?", formatDay(proposal.answer?.at ?? "", now))
+  return designAnswerByline(proposal.answer ?? { by: "?" }, formatDay(proposal.answer?.at ?? "", now))
 }
 
 export function queuedText(recipient: RecipientStatus): string {

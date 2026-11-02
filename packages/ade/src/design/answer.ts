@@ -1,8 +1,14 @@
 import type { AnsweredDesignEvent, ReopenedDesignEvent } from "./log"
 import type { DesignProposal } from "./state"
+import { isUsersOwnAnswer } from "../decisions/answer"
 import { locale, t } from "../i18n"
 
 export const USER = "utente"
+
+/** Who chose, as the panel says it: a session is only ever reporting (`isUsersOwnAnswer`). */
+export function designAnswerByline(answer: { readonly by: string; readonly fromPane?: string }, day: string): string {
+  return t(isUsersOwnAnswer(answer) ? "design.delivery.by" : "design.delivery.relayed", answer.by, day)
+}
 
 export type SheetKey =
   | { readonly kind: "pick"; readonly index: number }

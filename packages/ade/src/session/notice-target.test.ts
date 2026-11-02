@@ -20,4 +20,11 @@ describe("a message with no session behind it (audit 0.7.7, MEDIO 6)", () => {
     expect(registerAuthor(undefined, "p3")).toBe("p3")
     expect(registerAuthor("Master", "p1")).toBe("Master")
   })
+
+  test("a session never signs as the user, whatever its pane is titled", () => {
+    for (const title of ["utente", "UTENTE", " Utente ", "u t e n t e"]) {
+      expect(registerAuthor(title, "p1")).toBe("p1")
+      expect(registerAuthor(title, "")).toBe("ade-msg")
+    }
+  })
 })

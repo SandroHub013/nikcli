@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { designAnswerByline } from "./answer"
 import { pruneOutbox, submitGate } from "./delivery"
 import { previewSize } from "./preview-plan"
 import { parseDesignLog, serializeDesignEvent, toEvent, type DesignEvent } from "./log"
@@ -387,5 +388,13 @@ describe("a preview's size (S75 point 3)", () => {
   test("malformed: 360×240", () => {
     expect(previewSize('<meta name="ade-size" content="largo">')).toEqual({ width: 360, height: 240 })
     expect(previewSize('<meta name="ade-size" content="360 per 240">')).toEqual({ width: 360, height: 240 })
+  })
+})
+
+describe("a choice a session wrote is not the user's own", () => {
+  test("the panel says who reported it", () => {
+    expect(designAnswerByline({ by: "utente" }, "oggi")).toBe(t("design.delivery.by", "utente", "oggi"))
+    expect(designAnswerByline({ by: "Master", fromPane: "p1" }, "oggi")).toBe(t("design.delivery.relayed", "Master", "oggi"))
+    expect(t("design.delivery.relayed", "Master", "oggi")).toContain("Master")
   })
 })

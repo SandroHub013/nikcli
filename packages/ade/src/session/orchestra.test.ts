@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   checkName,
+  isReservedName,
   depthOf,
   descendants,
   excludeWithAde,
@@ -17,6 +18,8 @@ import {
   isBaseRef,
   worktreeAddArgs,
 } from "./orchestra"
+import { USER as DECISIONS_USER } from "../decisions/answer"
+import { USER as DESIGN_USER } from "../design/answer"
 
 describe("names", () => {
   test("a usable name comes back trimmed", () => {
@@ -27,6 +30,19 @@ describe("names", () => {
     for (const bad of ["", "   ", "12", "web/api", 'a"b', "x".repeat(41)]) {
       expect("error" in checkName(bad)).toBe(true)
     }
+  })
+
+  test("«utente» is the user's name in the registers: no session can take it, however it is written", () => {
+    for (const reserved of ["utente", "UTENTE", " Utente ", "u t e n t e", "uténte", "ut​ente", "ｕｔｅｎｔｅ"]) {
+      expect("error" in checkName(reserved)).toBe(true)
+      expect(isReservedName(reserved)).toBe(true)
+    }
+    // The same word the registers use, in both of them.
+    expect(isReservedName(DECISIONS_USER)).toBe(true)
+    expect(isReservedName(DESIGN_USER)).toBe(true)
+    // Only the name itself.
+    expect(checkName("utente finale")).toEqual({ name: "utente finale" })
+    expect(checkName("utenti")).toEqual({ name: "utenti" })
   })
 
   test("a taken name is taken whatever the case", () => {

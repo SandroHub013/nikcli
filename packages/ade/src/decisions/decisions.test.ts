@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { answerByline, isUsersOwnAnswer } from "./answer"
 import { submitGate } from "./delivery"
 import { resetLocaleForTests } from "../i18n"
 import { parseDecisionLog, serializeDecisionEvent, toEvent, type DecisionEvent } from "./log"
@@ -447,5 +448,33 @@ describe("multiple answers (S75 point 6)", () => {
   test("the message says scelte: A + C", () => {
     const { decisions } = foldDecisions([open(), answer({ choices: ["A", "C"] })])
     expect(resolvedMessage(decisions[0]!)).toBe('risolta [k=D40] Quali — scelte: A + C — parole: "A + C"')
+  })
+})
+
+describe("an answer a session wrote is not the user's own", () => {
+  const answerOf = (event: Partial<DecisionEvent>) =>
+    foldDecisions(
+      [
+        opened("D1"),
+        { type: "risposta", k: "D1", at: at(5), by: "utente", words: "ok", ...event } as DecisionEvent,
+      ],
+      new Date(at(10)),
+    ).decisions[0]!.answer!
+
+  test("the user's click, also on a line from before this change", () => {
+    const answer = answerOf({})
+    expect(isUsersOwnAnswer(answer)).toBe(true)
+    expect(answerByline(answer, "oggi")).toBe("risposta di utente · oggi")
+  })
+
+  test("what a session recorded is told apart, and still answers the decision", () => {
+    const answer = answerOf({ by: "Master", fromPane: "p1" })
+    expect(answer.words).toBe("ok")
+    expect(isUsersOwnAnswer(answer)).toBe(false)
+    expect(answerByline(answer, "oggi")).toBe("riportata da Master · oggi")
+  })
+
+  test("a session that was called «utente» before the name was reserved is still a session", () => {
+    expect(isUsersOwnAnswer(answerOf({ by: "utente", fromPane: "p1" }))).toBe(false)
   })
 })

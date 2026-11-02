@@ -18,6 +18,7 @@
  * The request line typed into the recipient carries the reply command, so an
  * agent that has never heard of `ade-msg` can still answer.
  */
+import { isReservedName } from "./orchestra"
 
 export interface MailPane {
   id: string
@@ -1766,6 +1767,7 @@ export const USAGE_DESIGN = [
 export const USAGE_DECISIONI = [
   "ade-msg registro <decisioni|design> <aperta|risposta|rimandata|riaperta|chiusa> '<json>'",
   "  scrive un evento nel registro Decisioni o Design: il json ha i campi senza type, at e by (li mette ADE);",
+  "  by è il nome della tua sessione: una risposta scritta così nel pannello è «riportata da» te, non un clic dell'utente.",
   "  k serve, tranne per aperta. ADE controlla la riga, la scrive e dice se il tasto la mostra; rimandata solo",
   "  per decisioni. I registri si scrivono solo così. Per un design la strada semplice è ade-msg design proponi.",
   "  Il json anche da file (--file <percorso>) o da stdin (--stdin, al posto del json): da PowerShell 5.1 usa",
@@ -1876,7 +1878,10 @@ export function noticeTarget(
   return open(from) ? { pane: from } : undefined
 }
 
-/** The `by` of an event `ade-msg registro` writes: never empty, whoever sent it. */
+/**
+ * The `by` of an event `ade-msg registro` writes: never empty, whoever sent it, and never the user's own name, which
+ * a pane can still be titled by hand or by its terminal: a session cannot sign an answer as the user.
+ */
 export function registerAuthor(title: string | undefined, from: string | undefined): string {
-  return title || from || "ade-msg"
+  return (title && !isReservedName(title) ? title : "") || from || "ade-msg"
 }

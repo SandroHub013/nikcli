@@ -559,7 +559,7 @@ describe("the sheet keeps a choice made in this window", () => {
 })
 
 describe("delivery text in DesignPane (MEDIO 2)", () => {
-  test("a choice made outside ADE shows «scelta di X · giorno» instead of staying «in coda»", () => {
+  test("a choice a session recorded shows «riportata da X · giorno» instead of staying «in coda»", () => {
     const proposal: DesignProposal = {
       k: "DS10",
       title: "Navigation",
@@ -585,7 +585,7 @@ describe("delivery text in DesignPane (MEDIO 2)", () => {
       recipient: () => ({ state: "pronta" as const, id: "p1", title: "Master" }),
     } as any
 
-    expect(deliveryText(hubOutside, proposal, now)).toBe("scelta di Master · oggi")
+    expect(deliveryText(hubOutside, proposal, now)).toBe("riportata da Master · oggi")
 
     // 2. In queue: delivery state is "in coda"
     const hubQueued = {
@@ -604,7 +604,7 @@ describe("delivery text in DesignPane (MEDIO 2)", () => {
     expect(deliveryText(hubDelivered, proposal, now)).toContain("✓ consegnata a Master")
   })
 
-  test("DesignPane renders «scelta di X · giorno» for an answered proposal from outside ADE", async () => {
+  test("DesignPane renders «riportata da X · giorno» for a proposal a session answered", async () => {
     const proposal: DesignProposal = {
       k: "DS10",
       title: "Navigation",
@@ -657,7 +657,7 @@ describe("delivery text in DesignPane (MEDIO 2)", () => {
 
     const hint = host.querySelector('[data-slot="design-hint"]')
     expect(hint).not.toBeNull()
-    expect(hint?.textContent).toContain("scelta di Master")
+    expect(hint?.textContent).toContain("riportata da Master")
 
     disposePane()
     disposeHub()
