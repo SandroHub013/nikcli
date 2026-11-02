@@ -112,3 +112,48 @@ describe("the lines held for a running session are saved too, not only those of 
     expect(suspendedMailToSave(held, (id) => id === "a").map((line) => line.inbox?.id)).toEqual(["r1", "r2"])
   })
 })
+
+/*
+ * Source checks for the wiring of the audit's data-safety fixes (review of ade/dati-salvi): the pure parts have
+ * their own tests; these pin that the workbench actually uses them, in the order that matters.
+ */
+describe("the data-safety wiring in the workbench", () => {
+  const source = readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8")
+  test("a delivered message leaves storage at once, inside the loop that delivers it", () => {
+    const delivered = source.indexOf("const done = await deliverOne(host, item.id, item.message)")
+    const splice = source.indexOf("mailQueue.splice(mailQueue.indexOf(item), 1)", delivered)
+    const written = source.indexOf("persistMail()", splice)
+    const loopEnd = source.indexOf("expireOutputClaims(Date.now())", delivered)
+    expect(splice).toBeGreaterThan(delivered)
+    expect(written).toBeGreaterThan(splice)
+    expect(written).toBeLessThan(source.indexOf("    persistMail()\n    expireOutputClaims", delivered))
+    expect(loopEnd).toBeGreaterThan(written)
+  })
+
+  test("the pickup writes the queue right after taking, through intakeMail", () => {
+    expect(source).toContain("persist: persistMail,")
+    expect(source).toContain("await intakeMail({")
+  })
+
+  test("the update persists the mail and the tick waits for the install", () => {
+    const run = source.indexOf("const runUpdate = async () => {")
+    const flush = source.indexOf("autosave.flush()", run)
+    const persisted = source.indexOf("persistMail()", flush)
+    const install = source.indexOf('invoke("ade_update_install")', run)
+    expect(persisted).toBeGreaterThan(flush)
+    expect(install).toBeGreaterThan(persisted)
+    expect(source).toContain("if (updating()) return\n          mailPass++")
+  })
+
+  test("the autosave never throws, never writes over a restore, and respects the block", () => {
+    const write = source.indexOf("write: () => {\n      if (workspaceRestoring) return")
+    expect(write).toBeGreaterThan(0)
+    const block = source.indexOf("if (workspaceSaveBlocked) {", write)
+    const save = source.indexOf('localStorage.setItem("ade.workspace"', write)
+    const caught = source.indexOf("} catch {", save)
+    expect(block).toBeGreaterThan(write)
+    expect(save).toBeGreaterThan(block)
+    expect(caught).toBeGreaterThan(save)
+    expect(source).toContain("retryUnreadableCopy(localStorage, Date.now())")
+  })
+})

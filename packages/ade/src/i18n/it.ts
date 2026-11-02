@@ -397,6 +397,16 @@ export const it = {
   "decisions.waiting": "Decisioni che aspettano te",
   "workspace.unreadable":
     "Non sono riuscita a leggere le sessioni salvate (forse sono di una versione più nuova di ADE). Ne ho tenuto una copia: aggiorna ADE per riaverle.",
+  "workspace.unreadableNoCopy":
+    "Non sono riuscita a leggere le sessioni salvate e non ho potuto tenerne una copia (manca spazio). Finché non se ne libera, le sessioni di questa volta non vengono salvate.",
+  "workspace.saveFailed":
+    "Non riesco a salvare le sessioni: manca spazio nell'archivio di ADE. Chiudi le sessioni che non servono.",
+  "workspace.restore.offer": "Ho una copia delle sessioni salvate che ora riesco a leggere.",
+  "workspace.restore.action": "Ripristina le sessioni",
+  "workspace.restore.confirm": "Le sessioni attuali saranno sostituite da quelle salvate e ADE si riapre.",
+  "workspace.restore.yes": "Ripristina",
+  "workspace.restore.no": "Annulla",
+  "workspace.restore.failed": "Non sono riuscita a ripristinare le sessioni: la copia non si legge più.",
   "update.desktopOnly": "Gli aggiornamenti si controllano dall'app desktop.",
   "update.alreadyShown": (version: string) => `Già segnalato: ADE ${version} è disponibile.`,
   "update.openFailed": (problem: string) => `Impossibile aprire la pagina: ${problem}`,

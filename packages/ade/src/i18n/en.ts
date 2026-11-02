@@ -388,6 +388,15 @@ export const en: Messages = {
   "decisions.waiting": "Decisions waiting for you",
   "workspace.unreadable":
     "I could not read the saved sessions (they may come from a newer version of ADE). I kept a copy: update ADE to get them back.",
+  "workspace.unreadableNoCopy":
+    "I could not read the saved sessions and could not keep a copy (no room left). Until there is room, this run's sessions are not saved.",
+  "workspace.saveFailed": "I cannot save the sessions: ADE's storage is full. Close the sessions you do not need.",
+  "workspace.restore.offer": "I have a copy of the saved sessions that I can read now.",
+  "workspace.restore.action": "Restore the sessions",
+  "workspace.restore.confirm": "The current sessions will be replaced by the saved ones and ADE reopens.",
+  "workspace.restore.yes": "Restore",
+  "workspace.restore.no": "Cancel",
+  "workspace.restore.failed": "I could not restore the sessions: the copy can no longer be read.",
   "update.desktopOnly": "Updates are checked from the desktop app.",
   "update.alreadyShown": (version) => `Already in your notifications: ADE ${version} is available.`,
   "update.openFailed": (problem) => `Couldn't open the page: ${problem}`,

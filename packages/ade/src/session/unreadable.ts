@@ -58,9 +58,16 @@ export function keepUnreadable(store: UnreadableStore, key: string, text: string
     // Never go backwards: two copies in the same millisecond or a clock set back would overwrite or misorder.
     const last = existing.length ? Number(existing[existing.length - 1]!.slice(key.length + ".unreadable.".length)) : 0
     const at = Math.max(now, last + 1)
-    store.setItem(unreadableKey(key, at), text)
-    const all = unreadableCopies(store, key)
-    for (const name of all.slice(0, Math.max(0, all.length - MAX_UNREADABLE))) store.removeItem(name)
+    // Room first: the oldest go before the new one is written, down to what leaves space for it. The unread text stays
+    // in `key` if the write fails, so dropping an old copy cannot lose anything that is not still there.
+    for (const name of existing.slice(0, Math.max(0, existing.length - (MAX_UNREADABLE - 1)))) store.removeItem(name)
+    try {
+      store.setItem(unreadableKey(key, at), text)
+    } catch {
+      // Still no room: the other old copies go too, and it is tried once more.
+      for (const name of unreadableCopies(store, key)) store.removeItem(name)
+      store.setItem(unreadableKey(key, at), text)
+    }
     return true
   } catch {
     return false
@@ -90,4 +97,37 @@ export function readSavedWorkspace(store: UnreadableStore, now: number): SavedWo
   const state = parseWorkspace(text)
   if (state) return { state, unreadable: false, saveBlocked: false }
   return { state: undefined, unreadable: true, saveBlocked: !keepUnreadable(store, WORKSPACE_KEY, text, now) }
+}
+
+/**
+ * While the autosave is blocked for want of a copy: tries again. `true` when there is nothing left to protect, so the
+ * save may go on (the text now reads, is gone, or has its copy).
+ */
+export function retryUnreadableCopy(store: UnreadableStore, now: number): boolean {
+  const text = store.getItem(WORKSPACE_KEY)
+  if (!text || parseWorkspace(text)) return true
+  return keepUnreadable(store, WORKSPACE_KEY, text, now)
+}
+
+/** The newest kept copy that this version reads and that has sessions in it, so the bell can offer it back. */
+export function restorableCopy(store: UnreadableStore): { key: string; state: WorkspaceState } | undefined {
+  for (const key of unreadableCopies(store, WORKSPACE_KEY).reverse()) {
+    const text = store.getItem(key)
+    const state = text ? parseWorkspace(text) : undefined
+    if (state && state.panes.length > 0) return { key, state }
+  }
+  return undefined
+}
+
+/** Puts a kept copy back as the saved workspace, and drops that copy. The caller reloads. */
+export function restoreCopy(store: UnreadableStore, copyKey: string): boolean {
+  try {
+    const text = store.getItem(copyKey)
+    if (!text || !parseWorkspace(text)) return false
+    store.setItem(WORKSPACE_KEY, text)
+    store.removeItem(copyKey)
+    return true
+  } catch {
+    return false
+  }
 }

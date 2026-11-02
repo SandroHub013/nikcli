@@ -59,7 +59,7 @@ import {
 import { syncOpenRouterKey } from "../host/openrouter-key-sync"
 import { createSttStreamTransport } from "../host/stt-stream"
 import { serializeWorkspace, type WorkspaceState } from "../session/persist"
-import { readSavedWorkspace } from "../session/unreadable"
+import { readSavedWorkspace, restorableCopy, restoreCopy, retryUnreadableCopy } from "../session/unreadable"
 import { intakeMail } from "../session/mail-intake"
 import { DEFAULT_BINDINGS, FROM_TERMINALS, NOT_FROM_TEXT_FIELDS, resolveDefaultBindings } from "../keyboard/bindings"
 import { formatChord, parseChord } from "../keyboard/keymap"
@@ -919,6 +919,8 @@ export function Workbench() {
    */
   const [notices, setNotices] = createSignal<Notice[]>([])
   const [noticesOpen, setNoticesOpen] = createSignal(false)
+  // The copy of the saved sessions whose «Ripristina» is waiting for the user's yes.
+  const [restoreAsking, setRestoreAsking] = createSignal<string>()
   const [newPaneOpen, setNewPaneOpen] = createSignal(false)
   // The buttons the two menus give the focus back to on Esc (`bindMenu`).
   let newPaneButton: HTMLButtonElement | undefined
@@ -928,6 +930,19 @@ export function Workbench() {
   const report = (text: string, kind: NoticeKind = "error", paneId?: string) => {
     setNotice(text)
     setNotices((list) => addNotice(list, { kind, text, at: Date.now(), ...(paneId ? { paneId } : {}) }))
+  }
+  /** The kept copy of the saved sessions put back as the workspace, and the page reloaded to read it. After the user's yes only. */
+  const restoreSessions = (copyKey: string) => {
+    setRestoreAsking(undefined)
+    // Nothing may write the current workbench over it, on the way out either (`pagehide`).
+    workspaceRestoring = true
+    persistMail()
+    if (!restoreCopy(localStorage, copyKey)) {
+      workspaceRestoring = false
+      report(t("workspace.restore.failed"))
+      return
+    }
+    window.location.reload()
   }
   /*
    * A bot waits for the user (the user's choice 4): a line in the bell for each new request, gone when the request is
@@ -3762,7 +3777,11 @@ export function Workbench() {
 
     for (const item of [...mailQueue]) {
       const done = await deliverOne(host, item.id, item.message)
-      if (done) mailQueue.splice(mailQueue.indexOf(item), 1)
+      if (done) {
+        mailQueue.splice(mailQueue.indexOf(item), 1)
+        // A delivered message leaves storage at once: a crash mid-pass must not type it a second time.
+        persistMail()
+      }
     }
     persistMail()
     expireOutputClaims(Date.now())
@@ -6492,6 +6511,10 @@ export function Workbench() {
 
   // True while the saved workspace could not be read and has no copy: the autosave leaves it alone (`session/unreadable.ts`).
   let workspaceSaveBlocked = false
+  // A restore of the kept copy is under way: nothing may write over it before the page reloads.
+  let workspaceRestoring = false
+  // The full-storage notice is said once until a save works again.
+  let saveFailedTold = false
 
   // Load recents and workspace on mount
   onMount(async () => {
@@ -6532,7 +6555,15 @@ export function Workbench() {
     }
     if (savedWorkspace.unreadable) {
       workspaceSaveBlocked = savedWorkspace.saveBlocked
-      report(t("workspace.unreadable"), "warning")
+      report(t(savedWorkspace.saveBlocked ? "workspace.unreadableNoCopy" : "workspace.unreadable"), "warning")
+    } else {
+      // A copy kept by an older build that this one reads: offered back, never put back by itself.
+      const copy = restorableCopy(localStorage)
+      if (copy) {
+        setNotices((list) =>
+          addNotice(list, { kind: "info", text: t("workspace.restore.offer"), restore: copy.key, at: Date.now() }),
+        )
+      }
     }
     // The messages held for a busy session when ADE closed, and the lines held for one that was running (`restoreMail`).
     await restoreMail(host)
@@ -6656,12 +6687,25 @@ export function Workbench() {
     // them.
     changed: revision,
     write: () => {
-      // The save that could not be read has no copy: it stays as it is rather than become an empty one.
-      if (workspaceSaveBlocked) return
+      if (workspaceRestoring) return
+      // The save that could not be read has no copy: it is tried again, and stays as it is until it has one.
+      if (workspaceSaveBlocked) {
+        if (!retryUnreadableCopy(localStorage, Date.now())) return
+        workspaceSaveBlocked = false
+      }
       // Unwrapped: serialising walks every pane and every line, and doing that
       // through the store's proxy would subscribe whatever happens to be
       // tracking to the entire workbench.
-      localStorage.setItem("ade.workspace", serializeWorkspace(toWorkspaceState(unwrap(wbStore))))
+      try {
+        localStorage.setItem("ade.workspace", serializeWorkspace(toWorkspaceState(unwrap(wbStore))))
+        saveFailedTold = false
+      } catch {
+        // Full storage: said once. It must not escape (a timer or `pagehide` has nobody to catch it, and `runUpdate` would stop).
+        if (!saveFailedTold) {
+          saveFailedTold = true
+          report(t("workspace.saveFailed"))
+        }
+      }
     },
   })
 
@@ -9990,6 +10034,26 @@ export function Workbench() {
                         {(notice) => (
                           <div data-slot="ade-notice-row" data-kind={notice.kind}>
                             <span data-slot="ade-notice-text">{notice.text}</span>
+                            <Show when={notice.restore}>
+                              {(copy) => (
+                                <Show
+                                  when={restoreAsking() === copy()}
+                                  fallback={
+                                    <button type="button" data-slot="ade-notice-link" onClick={() => setRestoreAsking(copy())}>
+                                      {t("workspace.restore.action")}
+                                    </button>
+                                  }
+                                >
+                                  <span data-slot="ade-notice-text">{t("workspace.restore.confirm")}</span>
+                                  <button type="button" data-slot="ade-notice-link" onClick={() => restoreSessions(copy())}>
+                                    {t("workspace.restore.yes")}
+                                  </button>
+                                  <button type="button" data-slot="ade-notice-link" onClick={() => setRestoreAsking(undefined)}>
+                                    {t("workspace.restore.no")}
+                                  </button>
+                                </Show>
+                              )}
+                            </Show>
                             <Show when={notice.bot}>
                               {(bot) => (
                                 <button

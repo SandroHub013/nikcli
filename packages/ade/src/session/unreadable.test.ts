@@ -1,10 +1,21 @@
 import { describe, expect, test } from "bun:test"
 import { serializeWorkspace, type WorkspaceState } from "./persist"
-import { MAX_UNREADABLE, WORKSPACE_KEY, keepUnreadable, readSavedWorkspace, unreadableCopies } from "./unreadable"
+import {
+  MAX_UNREADABLE,
+  WORKSPACE_KEY,
+  keepUnreadable,
+  readSavedWorkspace,
+  restorableCopy,
+  restoreCopy,
+  retryUnreadableCopy,
+  unreadableCopies,
+} from "./unreadable"
 
 class FakeStore {
   data = new Map<string, string>()
   full = false
+  /** Room for this many characters in all; 0 = unlimited. */
+  room = 0
   get length() {
     return this.data.size
   }
@@ -16,6 +27,11 @@ class FakeStore {
   }
   setItem(k: string, v: string) {
     if (this.full) throw new Error("QuotaExceededError")
+    if (this.room) {
+      let used = v.length
+      for (const [name, text] of this.data) if (name !== k) used += text.length
+      if (used > this.room) throw new Error("QuotaExceededError")
+    }
     this.data.set(k, v)
   }
   removeItem(k: string) {
@@ -88,5 +104,93 @@ describe("keepUnreadable", () => {
     keepUnreadable(store, WORKSPACE_KEY, "a", 100)
     keepUnreadable(store, WORKSPACE_KEY, "b", 50)
     expect(unreadableCopies(store, WORKSPACE_KEY).map((name) => store.getItem(name))).toEqual(["a", "b"])
+  })
+})
+
+describe("when there is little room", () => {
+  test("the oldest copy goes before the new one is written, so a full store still takes it", () => {
+    const store = new FakeStore()
+    const text = "x".repeat(100)
+    for (let i = 1; i <= MAX_UNREADABLE; i++) store.setItem(`${WORKSPACE_KEY}.unreadable.${i}`, `${i}${text}`)
+    store.room = text.length * 4 + 20
+    expect(keepUnreadable(store, WORKSPACE_KEY, `new${text}`, 99)).toBe(true)
+    expect(unreadableCopies(store, WORKSPACE_KEY)).toHaveLength(MAX_UNREADABLE)
+    expect(store.getItem(`${WORKSPACE_KEY}.unreadable.99`)).toBe(`new${text}`)
+  })
+
+  test("with no room even then, the other old copies go and it is tried once more", () => {
+    const store = new FakeStore()
+    const text = "y".repeat(100)
+    store.setItem(`${WORKSPACE_KEY}.unreadable.1`, `a${text}`)
+    store.setItem(`${WORKSPACE_KEY}.unreadable.2`, `b${text}`)
+    store.room = text.length * 2 + 10
+    expect(keepUnreadable(store, WORKSPACE_KEY, `c${text}`, 5)).toBe(true)
+    expect(unreadableCopies(store, WORKSPACE_KEY).map((name) => store.getItem(name)?.[0])).toEqual(["c"])
+  })
+
+  test("a blocked save is tried again and lets go once the copy exists", () => {
+    const store = new FakeStore()
+    store.setItem(WORKSPACE_KEY, future)
+    store.full = true
+    expect(readSavedWorkspace(store, 1).saveBlocked).toBe(true)
+    expect(retryUnreadableCopy(store, 2)).toBe(false)
+    store.full = false
+    expect(retryUnreadableCopy(store, 3)).toBe(true)
+    expect(unreadableCopies(store, WORKSPACE_KEY)).toHaveLength(1)
+  })
+
+  test("nothing to protect: the retry lets the save go on", () => {
+    const store = new FakeStore()
+    expect(retryUnreadableCopy(store, 1)).toBe(true)
+    store.setItem(WORKSPACE_KEY, serializeWorkspace(readable([])))
+    expect(retryUnreadableCopy(store, 2)).toBe(true)
+  })
+})
+
+function readable(panes: unknown[]): WorkspaceState {
+  return { version: 4, panes, browsers: [], currentView: "sessions", sidebarWidth: 240 } as unknown as WorkspaceState
+}
+
+/*
+ * Roll back, go forward: the old build copied the sessions and saved an empty workbench; the new build reads the empty
+ * one fine. The copy is offered back, and put back only when asked for.
+ */
+describe("getting the sessions back", () => {
+  const sessions = (version: number) =>
+    JSON.stringify({ version, panes: [{ id: "p1", title: "kept", status: "idle" }], browsers: [] })
+
+  test("a kept copy that reads now is offered, newest first, and empty ones are not", () => {
+    const store = new FakeStore()
+    const older = serializeWorkspace(readable([{ id: "p0", title: "old", status: "idle" }]))
+    store.setItem(`${WORKSPACE_KEY}.unreadable.1`, older)
+    store.setItem(`${WORKSPACE_KEY}.unreadable.2`, serializeWorkspace(readable([])))
+    store.setItem(`${WORKSPACE_KEY}.unreadable.3`, future)
+    expect(restorableCopy(store)?.key).toBe(`${WORKSPACE_KEY}.unreadable.1`)
+  })
+
+  test("nothing is offered while the copies still cannot be read", () => {
+    const store = new FakeStore()
+    store.setItem(`${WORKSPACE_KEY}.unreadable.1`, future)
+    expect(restorableCopy(store)).toBeUndefined()
+  })
+
+  test("restoring writes the copy as the workspace and drops the copy; reading it back has the sessions", () => {
+    const store = new FakeStore()
+    store.setItem(WORKSPACE_KEY, serializeWorkspace(readable([])))
+    store.setItem(`${WORKSPACE_KEY}.unreadable.1`, serializeWorkspace(readable([{ id: "p1", title: "kept", status: "idle" }])))
+    const copy = restorableCopy(store)!
+    expect(readSavedWorkspace(store, 9).state?.panes).toHaveLength(0)
+    expect(restoreCopy(store, copy.key)).toBe(true)
+    expect(unreadableCopies(store, WORKSPACE_KEY)).toHaveLength(0)
+    expect(readSavedWorkspace(store, 10).state?.panes).toHaveLength(1)
+  })
+
+  test("a copy that no longer reads is not put over the workspace", () => {
+    const store = new FakeStore()
+    const good = serializeWorkspace(readable([{ id: "p1", title: "now", status: "idle" }]))
+    store.setItem(WORKSPACE_KEY, good)
+    store.setItem(`${WORKSPACE_KEY}.unreadable.1`, sessions(99))
+    expect(restoreCopy(store, `${WORKSPACE_KEY}.unreadable.1`)).toBe(false)
+    expect(store.getItem(WORKSPACE_KEY)).toBe(good)
   })
 })
