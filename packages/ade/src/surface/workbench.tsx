@@ -10643,7 +10643,7 @@ export function Workbench() {
                 when={gridPanes().length > 0 && !starting()}
                 fallback={
                   <SessionNew
-                    workspace={project()?.name || "workspace"}
+                    workspace={project()?.name || t("new.unnamedProject")}
                     path={project()?.root || ""}
                     /* Cancelling is only offered when there is something to go
                        back to; on an empty workbench it would lead nowhere. */

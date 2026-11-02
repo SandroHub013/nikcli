@@ -1,3 +1,4 @@
+import { t } from "../i18n"
 import { currentAgentId } from "../session/legacy-agent-id"
 /**
  * The agents ADE can start, and how to start them.
@@ -90,7 +91,10 @@ export const AGENTS: AgentOption[] = [
   { id: "t3", label: "T3 Code", command: "t3", kind: "app" },
   {
     id: "terminal",
-    label: "Terminal",
+    // The pane's own word for it («Terminale»), in the language of the moment.
+    get label() {
+      return t("paneTitle.shell")
+    },
     // Not an agent: the shell a workbench preset drops into its second slot.
     command: systemShell(),
   },

@@ -240,9 +240,10 @@ export const it = {
   "pane.tree.stale": "Albero isolato dall'ultimo commit: le modifiche non salvate non ci sono",
   "pane.tree.noDeps": "Albero isolato senza dipendenze collegate: l'agente può modificare ma non eseguire",
   "pane.tree.project": "Nessuna copia di lavoro: l'agente lavora direttamente nel progetto",
-  "pane.tree.preparing": "Preparazione albero…",
-  "pane.tree.preparing.short": "preparazione albero…",
+  "pane.tree.preparing": "Preparazione della copia di lavoro…",
+  "pane.tree.preparing.short": "preparazione…",
   "pane.session": "Sessione",
+  "pane.tree.branch": (branch: string) => `Branch ${branch}`,
   "pane.renameTip": "Doppio clic per rinominare",
   "pane.name": "Nome della sessione",
   "pane.quota": "quota",
@@ -292,6 +293,7 @@ export const it = {
 
   // New session, session resume hooks, Agent console
   "new.title": "Nuova sessione",
+  "new.unnamedProject": "progetto",
   "new.cancel": "Annulla",
   "new.close": "Chiudi",
   "new.launch": (count: number) => (count === 1 ? "Avvia 1 sessione" : `Avvia ${count} sessioni`),
@@ -1519,6 +1521,8 @@ export const it = {
   "shots.delete.keep": "Tieni",
   "shots.delete.failed":
     "Non ho eliminato la schermata: il file è in uso o protetto. Chiudi il programma che la tiene aperta e riprova.",
+  "shots.tray.aria": (count: number) => `Schermate recenti (${count})`,
+  "shots.open.named": (name: string) => `Apri ${name}`,
   "shots.more.left": "Schermate precedenti",
   "shots.more.right": "Altre schermate",
   "shots.close": "Chiudi",

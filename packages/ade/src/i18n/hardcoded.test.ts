@@ -26,6 +26,8 @@ const BASELINE = join(import.meta.dir, "hardcoded-baseline.json")
 
 const UI_ATTRIBUTES = new Set([
   "title",
+  // The tooltip a pane draws itself (pane.tsx), the same words as its title.
+  "data-tip",
   "aria-label",
   "placeholder",
   "alt",

@@ -23,6 +23,8 @@ const SAME_IN_BOTH = new Set<string>([
   // The «No» of a permission prompt: the same word in both.
   "permission.answer.no",
   "preset.solo",
+  // «Branch» is git's word, in both.
+  "pane.tree.branch",
   "sidebar.spaces",
   "pane.quota",
   "settings.grid.auto",

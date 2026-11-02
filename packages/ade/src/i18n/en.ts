@@ -234,6 +234,7 @@ export const en: Messages = {
   "pane.tree.project": "No isolated worktree: the agent works directly in the project",
   "pane.tree.preparing": "Preparing worktree…",
   "pane.tree.preparing.short": "preparing worktree…",
+  "pane.tree.branch": (branch) => `Branch ${branch}`,
   "pane.session": "Session",
   "pane.renameTip": "Double-click to rename",
   "pane.name": "Session name",
@@ -284,6 +285,7 @@ export const en: Messages = {
 
   // New session, session resume hooks, Agent console
   "new.title": "New session",
+  "new.unnamedProject": "project",
   "new.cancel": "Cancel",
   "new.close": "Close",
   "new.launch": (count) => (count === 1 ? "Start 1 session" : `Start ${count} sessions`),
@@ -1486,6 +1488,8 @@ export const en: Messages = {
   "shots.delete.keep": "Keep",
   "shots.delete.failed":
     "I did not delete the screenshot: the file is in use or protected. Close the program that has it open and try again.",
+  "shots.tray.aria": (count) => `Recent screenshots (${count})`,
+  "shots.open.named": (name) => `Open ${name}`,
   "shots.more.left": "Earlier screenshots",
   "shots.more.right": "More screenshots",
   "shots.close": "Close",
