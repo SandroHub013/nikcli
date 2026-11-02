@@ -145,8 +145,8 @@ describe("proactive-alerts", () => {
 
     expect(spoken).toHaveLength(1)
     expect(spoken[0]).toContain("Prova-voce ha finito: tre test verdi.")
-    expect(windows).toHaveLength(1)
-    expect(windows[0].durationMs).toBe(RESPONSE_WINDOW_MS)
+    // A completion is announced and the microphone stays shut (audit MOD-16): nothing is listened to or paid for.
+    expect(windows).toHaveLength(0)
   })
 
   test("two consecutive turns of a full pane both notify", async () => {

@@ -261,10 +261,11 @@ export function createProactiveAlerts(deps: ProactiveAlertsDeps) {
           break
         }
 
-        // 2. Open single response window
-        if (event.type !== "decision" && deps.isEnabled() && !deps.isBusy?.()) {
-          const permissionParam =
-            event.type === "permission" ? { paneId: event.paneId, what: event.what, kind: event.kind } : undefined
+        // 2. Open single response window: only for a permission question, which waits for an answer. A completion
+        // is announced and nothing more: opening the microphone (and the paid STT) after every one of them was a path
+        // where voice listened and spent without a key press (audit MOD-16).
+        if (event.type === "permission" && deps.isEnabled() && !deps.isBusy?.()) {
+          const permissionParam = { paneId: event.paneId, what: event.what, kind: event.kind }
           await deps
             .openResponseWindow({
               durationMs: RESPONSE_WINDOW_MS,
