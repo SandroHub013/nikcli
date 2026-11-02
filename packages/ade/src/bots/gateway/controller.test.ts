@@ -1910,6 +1910,79 @@ describe("who a button and a revocation speak for (S13)", () => {
   })
 })
 
+describe("a queued message that never runs is acknowledged, or Rust hands it on again (BOT-1 to BOT-3)", () => {
+  /** A turn running (m1), and two more messages waiting behind it (m2, m3), none of them acknowledged yet. */
+  async function queued(extra?: { warn?: (line: string) => void }) {
+    const b = bridge()
+    const turns = fakeTurns()
+    const controller = await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+      warn: extra?.warn ?? (() => {}),
+    })
+    b.emit("primo", { id: "m1" })
+    await until("il turno", () => turns.started.length === 1)
+    b.emit("secondo", { id: "m2" })
+    b.emit("terzo", { id: "m3" })
+    await until("le code", () => b.sent.length === 2)
+    expect(b.acks.map((ack) => ack.id)).toEqual(["m1"])
+    return { b, turns, controller }
+  }
+
+  test("/ferma acknowledges the messages it drops, so a restart does not run them (BOT-1)", async () => {
+    const lines: string[] = []
+    const { b, turns } = await queued({ warn: (line) => lines.push(line) })
+    b.emit("/ferma", { id: "cmd" })
+    await until("fermato", () => b.sent.some((sent) => sent.text === t("gateway.stopped")))
+    expect(b.acks.map((ack) => ack.id).sort()).toEqual(["cmd", "m1", "m2", "m3"])
+    // The log says why, and never what the person wrote.
+    expect(lines.filter((line) => line.includes("stopped with /ferma"))).toHaveLength(2)
+    expect(lines.join("\n")).not.toContain("secondo")
+    expect(turns.started[0]!.stopped).toBe(true)
+  })
+
+  test("a revoked sender's queued messages are acknowledged, the other person's are not touched (BOT-3)", async () => {
+    const { b, controller } = await queued()
+    b.emit("di un altro", { id: "x4", sender: { id: "99", name: "Bea" } })
+    await until("anche questo in coda", () => b.sent.length === 3)
+    controller.revoke(BOT.path, "telegram", "42")
+    expect(b.acks.map((ack) => ack.id).sort()).toEqual(["m1", "m2", "m3"])
+    expect(b.acks.some((ack) => ack.id === "x4")).toBe(false)
+  })
+
+  test("switching a gateway off stops its running turn and acknowledges what it had queued (BOT-2)", async () => {
+    const lines: string[] = []
+    const { b, turns, controller } = await queued({ warn: (line) => lines.push(line) })
+    controller.off(BOT.path, "telegram")
+    expect(turns.started[0]!.stopped).toBe(true)
+    expect(b.acks.map((ack) => ack.id).sort()).toEqual(["m1", "m2", "m3"])
+    expect(lines.filter((line) => line.includes("gateway switched off"))).toHaveLength(2)
+    // Nothing is left to start once the stopped turn ends.
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    expect(turns.started).toHaveLength(1)
+  })
+
+  test("off for one platform or one bot leaves the others alone", async () => {
+    const { b, turns, controller } = await queued()
+    controller.off(BOT.path, "slack")
+    controller.off("altro-bot")
+    expect(turns.started[0]!.stopped).toBe(false)
+    expect(b.acks.map((ack) => ack.id)).toEqual(["m1"])
+    // Without a platform, every platform of the bot goes.
+    controller.off(BOT.path)
+    expect(turns.started[0]!.stopped).toBe(true)
+    expect(b.acks.map((ack) => ack.id).sort()).toEqual(["m1", "m2", "m3"])
+  })
+
+  test("stopping the controller (a reload) does not acknowledge the queue: Rust hands it to the next page", async () => {
+    const { b, controller } = await queued()
+    controller.stop()
+    expect(b.acks.map((ack) => ack.id)).toEqual(["m1"])
+  })
+})
+
 describe("the detail of a failed turn stays in ADE, where the panel shows it (S10)", () => {
   test("the last failed turn of a bot's platform is kept, with its time, without a key and not too long", async () => {
     forgetTurnFailures()

@@ -215,6 +215,12 @@ export interface GatewayController {
    * stopped without a word to them, and their questions close with no answer.
    */
   revoke: (bot: string, platform: string, sender: string) => void
+  /**
+   * The gateway of `bot` on `platform` (every platform when none is given) was switched off, its token cleared or
+   * its bot deleted: a kill switch. Its running turns stop, its queued messages are acknowledged and dropped, and its
+   * questions close with no answer. Nothing of it is left to run later.
+   */
+  off: (bot: string, platform?: string) => void
   /** Chats with a turn running, for tests and the panel. */
   busy: () => string[]
 }
@@ -528,6 +534,18 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     return reply(message, t("gateway.model.set", named(picked)))
   }
 
+  /**
+   * A message that leaves the queue without becoming a turn is acknowledged to Rust, or Rust keeps it unacknowledged
+   * and hands it on again after a reload or a restart, to run with tools: `/ferma`, a revoked sender and a gateway
+   * switched off were all that (BOT-1, BOT-2, BOT-3). The reason goes to the log; never the text.
+   */
+  const dropQueued = (message: GatewayMessage, reason: string) => {
+    warn(`gateway ${message.platform}: message ${message.id} dropped from the queue: ${reason}`)
+    // A message made by `/riprova` was never Rust's.
+    if (message.id.includes(RETRY_MARK)) return
+    void deps.bridge.ack?.(message.bot, message.platform, message.chat, message.id)?.catch?.(() => {})
+  }
+
   const command = async (message: GatewayMessage, key: string, which: string) => {
     const state = stateOf(key)
     const running = state.turn !== undefined || state.starting
@@ -539,7 +557,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       return reply(message, t("gateway.fresh"))
     }
     if (which === "stop") {
-      state.queue.length = 0
+      for (const dropped of state.queue.splice(0)) dropQueued(dropped, "stopped with /ferma")
       if (!running) return reply(message, t("gateway.nothingToStop"))
       if (state.turn) {
         state.cancelled = true
@@ -948,6 +966,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       closed = true
       unlisten()
       for (const state of chats.values()) {
+        // Not acknowledged on purpose: ADE is closing or the page is reloading, and Rust hands them on to the next page.
         state.queue.length = 0
         state.turn?.stop()
       }
@@ -959,7 +978,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
         message.bot === bot && message.platform === platform && message.sender.id === sender
       for (const state of chats.values()) {
         for (let index = state.queue.length - 1; index >= 0; index--) {
-          if (theirs(state.queue[index]!)) state.queue.splice(index, 1)
+          if (theirs(state.queue[index]!)) dropQueued(state.queue.splice(index, 1)[0]!, "sender revoked")
         }
         if (state.current && theirs(state.current)) {
           if (state.turn) state.turn.stop()
@@ -969,6 +988,22 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       for (const question of [...questions.values()]) {
         const target = question.target
         if (target.bot === bot && target.platform === platform && target.asker === sender) question.answer(undefined)
+      }
+    },
+    off: (bot, platform) => {
+      const ours = (message: GatewayMessage) => message.bot === bot && (platform === undefined || message.platform === platform)
+      for (const state of chats.values()) {
+        for (let index = state.queue.length - 1; index >= 0; index--) {
+          if (ours(state.queue[index]!)) dropQueued(state.queue.splice(index, 1)[0]!, "gateway switched off")
+        }
+        if (state.current && ours(state.current)) {
+          if (state.turn) state.turn.stop()
+          else if (state.starting) state.cancelled = true
+        }
+      }
+      for (const question of [...questions.values()]) {
+        const target = question.target
+        if (target.bot === bot && (platform === undefined || target.platform === platform)) question.answer(undefined)
       }
     },
     busy: () => [...chats.entries()].filter(([, state]) => state.turn || state.starting).map(([key]) => key),
