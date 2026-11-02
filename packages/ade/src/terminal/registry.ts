@@ -13,6 +13,7 @@
 import { FitAddon } from "@xterm/addon-fit"
 import { ImageAddon, type IImageAddonOptions } from "@xterm/addon-image"
 import { Terminal, type ITheme } from "@xterm/xterm"
+import { DEFAULT_PTY_COLS, DEFAULT_PTY_ROWS } from "./pty-defaults"
 import { registerLinks, type LinkRequest } from "./links"
 import { registerMenuClicks } from "./menu-click"
 import { rowsInside, terminalBox, watchCellSize } from "./fit-rows"
@@ -492,6 +493,13 @@ export function getTerminal(id: string): SessionTerminal {
   const initialTheme = readTheme()
   const terminal = new Terminal({
     /*
+     * The size the process is born at when the pane is not drawn (`pty_spawn`'s default), not xterm's 80x24: an
+     * undrawn terminal received the output of a process told 120 columns, and a `--resume` replayed its history
+     * into the narrower grid. The first fit in a cell reflows it (SES-9).
+     */
+    cols: DEFAULT_PTY_COLS,
+    rows: DEFAULT_PTY_ROWS,
+    /*
      * Scrollback is what makes a session reviewable after the fact. Agents are
      * verbose — a single tool call can be hundreds of lines — and the default
      * thousand would quietly eat the beginning of most runs. Five thousand keeps
@@ -548,8 +556,21 @@ export function hasTerminal(id: string): boolean {
   return terminals.has(id)
 }
 
-export function writeToTerminal(id: string, chunk: string): void {
-  getTerminal(id).terminal.write(chunk)
+/**
+ * `written` is called once xterm has parsed the chunk: the page's answer to the host's flow control (RS-7).
+ *
+ * Returns false when xterm refused the data: its `write` throws once 50 MB are waiting to be parsed (a hidden page
+ * parses on throttled timers), and the output is gone. The chunk is paid anyway, so the host is not left waiting for
+ * an answer that will never come; the caller says so, since output must not be lost silently.
+ */
+export function writeToTerminal(id: string, chunk: string, written?: () => void): boolean {
+  try {
+    getTerminal(id).terminal.write(chunk, written)
+    return true
+  } catch {
+    written?.()
+    return false
+  }
 }
 
 /**
@@ -565,15 +586,34 @@ export function cleanScreenSequence(rows: number, written: boolean): string {
   return written ? "\r\n".repeat(Math.max(1, rows)) + "[H" : ""
 }
 
-/** Gives the next process in `id` an empty screen at 1;1, the old one kept in the scrollback. */
+/**
+ * What switches off the modes a program killed by `pty_kill` leaves on in the emulator: it never got to reset them.
+ *
+ * A soft reset (DECSTR), then, one by one, the alternate buffer, mouse tracking in every form, bracketed paste, focus
+ * reports and application cursor keys. Without it a shell restarted after OpenCode or ragu got every mouse move as
+ * typed text, ADE showed the Shift+drag hint and turned off the menu clicks, and one restarted after vim began in the
+ * alternate buffer with no scrollback (audit 2026-11-02, SES-7).
+ */
+export function modeResetSequence(): string {
+  // Not 1049: on the normal buffer it sends the cursor to 1;1 (see `startOnCleanScreen`).
+  const modes = [1000, 1002, 1003, 1005, 1006, 1015, 2004, 1004, 1]
+  return "\u001b[!p" + modes.map((mode) => `\u001b[?${mode}l`).join("")
+}
+
+/** Gives the next process in `id` an empty screen at 1;1, the old one kept in the scrollback, and no mode of the old one. */
 export function startOnCleanScreen(id: string): void {
   const session = terminals.get(id)
   if (!session) return
   const { terminal } = session
   const buffer = terminal.buffer.active
-  const written = buffer.baseY > 0 || buffer.cursorY > 0 || buffer.cursorX > 0
-  const sequence = cleanScreenSequence(terminal.rows, written)
-  if (sequence) terminal.write(sequence)
+  const alternate = buffer.type === "alternate"
+  // Leaving the alternate buffer shows the normal one again, which is the screen to scroll away.
+  const written = alternate || buffer.baseY > 0 || buffer.cursorY > 0 || buffer.cursorX > 0
+  /*
+   * `?1049l` only when there is an alternate buffer to leave: on the normal one xterm restores a cursor saved at 0;0,
+   * so the newlines that scroll the screen away started from the top and left the old lines on screen (review B1).
+   */
+  terminal.write((alternate ? "\u001b[?1049l" : "") + modeResetSequence() + cleanScreenSequence(terminal.rows, written))
 }
 
 /** Prints a line of ADE's own, marked so it cannot be mistaken for the agent. */

@@ -382,6 +382,23 @@ test("resolveAgent accepts the id, the id without -code, and the label", () => {
   expect("error" in resolveAgent(agents, "gemini")).toBe(true)
 })
 
+test("«Ragu Code» without the accent still finds what is labelled «Ragù Code», and the other way round (B4)", () => {
+  const agents = [
+    { id: "ragu", label: "Ragù Code" },
+    { id: "codex", label: "Codex" },
+  ]
+  expect(resolveAgent(agents, "Ragu Code")).toEqual({ id: "ragu" })
+  expect(resolveAgent(agents, "Ragù Code")).toEqual({ id: "ragu" })
+  expect(resolveAgent([{ id: "ragu", label: "Ragu Code" }], "ragù code")).toEqual({ id: "ragu" })
+  const titled = [
+    { id: "n1-0", title: "Sessione 1 — Ragù Code", agent: "ragu", status: "idle" },
+    { id: "n2-1", title: "Sessione 2 — codex", agent: "codex", status: "working" },
+  ]
+  expect(resolveTarget(titled, "Sessione 1 — Ragu Code")).toEqual({ pane: titled[0] })
+  expect(resolveTarget(titled, "ragu code")).toEqual({ pane: titled[0] })
+  expect(resolveTarget(titled, "Ragù")).toEqual({ pane: titled[0] })
+})
+
 test("who-owns carries the file as its text", () => {
   expect(parseMessage('{"kind":"whoowns","from":"a","text":" src/a.ts "}')).toMatchObject({
     kind: "whoowns",

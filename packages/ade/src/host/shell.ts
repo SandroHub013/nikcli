@@ -98,7 +98,12 @@ export interface Host {
     /** Terminal size at start. The CLI draws its first frame against this. */
     cols?: number
     rows?: number
-    onData?: (chunk: string) => void
+    /**
+     * The raw stream. Returns `true` when it feeds a terminal and will call `written` once the terminal has written the
+     * chunk; otherwise the chunk counts as written when this returns. The host holds the child back while the page is
+     * far behind on these answers (`flow-ack.ts`).
+     */
+    onData?: (chunk: string, written: () => void) => boolean | void
     onLine: (line: string, stream: "out" | "err") => void
     onExit: (code: number | null) => void
     /**
@@ -473,7 +478,9 @@ export { stripAnsi } from "./ansi"
 
 import { openReclaimed, sealForPane, sealForRequest } from "../session/mail-seal"
 import { createLineAccumulator } from "./line-stream"
+import { DEFAULT_PTY_COLS, DEFAULT_PTY_ROWS } from "../terminal/pty-defaults"
 import { orderedWrites } from "./ordered-writes"
+import { createAckBatcher, deliverChunk } from "./flow-ack"
 import type { TokenUsage } from "../session/shared"
 import type { InstallProgress, PackStatus } from "@ragu/voice/light"
 import { keyError, type KeyDraft, type KeyInfo } from "../secrets/keys"
@@ -641,6 +648,8 @@ export async function getHost(): Promise<Host | undefined> {
       const id = `pty-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
       let dead = false
+      // Batched: one call per chunk would be up to 62 a second for a pane that only prints a spinner (review, RS-7).
+      const ackBatch = createAckBatcher((bytes) => void invoke("pty_ack", { id, bytes }).catch(() => undefined))
       const lineStream = createLineAccumulator()
       const unlisten: Array<() => void> = []
 
@@ -659,8 +668,8 @@ export async function getHost(): Promise<Host | undefined> {
          *
          * Must match `data_topic` in `src-tauri/src/pty.rs`.
          */
-        await listen<{ id: string; data: string }>(`pty:data:${id}`, (event) => {
-          onData?.(event.payload.data)
+        await listen<{ id: string; data: string; bytes?: number }>(`pty:data:${id}`, (event) => {
+          deliverChunk(event.payload, onData, ackBatch)
           /*
            * The second reading of the same bytes. Escape sequences are removed
            * and the remainder split on newlines, so the parts of ADE that only
@@ -689,8 +698,8 @@ export async function getHost(): Promise<Host | undefined> {
           command,
           args,
           cwd,
-          cols: cols ?? 120,
-          rows: rows ?? 30,
+          cols: cols ?? DEFAULT_PTY_COLS,
+          rows: rows ?? DEFAULT_PTY_ROWS,
           link: link ?? null,
           pane: pane ?? null,
           paneToken: paneToken ?? null,

@@ -1,4 +1,4 @@
-import { locale, translate, type Locale } from "../i18n"
+import { locale, translate, type Locale, bcp47 } from "../i18n"
 /**
  * Recording a video of ADE in use (S36).
  *
@@ -230,7 +230,7 @@ export function qualityLabel(level: QualityLevel, language: Locale = locale()): 
 
 /** "circa 66 MB al minuto", as it is written beside the choice, in the interface language. */
 export function sizePerMinute(level: QualityLevel, language: Locale = locale()): string {
-  const rounded = new Intl.NumberFormat(language === "it" ? "it-IT" : "en-US", { maximumFractionDigits: 1 }).format(
+  const rounded = new Intl.NumberFormat(bcp47(language), { maximumFractionDigits: 1 }).format(
     level.megabytesPerMinute,
   )
   return translate(language, "record.sizePerMinute", rounded)

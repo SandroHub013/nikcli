@@ -64,6 +64,23 @@ describe("parseUtterance", () => {
     })
   })
 
+  describe("«Cerca comandi», the palette's name (B5)", () => {
+    test("the name on screen is understood, and every older phrase still opens it", () => {
+      for (const phrase of ["apri cerca comandi", "cerca comandi", "apri la tavolozza", "apri tavolozza", "apri palette"]) {
+        const res = parseUtterance(phrase)
+        expect([phrase, res.outcome, res.intent?.intent]).toEqual([phrase, "matched", "palette.open"])
+      }
+    })
+
+    test("«cerca file X» is still a file search, not the palette", () => {
+      expect(parseUtterance("cerca file parser").intent?.intent).not.toBe("palette.open")
+    })
+
+    test("the readback and the spoken answer say Cerca comandi, not tavolozza", () => {
+      expect(parseUtterance("apri cerca comandi").intent?.readback).toBe("Apro Cerca comandi")
+    })
+  })
+
   describe("slot extraction", () => {
     test("«tema chiaro» and «tema scuro» name the theme they want", () => {
       expect(parseUtterance("tema chiaro").slots.text).toBe("light")

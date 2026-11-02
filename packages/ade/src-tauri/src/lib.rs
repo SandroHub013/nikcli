@@ -2254,12 +2254,14 @@ async fn unregister_global_voice_shortcuts(app: tauri::AppHandle) -> Result<(), 
 /// nothing but its event-target window, and neither the log nor the exit code
 /// mentions it. Building it explicitly turns that into an error with a reason.
 fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
-    // The config always names the product (`bun run brand` writes it); the
-    // fallback reads the same brand.json, so no name is typed here.
-    let mut title = app.config().product_name.clone().unwrap_or_else(|| crate::brand::name().to_owned());
+    // The window carries the name people read (brand.json's `title`), not
+    // productName: that one stays «ADE», the installer and the updater hang
+    // off it. The test build keeps its «Test» so the two never look alike.
+    let mut title = crate::brand::title().to_owned();
     // `bun run test:app` names the worktree and branch, so with several test
     // instances open the taskbar says which is which.
     if is_test_build(app) {
+        title = format!("{title} Test");
         if let Ok(label) = std::env::var("ADE_TEST_LABEL") {
             if !label.trim().is_empty() {
                 title = format!("{title} · {}", label.trim());
@@ -2778,6 +2780,7 @@ pub fn run() {
             pty::pty_spawn,
             pty::pty_write,
             pty::pty_resize,
+            pty::pty_ack,
             pty::pty_kill,
             pty::pty_which,
             pty::pty_refresh_path,

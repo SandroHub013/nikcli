@@ -54,6 +54,11 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
     return { host, statuses: await recheckAgents(host, os() === "windows") }
   })
   const agents = () => loaded()?.statuses
+  /* The agents that can start come first and the ones still to install after them, each group in its own order (UX-14). */
+  const ready = () => {
+    const all = agents() ?? []
+    return [...all.filter((status) => status.availability !== "assente"), ...all.filter((status) => status.availability === "assente")]
+  }
   const [chosen, setAgentId] = createSignal<string>()
   // The missing agent whose install panel is open.
   const [installing, setInstalling] = createSignal<string>()
@@ -149,7 +154,7 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
               )}
             </Show>
             <div data-slot="new-agents">
-              <For each={agents() ?? []}>
+              <For each={ready()}>
                 {(status: AgentStatus) => {
                   const isSelected = () => agentId() === status.agent.id
                   const isAbsent = () => status.availability === "assente"

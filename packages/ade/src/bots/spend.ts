@@ -18,7 +18,7 @@
  * can pass the cap by what one of them was allowed. The next turn is then refused.
  */
 
-import { locale, t } from "../i18n"
+import { locale, t, bcp47 } from "../i18n"
 import type { BotAccount } from "./account"
 import type { AgentFile } from "./ragu"
 import { appendMessage, applyProblem, emptyTalk, sendMessage } from "./talk"
@@ -188,7 +188,7 @@ export function noticeGiven(spend: BotSpend, now: number): BotSpend {
 
 /** Dollars in the language's way: «0,42 $», «$0.42». */
 export function dollars(value: number): string {
-  return new Intl.NumberFormat(locale() === "it" ? "it-IT" : "en-US", {
+  return new Intl.NumberFormat(bcp47(), {
     style: "currency",
     currency: "USD",
     currencyDisplay: "narrowSymbol",

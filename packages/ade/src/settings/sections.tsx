@@ -1,4 +1,5 @@
-import { For, Show, createMemo, createSignal, onMount } from "solid-js"
+import { For, Show, createMemo, createResource, createSignal, onMount } from "solid-js"
+import { BRAND } from "../brand"
 import type { AgentFile } from "../bots/ragu"
 import { listBots, resolveRoots } from "../bots/store"
 import { QUALITY_LEVELS, qualityLabel, qualityLevel, sizePerMinute, type RecordQuality } from "../record/recording"
@@ -421,6 +422,14 @@ export interface RecordVideoSectionProps {
   onPickFolder: () => void
   /** The same export `record.export` runs. */
   onExport: () => void
+  /** Whether an export is running; while it is, the button gives way to its progress and «Annulla». */
+  exporting?: () => boolean
+  /** How far the running export is, 0 to 1. */
+  exportProgress?: () => number
+  /** The export is held because the window is hidden; it goes on when the window is back. */
+  exportWaiting?: () => boolean
+  /** Stops the running export. */
+  onCancelExport?: () => void
 }
 
 /**
@@ -489,9 +498,33 @@ export function RecordVideoSection(props: RecordVideoSectionProps) {
       </ul>
 
       <div data-slot="settings-choices">
-        <button type="button" data-slot="settings-choice" data-action="record.export" onClick={() => props.onExport()}>
-          {t("settings.record.export")}
-        </button>
+        <Show
+          when={props.exporting?.()}
+          fallback={
+            <button type="button" data-slot="settings-choice" data-action="record.export" onClick={() => props.onExport()}>
+              {t("settings.record.export")}
+            </button>
+          }
+        >
+          <span
+            data-slot="settings-meta"
+            data-export="progress"
+            data-waiting={props.exportWaiting?.() ? "true" : undefined}
+            role="status"
+          >
+            {props.exportWaiting?.()
+              ? t("settings.record.export.waiting")
+              : t("settings.record.export.progress", Math.round((props.exportProgress?.() ?? 0) * 100))}
+          </span>
+          <button
+            type="button"
+            data-slot="settings-choice"
+            data-action="record.export.cancel"
+            onClick={() => props.onCancelExport?.()}
+          >
+            {t("settings.record.export.cancel")}
+          </button>
+        </Show>
       </div>
       <p data-slot="settings-meta">{t("settings.record.export.desc")}</p>
     </>
@@ -560,6 +593,47 @@ export function UpdatesSection(props: UpdatesSectionProps) {
           </div>
         )}
       </Show>
+    </>
+  )
+}
+
+/**
+ * The folder ADE keeps its own data in, as the desktop app knows it. Outside the
+ * desktop app (the browser, the tests) there is none: the row says so.
+ */
+async function appDataFolder(): Promise<string | undefined> {
+  try {
+    return await (await import("@tauri-apps/api/path")).appLocalDataDir()
+  } catch {
+    return undefined
+  }
+}
+
+export interface AboutSectionProps {
+  readonly version?: string | undefined
+  /** Where the data folder comes from; tests give their own. */
+  readonly dataFolder?: () => Promise<string | undefined>
+}
+
+/** About: the name people read, the tagline, the version and the data folder, as plain rows. */
+export function AboutSection(props: AboutSectionProps) {
+  const [folder] = createResource(() => (props.dataFolder ?? appDataFolder)())
+  return (
+    <>
+      <div data-slot="section-head">
+        <p data-slot="section-desc" data-about="name">
+          {BRAND.title}
+        </p>
+        <p data-slot="settings-meta" data-about="tagline">
+          {BRAND.tagline}
+        </p>
+      </div>
+      <p data-slot="settings-meta" data-about="version">
+        {t("settings.about.version")}: {props.version ?? t("settings.about.unknown")}
+      </p>
+      <p data-slot="settings-meta" data-about="folder">
+        {t("settings.about.folder")}: <span data-slot="settings-path">{folder.loading ? "…" : (folder() ?? t("settings.about.unknown"))}</span>
+      </p>
     </>
   )
 }

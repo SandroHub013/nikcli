@@ -63,7 +63,7 @@ export interface Runner {
 export const RUNNERS: readonly Runner[] = [
   {
     id: "ragu",
-    label: "Ragu Code",
+    label: "Ragù Code",
     command: RAGU_COMMAND,
     models: [],
     // A ragu model's efforts are its own variants, read from ragu (`effort.ts`), not a list here.

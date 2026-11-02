@@ -6,6 +6,8 @@
  * from those fields; nothing here matches the text of an error.
  */
 
+import { bcp47 } from "../i18n/locale"
+
 /** What the host knows about a binary file without reading it. */
 export interface BinaryFile {
   /** The whole file's size. */
@@ -151,7 +153,7 @@ export function formatSize(bytes: number, language: "it" | "en"): string {
     value /= 1024
     unit++
   }
-  const number = new Intl.NumberFormat(language === "it" ? "it-IT" : "en-US", { maximumFractionDigits: 1 }).format(
+  const number = new Intl.NumberFormat(bcp47(language), { maximumFractionDigits: 1 }).format(
     value,
   )
   return `${number} ${UNITS[unit]}`

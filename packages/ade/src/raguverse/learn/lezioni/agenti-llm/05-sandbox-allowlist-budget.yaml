@@ -39,7 +39,7 @@ fonti:
     url: https://genai.owasp.org/llm-top-10/
   - id: F6
     titolo: "Documentazione di ragu: pagina dei permessi (allow, ask, deny)"
-    url: https://github.com/nikcli/nikcli/blob/live-main/packages/web/src/pages/docs/permissions.astro
+    url: https://github.com/SandroHub013/nikcli/blob/live-main/packages/web/src/pages/docs/permissions.astro
   - id: F7
     titolo: "OpenRouter: limiti delle API e dei modelli gratuiti"
     url: https://openrouter.ai/docs/api-reference/limits

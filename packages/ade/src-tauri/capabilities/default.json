@@ -102,6 +102,7 @@
     "allow-mailbox-state",
     "allow-mailbox-take",
     "allow-path-exists",
+    "allow-pty-ack",
     "allow-pty-kill",
     "allow-pty-refresh-path",
     "allow-pty-resize",

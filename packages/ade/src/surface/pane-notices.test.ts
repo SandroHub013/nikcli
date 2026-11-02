@@ -140,8 +140,6 @@ describe("the notes that go over the terminal", () => {
 
   test("errors, and what the user has to do, are told, not only written", () => {
     const keys = [
-      "pane.startFailed",
-      "pane.connectFailed",
       "keys.unread",
       "task.notSent",
       "task.stepNotSent",
@@ -156,6 +154,10 @@ describe("the notes that go over the terminal", () => {
     for (const key of keys) {
       expect([key, told(key).length > 0, onlyWritten(key)]).toEqual([key, true, []])
     }
+    // A start or a connection that failed is told, through the text that explains the reason (UX-9).
+    for (const fn of ["startFailureText", "connectFailureText"]) {
+      expect([fn, callsTo(workbench, "tellPane").filter((call) => call.includes(`${fn}(`)).length > 0]).toEqual([fn, true])
+    }
     // The failed auto-close is told; the one that closed is only written.
     expect(codeOf(workbench)).toContain(
       codeOf(
@@ -165,14 +167,14 @@ describe("the notes that go over the terminal", () => {
   })
 
   test("a start that failed says why, and no bare error goes to the transcript alone", () => {
-    expect(workbench).toContain('tellPane(paneId, t("pane.startFailed", String(e)))')
-    expect(workbench).toContain('tellPane(paneId, t("pane.connectFailed", String(e)))')
+    expect(workbench).toContain("tellPane(paneId, startFailureText(String(e), agent))")
+    expect(workbench).toContain("tellPane(paneId, connectFailureText(String(e)))")
     // A start the host refused (a program not found) comes back as a reason, not as the agent's stderr.
     expect(workbench).toMatch(
-      /onRefused: \(reason\) => \{\n\s+refused = true\n\s+tellPane\(paneId, t\("pane\.startFailed", reason\)\)/,
+      /onRefused: \(reason\) => \{\n\s+refused = true\n\s+tellPane\(paneId, startFailureText\(reason, agent\)\)/,
     )
     expect(workbench).toMatch(
-      /onRefused: \(reason\) => \{\n\s+refused = true\n\s+tellPane\(paneId, t\("pane\.connectFailed", reason\)\)/,
+      /onRefused: \(reason\) => \{\n\s+refused = true\n\s+tellPane\(paneId, connectFailureText\(reason\)\)/,
     )
     const shell = read("host", "shell.ts")
     expect(shell).toContain("if (onRefused) onRefused(reason)")

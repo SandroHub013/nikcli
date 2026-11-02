@@ -1,10 +1,17 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import {
+  MAX_EXPORT_BYTES,
+  checkExportSize,
   createCleanup,
+  estimateExportBytes,
   exportPromo,
   micOffsetMs,
   pickExportMime,
   quietWav,
+  pausableRecorder,
+  pauseWhileHidden,
   readEvents,
   startDue,
   waitAtMost,
@@ -220,5 +227,145 @@ describe("record/export, the microphone's own start", () => {
     left = startDue(left, 2500)
     expect(started).toEqual(["mic", "later"])
     expect(left).toEqual([])
+  })
+})
+
+/*
+ * Audit 2026-11-02, MOD-4: the clip is kept whole in the renderer that draws the terminals (the blob and then a copy
+ * of it), so a long take at the default level made gigabytes and a white window. A take that cannot fit is refused
+ * before anything starts, with a message that says what to change.
+ */
+describe("record/export, the size a clip may reach", () => {
+  test("the estimate is video plus audio bits for the whole take", () => {
+    // 60 s at 8 Mbit/s video and 160 kbit/s audio: 8.16 Mbit/s x 60 s / 8 = 61.2 MB
+    expect(estimateExportBytes(60_000, 8_000_000)).toBe(61_200_000)
+    expect(estimateExportBytes(Number.NaN, 8_000_000)).toBe(0)
+    expect(estimateExportBytes(-5, 8_000_000)).toBe(0)
+  })
+
+  test("a 30-minute take at the default level is refused, and the message names the size and the way out", () => {
+    expect(estimateExportBytes(30 * 60_000, 8_000_000)).toBeGreaterThan(MAX_EXPORT_BYTES)
+    let message = ""
+    try {
+      checkExportSize(30 * 60_000, 8_000_000)
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error)
+    }
+    expect(message).toMatch(/MB/)
+    expect(message.length).toBeGreaterThan(40)
+  })
+
+  test("a short take goes through", () => {
+    expect(() => checkExportSize(2 * 60_000, 8_000_000)).not.toThrow()
+  })
+})
+
+/*
+ * MOD-6: `requestAnimationFrame` stops in a minimised WebView2 window while the media keeps playing, so the canvas
+ * repeated the last frame over running audio. The media and the recorder stand still while the window is hidden.
+ *
+ * Review of ade/residui-gravi, B2: the loop stays on `requestAnimationFrame`. A take is variable frame rate (a frame
+ * only when the window changes), so a loop on the video's own frames draws nothing on a still window: the pointer
+ * teleports, the zoom and the click rings are skipped, and a late microphone track starts late.
+ */
+describe("record/export, the frame loop", () => {
+  test("it draws on the display's frames, not on the video's", () => {
+    const source = readFileSync(join(import.meta.dir, "export.ts"), "utf-8")
+    expect(source).toContain("requestAnimationFrame(tick)")
+    expect(source).not.toContain("requestVideoFrameCallback(")
+  })
+
+  function fakeRecorder(state: "inactive" | "recording" | "paused") {
+    const log: string[] = []
+    return {
+      log,
+      state,
+      pause() {
+        this.state = "paused"
+        log.push("pause")
+      },
+      resume() {
+        this.state = "recording"
+        log.push("resume")
+      },
+    }
+  }
+
+  test("the recorder is paused and resumed with the media, so the clip has no frozen silent hole (B3)", () => {
+    const recorder = fakeRecorder("recording")
+    const pausable = pausableRecorder(recorder)
+    expect(pausable.paused).toBe(false)
+    pausable.pause()
+    expect(recorder.log).toEqual(["pause"])
+    expect(pausable.paused).toBe(true)
+    void pausable.play()
+    expect(recorder.log).toEqual(["pause", "resume"])
+  })
+
+  test("a recorder that was not recording is left alone", () => {
+    const idle = fakeRecorder("inactive")
+    const pausable = pausableRecorder(idle)
+    expect(pausable.paused).toBe(true)
+    void pausable.play()
+    expect(idle.log).toEqual([])
+  })
+
+  function fakeDocument() {
+    const listeners = new Map<string, () => void>()
+    return {
+      hidden: false,
+      addEventListener: (type: string, run: () => void) => void listeners.set(type, run),
+      removeEventListener: (type: string) => void listeners.delete(type),
+      fire: (type: string) => listeners.get(type)?.(),
+      count: () => listeners.size,
+    }
+  }
+  function fakeMedia(paused: boolean) {
+    const log: string[] = []
+    return {
+      log,
+      paused,
+      pause() {
+        this.paused = true
+        log.push("pause")
+      },
+      play() {
+        this.paused = false
+        log.push("play")
+        return Promise.resolve()
+      },
+    }
+  }
+
+  test("hidden stops what was playing, visible plays only that again, and a track not yet started stays unstarted", () => {
+    const doc = fakeDocument()
+    const playing = fakeMedia(false)
+    const late = fakeMedia(true)
+    const stop = pauseWhileHidden(doc, [playing, late])
+    doc.hidden = true
+    doc.fire("visibilitychange")
+    expect(playing.log).toEqual(["pause"])
+    expect(late.log).toEqual([])
+    doc.hidden = false
+    doc.fire("visibilitychange")
+    expect(playing.log).toEqual(["pause", "play"])
+    expect(late.log).toEqual([])
+    stop()
+    expect(doc.count()).toBe(0)
+  })
+
+  test("it says when the window goes away and comes back, so the progress can tell the user the export is waiting", () => {
+    const doc = fakeDocument()
+    const told: boolean[] = []
+    pauseWhileHidden(doc, [fakeMedia(false)], (hidden) => told.push(hidden))
+    doc.hidden = true
+    doc.fire("visibilitychange")
+    doc.hidden = false
+    doc.fire("visibilitychange")
+    expect(told).toEqual([true, false])
+  })
+
+  test("a document that cannot listen is left alone", () => {
+    expect(() => pauseWhileHidden({ hidden: false } as never, [fakeMedia(false)])()).not.toThrow()
   })
 })

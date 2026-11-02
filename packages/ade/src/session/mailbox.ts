@@ -414,6 +414,11 @@ export function needsVoiceSendConfirmation(message: Message): boolean {
   return voiceConfirmationFor(message) !== undefined
 }
 
+/** Case and accents out: «Ragu Code» still finds what is now labelled «Ragù Code». */
+function folded(text: string): string {
+  return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+}
+
 /** `claude-code` answers to "claude"; ids are compared without that suffix. */
 function agentName(agent: string | undefined): string {
   return (agent ?? "").toLowerCase().replace(/-code$/, "")
@@ -479,7 +484,7 @@ export function resolveTarget(panes: readonly MailPane[], to: string, fromId?: s
       .trim()
       .replace(/^#/, "")
   }
-  const lower = wanted.toLowerCase()
+  const lower = folded(wanted)
 
   if (/^\d+$/.test(wanted)) {
     const pane = scope[Number(wanted) - 1]
@@ -505,7 +510,7 @@ export function resolveTarget(panes: readonly MailPane[], to: string, fromId?: s
 
   return (
     pick(
-      scope.filter((pane) => pane.title.toLowerCase() === lower),
+      scope.filter((pane) => folded(pane.title) === lower),
       "titolo",
     ) ??
     pick(
@@ -513,7 +518,7 @@ export function resolveTarget(panes: readonly MailPane[], to: string, fromId?: s
       "agente",
     ) ??
     pick(
-      scope.filter((pane) => pane.title.toLowerCase().includes(lower)),
+      scope.filter((pane) => folded(pane.title).includes(lower)),
       "titolo",
     ) ?? {
       error: `nessuna sessione "${trimmed}". Sessioni: ${ordered.map(label).join(", ") || "nessuna"}`,
@@ -529,11 +534,11 @@ export function resolveAgent(
   agents: readonly { id: string; label: string }[],
   name: string,
 ): { id: string } | { error: string } {
-  const wanted = name.trim().toLowerCase()
+  const wanted = folded(name.trim())
   const hit =
     agents.find((agent) => agent.id.toLowerCase() === wanted) ??
     agents.find((agent) => agentName(agent.id) === agentName(wanted)) ??
-    agents.find((agent) => agent.label.toLowerCase() === wanted)
+    agents.find((agent) => folded(agent.label) === wanted)
   return hit
     ? { id: hit.id }
     : { error: `nessun agente "${name}". Agenti: ${agents.map((agent) => agent.id).join(", ")}` }

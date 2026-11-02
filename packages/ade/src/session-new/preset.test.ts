@@ -30,7 +30,7 @@ describe("PRESETS", () => {
         id: "swarm",
         label: "Sciame",
         sessions: 4,
-        description: "Quattro agenti si distribuiscono su task paralleli.",
+        description: "Quattro agenti si distribuiscono su compiti in parallelo.",
       },
     ])
   })

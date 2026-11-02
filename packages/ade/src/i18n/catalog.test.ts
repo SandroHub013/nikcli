@@ -11,7 +11,6 @@ import { it } from "./it"
 
 /** Texts that are the same word in both languages, or are names. */
 const SAME_IN_BOTH = new Set<string>([
-  "decisions.shortTitle",
   // The name of the app, in any language.
   "bots.waiting.fromAde",
   "design.shortTitle",
@@ -24,7 +23,8 @@ const SAME_IN_BOTH = new Set<string>([
   // The «No» of a permission prompt: the same word in both.
   "permission.answer.no",
   "preset.solo",
-  "sidebar.spaces",
+  // «Branch» is git's word, in both.
+  "pane.tree.branch",
   "pane.quota",
   "settings.grid.auto",
   "gateway.panel.platformTelegram",
@@ -117,7 +117,7 @@ describe("the catalogs", () => {
     expect(it["vui.intent.model.new"]).toBe("Apri il visore 3D")
     expect(it["vui.intent.project.recent"]).toBe("Apri un progetto recente")
     expect(it["vui.intent.dictation.finish"]).toBe("Finisci e invia la dettatura")
-    expect(it["vui.intent.palette.open"]).toBe("Apri la tavolozza dei comandi")
+    expect(it["vui.intent.palette.open"]).toBe("Apri Cerca comandi")
     expect(en["vui.intent.app.new"]).toBe("Open the simulator")
     expect(en["vui.intent.dictation.finish"]).toBe("Finish and send the dictation")
   })
@@ -190,5 +190,73 @@ describe("the catalogs", () => {
 
   test("the exceptions still exist, so the list cannot rot", () => {
     for (const key of SAME_IN_BOTH) expect(Object.keys(it)).toContain(key)
+  })
+})
+
+/** Every text of a catalog, functions called with marked arguments, with its key. */
+function allTexts(catalog: Record<string, unknown>): [string, string][] {
+  return Object.keys(catalog).map((key) => [key, sample(catalog[key])])
+}
+
+describe("the words of the glossary (UX-11, UX-12, UX-27)", () => {
+  // «App di messaggi (gateway)» is the user's own choice (bots/words.test.ts, scelta 6): the technical word stays in brackets.
+  const CHOSEN = new Set(["gateway.panel.heading"])
+  const italian = allTexts(it).filter(([key]) => !CHOSEN.has(key))
+
+  test("one term for each concept: the losing synonyms are gone from the Italian texts", () => {
+    const forbidden: [string, RegExp][] = [
+      ["a project is a progetto, not a Space", /\bSpaces?\b|(?:uno|lo|nello) space\b/],
+      ["a worktree is a copia di lavoro (worktree git, once)", /\b[Ww]orktree\b(?! git\)|, worktree\b)/],
+      ["the command palette is Cerca comandi", /\b[Pp]alette\b|tavolozza|Cerca o esegui/],
+      ["check again is Ricontrolla", /Controlla di nuovo/],
+      ["a screenshot tray is Schermate", /vassoio/],
+      ["kill is termina", /[Uu]cciso|[Uu]ccidi/],
+      ["a task is a compito", /\btasks?\b/],
+      ["a gateway is a collegamento chat", /\b[Gg]ateway\b/],
+      ["Decisioni is never cut to Dec", /^Dec$/],
+    ]
+    for (const [why, pattern] of forbidden) {
+      expect(italian.filter(([, text]) => pattern.test(text)).map(([key]) => key), why).toEqual([])
+    }
+  })
+
+  test("ADE speaks in the feminine in Italian: never «non sono riuscito» or «ADE non è riuscito»", () => {
+    expect(italian.filter(([, text]) => /[Nn]on sono riuscito|ADE non è riuscito/.test(text)).map(([key]) => key)).toEqual([])
+  })
+
+  test("an ellipsis is the one character «…», never three dots, in the Italian texts", () => {
+    expect(italian.filter(([, text]) => /[^.]\.\.\.(?!\.)/.test(text)).map(([key]) => key)).toEqual([])
+  })
+
+  test("the English UI never says «Dec» for decisions, which reads as December", () => {
+    expect(en["decisions.shortTitle"]).toBe("Decisions")
+  })
+})
+
+describe("the confirmation dialogs name their action (UX-10)", () => {
+  const dialogs = ["pane.closeRunning", "pane.closeWorktree", "editor.closeDirty", "editor.saveUnreadable", "editor.saveChanged"] as const
+  test("each one has its own two buttons, and neither is «Sì» or «No»", () => {
+    for (const dialog of dialogs) {
+      for (const catalog of [it, en] as Record<string, unknown>[]) {
+        const ok = sample(catalog[`${dialog}.ok`])
+        const cancel = sample(catalog[`${dialog}.cancel`])
+        expect([ok, cancel], dialog).not.toContain(sample(catalog["ask.yes"]))
+        expect([ok, cancel], dialog).not.toContain(sample(catalog["ask.no"]))
+        expect(ok, dialog).not.toBe(cancel)
+      }
+    }
+  })
+
+  test("the questions are the report's, and «comunque» is the one word for «anyway»", () => {
+    expect(it["pane.closeRunning"]("Sessione 1")).toBe("Chiudere «Sessione 1»? L'agente è ancora al lavoro e si ferma.")
+    expect(it["pane.closeRunning.ok"]).toBe("Chiudi e ferma")
+    expect(it["pane.closeRunning.cancel"]).toBe("Lascia aperta")
+    expect(it["editor.closeDirty"]("a.ts")).toBe("Chiudere a.ts senza salvare? Le modifiche non salvate vanno perse.")
+    expect(it["editor.closeDirty.ok"]).toBe("Chiudi senza salvare")
+    expect(it["editor.closeDirty.cancel"]).toBe("Torna al file")
+    expect(it["editor.saveChanged"]("a.ts")).toBe("a.ts è cambiato su disco dopo che l'hai aperto. Salvando, le tue modifiche sostituiscono quella versione.")
+    expect(it["editor.saveChanged.ok"]).toBe("Sostituisci")
+    expect(it["window.closeConfirm.message"](2)).toEndWith("Chiudere comunque?")
+    expect(it["window.closeConfirm.message"](2)).not.toContain("lo stesso")
   })
 })

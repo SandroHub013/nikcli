@@ -50,6 +50,8 @@ export const VOCABULARY: readonly VoiceIntentSpec[] = [
   {
     intent: "palette.open",
     phrases: [
+      "apri cerca comandi",
+      "cerca comandi",
       "apri tavolozza",
       "apri la tavolozza",
       "apri palette",
@@ -61,7 +63,7 @@ export const VOCABULARY: readonly VoiceIntentSpec[] = [
     ],
     slots: [],
     destructive: false,
-    readback: "Apro la tavolozza dei comandi",
+    readback: "Apro Cerca comandi",
   },
   {
     intent: "project.open",
