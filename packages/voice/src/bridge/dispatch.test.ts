@@ -385,6 +385,65 @@ describe("dispatch", () => {
       ).toBe(true)
     })
 
+    /*
+     * MOD-1: with no browser open, «naviga» took a candidate among all the panes and fell back to the focused one,
+     * an agent's session, which then became a browser.
+     */
+    describe("browser.navigate never turns a session into a browser", () => {
+      const sessionsOnly = () => {
+        const host = new MockVoiceHost()
+        host.panes = [host.panes[0]!]
+        // `browser.new` adds a browser pane, as ADE's command does.
+        host.runCommand = async (id: string) => {
+          host.calls.push({ method: "runCommand", args: [id] })
+          if (id === "browser.new")
+            host.panes = [
+              ...host.panes,
+              {
+                id: "b-new",
+                title: "Browser",
+                status: "working",
+                index: 2,
+                hasLiveProcess: false,
+                isBrowser: true,
+                isFile: false,
+              },
+            ]
+        }
+        return host
+      }
+      const spec = () => VOCABULARY.find((v) => v.intent === "browser.navigate")!
+
+      test("no browser open: a new one opens on the address, the focused session is left alone", async () => {
+        const host = sessionsOnly()
+        const outcome = await dispatch(makeParseResult(spec(), { url: "http://localhost:5173" }), host, {
+          focusedPaneId: "pane-1",
+        })
+        expect(outcome.success).toBe(true)
+        expect(host.calls.filter((c) => c.method === "browserNavigate").map((c) => c.args)).toEqual([
+          ["b-new", "http://localhost:5173"],
+        ])
+      })
+
+      test("a session named: a new browser opens instead", async () => {
+        const host = sessionsOnly()
+        const outcome = await dispatch(makeParseResult(spec(), { url: "http://localhost:5173", paneIndex: 1 }), host)
+        expect(outcome.success).toBe(true)
+        expect(host.calls.some((c) => c.method === "browserNavigate" && c.args[0] === "pane-1")).toBe(false)
+        expect(host.calls.some((c) => c.method === "runCommand" && c.args[0] === "browser.new")).toBe(true)
+      })
+
+      test("a browser open: it is the one navigated, nothing new opens", async () => {
+        const host = new MockVoiceHost()
+        const outcome = await dispatch(makeParseResult(spec(), { url: "http://localhost:5173" }), host, {
+          focusedPaneId: "pane-1",
+        })
+        expect(outcome.success).toBe(true)
+        expect(host.calls.filter((c) => c.method === "browserNavigate").map((c) => c.args[0])).toEqual(["pane-2"])
+        expect(host.calls.some((c) => c.method === "runCommand")).toBe(false)
+      })
+    })
+
     test("dispatches answerPermission allow", async () => {
       const host = new MockVoiceHost()
       const spec = VOCABULARY.find((v) => v.intent === "permission.allow")!
@@ -471,6 +530,8 @@ describe("dispatch", () => {
         if (spec.slots.includes("path")) dummySlots.path = "test/path.ts"
         if (spec.slots.includes("url")) dummySlots.url = "http://localhost:3000"
         if (spec.slots.includes("columns")) dummySlots.columns = 2
+        // Pane 1 is a session, and a session is never navigated (MOD-1): the browser is pane 2.
+        if (spec.intent === "browser.navigate") dummySlots.paneIndex = 2
 
         const outcome = await dispatch(makeParseResult(spec, dummySlots), host)
 

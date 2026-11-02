@@ -524,6 +524,8 @@ export const voiceEn: VoiceMessages = {
   "voice.msg.program.insertFailed": "Error inserting the transcribed text into the panel.",
   "voice.msg.program.hostFailed": "Error running the command on the VoiceHost.",
   "voice.msg.program.noSuchPane": (paneId) => `I can't find panel ${paneId}: the dictation was not sent.`,
+  "voice.msg.program.paneGone": "The panel you were dictating to was closed: the dictation was not sent.",
+  "voice.msg.program.keptText": (text) => `The dictated text: «${text}»`,
   "voice.msg.program.noPaneOpen": "No panel open: the dictation was not sent.",
   "voice.msg.program.heardWhileThinking": (words) =>
     `Heard while I was thinking: «${words}». Say «send this» to send it later, or leave it: it is dropped.`,
@@ -544,6 +546,12 @@ export const voiceEn: VoiceMessages = {
   "voice.msg.host.noProject": "There is no project open: tell me which project to start the session in.",
   "voice.msg.host.noProcess": (paneId) => `Panel '${paneId}' has no live process to send the message to.`,
   "voice.msg.host.noSession": (paneId) => `No active session for panel '${paneId}'.`,
+  "voice.msg.host.typingPending":
+    "That panel has a half-typed line: send or clear it first. The text was not sent; you will find it in the panel.",
+  "voice.msg.host.askingHeld": (text) =>
+    `Voice: not sent, the panel is asking a question. Answer it in the terminal, then say it again. The text was: «${text}»`,
+  "voice.msg.host.typingHeld": (text) =>
+    `Voice: not sent, there is a half-typed line here. Send or clear it, then say it again. The text was: «${text}»`,
   "voice.msg.host.searchDesktopOnly": "searching the project only works in the desktop app",
   "voice.msg.host.searchNoProject": "there is no project open to search in",
   "voice.msg.host.searchUnreadable": (why) => `I can't read the project's files (${why})`,

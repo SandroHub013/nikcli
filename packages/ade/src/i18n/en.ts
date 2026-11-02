@@ -434,6 +434,9 @@ export const en: Messages = {
   "keys.unread": (problem) => `Couldn't read the API keys, so the session starts without them: ${problem}`,
   "task.notSent":
     "ADE didn't send the initial task because the session never settled. Type it yourself once it's ready.",
+  "task.confirmTrust":
+    "The session is asking you to trust this folder: confirm it in the terminal and ADE will type the initial task.",
+  "task.trustAccepted": "A work folder ADE made for this session: trust confirmed, then the task.",
   "task.stepNotSent": (text) => `ADE didn't type “${text}” because the connection never settled. Type it yourself.`,
   "task.agentMissing": (command) =>
     `“${command}” isn't installed on the server, so ADE didn't type the task: the remote shell would have run it as a command.`,

@@ -448,6 +448,9 @@ export const it = {
   "keys.unread": (problem: string) => `Chiavi API non lette, la sessione parte senza: ${problem}`,
   "task.notSent":
     "ADE non ha inviato il compito iniziale: la sessione non si è stabilizzata. Scrivilo tu quando è pronta.",
+  "task.confirmTrust":
+    "La sessione chiede la fiducia per questa cartella: confermala nel terminale e ADE scriverà il compito iniziale.",
+  "task.trustAccepted": "Cartella di lavoro creata da ADE per questa sessione: fiducia confermata, poi il compito.",
   "task.stepNotSent": (text: string) =>
     `ADE non ha scritto «${text}»: la connessione non si è stabilizzata. Scrivilo tu.`,
   "task.agentMissing": (command: string) =>

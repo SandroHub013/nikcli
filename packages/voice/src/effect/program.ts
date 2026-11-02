@@ -65,11 +65,19 @@ export function dispatchTranscription(
   host: VoiceHost,
   sendMode: "manual" | "auto",
   focusedPaneId?: string,
+  /**
+   * `focusedPaneId` is the pane the sentence was spoken to, not merely the focus now: closed since, the sentence is
+   * refused rather than given to «the only pane» left, another agent (review of invio-giusto, NB4).
+   */
+  spokenTo = false,
 ): Effect.Effect<void, HostActionFailed> {
   return Effect.tryPromise({
     try: async () => {
       const panes = host.listPanes()
       const focused = focusedPaneId ? panes.find((p) => p.id === focusedPaneId) : undefined
+      if (spokenTo && focusedPaneId && !focused) {
+        throw new Error(tr("voice.msg.program.paneGone"))
+      }
       const clearTarget = focused ?? (panes.length === 1 ? panes[0] : undefined)
 
       /*
@@ -702,10 +710,14 @@ export function makeVoiceProgram(
                 ? (panes.find((p) => p.id === effect.paneId) ?? panes.find((p) => String(p.index) === effect.paneId))
                 : (panes.find((p) => p.id === focused) ?? panes[0])
               if (!target) {
+                // A number said, or the id of the pane the dictation was spoken to, closed since.
                 const missing = effect.paneId
-                  ? tr("voice.msg.program.noSuchPane", effect.paneId)
+                  ? /^\d+$/.test(effect.paneId)
+                    ? tr("voice.msg.program.noSuchPane", effect.paneId)
+                    : tr("voice.msg.program.paneGone")
                   : tr("voice.msg.program.noPaneOpen")
-                options.onError?.(missing)
+                // Refused, never sent to another pane (MOD-3); the words are kept where the user can take them.
+                options.onError?.(`${missing} ${tr("voice.msg.program.keptText", effect.text)}`)
                 yield* say(missing)
                 break
               }
@@ -1484,7 +1496,13 @@ export function makeVoiceProgram(
         // show the user that they were heard, and that is worth saying even if
         // the delivery into the pane then fails and says so itself.
         options.onTranscribed?.(text)
-        yield* dispatchTranscription(text, host, settings.transcriptionSend, focusedPaneId).pipe(
+        yield* dispatchTranscription(
+          text,
+          host,
+          settings.transcriptionSend,
+          focusedPaneId,
+          spokenPaneId !== undefined,
+        ).pipe(
           Effect.catchAll((err) =>
             Effect.sync(() => {
               // `spokenMessage` turns every HostActionFailed into one generic

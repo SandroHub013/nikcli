@@ -394,6 +394,25 @@ describe("a session's status follows its turn hooks", () => {
 
 describe("when a session can be written to", () => {
   const now = 10_000_000
+  /*
+   * SES-3: without hooks, the screen is the only place a menu drawn with the cursor shows. A pane whose screen
+   * cannot be read was free on its silence alone, and a delivery's Enter answered whatever it was showing.
+   */
+  test("a session without hooks whose screen cannot be read is not free, however quiet", () => {
+    expect(isFree({ hooked: false, permissionPending: false, lastOutputAt: now - 60_000 }, now)).toBe(true)
+    expect(isFree({ hooked: false, permissionPending: false, lastOutputAt: now - 60_000, screenUnread: true }, now)).toBe(
+      false,
+    )
+    expect(isFree({ hooked: false, permissionPending: false, screenUnread: true }, now)).toBe(false)
+    // The hook's word is not a guess: a hooked pane is free on it whatever the screen.
+    expect(
+      isFree(
+        { hooked: true, permissionPending: false, activity: { state: "idle", at: now - 5 }, screenUnread: true },
+        now,
+      ),
+    ).toBe(true)
+  })
+
   test("a hooked session is free unless its turn is running", () => {
     expect(isFree({ hooked: true, permissionPending: false, activity: { state: "idle", at: now - 5 } }, now)).toBe(true)
     expect(

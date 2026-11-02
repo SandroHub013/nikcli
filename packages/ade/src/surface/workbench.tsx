@@ -313,6 +313,7 @@ import {
   permissionIdentity,
   type PermissionAnswer,
 } from "../session/permission"
+import { bottomRows, folderTrust, openingTrust, screenQuestion } from "../session/screen-question"
 import { readReportLine } from "../session/report"
 import { asOneLine, asSubmittedLine, confirmDeadline, pasteSettled, submitCheck } from "../session/typing"
 import { searchPaths, walkProject } from "../search"
@@ -629,7 +630,7 @@ import {
   writeToTerminal,
 } from "../terminal/registry"
 import type { LinkRequest } from "../terminal/links"
-import { decideOpening } from "../session/opening"
+import { OPENING_QUIET_MS, decideOpening } from "../session/opening"
 import { cleanTranscriptLine } from "../session/transcript-line"
 import { createRawWindows } from "../session/raw-window"
 import { NEW_PANE_ITEMS, showsNewPane, type NewPaneItem } from "./new-pane"
@@ -2931,6 +2932,8 @@ export function Workbench() {
         typing: isTyping(records.typed.get(paneId)),
         // A turn only output declared and ADE gave up: a TUI that repaints is not busy for that (`OUTPUT_CLAIM_MAX_MS`).
         quarantined: claims.quarantined(paneId),
+        // Where a menu drawn with the cursor would show (`screenAsks`): unread, a quiet pane without hooks is not free.
+        screenUnread: !hasTerminal(paneId),
         ...(activity ? { activity } : {}),
         ...(lastOutputAt.has(paneId) ? { lastOutputAt: lastOutputAt.get(paneId)! } : {}),
       },
@@ -3307,7 +3310,18 @@ export function Workbench() {
    * missed the rest here too on the first pass.
    */
   const questionOpen = (paneId: string) =>
-    isQuestionOpen(permissions()[paneId], activityOf.get(paneId)) || modeTracker.heldOpen(paneId)
+    isQuestionOpen(permissions()[paneId], activityOf.get(paneId)) || modeTracker.heldOpen(paneId) || screenAsks(paneId)
+
+  /*
+   * A menu drawn with the cursor (codex, OpenCode, ragu without its plugin, a trust dialog), which the line stream
+   * never sees whole: read off the pane's screen whenever typing is weighed (`session/screen-question.ts`, SES-3). It
+   * holds the Enter; it is not offered to the voice to answer, its keys are arrows.
+   */
+  const screenAsks = (paneId: string) => {
+    if (!running.has(paneId) || !hasTerminal(paneId)) return false
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    return pane !== undefined && screenQuestion(getTerminal(paneId).terminal, pane.agent ?? pane.model) !== undefined
+  }
 
   /*
    * One secret per spawn, in that process tree's environment only. A pane id
@@ -5628,6 +5642,8 @@ export function Workbench() {
     appendLine: (id, text, kind) => appendLine(id, text, kind),
     tellPane: (id, text) => tellPane(id, text),
     permissions,
+    isTyping: (id) => isTyping(records.typed.get(id)),
+    questionOpen: (id) => questionOpen(id),
     answerPermission: (id, ans) => answerPermission(id, ans),
     confirmVoiceSend: (id, approved) => {
       if (approved) voiceSendDecisions.set(id, "approved")
@@ -7630,6 +7646,8 @@ export function Workbench() {
     if (closing?.worktree) giveBackWorktree(closing, closing.worktree)
     void closeSuspendedTree(running.get(id))
     running.delete(id)
+    // A start still awaiting its spawn ends the process it gets back (SES-2).
+    running.cancelStart(id)
     touchRunning()
     // A question the voice is asking about this pane has nobody left to answer it.
     if (questionOpen(id)) {
@@ -8401,6 +8419,8 @@ export function Workbench() {
     /** Type `task` even into a resumed conversation: the user just wrote it. */
     typeIntoResumed = false,
   ) => {
+    // First of all: closing the pane, or starting it again, takes it away (`RunningSessions.adopt`).
+    const start = running.beginStart(paneId)
     const agent = agentById(agentId)
     // An app's pane is its server's console: a task typed there is a line the server does not read.
     if (agent?.kind === "app") task = ""
@@ -8427,7 +8447,7 @@ export function Workbench() {
       setWb((w) => updatePane(w, paneId, { gone: undefined }))
     const p = host ? await projectOfPane(host, paneId) : undefined
     if (!agent || !agent.command || !host || !p) return
-    if (p.remote) return startRemoteProcess(paneId, agentId, agent.command, task, p.remote, host)
+    if (p.remote) return startRemoteProcess(paneId, agentId, agent.command, task, p.remote, host, start)
 
     /*
      * The conversation id is chosen here, before the agent exists.
@@ -8512,6 +8532,12 @@ export function Workbench() {
       else tellPane(paneId, t("resume.noMint", agent.label || agentId))
     }
 
+    /*
+     * Started again during the asks above (a quick `relaunch --fresh`): what follows writes the pane's conversation
+     * id, hook nonce and status, and clears its per-pane records, which by now are the newer session's (review, NB1).
+     */
+    if (!running.starting(paneId, start)) return
+
     const paneTitle = wb().panes.find((pane) => pane.id === paneId)?.title ?? agent.label ?? agentId
     // The pane's own arguments on every start, the first and each restart (`start-args.ts`).
     const extraArgs = startArgsFor(agentId, launched, {
@@ -8577,6 +8603,8 @@ export function Workbench() {
     let spawned: SpawnedSession | undefined
     // The host refused to start it: said by `onRefused`, then the exit that follows.
     let refused = false
+    // Closed or started again while it was starting: its exit is not the pane's (SES-2).
+    let superseded = false
 
     /*
      * The project itself, not a worktree cut for the session.
@@ -8651,6 +8679,9 @@ export function Workbench() {
       let firstByteAt: number | undefined
       let lastByteAt: number | undefined
 
+      // Closed, or started again, during the awaits above: nothing to spawn.
+      if (!running.starting(paneId, start)) return
+
       // A restart reuses the pane's terminal; the new process starts at 1;1.
       startOnCleanScreen(paneId)
       modeTracker.forget(paneId)
@@ -8704,6 +8735,7 @@ export function Workbench() {
          * must not mark the new session finished.
          */
         onExit: (code) => {
+          if (superseded) return
           if (!running.has(paneId) || running.get(paneId) === spawned)
             finish(paneId, code, refused ? "startFailed" : undefined)
         },
@@ -8718,9 +8750,18 @@ export function Workbench() {
         ...(secretNames.length > 0 ? { secrets: secretNames } : {}),
       })
 
+      /*
+       * Closed, or started again, while the spawn was on its way (SES-2): the
+       * process is ended with what it started, never adopted by a pane that is
+       * gone, where nothing could reach it and the opening task was typed in.
+       */
+      if (!wb().panes.some((pane) => pane.id === paneId)) running.cancelStart(paneId)
+      if (!running.adopt(paneId, start, session)) {
+        superseded = true
+        return
+      }
       spawned = countingLines(session, () => linesSent.set(paneId, (linesSent.get(paneId) ?? 0) + 1))
       stampingInput(session, () => lastInputAt.set(paneId, Date.now()))
-      running.set(paneId, session)
       touchRunning()
       resyncSize(paneId, session, bornAt)
 
@@ -8826,10 +8867,33 @@ export function Workbench() {
       // job a second time.
       if (starting.typesTask) {
         const startedAt = Date.now()
+        // A folder-trust dialog in front of the task: answered or pointed out once (`openingTrust`).
+        let trustHandled = false
+        const ownWorktree = launched?.worktree !== undefined && sameFolder(workDir, launched.worktree)
         const poll = setInterval(() => {
-          // The pane was closed, or the process died, while we were waiting.
-          if (!running.has(paneId)) {
+          /*
+           * The pane was closed, the process died, or a relaunch put another
+           * session in its place (SES-4): this task, and these byte times,
+           * belong to the spawn that is gone.
+           */
+          if (running.get(paneId) !== session) {
             stopOpeningPoll(poll)
+            return
+          }
+
+          // Read once the screen is drawn: a dialog read half painted has no cursor yet.
+          const drawn = lastByteAt !== undefined && Date.now() - lastByteAt >= OPENING_QUIET_MS
+          const trust =
+            !trustHandled && drawn && hasTerminal(paneId)
+              ? folderTrust(bottomRows(getTerminal(paneId).terminal), agentId)
+              : undefined
+          if (trust) {
+            trustHandled = true
+            if (openingTrust(trust, ownWorktree) === "accept") {
+              session.write("\r")
+              appendLine(paneId, t("task.trustAccepted"), "note", "ade")
+            } else tellPane(paneId, t("task.confirmTrust"))
+            // The dialog is still on screen until the CLI redraws: the next pass reads it again.
             return
           }
 
@@ -8852,21 +8916,21 @@ export function Workbench() {
             )
             // Opening tasks only — a line the user typed later is theirs alone.
             // Text and Enter apart, for the reason `typeLine` gives.
-            const session = running.get(paneId)
+            // Into this poll's own session, the one checked above.
             const opening = typeIntoResumed ? task : withIntro(agentId, task)
             // A task from `ade-msg spawn` is a request like any other: too long to type, it goes to the inbox.
-            const spawned = [...openRequests.values()].find(
-              (request) => request.kind === "spawn" && request.to === paneId,
+            const request = [...openRequests.values()].find(
+              (candidate) => candidate.kind === "spawn" && candidate.to === paneId,
             )
-            if (session && spawned) {
-              const meta = { id: spawned.id, kind: "spawn" as const, from: spawned.from }
+            if (request) {
+              const meta = { id: request.id, kind: "spawn" as const, from: request.from }
               void getHost().then(async (host) => {
                 if (!host) return void typeLine(session, opening)
                 // A prompt at start-up: the task waits among the held lines instead of going missing.
                 if ((await deliverText(host, paneId, opening, meta)) === "held")
                   heldLines.push({ paneId, text: opening, inbox: meta })
               })
-            } else if (session) void typeLine(session, opening)
+            } else void typeLine(session, opening)
             return
           }
           /*
@@ -8907,6 +8971,7 @@ export function Workbench() {
     task: string,
     target: RemoteTarget,
     host: NonNullable<Awaited<ReturnType<typeof getHost>>>,
+    start: symbol,
   ) => {
     const args = sshArgs(target)
     const home = host.homeDir ? await host.homeDir().catch(() => undefined) : undefined
@@ -8934,7 +8999,10 @@ export function Workbench() {
     let spawned: SpawnedSession | undefined
     // The host refused to start it: said by `onRefused`, then the exit that follows.
     let refused = false
+    // Closed or started again while it was starting: its exit is not the pane's (SES-2).
+    let superseded = false
     try {
+      if (!running.starting(paneId, start)) return
       startOnCleanScreen(paneId)
       // Born at the pane's size, not the host's 120x30 (S77); undefined for a pane not yet fitted.
       const bornAt = ptySize(paneId)
@@ -8953,6 +9021,7 @@ export function Workbench() {
         },
         onLine: (line, stream) => appendLine(paneId, line, stream === "err" ? "note" : "step"),
         onExit: (code) => {
+          if (superseded) return
           if (!running.has(paneId) || running.get(paneId) === spawned)
             finish(paneId, code, refused ? "connectFailed" : undefined)
         },
@@ -8963,8 +9032,13 @@ export function Workbench() {
         pane: paneId,
         paneToken: mintPaneToken(paneId),
       })
+      // As for a local session: closed or started again meanwhile, the connection is ended (SES-2).
+      if (!wb().panes.some((pane) => pane.id === paneId)) running.cancelStart(paneId)
+      if (!running.adopt(paneId, start, session)) {
+        superseded = true
+        return
+      }
       spawned = stampingInput(session, () => lastInputAt.set(paneId, Date.now()))
-      running.set(paneId, session)
       touchRunning()
       resyncSize(paneId, session, bornAt)
 
