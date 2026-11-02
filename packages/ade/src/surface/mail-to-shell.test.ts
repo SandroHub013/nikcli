@@ -28,7 +28,7 @@ test("the round never types a held line into a shell: it shows it as a notice an
   expect(shell).toBeGreaterThan(round)
   expect(typed).toBeGreaterThan(shell)
   const branch = source.slice(shell, typed)
-  expect(branch).toContain("heldLines.splice(heldLines.indexOf(item), 1)")
+  expect(branch).toContain("dropFrom(heldLines, item)")
   expect(branch).toContain('tellPane(item.paneId, t("note.mailNotTyped"')
   expect(branch).not.toContain("typeLine")
   expect(branch).not.toContain("deliverText")

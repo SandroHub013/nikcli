@@ -1700,6 +1700,9 @@ export const it = {
   "note.replySentTo": (to: string, ref: string) => `Risposta inviata a ${to} (richiesta ${ref})`,
   "note.replyFrom": (from: string, text: string) => `Risposta ricevuta da ${from}: ${text}`,
   "note.keptOpen": (problem: string) => `Resta aperta: ${problem}`,
+  "mail.stuck": (kind: string, id: string) =>
+    `Posta tra le sessioni: ${kind} ${id} non ha dato esito. ADE è andata avanti e il mittente è stato avvisato`,
+  "mail.stepStuck": "Posta tra le sessioni: un passo non finisce. ADE lo riprova; se la posta resta ferma, riavvia ADE",
   "note.closedAfterReply": (closed: string) => `Chiusa dopo la risposta: ${closed}`,
   "note.updateFrom": (from: string, state: string, text: string) => `Aggiornamento da ${from}: ${state} — ${text}`,
   "note.memory": (line: string) => `Memoria: ${line}`,
