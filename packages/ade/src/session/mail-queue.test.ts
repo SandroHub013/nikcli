@@ -91,7 +91,7 @@ describe("lint: the workbench writes the queue and reads it back", () => {
   })
 
   test("read back once the saved layout is, and a held message's sender is told when its session is gone", () => {
-    const layout = source.indexOf("setWb(fromWorkspaceState(state))")
+    const layout = source.indexOf("setWb(fromWorkspaceState(savedWorkspace.state))")
     const restored = source.indexOf("await restoreMail(host)", layout)
     expect(layout).toBeGreaterThan(0)
     expect(restored).toBeGreaterThan(layout)
