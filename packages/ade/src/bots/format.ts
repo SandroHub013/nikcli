@@ -7,7 +7,6 @@
 import { bcp47, locale, type Locale } from "../i18n/locale"
 import { translate } from "../i18n"
 
-
 function decimal(value: number, digits: number, loc: Locale, minimum = 0): string {
   return new Intl.NumberFormat(bcp47(loc), { minimumFractionDigits: minimum, maximumFractionDigits: digits }).format(value)
 }

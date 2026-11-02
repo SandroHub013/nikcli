@@ -26,9 +26,13 @@ type ReasonKey =
   | "pane.reason.sshNoDestination"
   | "pane.reason.shellArgument"
   | "pane.reason.unsafeArgument"
+  | "pane.reason.notFound"
+  | "pane.reason.sshPortMissing"
+  | "pane.reason.sshValueMissing"
 
 /** Rust's wording, in the order it is tried, and the catalog text each one becomes. */
 const KNOWN: readonly { readonly match: RegExp; readonly key: ReasonKey }[] = [
+  { match: /^programma non trovato: (.+)$/s, key: "pane.reason.notFound" },
   { match: /^(.+) non parte: (.+)$/s, key: "pane.reason.cantRun" },
   { match: /^pty non creata: (.+)$/s, key: "pane.reason.noPty" },
   { match: /^opzione di avvio non consentita per (.+): (.+)$/s, key: "pane.reason.optionRefused" },
@@ -41,6 +45,8 @@ const KNOWN: readonly { readonly match: RegExp; readonly key: ReasonKey }[] = [
   { match: /^argomento ssh non consentito: (.+)$/s, key: "pane.reason.sshArgument" },
   { match: /^porta ssh non valida: (.+)$/s, key: "pane.reason.sshPort" },
   { match: /^valore ssh non valido: (.+)$/s, key: "pane.reason.sshValue" },
+  { match: /^porta ssh mancante$/, key: "pane.reason.sshPortMissing" },
+  { match: /^valore ssh mancante$/, key: "pane.reason.sshValueMissing" },
   { match: /^ssh senza destinazione$/, key: "pane.reason.sshNoDestination" },
   { match: /^argomento della shell non consentito: (.+)$/s, key: "pane.reason.shellArgument" },
   { match: /^argomento non sicuro per (.+): contiene (.+), che cmd\.exe interpreta$/s, key: "pane.reason.unsafeArgument" },
@@ -63,7 +69,8 @@ export function reasonText(raw: string): string {
     const found = match.exec(reason)
     if (!found) continue
     const [, a = "", b = ""] = found
-    return (t as (key: string, ...args: string[]) => string)(key, a, b)
+    const second = key === "pane.reason.cantRun" ? reasonText(b) : b
+    return (t as (key: string, ...args: string[]) => string)(key, a, second)
   }
   return reason
 }
@@ -77,5 +84,6 @@ export function startFailureText(raw: string, agent?: { readonly label: string }
 
 /** The pane's note when a connection did not open. */
 export function connectFailureText(raw: string): string {
+  if (/^programma non trovato: /.test(plain(raw))) return t("pane.connectFailed.notFound", reasonText(raw))
   return t("pane.connectFailed", reasonText(raw))
 }

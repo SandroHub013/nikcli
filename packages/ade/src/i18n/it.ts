@@ -15,18 +15,13 @@ import { voiceIt } from "./voice-it"
 
 export const it = {
   ...voiceIt,
-  "settings.language.label": "Lingua",
-  "settings.language.title": "Lingua",
   "settings.language.desc":
     "La lingua dei menu, dei pannelli e degli avvisi di ADE. «Sistema» segue la lingua del computer. L'assistente vocale continua a usare la lingua del riconoscimento, che si sceglie nelle impostazioni della voce.",
   "settings.language.group": "Lingua dell'interfaccia",
-  "settings.language.system": "Sistema",
   "settings.language.systemNow": (language: string) => `Sistema (${language})`,
   "settings.language.it": "Italiano",
   "settings.language.en": "English",
 
-  "settings.theme.label": "Tema",
-  "settings.theme.title": "Tema",
   "settings.theme.desc":
     "Scegli l'aspetto dell'interfaccia di ADE: chiaro, scuro, oppure vetro trasparente con effetto nativo sul desktop.",
   "settings.theme.group": "Tema dell'interfaccia",
@@ -40,7 +35,6 @@ export const it = {
   "settings.theme.opacityLow": (min: number) =>
     `Sotto il ${min}% il vetro è più spinto e il testo perde contrasto sulle scrivanie chiare.`,
   "settings.theme.unsupported": "Il tema Vetro non è supportato su questo sistema o compositore grafico.",
-  "settings.theme.desktopOnly": "La trasparenza nativa della finestra è disponibile solo nell'applicazione desktop.",
   "settings.theme.toLight": "Passa al tema chiaro",
   "settings.theme.toDark": "Passa al tema scuro",
   "settings.theme.toGlass": "Passa al tema vetro",
@@ -60,6 +54,8 @@ export const it = {
   "palette.recents.forgetGone": (n: number) => `Togli dai recenti le cartelle sparite (${n})`,
   "palette.design.variant": (k: string, title: string, variant: number, name: string) =>
     `Design: apri la variante — ${title ? `${k} · ${title}` : k} · Variante ${variant}${name ? ` «${name}»` : ""}`,
+  "confirm.forgetGone.ok": "Togli",
+  "confirm.forgetGone.cancel": "Annulla",
   "confirm.forgetGone": (n: number) =>
     n === 1
       ? "Togliere dai recenti e dai progetti 1 cartella sparita?"
@@ -112,7 +108,7 @@ export const it = {
   "update.none": "Nessun aggiornamento disponibile.",
   "update.dev": "Questa è una build di sviluppo: non c'è una versione installata da aggiornare.",
   "update.failed": (problem: string) =>
-    `Non sono riuscita a controllare gli aggiornamenti: il server delle release non ha risposto (${problem}). Riprova più tardi da Notifiche → Controlla aggiornamenti.`,
+    `Non sono riuscita a controllare gli aggiornamenti (${problem}). Riprova più tardi da Notifiche → Controlla aggiornamenti.`,
   "presence.off": "Microfono spento",
   "presence.asleep": "In attesa della parola di richiamo",
   "presence.idle": "Pronto",
@@ -259,11 +255,15 @@ export const it = {
   "pane.input.none": "nessun processo in ascolto",
   "pane.notDelivered": (text: string) => `Nessun processo in ascolto: ${text} non è stato consegnato.`,
   "pane.startFailed": (error: string) =>
-    `La sessione non è partita: ${error}. Premi Riavvia; se succede di nuovo, controlla l'accesso in Impostazioni → Agenti e account.`,
+    `La sessione non è partita: ${error}. Premi Riprova; se succede di nuovo, controlla l'accesso in Impostazioni → Agenti e account.`,
   "pane.startFailed.notFound": (agent: string, command: string) =>
-    `${agent} non è partito: il comando «${command}» non è installato su questo computer. Installalo dalla sua scheda in Nuova sessione, poi premi Riavvia.`,
+    `${agent} non è partito: il comando «${command}» non è installato su questo computer. Installalo dalla sua scheda in Nuova sessione, poi premi Riprova.`,
+  "pane.connectFailed.notFound": (reason: string) => `La connessione non è riuscita: ${reason}. Installalo, poi riprova.`,
   "pane.connectFailed": (error: string) => `La connessione non è riuscita: ${error}. Controlla l'indirizzo e la rete, poi riprova.`,
   "pane.reason.cantRun": (command: string, why: string) => `${command} non si avvia (${why})`,
+  "pane.reason.notFound": (command: string) => `il comando «${command}» non è installato su questo computer`,
+  "pane.reason.sshPortMissing": "manca la porta dopo -p",
+  "pane.reason.sshValueMissing": "manca il valore dell'opzione ssh",
   "pane.reason.noPty": (why: string) => `il terminale non si è aperto (${why})`,
   "pane.reason.optionRefused": (command: string, flag: string) => `ADE non avvia ${command} con l'opzione ${flag}`,
   "pane.reason.commandRefused": (command: string) => `ADE non può avviare «${command}»`,
@@ -534,7 +534,7 @@ export const it = {
   "editor.saveCancelled.unreadable": (problem: string) =>
     `Salvataggio annullato: non ho potuto rileggere il file (${problem}).`,
   "editor.saveChanged": (file: string) =>
-    `${file} è cambiato su disco dopo che l'hai aperto. Salvando, le tue modifiche sostituiscono quelle.`,
+    `${file} è cambiato su disco dopo che l'hai aperto. Salvando, le tue modifiche sostituiscono quella versione.`,
   "editor.saveChanged.ok": "Sostituisci",
   "editor.saveChanged.cancel": "Annulla",
   "editor.saveCancelled.changed": "Salvataggio annullato: il file è cambiato su disco.",
@@ -554,7 +554,6 @@ export const it = {
   "bar.dismissNotice": "Togli l'avviso",
   "bell.empty": "Nessuna notifica.",
   "settings.title": "Impostazioni",
-  "settings.subtitle": "Voce, routine, codice, MCP, plugin e competenze",
   "settings.done": "Fatto",
   "settings.category.general": "Generale",
   "settings.category.general.desc": "Aspetto, lingua e disposizione delle finestre",
@@ -593,7 +592,6 @@ export const it = {
   "settings.about.version": "Versione",
   "settings.about.folder": "Cartella dei dati",
   "settings.about.unknown": "non disponibile",
-  "settings.group.voice": "Voce",
   "settings.record.quality": "Qualità del video",
   "settings.record.mic": "Microfono nelle registrazioni",
   "settings.record.mic.on": "Attivo",
@@ -606,10 +604,7 @@ export const it = {
   "settings.updates.desc":
     "ADE si aggiorna dalle release ufficiali: lo stesso controllo parte dal menu delle notifiche.",
   "settings.updates.installed": "Versione installata:",
-  "settings.code": "Codice",
   "settings.keys": "Chiavi API",
-  "settings.extensions": "Estensioni",
-  "settings.space": "Spazio su disco",
   "space.title": "Spazio su disco",
   "space.desc": "Quello che ADE tiene sul tuo computer e si può togliere. Prima di cancellare dice quanto libera; il lavoro non integrato, i segreti, le decisioni e la memoria dei progetti non si toccano mai.",
   "space.empty": "Non c'è niente da togliere.",
@@ -641,10 +636,8 @@ export const it = {
   "space.failed": (a: string) => `Non fatto: ${a}`,
   "space.kept": (a: string) => `Resta: ${a}`,
   "space.busy": "Un attimo…",
-  "settings.tools": "Strumenti",
   "settings.noPlugins": "Nessun plugin caricato.",
   "settings.notBuilt": "Non c'è ancora niente da configurare qui: la sezione esiste, la funzione no.",
-  "settings.grid.title": "Griglia",
   "settings.grid.desc":
     "Su quante colonne stanno i pannelli nella vista Codice. In automatico ADE le sceglie dalla larghezza della finestra e da quanti pannelli sono aperti, in modo che nessuno scenda sotto la larghezza minima leggibile.",
   "settings.grid.columns": "Colonne della griglia",
@@ -1111,9 +1104,9 @@ export const it = {
   "gateway.panel.openPlatforms": "Apri piattaforme",
   "gateway.panel.attentionNotice": (name: string, platform: string) =>
     `Il collegamento chat di ${name} su ${platform} richiede attenzione.`,
-  "gateway.bar.connected": "Gateway: collegato",
-  "gateway.bar.reconnecting": "Gateway: riconnessione in corso",
-  "gateway.bar.needsAttention": "Gateway: richiede attenzione",
+  "gateway.bar.connected": "Collegamento chat: attivo",
+  "gateway.bar.reconnecting": "Collegamento chat: riconnessione in corso",
+  "gateway.bar.needsAttention": "Collegamento chat: richiede attenzione",
   "gateway.panel.lastMessage": (time: string) => `ultimo messaggio alle ${time}`,
   "gateway.panel.redacted": (time: string) =>
     `Nel messaggio delle ${time} c'era una chiave: l'ho nascosta, il bot non l'ha vista e non è stata salvata.`,
@@ -1343,7 +1336,7 @@ export const it = {
   "decisions.noProject": "Nessun progetto aperto.",
   "decisions.noProject.hint": "Il registro delle decisioni sta in .ade/decisions.jsonl del progetto.",
   "decisions.unreadable": (problem: string) =>
-    `Non riesco a leggere le decisioni del progetto: il file .ade/decisions.jsonl ha una riga rovinata (${problem}). Correggi quella riga e riapri il pannello.`,
+    `Non riesco a leggere le decisioni del progetto (${problem}). Controlla il file .ade/decisions.jsonl e riapri il pannello.`,
   "decisions.ignored": (count: number) => `${count === 1 ? "1 riga ignorata" : `${count} righe ignorate`} nel registro`,
   "decisions.section.open": "Da decidere, in ordine",
   "decisions.section.answered": "Risposte, in attesa di esecuzione",
@@ -1461,7 +1454,7 @@ export const it = {
     `Consegnare ${queued === 1 ? "la scelta in coda" : `le ${queued} scelte in coda`} a «${title}»?`,
   "design.recipient.deliver": "Consegna",
   "design.sheet.position": (index: number, total: number) => `${index} di ${total}`,
-  "design.sheet.empty": "Quando una sessione ti chiede una scelta, il numero accanto a Decisioni in alto si accende.",
+  "design.sheet.empty": "Quando una sessione ti propone un design, il numero accanto a Design in alto si accende.",
   "design.sheet.needChoice": "Nessuna variante scelta: premi 1–9 o clicca una variante, poi Invio",
   "design.sheet.needRecipient": "Nessuno riceve la risposta: scegli chi riceve, poi Invio",
   "design.sheet.keys": "1–9 sceglie · Invio registra la scelta · ← → scorre · Esc chiude",

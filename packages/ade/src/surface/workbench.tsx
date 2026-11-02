@@ -1475,7 +1475,7 @@ export function Workbench() {
       await host.recordWrite(out, result.bytes)
       report(t("record.export.done", out), "info")
     } catch (failure) {
-      report(t("record.export.failed", failure instanceof Error ? failure.message : String(failure)))
+      report(t("record.export.failed", errorMessage(failure).replace(/\.+$/, "")))
     } finally {
       setExporting(false)
     }
@@ -7616,7 +7616,7 @@ export function Workbench() {
       )
     } else if (id === "recents.forgetGone") {
       const count = recents().filter((entry) => isMissingRecent(missingRoots(), entry.root)).length
-      if (count > 0 && (await askYesNo(t("confirm.forgetGone", count)))) {
+      if (count > 0 && (await askYesNo(t("confirm.forgetGone", count), { ok: t("confirm.forgetGone.ok"), cancel: t("confirm.forgetGone.cancel") }))) {
         const next = withoutMissing(recents(), missingRoots())
         setRecents(next)
         localStorage.setItem("ade.recents", serializeRecents(next))
@@ -7975,15 +7975,6 @@ export function Workbench() {
     sheetWatch.forget(id)
   }
 
-  /*
-   * An unsaved file is not closed without asking.
-   *
-   * The buffer model has always known whether there is anything to lose;
-   * nothing asked it. Closing a file pane — by the X, by Ctrl+W, or by the
-   * command — dropped the draft with no warning and no way back. The question
-   * is the dialog plugin's, so it is answered later: `close` says whether the
-   * pane went now, and it goes only on the yes (`editor/closer.ts`).
-   */
   /** The two buttons of a close question, named for what each does (UX-10). */
   const closeLabels = {
     running: () => ({ ok: t("pane.closeRunning.ok"), cancel: t("pane.closeRunning.cancel") }),
@@ -7996,6 +7987,16 @@ export function Workbench() {
     const resumable = Boolean(pane?.agent && RESUME[pane.agent])
     return `${t("pane.closeRunning", title)}${resumable ? ` ${t("pane.closeRunning.saved")}` : ""}`
   }
+
+  /*
+   * An unsaved file is not closed without asking.
+   *
+   * The buffer model has always known whether there is anything to lose;
+   * nothing asked it. Closing a file pane — by the X, by Ctrl+W, or by the
+   * command — dropped the draft with no warning and no way back. The question
+   * is the dialog plugin's, so it is answered later: `close` says whether the
+   * pane went now, and it goes only on the yes (`editor/closer.ts`).
+   */
   const closer = createCloser({
     unsaved: (id) => {
       const buffer = buffers()[id]

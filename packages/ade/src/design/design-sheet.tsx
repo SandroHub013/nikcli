@@ -11,6 +11,7 @@ import { projectRootFromRegisterPath, type DesignHub } from "./hub"
 import { bucketProposals, type DesignProposal } from "./state"
 import "./design.css"
 import { t } from "../i18n"
+import { errorMessage } from "../session-new/start-failure"
 
 export function DesignSheet(props: {
   hub: DesignHub
@@ -147,7 +148,7 @@ export function DesignSheet(props: {
       <div data-slot="sheet-body">
         <Show when={props.hub.register.error()}>
           <div data-slot="design-problem" role="alert">
-            {t("design.unreadable", String(props.hub.register.error()))}
+            {t("design.unreadable", errorMessage(props.hub.register.error()))}
           </div>
         </Show>
         <Show

@@ -124,7 +124,6 @@ export const voiceIt = {
   "vui.codexFallback.off.desc": "Riferisce il limite senza passare a Codex (predefinito)",
   "vui.engine.note":
     "L'agente usa il tuo account della CLI, per uso personale: ADE non legge le tue credenziali, tiene pochi turni insieme e non riprova quando raggiungi il limite. Non modifica file e non esegue comandi nel progetto: il lavoro lo affida alle sessioni. Per un uso intensivo accedi alla CLI con una chiave API.",
-  "vui.trial.noEngine": "Impossibile avviare la voce: comando non inviato.",
   "vui.shortcut.conflicting": "Scorciatoia in conflitto.",
   "vui.shortcut.shadowed": (message: string) =>
     `${message} ADE ha la precedenza: questa scorciatoia non attiva la voce.`,
@@ -197,7 +196,6 @@ export const voiceIt = {
   "vui.reply.mai.it-IT-Rosa": "Rosa",
   "vui.reply.mai.it-IT-Rosa.desc": "Femminile, italiano, a pagamento (OpenRouter)",
   "vui.reply.mai.licence": "Microsoft MAI-Voice, via OpenRouter.",
-  "vui.replies.maiEnglish": "MAI legge solo l'italiano: una risposta in un'altra lingua la legge la voce locale.",
   // Voce delle risposte su Microsoft MAI, nella scheda OpenRouter
   "vui.mai.title": "Microsoft MAI",
   "vui.mai.offer": "Nuova voce predefinita: Rosa (Microsoft)",
@@ -322,10 +320,7 @@ export const voiceIt = {
   "vui.load.failed": "La voce non si è caricata. Riprova tra un momento.",
   "vui.backend.title": "Riconoscimento",
   "vui.backend.desc": "Come la tua voce diventa testo",
-  "vui.backend.readyLocal": "Pronto (in locale)",
   "vui.backend.ready": "Pronto",
-  "vui.backend.available": "Disponibile (~640 MB)",
-  "vui.backend.unsupported": "Non supportato",
   "vui.backend.needsKey": "Serve la chiave",
   "vui.backend.openrouter.desc": "Trascrizione cloud ad alta accuratezza (microsoft/mai-transcribe-2)",
   "vui.key.title": "Chiave API OpenRouter",
@@ -396,7 +391,7 @@ export const voiceIt = {
   "vui.intent.dialog.repeat": "Ripeti",
   "vui.commands.title": "Comandi vocali",
   "vui.commands.desc": "Il vocabolario riconosciuto. Scrivine uno per provarlo senza parlare",
-  "vui.commands.trial.placeholder": "Es. «apri la tavolozza»",
+  "vui.commands.trial.placeholder": "Es. «apri cerca comandi»",
   "vui.commands.trial": "Prova un comando scrivendolo",
   "vui.commands.sending": "Invio…",
   "vui.commands.run": "Esegui",
@@ -413,7 +408,6 @@ export const voiceIt = {
   "vui.live.start": "Avvia ascolto",
   "vui.footer.keys": "Frecce per scegliere · Invio per confermare · Esc per chiudere",
   "vui.footer.done": "Fatto",
-  "vui.asr.noRuntime": "Né WebGPU né WebAssembly sono supportati in questo browser o ambiente.",
   "vui.asr.noKey": "Chiave API OpenRouter mancante.",
   "vui.asr.keyCheck": "Errore durante la verifica della chiave OpenRouter.",
 
@@ -439,7 +433,6 @@ export const voiceIt = {
   "vui.fix.noMainKey": "Manca un tasto principale.",
   "vui.fix.defaults": "Impostazioni non valide o assenti: ripristinati i valori predefiniti.",
   "vui.fix.noVersion": "Versione impostazioni mancante: impostata alla versione 1.",
-  "vui.fix.migrated": (from: string, to: string) => `Migrata versione impostazioni da ${from} a ${to}.`,
   "vui.fix.wakeDefault":
     "Ora l'assistente risponde solo quando lo chiami per nome: puoi cambiarlo nelle impostazioni vocali.",
   "vui.fix.mode": (value: string, fallback: string) =>

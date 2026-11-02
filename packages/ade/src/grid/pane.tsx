@@ -519,7 +519,7 @@ export function SessionPane(props: SessionPaneProps) {
 
   const tipAll = createMemo(() => {
     const q = quota()
-    const quotaLines = q ? `\n${q.tooltip}` : ""
+    const quotaLines = q && !(isQuotaUnavailable(q) && q.sourceless) ? `\n${q.tooltip}` : ""
     const branchLine = props.tree ? `\n${t("pane.tree.branch", props.tree.branch)}` : ""
     const tokLine = props.tokens ? `\n${props.tokens}` : ""
     return `${props.title}\n${props.agent ?? props.model ?? t("pane.session")} · ${STATE_FULL[state()]}\n${stateDetail()}${quotaLines}${branchLine}${tokLine}`

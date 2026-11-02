@@ -1,4 +1,3 @@
-import { bcp47 } from "../i18n/locale"
 /**
  * A file that is not text, as the host describes it.
  *
@@ -6,6 +5,8 @@ import { bcp47 } from "../i18n/locale"
  * sentence: `{ kind: "binary", bytes, modified, head }`. The pane draws its card
  * from those fields; nothing here matches the text of an error.
  */
+
+import { bcp47 } from "../i18n/locale"
 
 /** What the host knows about a binary file without reading it. */
 export interface BinaryFile {

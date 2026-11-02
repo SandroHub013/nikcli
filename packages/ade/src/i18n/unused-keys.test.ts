@@ -32,9 +32,9 @@ describe("the Italian catalog", () => {
   test("has no key that nothing reads", () => {
     const text = [...sources(SRC), ...sources(VOICE)].map((path) => readFileSync(path, "utf8")).join("\n")
     const prefixes = new Set<string>()
-    for (const match of text.matchAll(/[`"']([A-Za-z0-9_.-]+)\$\{/g)) prefixes.add(match[1]!)
+    // The prefix must hold a dot: a bare `n${...}` or `s${...}` once made 403 keys pass without being read.
+    for (const match of text.matchAll(/[`"']([A-Za-z0-9_-]+\.[A-Za-z0-9_.-]*)\$\{/g)) prefixes.add(match[1]!)
     const unused = Object.keys(it).filter((key) => {
-      if (key.startsWith("vui.")) return false
       if (text.includes(`"${key}"`) || text.includes(`'${key}'`) || text.includes(`\`${key}\``)) return false
       return ![...prefixes].some((prefix) => key.startsWith(prefix))
     })

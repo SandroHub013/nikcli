@@ -10,18 +10,13 @@ import { voiceEn } from "./voice-en"
  */
 export const en: Messages = {
   ...voiceEn,
-  "settings.language.label": "Language",
-  "settings.language.title": "Language",
   "settings.language.desc":
     "The language of ADE's menus, panels and notices. System follows your computer's language. The voice assistant keeps using the speech-recognition language, which you set in the voice settings.",
   "settings.language.group": "Interface language",
-  "settings.language.system": "System",
   "settings.language.systemNow": (language) => `System (${language})`,
   "settings.language.it": "Italiano",
   "settings.language.en": "English",
 
-  "settings.theme.label": "Theme",
-  "settings.theme.title": "Theme",
   "settings.theme.desc":
     "Choose the appearance of ADE's interface: light, dark, or transparent glass with native desktop window effect.",
   "settings.theme.group": "Interface theme",
@@ -35,7 +30,6 @@ export const en: Messages = {
   "settings.theme.opacityLow": (min) =>
     `Below ${min}% the glass goes further and text loses contrast on pale desktops.`,
   "settings.theme.unsupported": "Glass theme is not supported on this operating system or window compositor.",
-  "settings.theme.desktopOnly": "Native window transparency is only available in the desktop application.",
   "settings.theme.toLight": "Switch to light theme",
   "settings.theme.toDark": "Switch to dark theme",
   "settings.theme.toGlass": "Switch to glass theme",
@@ -55,6 +49,8 @@ export const en: Messages = {
   "palette.recents.forgetGone": (n) => `Remove gone folders from the recents (${n})`,
   "palette.design.variant": (k, title, variant, name) =>
     `Design: open the variant — ${title ? `${k} · ${title}` : k} · Variant ${variant}${name ? ` «${name}»` : ""}`,
+  "confirm.forgetGone.ok": "Remove",
+  "confirm.forgetGone.cancel": "Cancel",
   "confirm.forgetGone": (n) =>
     n === 1
       ? "Remove 1 gone folder from the recent projects and the project list?"
@@ -107,7 +103,7 @@ export const en: Messages = {
   "update.none": "No updates available.",
   "update.dev": "This is a development build, so there's no installed version to update.",
   "update.failed": (problem) =>
-    `Couldn't check for updates: the release server didn't answer (${problem}). Try again later from Notifications → Check for updates.`,
+    `Couldn't check for updates (${problem}). Try again later from Notifications → Check for updates.`,
   "presence.off": "Microphone off",
   "presence.asleep": "Waiting for the wake word",
   "presence.idle": "Ready",
@@ -251,11 +247,15 @@ export const en: Messages = {
   "pane.input.none": "no process listening",
   "pane.notDelivered": (text) => `No process is listening, so ${text} wasn't delivered.`,
   "pane.startFailed": (error) =>
-    `The session didn't start: ${error}. Press Restart; if it happens again, check your sign-in in Settings → Agents and accounts.`,
+    `The session didn't start: ${error}. Press Retry; if it happens again, check your sign-in in Settings → Agents and accounts.`,
   "pane.startFailed.notFound": (agent, command) =>
-    `${agent} didn't start: the command “${command}” is not installed on this computer. Install it from its card in New session, then press Restart.`,
+    `${agent} didn't start: the command “${command}” is not installed on this computer. Install it from its card in New session, then press Retry.`,
+  "pane.connectFailed.notFound": (reason) => `The connection failed: ${reason}. Install it, then try again.`,
   "pane.connectFailed": (error) => `The connection failed: ${error}. Check the address and the network, then try again.`,
   "pane.reason.cantRun": (command, why) => `${command} won't start (${why})`,
+  "pane.reason.notFound": (command) => `the command “${command}” is not installed on this computer`,
+  "pane.reason.sshPortMissing": "the port after -p is missing",
+  "pane.reason.sshValueMissing": "the value of the ssh option is missing",
   "pane.reason.noPty": (why) => `the terminal could not be opened (${why})`,
   "pane.reason.optionRefused": (command, flag) => `ADE does not start ${command} with the option ${flag}`,
   "pane.reason.commandRefused": (command) => `ADE cannot start “${command}”`,
@@ -537,7 +537,6 @@ export const en: Messages = {
   "bar.dismissNotice": "Dismiss notice",
   "bell.empty": "No notifications.",
   "settings.title": "Settings",
-  "settings.subtitle": "Voice, routines, code, MCP, plugins and skills",
   "settings.done": "Done",
   "settings.category.general": "General",
   "settings.category.general.desc": "Appearance, language, and window layout",
@@ -576,7 +575,6 @@ export const en: Messages = {
   "settings.about.version": "Version",
   "settings.about.folder": "Data folder",
   "settings.about.unknown": "not available",
-  "settings.group.voice": "Voice",
   "settings.record.quality": "Video quality",
   "settings.record.mic": "Microphone in takes",
   "settings.record.mic.on": "On",
@@ -588,10 +586,7 @@ export const en: Messages = {
   "settings.record.export.desc": "Adds zoom and clicks, and uses the microphone's audio when there is any.",
   "settings.updates.desc": "ADE updates from official releases; the same check runs from the notifications menu.",
   "settings.updates.installed": "Installed version:",
-  "settings.code": "Code",
   "settings.keys": "API keys",
-  "settings.extensions": "Extensions",
-  "settings.space": "Disk space",
   "space.title": "Disk space",
   "space.desc": "What ADE keeps on your computer and can be taken away. It says how much it frees before it deletes; work that has not landed, secrets, decisions and projects' memory are never touched.",
   "space.empty": "There is nothing to remove.",
@@ -623,10 +618,8 @@ export const en: Messages = {
   "space.failed": (a: string) => `Not done: ${a}`,
   "space.kept": (a: string) => `Stays: ${a}`,
   "space.busy": "One moment…",
-  "settings.tools": "Tools",
   "settings.noPlugins": "No plugins loaded.",
   "settings.notBuilt": "Nothing to configure here yet: the section exists, the feature doesn't.",
-  "settings.grid.title": "Grid",
   "settings.grid.desc":
     "How many columns the panels use in the Code view. On Auto, ADE picks based on the window width and how many panels are open, so none gets narrower than is readable.",
   "settings.grid.columns": "Grid columns",
@@ -1088,10 +1081,10 @@ export const en: Messages = {
   "gateway.panel.changeCode": "Change code",
   "gateway.panel.openPlatforms": "Open platforms",
   "gateway.panel.attentionNotice": (name: string, platform: string) =>
-    `Gateway for ${name} on ${platform} needs attention.`,
-  "gateway.bar.connected": "Gateway: connected",
-  "gateway.bar.reconnecting": "Gateway: reconnecting",
-  "gateway.bar.needsAttention": "Gateway: needs attention",
+    `Chat connection for ${name} on ${platform} needs attention.`,
+  "gateway.bar.connected": "Chat connection: on",
+  "gateway.bar.reconnecting": "Chat connection: reconnecting",
+  "gateway.bar.needsAttention": "Chat connection: needs attention",
   "gateway.panel.lastMessage": (time) => `last message at ${time}`,
   "gateway.panel.redacted": (time) =>
     `The message at ${time} held a key: it was hidden, the bot did not see it and it was not saved.`,
@@ -1315,7 +1308,7 @@ export const en: Messages = {
   "decisions.noProject": "No project open.",
   "decisions.noProject.hint": "The decision log lives in the project's .ade/decisions.jsonl.",
   "decisions.unreadable": (problem) =>
-    `Can't read the project's decisions: the file .ade/decisions.jsonl has a damaged line (${problem}). Fix that line and reopen the panel.`,
+    `Can't read the project's decisions (${problem}). Check the file .ade/decisions.jsonl and reopen the panel.`,
   "decisions.ignored": (count) => `${count === 1 ? "1 line" : `${count} lines`} skipped in the log`,
   "decisions.section.open": "To decide, in order",
   "decisions.section.answered": "Answered, waiting to be carried out",
@@ -1429,7 +1422,7 @@ export const en: Messages = {
     `Deliver ${queued === 1 ? "the queued choice" : `the ${queued} queued choices`} to “${title}”?`,
   "design.recipient.deliver": "Deliver",
   "design.sheet.position": (index, total) => `${index} of ${total}`,
-  "design.sheet.empty": "When a session asks you to choose, the number next to Decisions at the top lights up.",
+  "design.sheet.empty": "When a session proposes a design, the number next to Design at the top lights up.",
   "design.sheet.needChoice": "Nothing chosen: press 1–9 or click an option, then Enter",
   "design.sheet.needRecipient": "Nobody receives the answer: choose who does, then Enter",
   "design.sheet.keys": "1–9 choose · Enter records · ← → browse · Esc closes",
@@ -1505,7 +1498,7 @@ export const en: Messages = {
   "review.error.status": "Couldn't read the repository status.",
   "review.error.stats": "Couldn't compute the change statistics.",
   "review.error.files": "Couldn't list the changed files.",
-  "shots.dismiss": "Remove from tray",
+  "shots.dismiss": "Remove from Screenshots",
   "shots.dismiss.named": (name) => `Remove ${name}`,
   "shots.hint": "drag it onto a session to give it to the agent",
   "shots.delete": "Delete",

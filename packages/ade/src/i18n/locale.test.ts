@@ -69,18 +69,18 @@ describe("t()", () => {
       // What `<h3>{t("…")}</h3>` compiles to: one render effect per text.
       createRenderEffect(() => {
         runs++
-        title.textContent = t("settings.language.title")
+        title.textContent = t("settings.tab.language")
       })
       host.append(title)
       return dispose
     })
     const node = host.firstChild
-    expect(host.textContent).toBe("Lingua")
+    expect(host.textContent).toBe("Lingua dell'interfaccia")
     setLocalePreference("en")
-    expect(host.textContent).toBe("Language")
+    expect(host.textContent).toBe("Interface language")
     expect(host.firstChild).toBe(node)
     setLocalePreference("it")
-    expect(host.textContent).toBe("Lingua")
+    expect(host.textContent).toBe("Lingua dell'interfaccia")
     expect(runs).toBe(3)
     dispose()
   })

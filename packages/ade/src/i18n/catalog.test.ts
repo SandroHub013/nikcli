@@ -25,7 +25,6 @@ const SAME_IN_BOTH = new Set<string>([
   "preset.solo",
   // «Branch» is git's word, in both.
   "pane.tree.branch",
-  "sidebar.spaces",
   "pane.quota",
   "settings.grid.auto",
   "gateway.panel.platformTelegram",
@@ -200,19 +199,20 @@ function allTexts(catalog: Record<string, unknown>): [string, string][] {
 }
 
 describe("the words of the glossary (UX-11, UX-12, UX-27)", () => {
-  // The spoken phrase «apri la tavolozza» is what the voice engine understands, not a name on screen.
-  const SPOKEN = new Set(["vui.commands.trial.placeholder"])
-  const italian = allTexts(it).filter(([key]) => !SPOKEN.has(key))
+  // «App di messaggi (gateway)» is the user's own choice (bots/words.test.ts, scelta 6): the technical word stays in brackets.
+  const CHOSEN = new Set(["gateway.panel.heading"])
+  const italian = allTexts(it).filter(([key]) => !CHOSEN.has(key))
 
   test("one term for each concept: the losing synonyms are gone from the Italian texts", () => {
     const forbidden: [string, RegExp][] = [
-      ["a project is a progetto, not a Space", /Spaces?|(?:uno|lo|nello) space/],
-      ["a worktree is a copia di lavoro", /albero isolato|copia di lavoro isolata|[Ww]orktree (?:delle|resta)|la worktree/],
-      ["the command palette is Cerca comandi", /[Pp]alette dei comandi|tavolozza|Cerca o esegui/],
+      ["a project is a progetto, not a Space", /\bSpaces?\b|(?:uno|lo|nello) space\b/],
+      ["a worktree is a copia di lavoro (worktree git, once)", /\b[Ww]orktree\b(?! git\)|, worktree\b)/],
+      ["the command palette is Cerca comandi", /\b[Pp]alette\b|tavolozza|Cerca o esegui/],
       ["check again is Ricontrolla", /Controlla di nuovo/],
       ["a screenshot tray is Schermate", /vassoio/],
       ["kill is termina", /[Uu]cciso|[Uu]ccidi/],
-      ["a task is a compito", /task (?:parallel|iniziale)/],
+      ["a task is a compito", /\btasks?\b/],
+      ["a gateway is a collegamento chat", /\b[Gg]ateway\b/],
       ["Decisioni is never cut to Dec", /^Dec$/],
     ]
     for (const [why, pattern] of forbidden) {
@@ -254,7 +254,7 @@ describe("the confirmation dialogs name their action (UX-10)", () => {
     expect(it["editor.closeDirty"]("a.ts")).toBe("Chiudere a.ts senza salvare? Le modifiche non salvate vanno perse.")
     expect(it["editor.closeDirty.ok"]).toBe("Chiudi senza salvare")
     expect(it["editor.closeDirty.cancel"]).toBe("Torna al file")
-    expect(it["editor.saveChanged"]("a.ts")).toBe("a.ts è cambiato su disco dopo che l'hai aperto. Salvando, le tue modifiche sostituiscono quelle.")
+    expect(it["editor.saveChanged"]("a.ts")).toBe("a.ts è cambiato su disco dopo che l'hai aperto. Salvando, le tue modifiche sostituiscono quella versione.")
     expect(it["editor.saveChanged.ok"]).toBe("Sostituisci")
     expect(it["window.closeConfirm.message"](2)).toEndWith("Chiudere comunque?")
     expect(it["window.closeConfirm.message"](2)).not.toContain("lo stesso")
