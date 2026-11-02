@@ -64,6 +64,8 @@ const MAX_BUTTON_DATA: usize = 64;
 const MAX_BUTTON_LABEL: usize = 64;
 const PENDING_CAP: usize = 1_000;
 const DISK_PENDING_CAP: usize = 200;
+/// What the panel is told when the pending queue is full and a message was dropped.
+const QUEUE_FULL: &str = "coda_piena";
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MessageSender {
@@ -348,6 +350,66 @@ fn save_pending_to_disk(
     } else {
         let _ = write_pending_file(&path, &unacked);
     }
+}
+
+/// Takes the acknowledged entries out of `pending`, wherever they sit: one never acknowledged in front of them
+/// must not hold them back (BOT-4). What is left is written to disk, and the furthest position the taken
+/// entries held is returned: the unacknowledged ones stay in the file, so the position may pass them.
+fn settle(
+    env: &dyn Env,
+    store_path: &std::path::Path,
+    bot: &str,
+    platform: Platform,
+    pending: &mut VecDeque<PendingEntry>,
+) -> Option<String> {
+    let mut furthest: Option<String> = None;
+    pending.retain(|entry| {
+        if !entry.acked {
+            return true;
+        }
+        if let Some(cursor) = &entry.cursor {
+            if is_cursor_ahead(furthest.as_deref(), cursor) {
+                furthest = Some(cursor.clone());
+            }
+        }
+        false
+    });
+    save_pending_to_disk(env, store_path, bot, platform, pending);
+    furthest
+}
+
+/// A message handed on again (the page reloaded, or the link started again) passes what a new one passes:
+/// its sender must still be authorized, and is the owner only if they still are. One that fails is marked
+/// acknowledged and dropped, with a line in the log (BOT-3). Returns what goes to the page and whether any was dropped.
+fn recheck_unacked(
+    env: &dyn Env,
+    store: &Store,
+    bot: &str,
+    platform: Platform,
+    pending: &mut VecDeque<PendingEntry>,
+) -> (Vec<GatewayMessage>, bool) {
+    let link = store.link(bot, platform);
+    let mut again = Vec::new();
+    let mut dropped = 0;
+    for entry in pending.iter_mut().filter(|entry| !entry.acked) {
+        let sender = entry.msg.sender.id.as_str();
+        if !link.as_ref().is_some_and(|link| link.is_authorized(sender)) {
+            entry.acked = true;
+            dropped += 1;
+            continue;
+        }
+        entry.msg.recovered = true;
+        entry.msg.owner = link.as_ref().is_some_and(|link| link.is_owner(sender));
+        again.push(entry.msg.clone());
+    }
+    if dropped > 0 {
+        env.log(&format!(
+            "gateway {} {}: {dropped} messaggi in coda non riconsegnati: il mittente non è più autorizzato",
+            platform.id(),
+            &bot_key(bot)[..8]
+        ));
+    }
+    (again, dropped > 0)
 }
 
 /// Every token of every link in the gateway's state, out of the vault: for the uninstall that is asked to delete the data. The state file is
@@ -673,25 +735,25 @@ impl Hub {
 
     /// The page listens for `gateway:message`: the gateways may read.
     pub fn ready(&self) {
-        let pending: Vec<GatewayMessage> = {
+        let mut again: Vec<GatewayMessage> = Vec::new();
+        let mut moved: Vec<(String, Platform, Arc<dyn Adapter>, String)> = Vec::new();
+        {
             let links = self.links();
-            links
-                .values()
-                .flat_map(|r| {
-                    r.pending
-                        .lock()
-                        .unwrap()
-                        .iter_mut()
-                        .filter(|entry| !entry.acked)
-                        .map(|entry| {
-                            entry.msg.recovered = true;
-                            entry.msg.clone()
-                        })
-                        .collect::<Vec<_>>()
-                })
-                .collect()
-        };
-        for msg in pending {
+            for ((bot, platform), running) in links.iter() {
+                let mut pending = running.pending.lock().unwrap();
+                let (messages, dropped) = recheck_unacked(&*self.env, &self.store, bot, *platform, &mut pending);
+                again.extend(messages);
+                if dropped {
+                    if let Some(cursor) = settle(&*self.env, self.store.path(), bot, *platform, &mut pending) {
+                        moved.push((bot.clone(), *platform, running.adapter.clone(), cursor));
+                    }
+                }
+            }
+        }
+        for (bot, platform, adapter, cursor) in moved {
+            let _ = self.advance_cursor(&bot, platform, Some(&adapter), &cursor);
+        }
+        for msg in again {
             self.env.message(&msg);
         }
         self.ready.send_replace(true);
@@ -742,9 +804,14 @@ impl Hub {
             read_pending_file(&pending_file_path(self.store.path(), bot, platform)).into();
         let ready_now = *self.ready.borrow();
         if ready_now {
-            for entry in initial_pending.iter_mut().filter(|entry| !entry.acked) {
-                entry.msg.recovered = true;
-                self.env.message(&entry.msg);
+            let (again, dropped) = recheck_unacked(&*self.env, &self.store, bot, platform, &mut initial_pending);
+            if dropped {
+                if let Some(cursor) = settle(&*self.env, self.store.path(), bot, platform, &mut initial_pending) {
+                    let _ = self.advance_cursor(bot, platform, Some(&adapter), &cursor);
+                }
+            }
+            for msg in &again {
+                self.env.message(msg);
             }
         }
         let pending = Arc::new(Mutex::new(initial_pending));
@@ -784,8 +851,36 @@ impl Hub {
     /// Switches the gateway off, and remembers it is off.
     pub fn stop(&self, bot: &str, platform: Platform) -> Result<(), String> {
         check_bot(bot)?;
+        let queued = self.links().get(&(bot.to_string(), platform)).map(|running| running.pending.clone());
         self.halt(bot, platform);
         self.failed().remove(&(bot.to_string(), platform));
+        // «Off» is a kill switch: what was waiting is not delivered later, after a restart or a switch-on.
+        // The position moves past it, so the platform does not send it again either (BOT-2).
+        let path = pending_file_path(self.store.path(), bot, platform);
+        let mut waiting: Vec<PendingEntry> = match queued {
+            Some(queue) => queue.lock().unwrap().drain(..).collect(),
+            None => read_pending_file(&path),
+        };
+        let unacked = waiting.iter().filter(|entry| !entry.acked).count();
+        let mut furthest: Option<String> = None;
+        for entry in waiting.drain(..) {
+            if let Some(cursor) = entry.cursor {
+                if is_cursor_ahead(furthest.as_deref(), &cursor) {
+                    furthest = Some(cursor);
+                }
+            }
+        }
+        remove_pending_file(&path);
+        if unacked > 0 {
+            self.env.log(&format!(
+                "gateway {} {}: spento: {unacked} messaggi in coda scartati",
+                platform.id(),
+                &bot_key(bot)[..8]
+            ));
+        }
+        if let Some(cursor) = furthest {
+            let _ = self.advance_cursor(bot, platform, None, &cursor);
+        }
         self.env.status(&LinkStatus {
             bot: bot.to_string(),
             platform,
@@ -828,36 +923,57 @@ impl Hub {
     /// The webview acknowledged receipt of a message: advance the cursor up to this message in state.json.
     pub fn ack(&self, bot: &str, platform: Platform, chat: &str, id: &str) -> Result<(), String> {
         check_bot(bot)?;
-        let (adapter, pending_lock) = match self.links().get(&(bot.to_string(), platform)) {
-            Some(r) => (r.adapter.clone(), r.pending.clone()),
-            None => return Ok(()),
+        let running = self.links().get(&(bot.to_string(), platform)).map(|r| (r.adapter.clone(), r.pending.clone()));
+        let Some((adapter, pending_lock)) = running else {
+            // No link is running (switched off, or not started yet): the entry still leaves the file,
+            // or it would be handed on again at the next start (BOT-2).
+            return self.ack_in_file(bot, platform, chat, id);
         };
-        let mut cursor_to_save = None;
-        {
+        let cursor_to_save = {
             let mut pending = pending_lock.lock().unwrap();
             if let Some(entry) = pending.iter_mut().find(|entry| entry.msg.chat == chat && entry.msg.id == id) {
                 entry.acked = true;
             }
-            while pending.front().map_or(false, |entry| entry.acked) {
-                let popped = pending.pop_front().unwrap();
-                if popped.cursor.is_some() {
-                    cursor_to_save = popped.cursor;
-                }
+            settle(&*self.env, self.store.path(), bot, platform, &mut pending)
+        };
+        match cursor_to_save {
+            Some(cursor) => self.advance_cursor(bot, platform, Some(&adapter), &cursor),
+            None => Ok(()),
+        }
+    }
+
+    /// Saves `cursor` as the link's position if it is ahead of the saved one, and tells the adapter.
+    fn advance_cursor(&self, bot: &str, platform: Platform, adapter: Option<&Arc<dyn Adapter>>, cursor: &str) -> Result<(), String> {
+        if let Some(adapter) = adapter {
+            adapter.ack(cursor);
+        }
+        let written_at = self.env.now_ms();
+        self.store.update(bot, platform, |link, _| {
+            if is_cursor_ahead(link.cursor.as_deref(), cursor) {
+                link.cursor = Some(cursor.to_string());
+                link.cursor_saved_ms = Some(written_at);
             }
-            save_pending_to_disk(&*self.env, self.store.path(), bot, platform, &pending);
+            Ok(())
+        })
+    }
+
+    /// `ack` for a link that is not running: the entry is taken out of the pending file.
+    fn ack_in_file(&self, bot: &str, platform: Platform, chat: &str, id: &str) -> Result<(), String> {
+        let path = pending_file_path(self.store.path(), bot, platform);
+        let mut entries = read_pending_file(&path);
+        let Some(position) = entries.iter().position(|entry| entry.msg.chat == chat && entry.msg.id == id) else {
+            return Ok(());
+        };
+        let taken = entries.remove(position);
+        if entries.is_empty() {
+            remove_pending_file(&path);
+        } else {
+            let _ = write_pending_file(&path, &entries);
         }
-        if let Some(cursor) = cursor_to_save {
-            adapter.ack(&cursor);
-            let written_at = self.env.now_ms();
-            self.store.update(bot, platform, |link, _| {
-                if is_cursor_ahead(link.cursor.as_deref(), &cursor) {
-                    link.cursor = Some(cursor.clone());
-                    link.cursor_saved_ms = Some(written_at);
-                }
-                Ok(())
-            })?;
+        match taken.cursor {
+            Some(cursor) => self.advance_cursor(bot, platform, None, &cursor),
+            None => Ok(()),
         }
-        Ok(())
     }
 
     /// Wakes up all enabled gateways immediately: called when the computer wakes up from sleep or network returns.
@@ -1182,7 +1298,54 @@ impl Hub {
             Ok(())
         })?;
         self.env.log(&format!("gateway {} {}: autorizzazione revocata in ADE", platform.id(), &bot_key(bot)[..8]));
+        self.drop_queued_of(bot, platform, sender);
         Ok(())
+    }
+
+    /// What `sender` left in the pending queue is dropped, so no reload or restart hands it on again (BOT-3).
+    fn drop_queued_of(&self, bot: &str, platform: Platform, sender: &str) {
+        let running = self.links().get(&(bot.to_string(), platform)).map(|r| (r.adapter.clone(), r.pending.clone()));
+        let mut dropped = 0;
+        match running {
+            Some((adapter, queue)) => {
+                let furthest = {
+                    let mut pending = queue.lock().unwrap();
+                    for entry in pending.iter_mut().filter(|entry| !entry.acked && entry.msg.sender.id == sender) {
+                        entry.acked = true;
+                        dropped += 1;
+                    }
+                    if dropped == 0 {
+                        None
+                    } else {
+                        settle(&*self.env, self.store.path(), bot, platform, &mut pending)
+                    }
+                };
+                if let Some(cursor) = furthest {
+                    let _ = self.advance_cursor(bot, platform, Some(&adapter), &cursor);
+                }
+            }
+            None => {
+                let path = pending_file_path(self.store.path(), bot, platform);
+                let mut entries = read_pending_file(&path);
+                let before = entries.len();
+                entries.retain(|entry| entry.msg.sender.id != sender);
+                dropped = before - entries.len();
+                if dropped > 0 {
+                    if entries.is_empty() {
+                        remove_pending_file(&path);
+                    } else {
+                        let _ = write_pending_file(&path, &entries);
+                    }
+                }
+            }
+        }
+        if dropped > 0 {
+            self.env.log(&format!(
+                "gateway {} {}: {dropped} messaggi in coda di un mittente revocato scartati",
+                platform.id(),
+                &bot_key(bot)[..8]
+            ));
+        }
     }
 
     /// The user asks to pair one more account: for 10 minutes, or until one is
@@ -1523,13 +1686,25 @@ impl Task {
         }
         if pending.len() >= PENDING_CAP {
             self.env.log(&format!("{tag}: coda dei messaggi in attesa piena ({PENDING_CAP}): messaggio scartato"));
+            drop(pending);
+            // The panel says it: the bot is deaf until the page acknowledges what waits (BOT-4).
+            self.report(|live| {
+                live.needs_attention = true;
+                live.attention_reason = Some(QUEUE_FULL.to_string());
+            });
             return;
         }
         pending.push_back(PendingEntry { msg: msg.clone(), cursor, acked: false });
         save_pending_to_disk(&*self.env, self.store.path(), &self.bot, self.platform, &pending);
         drop(pending);
         self.env.message(&msg);
-        self.report(|live| live.last_message_ms = Some(at));
+        self.report(|live| {
+            live.last_message_ms = Some(at);
+            if live.attention_reason.as_deref() == Some(QUEUE_FULL) {
+                live.needs_attention = false;
+                live.attention_reason = None;
+            }
+        });
     }
 
     /// `/start <token>` arrived. True when it is dealt with here (the message goes no further).
@@ -2791,7 +2966,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn ack_only_removes_that_message_and_cursor_only_advances_when_preceding_are_confirmed() {
+    async fn ack_only_removes_that_message_and_the_unconfirmed_one_stays_on_disk() {
         let s = setup("sliding-window-ack");
         authorize(&s, "42");
         let (_adapter, feed) = start(&s);
@@ -2806,8 +2981,12 @@ mod tests {
         s.hub.ack(BOT, Platform::Fake, "c42", "102").unwrap();
         tokio::time::sleep(Duration::from_millis(30)).await;
 
-        // The cursor must NOT advance to 103 yet, because message 100 before it is unconfirmed:
-        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().cursor, None);
+        // BOT-4: the acknowledged one leaves the queue even behind the unconfirmed one, so one stuck entry cannot fill the
+        // queue. The position passes it: message 100 stays in the pending file, so a restart still hands it on, and
+        // message 102 is no longer run twice (before, the position stayed behind it and a restart ran it again).
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref(), Some("103"));
+        let on_disk = read_pending_file(&pending_file_path(s.hub.store.path(), BOT, Platform::Fake));
+        assert_eq!(on_disk.iter().map(|entry| entry.msg.id.as_str()).collect::<Vec<_>>(), vec!["100"]);
 
         // Page reloads:
         s.hub.unready();
@@ -2820,7 +2999,7 @@ mod tests {
 
         // Now acknowledge the first message:
         s.hub.ack(BOT, Platform::Fake, "c42", "100").unwrap();
-        // Since both 100 and 102 are now confirmed, cursor advances to 103:
+        // Both are confirmed now, and the position stays at 103:
         eventually("il cursore avanza a 103", || s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref() == Some("103")).await;
     }
 
@@ -3294,6 +3473,172 @@ mod tests {
         assert_eq!(running.pending.lock().unwrap().len(), PENDING_CAP);
         let logs = s.env.log.lock().unwrap();
         assert!(logs.iter().any(|line| line.contains("coda dei messaggi in attesa piena") && line.contains("messaggio scartato")));
+    }
+
+    fn with_cursor(cursor: &str, inbound: Inbound) -> Inbound {
+        Inbound { cursor: Some(cursor.into()), ..inbound }
+    }
+
+    /* BOT-4: one entry never acknowledged does not hold the others in the queue. */
+    #[tokio::test]
+    async fn an_acknowledged_entry_leaves_the_queue_even_behind_an_unacknowledged_one() {
+        let s = setup("ack-behind-unacked");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        feed.send(Ok(vec![
+            with_cursor("101", message("1", "c42", "42", "mai confermato")),
+            with_cursor("102", message("2", "c42", "42", "confermato")),
+        ]))
+        .unwrap();
+        eventually("i due messaggi", || s.env.messages.lock().unwrap().len() == 2).await;
+
+        s.hub.ack(BOT, Platform::Fake, "c42", "2").unwrap();
+
+        let links = s.hub.links();
+        let running = links.get(&(BOT.to_string(), Platform::Fake)).unwrap();
+        let left: Vec<String> = running.pending.lock().unwrap().iter().map(|entry| entry.msg.id.clone()).collect();
+        assert_eq!(left, vec!["1".to_string()], "the acknowledged entry must not wait behind the older one");
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref(), Some("102"));
+        // The one never acknowledged is still on disk, so a restart hands it on.
+        let on_disk = read_pending_file(&pending_file_path(s.hub.store.path(), BOT, Platform::Fake));
+        assert_eq!(on_disk.len(), 1);
+        assert_eq!(on_disk[0].msg.id, "1");
+    }
+
+    /* BOT-2: an acknowledgement that finds no running link still takes the entry out of the file. */
+    #[tokio::test]
+    async fn an_ack_with_no_running_link_removes_the_entry_from_the_pending_file() {
+        let s = setup("ack-no-link");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        feed.send(Ok(vec![with_cursor("201", message("1", "c42", "42", "uno"))])).unwrap();
+        eventually("il messaggio", || s.env.messages.lock().unwrap().len() == 1).await;
+        let path = pending_file_path(s.hub.store.path(), BOT, Platform::Fake);
+        assert!(path.exists());
+
+        s.hub.shutdown();
+        s.hub.ack(BOT, Platform::Fake, "c42", "1").unwrap();
+
+        assert!(!path.exists(), "the file kept an entry the page had acknowledged");
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref(), Some("201"));
+    }
+
+    /* BOT-2: switching a gateway off is a kill switch: what waited is not handed on after a restart or a switch-on. */
+    #[tokio::test]
+    async fn switching_a_gateway_off_drops_what_waited_in_the_queue() {
+        let s = setup("off-drops-queue");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        feed.send(Ok(vec![
+            with_cursor("301", message("1", "c42", "42", "uno")),
+            with_cursor("302", message("2", "c42", "42", "due")),
+        ]))
+        .unwrap();
+        eventually("i messaggi", || s.env.messages.lock().unwrap().len() == 2).await;
+        let path = pending_file_path(s.hub.store.path(), BOT, Platform::Fake);
+        assert!(path.exists());
+
+        s.hub.stop(BOT, Platform::Fake).unwrap();
+
+        assert!(!path.exists(), "the pending file outlived the switch-off");
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref(), Some("302"), "the platform would send them again");
+        assert!(s.env.log.lock().unwrap().iter().any(|line| line.contains("spento: 2 messaggi in coda scartati")));
+        // Switched on again, and the page reloaded: nothing comes back.
+        s.hub.start(BOT, Platform::Fake, "C:/progetto").unwrap();
+        s.hub.unready();
+        s.hub.ready();
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        assert_eq!(s.env.messages.lock().unwrap().len(), 2, "a dropped message was delivered again");
+    }
+
+    /* BOT-3: a revoked sender's queued messages do not come back after a reload. */
+    #[tokio::test]
+    async fn revoking_a_sender_drops_their_queued_messages_for_good() {
+        let s = setup("revoke-drops-queue");
+        authorize(&s, "42");
+        authorize(&s, "43");
+        let (_adapter, feed) = start(&s);
+        feed.send(Ok(vec![
+            with_cursor("401", message("1", "c42", "42", "del revocato")),
+            with_cursor("402", message("2", "c43", "43", "di un altro")),
+        ]))
+        .unwrap();
+        eventually("i messaggi", || s.env.messages.lock().unwrap().len() == 2).await;
+
+        s.hub.pairing_revoke(BOT, Platform::Fake, "42").unwrap();
+        s.hub.unready();
+        s.hub.ready();
+        eventually("il messaggio dell'altro è riemesso", || s.env.messages.lock().unwrap().len() == 3).await;
+
+        let messages = s.env.messages.lock().unwrap().clone();
+        assert_eq!(messages[2].id, "2");
+        assert!(messages.iter().skip(2).all(|m| m.sender.id != "42"), "the revoked sender's message came back");
+        let on_disk = read_pending_file(&pending_file_path(s.hub.store.path(), BOT, Platform::Fake));
+        assert_eq!(on_disk.iter().map(|entry| entry.msg.id.as_str()).collect::<Vec<_>>(), vec!["2"]);
+    }
+
+    /* BOT-3: whatever took the authorization away, a redelivered message is checked like a new one. */
+    #[tokio::test]
+    async fn a_redelivered_message_of_a_sender_no_longer_authorized_is_dropped_and_logged() {
+        let s = setup("redeliver-recheck");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        feed.send(Ok(vec![with_cursor("501", message("1", "c42", "42", "uno"))])).unwrap();
+        eventually("il messaggio", || s.env.messages.lock().unwrap().len() == 1).await;
+        // The authorization goes without `pairing_revoke` (the state file edited, another command).
+        s.hub
+            .store
+            .update(BOT, Platform::Fake, |link, _| {
+                link.authorized.clear();
+                Ok(())
+            })
+            .unwrap();
+
+        s.hub.unready();
+        s.hub.ready();
+        tokio::time::sleep(Duration::from_millis(30)).await;
+
+        assert_eq!(s.env.messages.lock().unwrap().len(), 1, "a sender no longer authorized was handed on again");
+        assert!(s.env.log.lock().unwrap().iter().any(|line| line.contains("non riconsegnati: il mittente non è più autorizzato")));
+        assert!(!pending_file_path(s.hub.store.path(), BOT, Platform::Fake).exists());
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref(), Some("501"));
+    }
+
+    /* BOT-4: a full queue is said in the panel, and the panel is told when it drains. */
+    #[tokio::test]
+    async fn a_full_pending_queue_is_reported_as_needing_attention() {
+        let s = setup("pending-full-attention");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        {
+            let links = s.hub.links();
+            let running = links.get(&(BOT.to_string(), Platform::Fake)).unwrap();
+            let mut pending = running.pending.lock().unwrap();
+            for i in 0..PENDING_CAP {
+                pending.push_back(PendingEntry {
+                    msg: GatewayMessage {
+                        bot: BOT.to_string(),
+                        platform: Platform::Fake,
+                        chat: "c42".into(),
+                        sender: MessageSender { id: "42".into(), name: "utente".into() },
+                        text: format!("msg {i}"),
+                        id: format!("m{i}"),
+                        redacted: false,
+                        button: false,
+                        private: true,
+                        recovered: false,
+                        owner: true,
+                    },
+                    cursor: None,
+                    acked: false,
+                });
+            }
+        }
+        feed.send(Ok(vec![message("overflow", "c42", "42", "troppo")])).unwrap();
+        eventually("la coda piena è segnalata", || {
+            s.env.statuses.lock().unwrap().last().is_some_and(|status| status.needs_attention && status.attention_reason.as_deref() == Some(QUEUE_FULL))
+        })
+        .await;
     }
 
     #[tokio::test]
