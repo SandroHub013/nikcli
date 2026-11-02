@@ -13,7 +13,8 @@
 /// registry that lets `write`, `resize` and `kill` find their master again.
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::sync::mpsc::{Receiver, RecvTimeoutError};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -22,16 +23,132 @@ use tauri::{AppHandle, Emitter, Manager};
 
 /// One live pseudo-terminal, kept only so later calls can reach it.
 struct Session {
-    /// Absent for a piped process (`pipe`), which has no terminal to resize.
-    master: Option<Box<dyn MasterPty + Send>>,
     /*
-     * Behind a lock of its own, so writing to one session never holds the lock
-     * that every other session's spawn, resize and kill has to take. A write to
-     * a pty blocks for as long as the child refuses to read its stdin, and a
-     * suspended agent is an ordinary thing rather than a rare one.
+     * Absent for a piped process (`pipe`), which has no terminal to resize. Shared so that a resize can leave the
+     * registry's lock before it talks to the console host (RS-8).
      */
-    writer: Arc<Mutex<Box<dyn Write + Send>>>,
+    master: Option<Arc<Mutex<Box<dyn MasterPty + Send>>>>,
+    /*
+     * A queue and not the pipe itself: a write to a pty blocks for as long as the child refuses to read its stdin,
+     * and a suspended agent is an ordinary thing rather than a rare one. See `WriteQueue`.
+     */
+    writer: Arc<WriteQueue>,
     child: Box<dyn Child + Send + Sync>,
+    /// What ends the tree if ADE dies without saying so. See `PaneJob`.
+    #[allow(dead_code)]
+    job: Option<PaneJob>,
+}
+
+/// How much may wait for a pane that is not reading before a write is refused.
+///
+/// Far above anything a person types, or a mail delivery sends, into one pane in the time a healthy child takes to
+/// read it. A single write larger than this still goes through when nothing is waiting: a big paste into a pane that
+/// is reading is not what this limit is for.
+const MAX_QUEUED_WRITE: usize = 8 * 1024 * 1024;
+
+#[derive(Default)]
+struct WriteState {
+    queued: AtomicUsize,
+    /// The session is gone: what is still queued is for nobody.
+    closed: AtomicBool,
+    failure: Mutex<Option<String>>,
+}
+
+/**
+ * One session's input: a queue, and one thread that alone touches the pipe.
+ *
+ * `pty_write` used to write from the async command itself. A child that stops reading blocked `write_all` on a tokio
+ * worker with no time limit, and every further keystroke parked another worker on the writer's mutex; once as many
+ * keys as cores had been typed, every async command of the window waited, the mailbox's included, until that one
+ * child read again. The mutex also let the keys through in whatever order the workers woke (RS-5, RS-6, SES-6).
+ *
+ * Here the command only enqueues, and a stalled pane costs one parked thread of its own. When the session goes, the
+ * pipe breaks under the thread and it ends; anything still queued is dropped, as nobody is left to read it.
+ */
+struct WriteQueue {
+    tx: Sender<Vec<u8>>,
+    state: Arc<WriteState>,
+}
+
+impl WriteQueue {
+    fn new(writer: Box<dyn Write + Send>) -> Self {
+        let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
+        let state = Arc::new(WriteState::default());
+        let thread_state = Arc::clone(&state);
+        std::thread::spawn(move || write_in_order(writer, &rx, &thread_state));
+        Self { tx, state }
+    }
+
+    /// Queues `bytes` and returns at once. Never waits for the child.
+    fn enqueue(&self, bytes: Vec<u8>) -> Result<(), String> {
+        if let Some(failure) = self.state.failure.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone() {
+            return Err(failure);
+        }
+        let len = bytes.len();
+        let waiting = self.state.queued.fetch_add(len, Ordering::SeqCst);
+        if waiting > 0 && waiting + len > MAX_QUEUED_WRITE {
+            self.state.queued.fetch_sub(len, Ordering::SeqCst);
+            return Err(format!("il terminale non sta leggendo: {} KB già in coda", waiting / 1024));
+        }
+        self.tx.send(bytes).map_err(|_| "sessione chiusa".to_string())
+    }
+}
+
+impl Drop for WriteQueue {
+    fn drop(&mut self) {
+        self.state.closed.store(true, Ordering::SeqCst);
+    }
+}
+
+/// The body of a session's writer thread: every write whole and in the order it was queued.
+fn write_in_order(mut writer: Box<dyn Write + Send>, queue: &Receiver<Vec<u8>>, state: &WriteState) {
+    while let Ok(bytes) = queue.recv() {
+        if state.closed.load(Ordering::SeqCst) {
+            return;
+        }
+        let written = writer.write_all(&bytes).and_then(|_| writer.flush());
+        state.queued.fetch_sub(bytes.len(), Ordering::SeqCst);
+        if let Err(error) = written {
+            // Told to the next write: the page's call has already returned.
+            *state.failure.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(format!("scrittura fallita: {error}"));
+            return;
+        }
+    }
+}
+
+/*
+ * What ends a pane's process tree when ADE itself goes without ending it.
+ *
+ * `kill_tree` needs ADE alive to run. A crash, a kill from Task Manager or `test:app stop`, or the NSIS setup that
+ * ends every `ade-desktop.exe` by name left the agents running headless, with their MCP servers and dev servers
+ * holding ports and worktree files (RS-4). A job with KILL_ON_JOB_CLOSE closes when ADE's last handle to it does, and
+ * the kernel closes that however the process ends. The descendants inherit the job; ADE itself is never in it, or
+ * the job would take the update's installer with it.
+ *
+ * Only for that. Dropping this value, which only a living ADE can do, takes the kill back first, so a pane that ends
+ * while ADE runs ends as it always has: `kill_tree` for a close, nothing for a program that exits by itself. Closing
+ * a Terminal pane must not take with it the VS Code that `code .` started from it, nor a daemon that other panes
+ * share. No process is meant to outlive a deliberate relaunch either: suspending, relaunching and restoring a pane
+ * all kill the old tree and spawn a new one, under a new job, and resume by conversation id.
+ *
+ * A job that cannot be made or joined is no reason to refuse a pane: it runs unguarded, as before. The child is
+ * joined right after it starts, not started suspended (portable-pty has no such option), so anything it created in
+ * those microseconds would stay out: a process that has not finished loading has not created anything yet.
+ */
+struct PaneJob(crate::ChildTreeGuard);
+
+impl PaneJob {
+    fn around(pid: Option<u32>) -> Option<Self> {
+        let job = crate::ChildTreeGuard::for_pane().ok()?;
+        job.assign_pid(pid?).ok()?;
+        Some(Self(job))
+    }
+}
+
+impl Drop for PaneJob {
+    fn drop(&mut self) {
+        self.0.release();
+    }
 }
 
 #[derive(Default)]
@@ -818,9 +935,9 @@ fn decode_stream_chunk(tail: &mut Vec<u8>) -> String {
 /// can be attached before the first byte arrives — a CLI that greets you in
 /// under a millisecond would otherwise lose its greeting.
 ///
-/// `async` for the reason given on `pty_write`: opening a ConPTY, scanning PATH
-/// and starting a process are all blocking, and a synchronous command does them
-/// on the thread that draws the window.
+/// `async` because opening a ConPTY, scanning PATH and starting a process are
+/// all blocking, and a synchronous command does them on the thread that draws
+/// the window.
 #[tauri::command]
 /*
  * The arguments are the IPC message, so they are not ours to group.
@@ -1031,6 +1148,7 @@ pub async fn pty_spawn(
         spawn_in_pty(builder, rows, cols).map_err(|e| spawn_failure(&command, &e))?
     };
     let Spawned { mut child, master, reader, writer, errors } = spawned;
+    let job = PaneJob::around(child.process_id());
 
     /*
      * The process is running now, so every failure below has to take it with
@@ -1047,12 +1165,13 @@ pub async fn pty_spawn(
     }
 
     let (mut reader, writer) = match (reader, writer) {
-        (Ok(reader), Ok(writer)) => (reader, Arc::new(Mutex::new(writer))),
+        (Ok(reader), Ok(writer)) => (reader, Arc::new(WriteQueue::new(writer))),
         (Err(e), _) => abort_with!(format!("uscita non leggibile: {e}")),
         (_, Err(e)) => abort_with!(format!("ingresso non scrivibile: {e}")),
     };
-    // The reader answers ConPTY's startup questions with it: see `StartupQueries`.
-    let answerer = Arc::clone(&writer);
+    // The reader answers ConPTY's startup questions with it: see `StartupQueries`. In the same queue as the keys, and
+    // without keeping it open once the session has gone.
+    let answerer = Arc::downgrade(&writer);
     let spawned_at = Instant::now();
 
     {
@@ -1063,9 +1182,10 @@ pub async fn pty_spawn(
         sessions.insert(
             id.clone(),
             Session {
-                master,
+                master: master.map(|master| Arc::new(Mutex::new(master))),
                 writer,
                 child,
+                job,
             },
         );
     }
@@ -1137,8 +1257,8 @@ pub async fn pty_spawn(
                     if !queries.done() && spawned_at.elapsed() < STARTUP_QUERY_WINDOW {
                         let (forward, reply) = queries.take(&text);
                         if !reply.is_empty() {
-                            if let Ok(mut writer) = answerer.lock() {
-                                let _ = writer.write_all(reply.as_bytes()).and_then(|_| writer.flush());
+                            if let Some(queue) = answerer.upgrade() {
+                                let _ = queue.enqueue(reply.into_bytes());
                             }
                         }
                         text = forward;
@@ -1220,7 +1340,7 @@ pub async fn pty_spawn(
      */
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_millis(500));
-        let code = {
+        let (code, gone) = {
             let registry = waiter.state::<Registry>();
             let Ok(mut sessions) = registry.0.lock() else {
                 break;
@@ -1230,16 +1350,13 @@ pub async fn pty_spawn(
             };
             match session.child.try_wait() {
                 Ok(None) => continue,
-                Ok(Some(status)) => {
-                    sessions.remove(&waited_id);
-                    Some(status.exit_code() as i32)
-                }
-                Err(_) => {
-                    sessions.remove(&waited_id);
-                    None
-                }
+                Ok(Some(status)) => (Some(status.exit_code() as i32), sessions.remove(&waited_id)),
+                Err(_) => (None, sessions.remove(&waited_id)),
             }
         };
+        // Past the lock: dropping it closes the pseudo console, which waits for conhost, and every spawn, write,
+        // resize and kill of every other pane would wait behind it (RS-8).
+        drop(gone);
         // Not said from here: the sender may still have output queued, and the page stops listening at the exit.
         let _ = exit_tx.send(code);
         // The sender may be waiting for output that will never come (no EOF): it looks at the code when it is woken.
@@ -1397,37 +1514,20 @@ fn pump_until(chunks: &Receiver<String>, mut emit: impl FnMut(String), ended: &d
 /// ruined by a helpful terminator: deciding when a line ends belongs to whoever
 /// is typing.
 ///
-/// `async` because a synchronous `#[tauri::command]` is dispatched on the
-/// thread that owns the window. The write below blocks for as long as the child
-/// refuses to read, so on that thread a single suspended agent stopped the
-/// whole interface from repainting — every pane, not only its own.
+/// Only queues: the session's own thread writes, for as long as the child takes
+/// to read (see `WriteQueue`), so a pane that stopped reading holds nothing that
+/// another pane or the mailbox needs. The page sends one write at a time and
+/// waits for this answer (`orderedWrites`), because two invokes in flight could
+/// reach the queue in either order.
 #[tauri::command]
 pub async fn pty_write(
     registry: tauri::State<'_, Registry>,
     id: String,
     data: String,
 ) -> Result<(), String> {
-    /*
-     * The registry lock is taken to find the writer and released before using
-     * it. `write_all` on a pty blocks for as long as the child is not reading
-     * its stdin — suspended, or sitting on a prompt nobody answered — and
-     * holding the global lock across that would freeze spawn, resize and kill
-     * for every other session in the window.
-     *
-     * The guard lives in a block of its own rather than being dropped by hand:
-     * an early `?` between the lookup and the write must release it too.
-     */
-    let writer = {
-        let sessions = registry.0.lock().map_err(|_| "registro bloccato")?;
-        let session = sessions.get(&id).ok_or("sessione non trovata")?;
-        Arc::clone(&session.writer)
-    };
-
-    let mut writer = writer.lock().map_err(|_| "scrittore bloccato")?;
-    writer
-        .write_all(data.as_bytes())
-        .map_err(|e| format!("scrittura fallita: {e}"))?;
-    writer.flush().map_err(|e| format!("flush fallito: {e}"))
+    let sessions = registry.0.lock().map_err(|_| "registro bloccato")?;
+    let session = sessions.get(&id).ok_or("sessione non trovata")?;
+    session.writer.enqueue(data.into_bytes())
 }
 
 /// Tells the session how big its terminal is now.
@@ -1436,8 +1536,9 @@ pub async fn pty_write(
 /// it at the size the pane happened to be when it started and every redraw wraps
 /// against a width that stopped being true the moment the user dragged anything.
 ///
-/// `async` like the rest: a resize arrives on every frame of a drag, and it
-/// asks the registry for a lock that a write may be holding.
+/// `async` like the rest, and off the registry's lock and the async workers: a
+/// resize arrives on every frame of a drag and talks to the console host, which
+/// may be slow to answer (RS-8).
 #[tauri::command]
 pub async fn pty_resize(
     registry: tauri::State<'_, Registry>,
@@ -1445,19 +1546,27 @@ pub async fn pty_resize(
     cols: u16,
     rows: u16,
 ) -> Result<(), String> {
-    let sessions = registry.0.lock().map_err(|_| "registro bloccato")?;
-    let session = sessions.get(&id).ok_or("sessione non trovata")?;
-    let Some(master) = session.master.as_ref() else {
+    let master = {
+        let sessions = registry.0.lock().map_err(|_| "registro bloccato")?;
+        let session = sessions.get(&id).ok_or("sessione non trovata")?;
+        session.master.clone()
+    };
+    let Some(master) = master else {
         return Ok(());
     };
-    master
-        .resize(PtySize {
-            rows: rows.max(1),
-            cols: cols.max(1),
-            pixel_width: 0,
-            pixel_height: 0,
-        })
-        .map_err(|e| format!("resize fallito: {e}"))
+    tauri::async_runtime::spawn_blocking(move || {
+        let master = master.lock().map_err(|_| "terminale bloccato".to_string())?;
+        master
+            .resize(PtySize {
+                rows: rows.max(1),
+                cols: cols.max(1),
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .map_err(|e| format!("resize fallito: {e}"))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// One row of the process table, as far as walking a tree needs.
@@ -1547,20 +1656,23 @@ fn kill_tree_keeping(pid: u32, include_root: bool) {
 /// review they did not, and the agent's MCP servers and shells outlived the pane
 /// with nothing left in the registry to find them.
 ///
-/// `async` because `wait()` below is exactly as blocking as the write is: a
-/// child that takes its time dying would otherwise take the window with it.
+/// `async`, with the work on the blocking pool: reading the process table,
+/// `wait()` and closing the pseudo console all take as long as they take, and a
+/// child slow to die would otherwise hold a worker every other command needs.
 #[tauri::command]
 pub async fn pty_kill(registry: tauri::State<'_, Registry>, id: String, tree: Option<bool>) -> Result<(), String> {
-    let mut session = {
+    let session = {
         let mut sessions = registry.0.lock().map_err(|_| "registro bloccato")?;
         sessions.remove(&id)
     };
-    if let Some(session) = session.as_mut() {
+    let Some(mut session) = session else {
+        return Ok(());
+    };
+    tauri::async_runtime::spawn_blocking(move || {
         if tree == Some(true) {
             if let Some(pid) = session.child.process_id() {
-                // Reading the process table takes a moment: off the async worker.
                 // On unix the root is left to `child.kill()` below (SIGHUP, a short wait, SIGKILL).
-                let _ = tauri::async_runtime::spawn_blocking(move || kill_tree_keeping(pid, cfg!(windows))).await;
+                kill_tree_keeping(pid, cfg!(windows));
             }
         }
         let _ = session.child.kill();
@@ -1571,8 +1683,9 @@ pub async fn pty_kill(registry: tauri::State<'_, Registry>, id: String, tree: Op
          * zombie until ADE itself exits.
          */
         let _ = session.child.wait();
-    }
-    Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 /// Reports whether `command` can be found and started at all.
@@ -1948,8 +2061,261 @@ mod tests {
         let child = pair.slave.spawn_command(cmd).unwrap();
         drop(pair.slave);
         let pid = child.process_id().unwrap();
-        let writer = Arc::new(Mutex::new(pair.master.take_writer().unwrap()));
-        (Session { master: Some(pair.master), writer, child }, pid)
+        let writer = Arc::new(WriteQueue::new(pair.master.take_writer().unwrap()));
+        (Session { master: Some(Arc::new(Mutex::new(pair.master))), writer, child, job: None }, pid)
+    }
+
+    /// A pipe end that takes nothing until it is told to, then hands over what it got.
+    struct StalledPipe {
+        release: Receiver<()>,
+        written: Arc<Mutex<Vec<u8>>>,
+        entered: Arc<AtomicBool>,
+    }
+
+    impl Write for StalledPipe {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.entered.store(true, Ordering::SeqCst);
+            let _ = self.release.recv();
+            self.written.lock().unwrap().extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    fn stalled_queue_entered() -> (WriteQueue, std::sync::mpsc::Sender<()>, Arc<Mutex<Vec<u8>>>, Arc<AtomicBool>) {
+        let (open, release) = std::sync::mpsc::channel();
+        let written = Arc::new(Mutex::new(Vec::new()));
+        let entered = Arc::new(AtomicBool::new(false));
+        let queue = WriteQueue::new(Box::new(StalledPipe {
+            release,
+            written: Arc::clone(&written),
+            entered: Arc::clone(&entered),
+        }));
+        (queue, open, written, entered)
+    }
+
+    fn stalled_queue() -> (WriteQueue, std::sync::mpsc::Sender<()>, Arc<Mutex<Vec<u8>>>) {
+        let (queue, open, written, _) = stalled_queue_entered();
+        (queue, open, written)
+    }
+
+    fn wait_until(what: &str, done: impl Fn() -> bool) {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !done() {
+            assert!(Instant::now() < deadline, "{what}");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    /*
+     * The incident's shape, RS-5: a child that stopped reading, and the user
+     * still typing into it. Each write used to park a tokio worker until the
+     * child read again; here all of them return while the pipe takes nothing.
+     */
+    #[test]
+    fn a_pane_that_stopped_reading_blocks_no_writer() {
+        let (queue, open, written) = stalled_queue();
+        let start = Instant::now();
+        for _ in 0..64 {
+            queue.enqueue(b"x".to_vec()).unwrap();
+        }
+        assert!(start.elapsed() < Duration::from_secs(2), "a write waited for the child");
+        assert!(written.lock().unwrap().is_empty());
+        for _ in 0..64 {
+            open.send(()).unwrap();
+        }
+        wait_until("the keys never reached the child", || written.lock().unwrap().len() == 64);
+    }
+
+    /// RS-6, SES-6: an Enter never lands before the text it ends, however long the child took.
+    #[test]
+    fn writes_reach_the_child_in_the_order_they_were_queued() {
+        let (queue, open, written) = stalled_queue();
+        let sent: Vec<u8> = (0..=255u8).cycle().take(2000).collect();
+        for byte in &sent {
+            queue.enqueue(vec![*byte]).unwrap();
+        }
+        for _ in 0..sent.len() {
+            open.send(()).unwrap();
+        }
+        wait_until("the keys never reached the child", || written.lock().unwrap().len() == sent.len());
+        assert_eq!(*written.lock().unwrap(), sent);
+    }
+
+    #[test]
+    fn a_full_queue_refuses_at_once_and_counts_what_has_gone() {
+        let (queue, open, written) = stalled_queue();
+        queue.enqueue(vec![0; MAX_QUEUED_WRITE]).unwrap();
+        let refused = queue.enqueue(vec![0; 1]).unwrap_err();
+        assert!(refused.contains("non sta leggendo"), "{refused}");
+        // What the child takes makes room again.
+        open.send(()).unwrap();
+        wait_until("the pipe never took it", || written.lock().unwrap().len() == MAX_QUEUED_WRITE);
+        wait_until("the room never came back", || queue.state.queued.load(Ordering::SeqCst) == 0);
+        queue.enqueue(vec![0; 1]).unwrap();
+        // A write larger than the cap goes through when nothing is waiting: a big paste into a healthy pane.
+        open.send(()).unwrap();
+        wait_until("the room never came back", || queue.state.queued.load(Ordering::SeqCst) == 0);
+        queue.enqueue(vec![0; MAX_QUEUED_WRITE + 1]).unwrap();
+    }
+
+    #[test]
+    fn a_session_that_goes_drops_what_was_still_queued() {
+        let (queue, open, written, entered) = stalled_queue_entered();
+        queue.enqueue(b"first".to_vec()).unwrap();
+        wait_until("the first write never began", || entered.load(Ordering::SeqCst));
+        queue.enqueue(b"second".to_vec()).unwrap();
+        drop(queue);
+        // The write in progress finishes; the one behind it is for nobody, and nothing holds it back any more.
+        open.send(()).unwrap();
+        drop(open);
+        wait_until("the first write never ended", || written.lock().unwrap().len() >= 5);
+        std::thread::sleep(Duration::from_millis(50));
+        assert_eq!(*written.lock().unwrap(), b"first");
+    }
+
+    #[test]
+    fn a_broken_pipe_is_told_to_the_next_write() {
+        struct Broken;
+        impl Write for Broken {
+            fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::from(std::io::ErrorKind::BrokenPipe))
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let queue = WriteQueue::new(Box::new(Broken));
+        queue.enqueue(b"x".to_vec()).unwrap();
+        wait_until("the failure was never recorded", || queue.state.failure.lock().unwrap().is_some());
+        assert!(queue.enqueue(b"y".to_vec()).unwrap_err().contains("scrittura fallita"));
+    }
+
+    /// RS-8: the waiter's teardown is past the lock, and a resize takes the master out of it.
+    #[test]
+    fn the_console_host_is_never_waited_for_under_the_registry_lock() {
+        let source = include_str!("pty.rs");
+        let waiter = source.split("let (code, gone) = {").nth(1).expect("the waiter");
+        let held = waiter.split("drop(gone);").next().expect("the drop");
+        assert!(held.contains("sessions.remove(&waited_id)"));
+        assert!(!held.contains("sessions.remove(&waited_id);"), "a removed session dropped under the lock");
+        let resize = source.split("pub async fn pty_resize(").nth(1).expect("the command");
+        let (held, talks) = resize.split_once("session.master.clone()").expect("the master taken out");
+        assert!(!held.contains(".resize("));
+        assert!(talks.split("pub ").next().unwrap().contains(".resize("));
+    }
+
+    /// Whether `pid` is running, whatever its children do.
+    #[cfg(windows)]
+    fn is_running(pid: u32) -> bool {
+        use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+        let mut sys = System::new();
+        sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
+        sys.process(Pid::from_u32(pid)).is_some()
+    }
+
+    /// A job's handle closing, which is what the kernel does when ADE dies: a pane's real ConPTY tree goes with it.
+    #[cfg(windows)]
+    #[test]
+    fn a_job_that_closes_with_its_kill_on_ends_a_conpty_tree() {
+        let (session, pid) = sleeping_session();
+        // At once, as `pty_spawn` does: what the shell starts after this is in the job.
+        let job = crate::ChildTreeGuard::for_pane().unwrap();
+        job.assign_pid(pid).unwrap();
+        std::thread::sleep(Duration::from_millis(500));
+        assert!(tree_alive(pid));
+        drop(job);
+        wait_until("the tree outlived its job", || !tree_alive(pid));
+        drop(session);
+    }
+
+    /// A pane ending while ADE runs keeps today's rules: dropping the job kills nothing, `kill_tree` does.
+    #[cfg(windows)]
+    #[test]
+    fn a_pane_job_dropped_by_a_living_ade_kills_nothing() {
+        let (session, pid) = sleeping_session();
+        let job = PaneJob::around(Some(pid)).expect("the pane's job");
+        std::thread::sleep(Duration::from_millis(500));
+        drop(job);
+        std::thread::sleep(Duration::from_millis(500));
+        assert!(tree_alive(pid), "dropping the job killed the pane");
+        end_session(session);
+        wait_until("the tree outlived its session", || !tree_alive(pid));
+    }
+
+    /*
+     * The real thing, RS-4: the owner of the job is another process, as ADE is, and it dies by force, with no Drop and
+     * no exit handler. It is this test binary run again, told by a variable to play ADE: it starts a tree, puts it in
+     * a pane's job, prints the pids and waits to be killed. The descendant's parent has gone by then, so a walk of
+     * the process table could not have found it: only the job can.
+     */
+    #[cfg(windows)]
+    #[test]
+    fn a_forced_kill_of_ade_ends_the_panes_tree() {
+        use std::io::BufRead;
+        use std::process::{Command, Stdio};
+        const OWNER: &str = "ADE_TEST_PLAY_JOB_OWNER";
+        if std::env::var_os(OWNER).is_some() {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            let root = Command::new("cmd")
+                .args(["/c", "ping -n 2 127.0.0.1 >nul & start /b ping -n 120 127.0.0.1 >nul"])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .creation_flags(CREATE_NO_WINDOW)
+                .spawn()
+                .unwrap();
+            let job = PaneJob::around(Some(root.id())).expect("the pane's job");
+            println!("pane-root {}", root.id());
+            std::thread::sleep(Duration::from_secs(60));
+            // Not reached: the test kills this process first. Dropped here, it would take the kill back.
+            std::mem::forget(job);
+            return;
+        }
+        let mut owner = Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "pty::tests::a_forced_kill_of_ade_ends_the_panes_tree", "--nocapture", "--test-threads=1"])
+            .env(OWNER, "1")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let root: u32 = std::io::BufReader::new(owner.stdout.take().unwrap())
+            .lines()
+            .map_while(Result::ok)
+            .find_map(|line| line.split("pane-root ").nth(1).and_then(|pid| pid.trim().parse().ok()))
+            .expect("the owner never said its pane's pid");
+        // The child the root leaves behind, and the root gone: a detached process, as a dev server is.
+        let descendant = {
+            use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
+            let deadline = Instant::now() + Duration::from_secs(30);
+            loop {
+                let mut sys = System::new();
+                sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::everything());
+                let found = sys
+                    .processes()
+                    .values()
+                    .find(|process| {
+                        process.parent().map(|parent| parent.as_u32()) == Some(root)
+                            && process.name().to_string_lossy().eq_ignore_ascii_case("ping.exe")
+                            && process.cmd().iter().any(|arg| arg.to_string_lossy() == "120")
+                    })
+                    .map(|process| process.pid().as_u32());
+                if let Some(pid) = found {
+                    break pid;
+                }
+                assert!(Instant::now() < deadline, "the descendant never started");
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        };
+        wait_until("the root never ended", || !is_running(root));
+        assert!(is_running(descendant));
+        owner.kill().unwrap();
+        owner.wait().unwrap();
+        wait_until("the descendant outlived ADE", || !is_running(descendant));
     }
 
     /// Whether `pid`, or any process it started, is still running.

@@ -102,9 +102,43 @@ pub struct Recorder {
     active: Mutex<Option<platform::Active>>,
     /// Video paths of the recent takes, newest last.
     takes: Mutex<Vec<String>>,
+    /// A take is being opened or closed. Neither holds `active` while it works: `record_state` runs on the window's
+    /// thread and takes that lock.
+    changing: std::sync::atomic::AtomicBool,
+}
+
+/// Holds `Recorder::changing` until dropped.
+struct Changing<'a>(&'a std::sync::atomic::AtomicBool);
+
+impl Drop for Changing<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, std::sync::atomic::Ordering::SeqCst);
+    }
 }
 
 impl Recorder {
+    /// One opening or closing at a time. On the window's thread they could not overlap; off it, a Start pressed while
+    /// the last take is still being finalised would ask for an encoder that one still holds.
+    fn begin_change(&self) -> Result<Changing<'_>, String> {
+        use std::sync::atomic::Ordering::SeqCst;
+        self.changing
+            .compare_exchange(false, true, SeqCst, SeqCst)
+            .map(|_| Changing(&self.changing))
+            .map_err(|_| "La registrazione si sta ancora aprendo o chiudendo: riprova tra poco.".to_string())
+    }
+
+    /// Waits for a take being opened or closed, up to `limit`. False if it was still going when the limit passed.
+    pub fn wait_for_take(&self, limit: std::time::Duration) -> bool {
+        let deadline = std::time::Instant::now() + limit;
+        while self.changing.load(std::sync::atomic::Ordering::SeqCst) {
+            if std::time::Instant::now() >= deadline {
+                return false;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        true
+    }
+
     /// Every file of the recent takes that exists, for the media scheme.
     pub fn playable(&self) -> Vec<PathBuf> {
         let Ok(takes) = self.takes.lock() else { return Vec::new() };
@@ -189,24 +223,32 @@ pub fn video_path(dir: &str, name: &str) -> PathBuf {
     PathBuf::from(dir).join(format!("{name}.mp4"))
 }
 
+/// `async` and on the blocking pool, like `record_stop`: opening the encoder and the capture takes its time (RS-9).
 #[tauri::command]
-pub fn record_start(
+pub async fn record_start(
     app: tauri::AppHandle,
-    recorder: tauri::State<'_, Recorder>,
     target: Target,
     dir: String,
     name: String,
     quality: Option<Quality>,
 ) -> Result<RecordState, String> {
-    let mut active = recorder.active.lock().map_err(|_| "registratore occupato".to_string())?;
-    if active.is_some() {
+    tauri::async_runtime::spawn_blocking(move || start_take(&app, target, &dir, &name, quality))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+fn start_take(app: &tauri::AppHandle, target: Target, dir: &str, name: &str, quality: Option<Quality>) -> Result<RecordState, String> {
+    use tauri::Manager;
+    let recorder = app.state::<Recorder>();
+    let _changing = recorder.begin_change()?;
+    if recorder.active.lock().map_err(|_| "registratore occupato".to_string())?.is_some() {
         return Err("Una registrazione è già in corso.".into());
     }
-    check_name(&name)?;
-    check_dir(&dir)?;
-    let path = video_path(&dir, &name);
-    let started = platform::start(&app, target, &path, quality.unwrap_or_default())?;
-    *active = Some(started);
+    check_name(name)?;
+    check_dir(dir)?;
+    let path = video_path(dir, name);
+    let started = platform::start(app, target, &path, quality.unwrap_or_default())?;
+    *recorder.active.lock().map_err(|_| "registratore occupato".to_string())? = Some(started);
     let shown = path.to_string_lossy().into_owned();
     if let Ok(mut takes) = recorder.takes.lock() {
         takes.push(shown.clone());
@@ -273,8 +315,19 @@ pub async fn record_write(request: tauri::ipc::Request<'_>, recorder: tauri::Sta
     })
 }
 
+/// `async` and on the blocking pool: closing a take joins the capture thread and finalises the MP4, seconds to tens of
+/// seconds behind a software encoder, and on the window's thread that froze every pane and all the mail (RS-9).
 #[tauri::command]
-pub fn record_stop(recorder: tauri::State<'_, Recorder>) -> Result<RecordState, String> {
+pub async fn record_stop(app: tauri::AppHandle) -> Result<RecordState, String> {
+    tauri::async_runtime::spawn_blocking(move || stop_take(&app))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+fn stop_take(app: &tauri::AppHandle) -> Result<RecordState, String> {
+    use tauri::Manager;
+    let recorder = app.state::<Recorder>();
+    let _changing = recorder.begin_change()?;
     let taken = {
         let mut active = recorder.active.lock().map_err(|_| "registratore occupato".to_string())?;
         active.take()
@@ -328,6 +381,59 @@ pub fn compose(raw: &[u8], width: u32, height: u32, row_pitch: u32, out: &mut Ve
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // RS-9: off the window's thread, where nothing else keeps a Start from overlapping the close of the last take.
+    #[test]
+    fn a_take_opens_or_closes_one_at_a_time_and_off_the_window_thread() {
+        let recorder = Recorder::default();
+        let closing = recorder.begin_change().expect("nothing is changing");
+        assert!(recorder.begin_change().is_err(), "a Start while the last take is closing");
+        drop(closing);
+        assert!(recorder.begin_change().is_ok(), "the next take can start");
+
+        let source = include_str!("mod.rs");
+        assert!(source.contains("pub async fn record_start("));
+        assert!(source.contains("pub async fn record_stop("));
+    }
+
+    // B3: the process ending kills the thread inside `encoder.finish()`, and the MP4 is lost. The exit waits for it.
+    #[test]
+    fn the_exit_waits_for_a_take_that_is_closing() {
+        use std::sync::mpsc::channel;
+        use std::time::{Duration, Instant};
+        let recorder = std::sync::Arc::new(Recorder::default());
+        let (holding, held) = channel();
+        let (release, released) = channel::<()>();
+        let closing = {
+            let recorder = recorder.clone();
+            std::thread::spawn(move || {
+                let _changing = recorder.begin_change().expect("nothing is changing");
+                holding.send(()).unwrap();
+                let _ = released.recv();
+            })
+        };
+        held.recv().unwrap();
+
+        // Still closing when the limit passes: the wait ends all the same, because it runs on the main thread.
+        let start = Instant::now();
+        assert!(!recorder.wait_for_take(Duration::from_millis(150)), "the wait said the take had closed");
+        assert!(start.elapsed() >= Duration::from_millis(150));
+
+        let waiter = {
+            let recorder = recorder.clone();
+            std::thread::spawn(move || recorder.wait_for_take(Duration::from_secs(10)))
+        };
+        std::thread::sleep(Duration::from_millis(100));
+        assert!(!waiter.is_finished(), "the wait did not wait");
+        release.send(()).unwrap();
+        closing.join().unwrap();
+        assert!(waiter.join().unwrap());
+
+        // With nothing closing it is no wait at all.
+        let start = Instant::now();
+        assert!(recorder.wait_for_take(Duration::from_secs(10)));
+        assert!(start.elapsed() < Duration::from_secs(5));
+    }
 
     // Full review 2026-10-06, rust 13: the file arrives as the raw body, the path in a header.
     #[test]

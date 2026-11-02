@@ -297,7 +297,7 @@ export function countingLines<T extends { write: (data: string) => void }>(sessi
   const write = session.write.bind(session)
   session.write = (data: string) => {
     if (data.includes("\r")) counted()
-    write(data)
+    return write(data)
   }
   return session
 }

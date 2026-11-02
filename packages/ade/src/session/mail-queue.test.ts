@@ -133,7 +133,7 @@ describe("the data-safety wiring in the workbench", () => {
     expect(persisted).toBeGreaterThan(flush)
     expect(install).toBeGreaterThan(persisted)
     // One pause for the timer and the native signal alike (`createMailRound`), not a line in the timer only.
-    expect(source).toContain("paused: () => updating(),")
+    expect(source).toContain("paused: () => installingUpdate(),")
   })
 
   test("the reload prompt does not come after a restore, and a restore refuses an unsaved file first", () => {
