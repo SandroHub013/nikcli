@@ -18,6 +18,15 @@ import { registerMenuClicks } from "./menu-click"
 import { rowsInside, terminalBox, watchCellSize } from "./fit-rows"
 import { selectionReachesSecret, watchRows, type CoverBuffer } from "./recording-cover"
 
+/**
+ * The mono the terminal draws in. xterm is handed concrete values, not
+ * `var()`, so this is `--ade-mono` written out; `fonts.test.ts` holds the two
+ * together. Cascadia Mono first (the Windows Terminal's own), then SF Mono,
+ * with "Segoe UI Symbol" for the spinners and marks an agent's TUI draws that
+ * Cascadia lacks.
+ */
+export const MONO_STACK = `"Cascadia Mono", "SF Mono", Consolas, "Segoe UI Symbol", ui-monospace, monospace`
+
 export const DEFAULT_IMAGE_OPTIONS: IImageAddonOptions = {
   iipSupport: true,
   sixelSupport: false,
@@ -108,7 +117,7 @@ function readTheme(): ITheme {
   probe.style.cssText = "position:absolute;width:0;height:0;visibility:hidden;pointer-events:none"
   host.appendChild(probe)
 
-  const theme: ITheme = { selectionBackground: "rgba(232, 110, 72, 0.3)" }
+  const theme: ITheme = {}
   // The first token declared in scope wins. A slot with none keeps xterm's
   // default, where an undeclared var() would hand the probe the text colour.
   const slot = (key: ColourSlot, ...tokens: string[]) => {
@@ -492,7 +501,7 @@ export function getTerminal(id: string): SessionTerminal {
      */
     scrollback: 5_000,
     fontSize: 12,
-    fontFamily: "'Cascadia Mono', 'JetBrains Mono', Consolas, ui-monospace, monospace",
+    fontFamily: MONO_STACK,
     lineHeight: 1.25,
     // A visible block that stops blinking when the pane loses focus: with six
     // sessions tiled, a blinking cursor in each is a room full of distractions.

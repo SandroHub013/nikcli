@@ -60,8 +60,10 @@ describe("the type scale (polish B1)", () => {
     const index = sheets.find((sheet) => sheet.file === "index.css")!.text
     const scale = [...index.matchAll(/--ade-font-([\w-]+):\s*([^;]+);/g)].map((match) => [match[1], match[2]!.trim()])
     expect(scale.length).toBeGreaterThanOrEqual(8)
-    for (const [, value] of scale) expect(value).toMatch(/^\d+px$/)
-    expect(Object.fromEntries(scale).body).toBe("12px")
+    // `body` is the md step by name (DS-20: «merge md and body»): one twelve, not two.
+    for (const [name, value] of scale) if (name !== "body") expect(value).toMatch(/^\d+px$/)
+    expect(Object.fromEntries(scale).body).toBe("var(--ade-font-md)")
+    expect(Object.fromEntries(scale).md).toBe("12px")
   })
 
   test("card bodies, messages, lists and the sidebar read at the body size", () => {

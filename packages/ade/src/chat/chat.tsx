@@ -14,6 +14,7 @@
  */
 
 import { createEffect, createMemo, createSignal, on, For, Show, onMount } from "solid-js"
+import { EmptyIcon } from "../ui/empty-icon"
 import { t } from "../i18n"
 import type { Agent, ConfigProviders } from "@ragu/sdk/client"
 import type { ChatCatalog } from "./connection"
@@ -518,6 +519,7 @@ export function Chat(props: ChatProps) {
               when={turns().length > 0}
               fallback={
                 <div data-slot="chat-empty">
+                  <EmptyIcon name="chat" />
                   <p data-slot="chat-empty-title">{t("chat.empty.title")}</p>
                   <p data-slot="chat-empty-body">{t("chat.empty.body")}</p>
                 </div>

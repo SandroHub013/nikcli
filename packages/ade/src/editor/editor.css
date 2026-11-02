@@ -131,7 +131,7 @@
 }
 
 [data-component="editor"] [data-slot="btn"]:active:not(:disabled) {
-  transform: scale(0.97);
+  transform: var(--ade-press);
 }
 
 [data-component="editor"] [data-slot="btn"]:focus-visible {

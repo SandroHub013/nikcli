@@ -80,7 +80,7 @@
 }
 
 [data-slot="model-open"]:active {
-  transform: scale(0.97);
+  transform: var(--ade-press);
 }
 
 [data-slot="model-open"]:focus-visible {
@@ -149,7 +149,7 @@
 }
 
 [data-slot="model-button"]:active:not(:disabled) {
-  transform: scale(0.96);
+  transform: var(--ade-press);
 }
 
 [data-slot="model-button"]:disabled {
