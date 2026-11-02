@@ -340,6 +340,32 @@ describe("the screenshot tray and viewer, by keyboard and screen reader", () => 
     expect(document.querySelector('[data-slot="shot-viewer-error"]')?.textContent).toBe(t("shots.send.failed"))
   })
 
+  test("deleting the picture that opened the viewer leaves the focus on a tile, not on the page", async () => {
+    // The viewer gives the focus back to the tile that opened it; that tile is gone, and a focus on a detached node is
+    // a focus on the page, so the keyboard user starts again from the top.
+    const other = { path: "C:/Pictures/Screenshots/b.png", name: "b.png", modified_ms: 2 }
+    const host = mount({
+      shots: [shot, other],
+      onDelete: async () => {
+        host.querySelector('[data-slot="shot"]')!.remove()
+        return true
+      },
+    })
+    host.querySelector<HTMLElement>('[data-slot="shot-open"]')!.click()
+    await settle()
+    const byText = (text: string) =>
+      [...document.querySelectorAll<HTMLButtonElement>('[data-component="shot-viewer"] button')].find((b) => b.textContent === text)!
+    byText(t("shots.delete")).click()
+    await settle()
+    byText(t("shots.delete.confirm")).click()
+    await settle()
+    await settle()
+    expect(document.querySelector('[data-component="shot-viewer"]')).toBeNull()
+    const active = document.activeElement as HTMLElement
+    expect(active.getAttribute("data-slot")).toBe("shot-open")
+    expect(active.getAttribute("aria-label")).toBe(t("shots.open.named", "b.png"))
+  })
+
   test("there is no send button where nothing can take the picture", async () => {
     const host = mount({ shots: [shot] })
     host.querySelector<HTMLElement>('[data-slot="shot-open"]')!.click()

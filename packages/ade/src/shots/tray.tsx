@@ -458,8 +458,13 @@ export function ShotTray(props: ShotTrayProps) {
                       // The viewer may have been closed or moved on meanwhile: its state is not this one's.
                       if (opened()?.path !== path) return
                       setDeleting(false)
-                      if (done) closeViewer()
-                      else {
+                      if (done) {
+                        // The tile that opened the viewer is gone, and the viewer gives the focus back to it: a focus
+                        // on a detached node is a focus on the page. Moving it to a tile first, while the viewer is
+                        // still open, makes that tile the one the focus goes back to.
+                        strip()?.querySelector<HTMLElement>('[data-slot="shot-open"]')?.focus({ preventScroll: true })
+                        closeViewer()
+                      } else {
                         setAsking(false)
                         setDeleteFailed(true)
                       }
