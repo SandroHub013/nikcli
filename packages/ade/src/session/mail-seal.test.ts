@@ -1,3 +1,5 @@
+import { followInboxRound, inboxNamesOf, type InboxRound } from "./mail-inbox"
+import { MAX_REBELLS, REBELL_AFTER_MS, type InboxEntry } from "./mailbox"
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { createHmac } from "crypto"
 import fs from "fs"
@@ -18,6 +20,35 @@ import {
 
 const TOKEN = "0123456789abcdef01234567"
 const OLD_TOKEN = "fedcba9876543210fedcba98"
+
+const inboxEntry = (paneId: string, name: string, over: Partial<InboxEntry> = {}): InboxEntry => ({
+  id: name,
+  paneId,
+  name,
+  from: "chi-manda",
+  kind: "ask",
+  chars: 40_000,
+  at: 0,
+  ringAt: 0,
+  rings: 0,
+  ...over,
+})
+
+/** The round as the workbench runs it, with the given pane in the gap of a relaunch: it exists and has no process. */
+const inboxRound = (over: Partial<InboxRound<string>> = {}): InboxRound<string> => ({
+  restored: () => true,
+  paneExists: () => true,
+  session: () => undefined,
+  readState: async () => "unread",
+  free: async () => true,
+  typing: () => false,
+  lost: async () => {},
+  held: () => {},
+  ring: () => {},
+  unread: () => {},
+  save: () => {},
+  ...over,
+})
 
 describe("a sealed file", () => {
   test("is the standard HMAC-SHA256, in the format both scripts read", async () => {
@@ -148,8 +179,73 @@ describe("a pane's unread mail when the pane gets a new token", () => {
   })
 })
 
+describe("a mail round while a pane has no process", () => {
+  test("keeps the unread mail of a pane that still exists: relaunching, restoring or suspended", async () => {
+    const pending = [inboxEntry("p1", "m1")]
+    await followInboxRound(pending, inboxRound(), REBELL_AFTER_MS * 10)
+    expect(inboxNamesOf(pending, "p1")).toEqual(["m1"])
+  })
+
+  test("decides nothing before the panes are restored, when none exists yet and none is closed", async () => {
+    const pending = [inboxEntry("p1", "m1")]
+    await followInboxRound(pending, inboxRound({ restored: () => false, paneExists: () => false }), REBELL_AFTER_MS * 10)
+    expect(inboxNamesOf(pending, "p1")).toEqual(["m1"])
+  })
+
+  test("drops the mail of a pane that was closed, and says nothing to its sender", async () => {
+    const pending = [inboxEntry("p1", "m1")]
+    const said: string[] = []
+    const saved: boolean[] = []
+    await followInboxRound(
+      pending,
+      inboxRound({ paneExists: () => false, unread: (entry) => said.push(entry.id), save: () => saved.push(true) }),
+      REBELL_AFTER_MS * 10,
+    )
+    expect(pending).toEqual([])
+    expect(said).toEqual([])
+    expect(saved).toEqual([true])
+  })
+
+  test("rings for it again once the process is there", async () => {
+    const pending = [inboxEntry("p1", "m1")]
+    const rung: string[] = []
+    const round = inboxRound({ ring: (entry, session) => rung.push(`${entry.name} ${session}`) })
+    await followInboxRound(pending, round, REBELL_AFTER_MS * 10)
+    expect(rung).toEqual([])
+    await followInboxRound(pending, { ...round, session: () => "nuovo" }, REBELL_AFTER_MS * 10)
+    expect(rung).toEqual(["m1 nuovo"])
+    expect(pending[0]?.rings).toBe(1)
+  })
+
+  test("still ends what ended: read, lost, or rung enough", async () => {
+    const running = { session: () => "vivo" }
+    const read = [inboxEntry("p1", "letto")]
+    await followInboxRound(read, inboxRound({ ...running, readState: async () => "read" }), 1)
+    expect(read).toEqual([])
+
+    const lost = [inboxEntry("p1", "perso")]
+    const told: string[] = []
+    await followInboxRound(lost, inboxRound({ ...running, readState: async () => "lost", lost: async (entry) => void told.push(entry.name) }), 1)
+    expect(lost).toEqual([])
+    expect(told).toEqual(["perso"])
+
+    const rung = [inboxEntry("p1", "suonato", { rings: MAX_REBELLS })]
+    const unread: string[] = []
+    await followInboxRound(rung, inboxRound({ ...running, unread: (entry) => unread.push(entry.name) }), REBELL_AFTER_MS * 10)
+    expect(rung).toEqual([])
+    expect(unread).toEqual(["suonato"])
+  })
+})
+
 describe("lint: the workbench keeps the mail's keys in order", () => {
   const workbench = fs.readFileSync(path.join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+
+  test("the round is told when the panes are back, and the seal reads the list the round keeps", () => {
+    expect(workbench).toContain("restored: () => mailRestored,")
+    expect(workbench).toContain("followInboxRound(\n      inboxPending,")
+    expect(workbench).toContain("const names = inboxNamesOf(inboxPending, paneId)")
+    expect(workbench).not.toContain("dropFrom(inboxPending")
+  })
 
   test("a pane's process starts after its unread mail is sealed for it", () => {
     expect(workbench).not.toContain("paneToken: mintPaneToken(")
@@ -223,6 +319,11 @@ function clientSuite(
 
     const put = (name: string, text: string) => fs.writeFileSync(path.join(box, name), text)
     const exists = (name: string) => fs.existsSync(path.join(box, name))
+    /** ADE's part: this pane's inbox files, written sealed with its new token as `host.mailboxInboxPut` does. */
+    const inboxFiles = {
+      read: async (name: string) => fs.readFileSync(path.join(box, "inbox/p1", `${name}.msg`), "utf8"),
+      write: async (name: string, body: string) => put(`inbox/p1/${name}.msg`, await seal(TOKEN, "inbox", name, body)),
+    }
     /** ADE's part: what the script posts, taken out of the outbox. */
     const waitForPost = () =>
       new Promise<{ id: string; text: string }>((resolve) => {
@@ -331,13 +432,36 @@ function clientSuite(
     )
 
     test(
+      "a mail round in the gap of a relaunch leaves a brief the new process can read",
+      async () => {
+        put("inbox/p1/gap.msg", await seal(OLD_TOKEN, "inbox", "gap", "il brief nel varco"))
+        const pending = [inboxEntry("p1", "gap")]
+        await followInboxRound(pending, inboxRound(), REBELL_AFTER_MS * 10)
+        await resealUnread(inboxNamesOf(pending, "p1"), [OLD_TOKEN], inboxFiles)
+        expect((await call(["inbox"])).out).toContain("il brief nel varco")
+      },
+      60_000,
+    )
+
+    test(
+      "mail rounds during a restart of ADE leave a brief the new process can read",
+      async () => {
+        put("inbox/p1/riavvio.msg", await seal(OLD_TOKEN, "inbox", "riavvio", "il brief del riavvio"))
+        const pending = [inboxEntry("p1", "riavvio")]
+        // The timer starts before the panes: no pane exists yet, then this one exists and starts.
+        await followInboxRound(pending, inboxRound({ restored: () => false, paneExists: () => false }), REBELL_AFTER_MS * 10)
+        await followInboxRound(pending, inboxRound(), REBELL_AFTER_MS * 10)
+        await resealUnread(inboxNamesOf(pending, "p1"), [], inboxFiles)
+        expect((await call(["inbox"])).out).toContain("il brief del riavvio")
+      },
+      60_000,
+    )
+
+    test(
       "a brief sealed before a relaunch is still read after it",
       async () => {
         put("inbox/p1/brief.msg", await seal(OLD_TOKEN, "inbox", "brief", "il brief lungo"))
-        await resealUnread(["brief"], [OLD_TOKEN], {
-          read: async (name) => fs.readFileSync(path.join(box, "inbox/p1", `${name}.msg`), "utf8"),
-          write: async (name, body) => put(`inbox/p1/${name}.msg`, await seal(TOKEN, "inbox", name, body)),
-        })
+        await resealUnread(["brief"], [OLD_TOKEN], inboxFiles)
         const read = await call(["inbox"])
         expect(read.out).toContain("il brief lungo")
         expect(exists("inbox/p1/handled/brief.msg")).toBe(true)

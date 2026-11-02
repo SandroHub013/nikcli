@@ -277,6 +277,7 @@ import { scrubSecrets } from "../bots/terms"
 import type { AgentFile } from "../bots/ragu"
 import type { Runner } from "../bots/runners"
 import { senderToken } from "../session/senders"
+import { followInboxRound, inboxNamesOf } from "../session/mail-inbox"
 import { firstTime, resealUnread, sealedBy, splitSealed, useMailKeys } from "../session/mail-seal"
 import { createActivityReads, type ActivityReads } from "../session/activity-reads"
 import { boardCandidates, parseOwners, whoOwns } from "../session/owners"
@@ -3183,78 +3184,37 @@ export function Workbench() {
 
   /** Rings again for unread inbox messages, and tells the sender of one never read. */
   const followInbox = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, now: number) => {
-    if (!host.mailboxInboxRead || inboxPending.length === 0) return
-    let changed = false
-    for (const entry of [...inboxPending]) {
-      const session = running.get(entry.paneId)
-      const state = session
-        ? await host.mailboxInboxRead(entry.paneId, entry.name).catch(() => "unread" as const)
-        : "unread"
-      if (state === "lost") {
-        /*
-         * Gone before it was read: said as lost, to the sender and, for a
-         * request, to whoever waits on it, so nobody believes it arrived. A
-         * file the reader moved is "read"; only a file in neither place is this.
-         */
-        if (!dropFrom(inboxPending, entry)) continue
-        const reader = mailPanes().find((pane) => pane.id === entry.paneId)
-        appendLine(entry.paneId, t("note.inboxLost", entry.id), "note", "ade")
-        if (entry.kind === "ask" || entry.kind === "spawn") {
-          if (openRequests.has(entry.id)) await settle(host, entry.id, formatLost(entry, reader))
-        } else {
-          tellSender(entry.from, formatLost(entry, reader))
-        }
-        changed = true
-        continue
-      }
-      const read = state === "read"
-      const free = session && !read ? (await freeNow(host, entry.paneId)) && !linesInFlight.has(entry.paneId) : false
-      const action = inboxAction(
-        entry,
-        { running: Boolean(session), free, read, typing: isTyping(records.typed.get(entry.paneId)) },
-        now,
-      )
-      if (action === "wait") continue
-      const panes = mailPanes()
-      if (action === "tell") {
-        entry.told = true
-        tellSender(
-          entry.from,
-          formatHeld(
-            entry,
-            panes.find((pane) => pane.id === entry.paneId),
-          ),
-        )
-        changed = true
-        continue
-      }
-      if (action === "ring" && session) {
-        entry.rings += 1
-        entry.ringAt = now
-        void typeLine(
-          session,
-          formatBell(
-            entry,
-            panes.find((pane) => pane.id === entry.from),
-            entry.chars,
-          ),
-        )
-        appendLine(entry.paneId, t("note.rang", entry.rings), "note", "ade")
-      } else {
-        if (!dropFrom(inboxPending, entry)) continue
-        if (action === "warn") {
-          tellSender(
-            entry.from,
-            formatUnread(
-              entry,
-              panes.find((pane) => pane.id === entry.paneId),
-            ),
-          )
-        }
-      }
-      changed = true
-    }
-    if (changed) saveInbox()
+    const inboxRead = host.mailboxInboxRead
+    if (!inboxRead) return
+    const paneNamed = (paneId: string) => mailPanes().find((pane) => pane.id === paneId)
+    await followInboxRound(
+      inboxPending,
+      {
+        restored: () => mailRestored,
+        paneExists,
+        session: (paneId) => running.get(paneId),
+        readState: (entry) => inboxRead(entry.paneId, entry.name).catch(() => "unread" as const),
+        free: async (paneId) => (await freeNow(host, paneId)) && !linesInFlight.has(paneId),
+        typing: (paneId) => isTyping(records.typed.get(paneId)),
+        lost: async (entry) => {
+          const reader = paneNamed(entry.paneId)
+          appendLine(entry.paneId, t("note.inboxLost", entry.id), "note", "ade")
+          if (entry.kind === "ask" || entry.kind === "spawn") {
+            if (openRequests.has(entry.id)) await settle(host, entry.id, formatLost(entry, reader))
+          } else {
+            tellSender(entry.from, formatLost(entry, reader))
+          }
+        },
+        held: (entry) => tellSender(entry.from, formatHeld(entry, paneNamed(entry.paneId))),
+        ring: (entry, session) => {
+          void typeLine(session, formatBell(entry, paneNamed(entry.from), entry.chars))
+          appendLine(entry.paneId, t("note.rang", entry.rings), "note", "ade")
+        },
+        unread: (entry) => tellSender(entry.from, formatUnread(entry, paneNamed(entry.paneId))),
+        save: saveInbox,
+      },
+      now,
+    )
   }
   /*
    * Restored requests count their grace from now, not from when they were
@@ -3407,7 +3367,7 @@ export function Workbench() {
    */
   const freshPaneToken = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, paneId: string) => {
     const token = mintPaneToken(paneId)
-    const names = inboxPending.filter((entry) => entry.paneId === paneId).map((entry) => entry.name)
+    const names = inboxNamesOf(inboxPending, paneId)
     const { mailboxInboxText: read, mailboxInboxPut: put } = host
     if (names.length > 0 && read && put) {
       await resealUnread(names, retiredTokens.get(paneId) ?? [], {

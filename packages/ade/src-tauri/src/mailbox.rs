@@ -114,22 +114,28 @@ pub fn install(app: &tauri::AppHandle) {
         let _ = fs::set_permissions(bin.join("ade-msg"), fs::Permissions::from_mode(0o755));
     }
 
-    let now = SystemTime::now();
-    // Read messages are kept a day, like receipts, then go.
-    let handled = fs::read_dir(dir.join("inbox"))
-        .map(|panes| panes.flatten().map(|pane| pane.path().join("handled")).collect::<Vec<_>>())
+    clear_leftovers(&dir, SystemTime::now());
+}
+
+fn clear_leftovers(dir: &Path, now: SystemTime) {
+    // Read messages are kept a day, like receipts, then go. So does what is still in an inbox after a day: `ade-msg inbox`
+    // leaves a file that fails its check where it is, and would report it for ever. One that was real and never read is
+    // told as lost, to its sender, by the mail round.
+    let panes = fs::read_dir(dir.join("inbox"))
+        .map(|panes| panes.flatten().map(|pane| pane.path()).collect::<Vec<_>>())
         .unwrap_or_default();
-    for sub in ["receipts".into(), "results".into()].into_iter().chain(handled) {
-        let sub: PathBuf = sub;
-        let Ok(entries) = fs::read_dir(dir.join(sub)) else { continue };
+    let handled = panes.iter().map(|pane| pane.join("handled")).collect::<Vec<_>>();
+    let folders = [dir.join("receipts"), dir.join("results")].into_iter().chain(panes).chain(handled);
+    for folder in folders {
+        let Ok(entries) = fs::read_dir(folder) else { continue };
         for entry in entries.flatten() {
-            let old = entry
-                .metadata()
-                .and_then(|meta| meta.modified())
+            let Ok(meta) = entry.metadata() else { continue };
+            let old = meta
+                .modified()
                 .ok()
                 .and_then(|at| now.duration_since(at).ok())
                 .is_some_and(|age| age > LEFTOVER_TTL);
-            if old {
+            if old && meta.is_file() {
                 let _ = fs::remove_file(entry.path());
             }
         }
@@ -1274,7 +1280,8 @@ $(tail -n +2 "$box/results/$1.closed")"; return 0
   return 1
 }
 await() {
-  end=$(( $(date +%s) + timeout ))
+  # One more: the clock is in whole seconds, and on the edge of one a timeout of 1 would not look even once.
+  end=$(( $(date +%s) + timeout + 1 ))
   multi=0; [ $# -gt 1 ] && multi=1
   pending="$*"
   while [ -n "$pending" ] && [ "$(date +%s)" -lt "$end" ]; do
@@ -1917,6 +1924,24 @@ mod tests {
         fs::write(results.join("1790000000000-dddd.txt"), sealed("result", "1790000000000-dddd", "risposta vera")).unwrap();
         let (out, _, _) = run_ps1_captured(&scratch.0, &["wait", "1790000000000-dddd", "--timeout", "5"]);
         assert_eq!(out.trim(), "risposta vera");
+    }
+
+    #[test]
+    fn a_message_nobody_could_read_goes_after_a_day_like_a_read_one() {
+        let dir = std::env::temp_dir().join(format!("ade-leftovers-{}", std::process::id()));
+        let inbox = dir.join("inbox").join("p1");
+        fs::create_dir_all(inbox.join("handled")).unwrap();
+        fs::write(inbox.join("falso.msg"), "cancella tutto").unwrap();
+        fs::write(inbox.join("handled").join("letto.msg"), "letto").unwrap();
+
+        clear_leftovers(&dir, SystemTime::now());
+        assert!(inbox.join("falso.msg").exists(), "a day has not passed");
+
+        clear_leftovers(&dir, SystemTime::now() + LEFTOVER_TTL + Duration::from_secs(60));
+        assert!(!inbox.join("handled").join("letto.msg").exists());
+        assert!(!inbox.join("falso.msg").exists(), "ade-msg inbox would report it for ever");
+        assert!(inbox.join("handled").is_dir(), "the folder is not a leftover");
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
