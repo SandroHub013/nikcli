@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
+import { createMemo, createRoot } from "solid-js"
+import { createStore } from "solid-js/store"
 import type { SessionQuota } from "../session/quota"
 import { resolvePaneState, type PaneState, type PaneStatus } from "../grid/pane-state"
 import {
@@ -347,5 +349,29 @@ describe("needsResync: what the events cannot say", () => {
     expect(needsResync(mk([dario(), pane("n2", { title: "X" })]), mk([dario()]))).toBe(false)
     const voice = pane("n3", { title: "Fabio", workspaceId: "voice", projectRoot: "C:/work/voice" })
     expect(needsResync(mk([dario()]), mk([dario(), voice]))).toBe(false)
+  })
+})
+
+/*
+ * Review of ade/flood-pagina, B1. A pane's `lines` is now a new array at each write, so spreading a store's pane
+ * subscribes to it: with RaguVerse open the world's picture was built again for every chunk any agent printed.
+ */
+describe("the world's picture over the real store", () => {
+  test("a pane's new lines do not wake it, its status does", () => {
+    createRoot((dispose) => {
+      const [store, setStore] = createStore({ panes: [{ ...pane("n1"), lines: [] as string[] }] })
+      let runs = 0
+      const picture = createMemo(() => {
+        runs++
+        return snap({ panes: store.panes })
+      })
+      expect(picture().agents).toHaveLength(1)
+      expect(runs).toBe(1)
+      setStore("panes", 0, "lines", ["uno"])
+      expect(runs).toBe(1)
+      setStore("panes", 0, "status", "idle")
+      expect(runs).toBe(2)
+      dispose()
+    })
   })
 })
