@@ -112,6 +112,43 @@ describe("tts/natural-speaker", () => {
     expect(h.played).toEqual(["Seconda risposta."])
   })
 
+  test("with no consent to download, a missing voice is never fetched by a reply (N8), and is once consent is given", async () => {
+    let consent = false
+    const h = harness({ mayDownload: () => consent })
+    h.setInstalled(false)
+    const speaker = createNaturalSpeaker(h.deps)
+    await speaker.speak("Prima risposta.")
+    await speaker.speak("Seconda risposta.")
+    expect(h.installs).toEqual([])
+    expect(h.fallback.spoken).toEqual(["Prima risposta.", "Seconda risposta."])
+    consent = true
+    await speaker.speak("Terza risposta.")
+    expect(h.installs).toEqual(["ugo"])
+  })
+
+  test("the fallback notice is said once for the profile, not at every start", async () => {
+    let seen = false
+    const make = () => {
+      const h = harness({
+        fallbackNotice: () => "Uso la voce di sistema.",
+        fallbackNoticeSeen: () => seen,
+        onFallbackNotice: () => {
+          seen = true
+        },
+      })
+      h.setInstalled(false)
+      return h
+    }
+    const first = make()
+    await createNaturalSpeaker(first.deps).speak("Prima.")
+    expect(first.fallback.spoken).toContain("Uso la voce di sistema.")
+    expect(seen).toBe(true)
+    // A new run of ADE: a new speaker, the same profile.
+    const second = make()
+    await createNaturalSpeaker(second.deps).speak("Seconda.")
+    expect(second.fallback.spoken).toEqual(["Seconda."])
+  })
+
   test("a failed natural voice download stays failed until a later successful retry", async () => {
     let installed = false
     let attempts = 0

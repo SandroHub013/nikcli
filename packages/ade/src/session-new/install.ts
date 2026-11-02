@@ -332,6 +332,26 @@ export function terminalLine(command: InstallCommand): string {
   return `powershell -NoProfile -Command "${command.line}"`
 }
 
+/**
+ * Every line «Installa» can type: the catalogue's, for each system, as `terminalLine` makes it, with and without the
+ * `&& exit` the follow-through adds. A line edited later stops matching the panes saved with the old one, so a change
+ * to a line here needs the old text kept in this set.
+ */
+const INSTALL_LINES = new Set(
+  INSTALLS.flatMap((entry) => Object.values(entry.commands))
+    .filter((command): command is InstallCommand => command !== undefined)
+    .flatMap((command) => [terminalLine(command), `${terminalLine(command)} && exit`]),
+)
+
+/**
+ * An install pane saved before `Pane.installFor` existed (ADE 0.18.0): a Terminal whose task is exactly a catalogue
+ * line. Such a pane would type its installer again at every start of ADE, so it is not brought back. The text is
+ * compared, never run.
+ */
+export function isSavedInstallPane(pane: { agent?: string; task?: string }): boolean {
+  return pane.agent === "terminal" && INSTALL_LINES.has((pane.task ?? "").trim())
+}
+
 /** Agents in the install table that are not in the catalogue, and catalogue agents with no entry; both should be none. */
 export function installGaps(): { unknown: string[]; missing: string[] } {
   const known = new Set(AGENTS.map((agent) => agent.id))

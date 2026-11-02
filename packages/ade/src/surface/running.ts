@@ -65,9 +65,15 @@ export class RunningSessions extends Map<string, SpawnedSession> {
    * The spawn of the start `token`, back from the host: kept as the pane's
    * session while that start is current, ended with its tree otherwise.
    * True when kept.
+   *
+   * `refused`: the host could not start it (binary not on PATH, key refused, ssh unreachable). `spawn` still hands
+   * back a session object then, already dead, and its exit has been handled; keeping it would leave a pane marked
+   * running with nothing behind it, with no «Riprova» and mail «sent» into nothing (audit SES-1).
    */
-  adopt(id: string, token: symbol, session: SpawnedSession): boolean {
-    if (!this.starting(id, token)) {
+  adopt(id: string, token: symbol, session: SpawnedSession, refused = false): boolean {
+    if (refused || !this.starting(id, token)) {
+      // Only its own token: a newer start of the pane may be in flight (review N2).
+      if (refused && this.starting(id, token)) this.#starts.delete(id)
       void session.kill({ tree: true })
       return false
     }

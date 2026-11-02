@@ -7,8 +7,9 @@
  *   2. A session completes its work (brief, concrete sentence, e.g. "Prova-voce ha finito: tre test verdi.")
  *   3. An open decision is registered in the Decisions panel
  * - The alert speaks with the microphone closed.
- * - After an alert, a single 6-8s response window opens with a visible signal,
- *   only if the user enabled proactive alerts (`spokenAlerts === true`).
+ * - After a permission alert, and only then, a single 6-8s response window opens with a visible signal. It is a
+ *   microphone and a paid transcription, so it needs its own switch (`alertsListen`, off by default) on top of
+ *   `spokenAlerts` (audit MOD-16).
  * - Once expired, the window closes and does not reopen. No background listening.
  * - Rate limit: maximum 1 alert every 20 seconds (`ALERT_COOLDOWN_MS = 20_000`).
  * - Hourly cap: maximum 15 alerts per hour (`MAX_ALERTS_PER_HOUR = 15`), with a polite pause announcement.
@@ -57,6 +58,8 @@ export interface ProactiveAlertsDeps {
   isLocked(): Promise<boolean>
   isEnabled(): boolean
   isBusy?(): boolean
+  /** The user turned on listening for an answer after an alert; without it the microphone is never opened. */
+  listensForAnswer?(): boolean
   speak(text: string): Promise<void>
   openResponseWindow(options: {
     durationMs: number
@@ -229,7 +232,12 @@ export function createProactiveAlerts(deps: ProactiveAlertsDeps) {
         // Formulate spoken text
         let phrase = ""
         if (event.type === "permission") {
-          phrase = t("voice.alert.permission", event.paneTitle, permissionSpeechLabel(event.kind))
+          // The question «Vuoi consentire?» only when a spoken answer will be listened for (review N13).
+          phrase = t(
+            deps.listensForAnswer?.() === true ? "voice.alert.permission" : "voice.alert.permissionStated",
+            event.paneTitle,
+            permissionSpeechLabel(event.kind),
+          )
         } else if (event.type === "completion") {
           phrase = event.summary
             ? t("voice.alert.completed", event.paneTitle, event.summary)
@@ -261,10 +269,11 @@ export function createProactiveAlerts(deps: ProactiveAlertsDeps) {
           break
         }
 
-        // 2. Open single response window
-        if (event.type !== "decision" && deps.isEnabled() && !deps.isBusy?.()) {
-          const permissionParam =
-            event.type === "permission" ? { paneId: event.paneId, what: event.what, kind: event.kind } : undefined
+        // 2. Open single response window: only for a permission question, which waits for an answer. A completion
+        // is announced and nothing more: opening the microphone (and the paid STT) after every one of them was a path
+        // where voice listened and spent without a key press (audit MOD-16).
+        if (event.type === "permission" && deps.isEnabled() && deps.listensForAnswer?.() === true && !deps.isBusy?.()) {
+          const permissionParam = { paneId: event.paneId, what: event.what, kind: event.kind }
           await deps
             .openResponseWindow({
               durationMs: RESPONSE_WINDOW_MS,

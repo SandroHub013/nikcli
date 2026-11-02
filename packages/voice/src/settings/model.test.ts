@@ -400,8 +400,9 @@ describe("settings/model agentEngine", () => {
 })
 
 describe("settings/model replyVoice", () => {
-  test("Rosa by default, an unknown voice repaired to Ugo, a known one kept", () => {
-    expect(DEFAULT_VOICE_SETTINGS.replyVoice).toBe("it-IT-Rosa")
+  test("Ugo by default (never the paid voice), an unknown voice repaired to Ugo, a known one kept", () => {
+    expect(DEFAULT_VOICE_SETTINGS.replyVoice).toBe("ugo")
+    expect(DEFAULT_VOICE_SETTINGS.replyBackend).toBe("piper")
     const absent = normalizeSettings({
       ...DEFAULT_VOICE_SETTINGS,
       replyVoice: undefined,
@@ -554,5 +555,14 @@ describe("the agent's speed", () => {
     })
     expect(odd.settings.agentSpeed).toBe("fast")
     expect(odd.corrections).toEqual([expect.stringContaining("lampo")])
+  })
+})
+
+describe("listening for an answer after an alert (MOD-16)", () => {
+  test("is off by default, off for a profile saved with alerts on that never had it, and kept when chosen", () => {
+    expect(DEFAULT_VOICE_SETTINGS.alertsListen).toBe(false)
+    expect(normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, spokenAlerts: true, alertsListen: undefined } as never).settings.alertsListen).toBe(false)
+    expect(normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, spokenAlerts: true, alertsListen: "yes" } as never).settings.alertsListen).toBe(false)
+    expect(normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, spokenAlerts: true, alertsListen: true }).settings.alertsListen).toBe(true)
   })
 })

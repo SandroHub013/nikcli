@@ -23,8 +23,11 @@ export interface SpawnedSession {
    * an arrow key and the "y" that answers a permission prompt are all
    * keystrokes: deciding where a line ends belongs to whoever is typing, so
    * callers send their own "\r".
+   *
+   * The desktop shell answers whether the pane took the bytes, false when it
+   * refused them (its queue is full, its pipe broke, the session has ended).
    */
-  write: (data: string) => void
+  write: (data: string) => void | Promise<boolean>
   /**
    * Tells the CLI how big its terminal is.
    *
@@ -468,6 +471,7 @@ export { stripAnsi } from "./ansi"
 
 import { openReclaimed, sealForPane, sealForRequest } from "../session/mail-seal"
 import { createLineAccumulator } from "./line-stream"
+import { orderedWrites } from "./ordered-writes"
 import type { TokenUsage } from "../session/shared"
 import type { InstallProgress, PackStatus } from "@ragu/voice"
 import { keyError, type KeyDraft, type KeyInfo } from "../secrets/keys"
@@ -702,6 +706,7 @@ export async function getHost(): Promise<Host | undefined> {
         onExit(null)
       }
 
+      const sendToPane = orderedWrites((data) => invoke("pty_write", { id, data }))
       return {
         kill: (options) => {
           if (dead) return Promise.resolve(true)
@@ -713,8 +718,8 @@ export async function getHost(): Promise<Host | undefined> {
           )
         },
         write: (data) => {
-          if (dead) return
-          void invoke("pty_write", { id, data }).catch(() => undefined)
+          if (dead) return Promise.resolve(false)
+          return sendToPane(data)
         },
         resize: (nextCols, nextRows) => {
           if (dead) return

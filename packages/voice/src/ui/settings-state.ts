@@ -84,6 +84,8 @@ export interface VoiceSettingsStateProps {
   onOpenVoiceSource?: (voice: ReplyVoice) => void
   naturalVoiceError?: string
   naturalVoiceDownloading?: boolean
+  /** Whether the Piper voice's pack is on this machine: the page offers «Scarica voce» while it is not (review R2). */
+  naturalVoiceInstalled?: boolean
   onDownloadNaturalVoice?: () => void
   /** How the Piper download is going, while it goes (K3's `tts_install_status`). */
   naturalVoiceProgress?: InstallProgress

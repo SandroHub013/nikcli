@@ -64,6 +64,7 @@ export interface SettingsSheetProps {
   onOpenVoiceSource?: (voice: ReplyVoice) => void
   naturalVoiceError?: string
   naturalVoiceDownloading?: boolean
+  naturalVoiceInstalled?: boolean
   onDownloadNaturalVoice?: () => void
   naturalVoiceProgress?: InstallProgress
   onCancelInstall?: (provider: LocalProvider) => void
@@ -168,6 +169,9 @@ function voiceStateProps(props: SettingsSheetProps): VoiceSettingsStateProps {
     },
     get naturalVoiceDownloading() {
       return props.naturalVoiceDownloading
+    },
+    get naturalVoiceInstalled() {
+      return props.naturalVoiceInstalled
     },
     get onDownloadNaturalVoice() {
       return props.onDownloadNaturalVoice

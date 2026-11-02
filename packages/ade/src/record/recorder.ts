@@ -79,12 +79,21 @@ export interface StartOptions {
 export interface Recorder {
   start(target: RecordTarget, options?: StartOptions): Promise<string | undefined>
   stop(language?: Locale): Promise<string | undefined>
+  /** Resolves when no take is closing: the video finalised, and its tracks written beside it. Never rejects. */
+  settled(): Promise<void>
   /** Notes something worth keeping: ignored when nothing is being recorded. */
   note(event: RecordEvent): void
   /** Keeps a sentence the assistant is about to say, for the voice track. */
   noteVoice(wav: ArrayBuffer, text?: string): void
   state(): RecordState
 }
+
+/**
+ * How long ADE waits for a take that is finishing before it closes or updates. Finalising runs off the window's
+ * thread, so the user can press X while it runs, and the process ending would lose the video and its tracks. Same limit
+ * as `end_everything`, on the native side.
+ */
+export const TAKE_CLOSE_LIMIT_MS = 60_000
 
 const stem = (video: string) => video.replace(/\.mp4$/i, "")
 
@@ -106,6 +115,7 @@ export function createRecorder(deps: RecorderDeps): Recorder {
   let log: ReturnType<typeof createEventLog> | undefined
   let voice: VoiceClip[] = []
   let mic: MicTake | undefined
+  let closing: Promise<void> | undefined
 
   const settle = (next: RecordState) => {
     state = next
@@ -214,6 +224,8 @@ export function createRecorder(deps: RecorderDeps): Recorder {
       log = undefined
       voice = []
       mic = undefined
+      let closed = () => {}
+      closing = new Promise((resolve) => (closed = resolve))
       settle({ status: "stopping", recording })
       try {
         const stopped = await deps.stop()
@@ -225,7 +237,14 @@ export function createRecorder(deps: RecorderDeps): Recorder {
         await writeTracks(recording.path, recording.startedAt, events, clips, micTake).catch(() => {})
         settle({ status: "idle" })
         return error instanceof Error ? error.message : String(error)
+      } finally {
+        closing = undefined
+        closed()
       }
+    },
+
+    settled() {
+      return closing ?? Promise.resolve()
     },
 
     note(event) {
