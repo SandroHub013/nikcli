@@ -308,10 +308,23 @@ describe("mail held for a pane being relaunched", () => {
 
   test("stays in the queue until the new process is up, before any held message is closed for a missing session", () => {
     const route = source.slice(source.indexOf(codeOf("const session = running.get(target.pane.id)\n    // Read back from the saved queue")))
-    const waits = route.indexOf(codeOf("if (!session && running.relaunching(target.pane.id)) return false"))
+    const waits = route.indexOf(codeOf("if (!session && running.relaunching(target.pane.id)) {"))
     const closes = route.indexOf(codeOf("if (!session) {"))
     expect(waits).toBeGreaterThan(-1)
     expect(waits).toBeLessThan(closes)
+  })
+
+  /*
+   * Re-review B8: fresh mail in the gap took the same silent `return false`: no receipt, no `held`. A gap past the client's
+   * 10 s and a start that then failed left an ask waiting for ever, and a send told «in coda» and gone.
+   */
+  test("gets its receipt and is marked held on the first pass, so a failed start tells the truth later", () => {
+    const route = source.slice(source.indexOf(codeOf("if (!session && running.relaunching(target.pane.id)) {")))
+    const gap = route.slice(0, route.indexOf(codeOf("if (!session) {")))
+    expect(gap).toContain(codeOf("if (!held.has(id)) {"))
+    expect(gap).toContain(codeOf("held.add(id)"))
+    expect(gap).toContain(codeOf("sta ripartendo"))
+    expect(gap.indexOf(codeOf("held.add(id)"))).toBeLessThan(gap.indexOf(codeOf("return false")))
   })
 })
 

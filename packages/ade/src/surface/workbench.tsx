@@ -457,7 +457,7 @@ import {
 } from "../session/enter"
 import { watchLongTasks } from "../session/long-task-log"
 import { formatSpawnFailed, spawnOutcome } from "../session/spawn-outcome"
-import { isTyping, submittedSince, typedAfter } from "../session/typed-line"
+import { isTyping, questionOpened, submittedSince, typedAfter } from "../session/typed-line"
 import { parseQueue, queueToSave, waitsForRestore } from "../session/mail-queue"
 import {
   clientStoppedReading,
@@ -3663,6 +3663,8 @@ export function Workbench() {
         ? statusFromActivity(pane.status, activity, workingSince.get(paneId), questionSeenAt.get(paneId))
         : undefined
       if (next === "waiting") {
+        // A new question: the key that answered the last one is not this one's answer (re-review B7).
+        records.typed.update(paneId, questionOpened)
         setWb((w) => updatePane(w, paneId, { status: "waiting", activity: "permission" }))
       } else if (next === "working") {
         panels.newTurn(paneId, activity.at)
@@ -5202,7 +5204,14 @@ export function Workbench() {
     if (!session && waitsForRestore({ replayed: replayedMail.has(id), paneExists: paneExists(target.pane.id), sinceBoot: Date.now() - loadedAt }))
       return false
     // Between the old process and the new one of a relaunch: not a closed pane, so what was held for it waits (review B4).
-    if (!session && running.relaunching(target.pane.id)) return false
+    if (!session && running.relaunching(target.pane.id)) {
+      // Fresh mail too: the sender hears now, and `held` makes the branch below tell the truth if the start then fails (re-review B8).
+      if (!held.has(id)) {
+        held.add(id)
+        await answer(`ok: in coda, "${target.pane.title}" sta ripartendo: arriva appena è su`)
+      }
+      return false
+    }
     if (!session) {
       // Its sender stopped reading receipts when it was held: an ask is answered where the caller waits.
       if (held.delete(id)) {
@@ -8557,6 +8566,7 @@ export function Workbench() {
     if (!request) return
 
     permissions.set(paneId, request)
+    records.typed.update(paneId, questionOpened)
     questionSeenAt.set(paneId, Date.now())
     setWb((w) => updatePane(w, paneId, { status: "waiting", activity: "permission" }))
     if (voiceEngine.isRunning()) {

@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
+import { codeOf } from "../test-support/source-text"
 
-import { isAnswerKey, isTyping, submittedSince, typedAfter, type TypedLine } from "./typed-line"
+import { isAnswerKey, isTyping, questionOpened, submittedSince, typedAfter, type TypedLine } from "./typed-line"
 
 const typeAll = (chunks: string[], from: TypedLine | undefined = undefined): TypedLine | undefined =>
   chunks.reduce((line, chunk, index) => typedAfter(line, chunk, 1_000 + index), from)
@@ -200,6 +201,39 @@ describe("a key typed into a menu on screen", () => {
     const draft = typedAfter(undefined, "abc", 1_000)
     expect(typedAfter(draft, "\r", 2_000, true)).toBeUndefined()
   })
+})
+
+/*
+ * Re-review B7: `answered` outlived the menu it answered, so the second one-key menu of the same turn counted as a draft and
+ * every message to the pane was held, with a note about a line nobody had begun.
+ */
+describe("a new question", () => {
+  test("is answered by its own first key, even when the last one was answered with no Enter between", () => {
+    const first = typedAfter(undefined, "1", 1_000, true)
+    expect(isTyping(first)).toBe(false)
+    const second = typedAfter(questionOpened(first), "1", 2_000, true)
+    expect(isTyping(second)).toBe(false)
+    expect(isTyping(typedAfter(questionOpened(second), "2", 3_000, true))).toBe(false)
+  })
+
+  test("without a new question the second key is still a draft", () => {
+    const first = typedAfter(undefined, "1", 1_000, true)
+    expect(isTyping(typedAfter(first, "1", 2_000, true))).toBe(true)
+  })
+
+  test("leaves a real draft alone", () => {
+    const draft = typedAfter(undefined, "ciao", 1_000)
+    expect(questionOpened(draft)).toBe(draft)
+    expect(questionOpened(undefined)).toBeUndefined()
+  })
+})
+
+test("lint: a question opening, by the hook or by the screen, drops the last answer", () => {
+  const workbench = codeOf(readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf-8"))
+  const hook = workbench.slice(workbench.indexOf(codeOf('if (next === "waiting") {')))
+  expect(hook.slice(0, 300)).toContain(codeOf("records.typed.update(paneId, questionOpened)"))
+  const screen = workbench.slice(workbench.indexOf(codeOf("permissions.set(paneId, request)")))
+  expect(screen.slice(0, 200)).toContain(codeOf("records.typed.update(paneId, questionOpened)"))
 })
 
 test("lint: the terminal asks whether a question is open before it counts a key", () => {

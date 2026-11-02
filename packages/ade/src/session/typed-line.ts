@@ -143,6 +143,14 @@ export function isAnswerKey(data: string): boolean {
   return isOneKey(data)
 }
 
+/**
+ * A new question opened: the key that answered the last one says nothing about this one, so its first key is an answer
+ * again. A real draft stays (re-review B7: two prompts in one turn, each answered with a digit and no Enter).
+ */
+export function questionOpened(line: TypedLine | undefined): TypedLine | undefined {
+  return line?.answered ? undefined : line
+}
+
 /** The line as it was, minus a pending Escape, with the clock moved on. */
 function keep(line: TypedLine | undefined, now: number): TypedLine | undefined {
   return line ? { pending: line.pending, at: now } : undefined
