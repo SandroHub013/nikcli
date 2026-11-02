@@ -42,7 +42,7 @@ import {
   type RemoteTarget,
 } from "../remote/ssh"
 import { RemoteSpaceDialog } from "../remote/remote-dialog"
-import { discoverProject, grantedRoots, openProject, rootMissing, type Project } from "../host/project"
+import { discoverProject, grantedRoots, openProject, rootMissing, startFolder, type Project } from "../host/project"
 import {
   addRecent,
   isMissingRecent,
@@ -1445,6 +1445,13 @@ export function Workbench() {
   })
 
   const [exporting, setExporting] = createSignal(false)
+  /** How far the running export is, 0 to 1; the settings panel shows it next to «Annulla». */
+  const [exportProgress, setExportProgress] = createSignal(0)
+  /** The window is hidden, so the export is held until it is back: the recorder and the media stand still with it. */
+  const [exportWaiting, setExportWaiting] = createSignal(false)
+  let exportAbort: AbortController | undefined
+  /** Stops the running export (MOD-4: it ran for as long as the take, with no way out). */
+  const cancelExport = () => exportAbort?.abort()
   /** Writes `<nome>.promo.mp4` beside the take: zoom, click rings, pointer, both tracks. */
   const exportLastTake = async () => {
     const video = lastTake()
@@ -1453,6 +1460,8 @@ export function Workbench() {
     const host = await getHost()
     if (!host?.readTextFile || !host.recordWrite) return report(t("record.export.desktopOnly"))
     setExporting(true)
+    setExportProgress(0)
+    exportAbort = new AbortController()
     report(t("record.exporting"), "info")
     try {
       const events = await host
@@ -1470,6 +1479,9 @@ export function Workbench() {
         ...(mic ? { mic } : {}),
         fps: level.fps,
         bitrate: level.bitrate,
+        signal: exportAbort.signal,
+        onProgress: setExportProgress,
+        onHidden: setExportWaiting,
       })
       const out = `${video.replace(/\.mp4$/i, "")}.promo.${result.extension}`
       await host.recordWrite(out, result.bytes)
@@ -1477,6 +1489,8 @@ export function Workbench() {
     } catch (failure) {
       report(t("record.export.failed", errorMessage(failure).replace(/\.+$/, "")))
     } finally {
+      exportAbort = undefined
+      setExportWaiting(false)
       setExporting(false)
     }
   }
@@ -6905,15 +6919,24 @@ export function Workbench() {
       const saved = restored?.projectPath
       // The last project's folder gone: ADE opens where it was started, and says why.
       const gone = saved ? await refuseMissingRoot(host, saved) : false
-      const path = (!gone && saved) || here
-      const p = await discoverProject(host, path)
-      setProject(p)
+      // The first run opens no folder: the empty project screen offers «Apri una cartella» (UX-5).
+      const path = startFolder({
+        saved,
+        gone,
+        hasRecents: recents().length > 0,
+        hasPanes: (restored?.panes.length ?? 0) > 0,
+        here,
+      })
+      const p = path ? await discoverProject(host, path) : undefined
+      if (p) {
+        setProject(p)
 
-      const newRecents = addRecent(recents(), { root: p.root, name: p.name })
-      setRecents(newRecents)
-      localStorage.setItem("ade.recents", serializeRecents(newRecents))
+        const newRecents = addRecent(recents(), { root: p.root, name: p.name })
+        setRecents(newRecents)
+        localStorage.setItem("ade.recents", serializeRecents(newRecents))
 
-      setWb((w) => ({ ...w, projectPath: p.root, focusedId: focusInProject(w, p) }))
+        setWb((w) => ({ ...w, projectPath: p.root, focusedId: focusInProject(w, p) }))
+      }
 
       /*
        * Restarting what was running when the app went away.
@@ -6929,7 +6952,7 @@ export function Workbench() {
        * carry a task: a finished one has nothing to resume, and a task-less
        * one would launch an agent with an empty prompt.
        */
-      if (restored) {
+      if (restored && p) {
         /*
          * Planned all at once, not one at a time.
          *
@@ -7801,7 +7824,9 @@ export function Workbench() {
     }
   }
 
-  const feedTerminal = (paneId: string, chunk: string) => {
+  /** `written` is called once the terminal has parsed the chunk, or at once when there is none: the host's flow control waits for it (RS-7). */
+  const discardNoted = new Set<string>()
+  const feedTerminal = (paneId: string, chunk: string, written?: () => void) => {
     /*
      * Nothing is written to a pane that no longer exists.
      *
@@ -7813,7 +7838,7 @@ export function Workbench() {
      * already run.
      */
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
-    if (!pane) return
+    if (!pane) return written?.()
 
     // A working agent keeps repainting (spinner, streamed text); every chunk
     // pushes back the moment the pane is declared idle again.
@@ -7822,7 +7847,11 @@ export function Workbench() {
     else if (hooked(paneId) && interruptEnds(activityOf.get(paneId), interruptedAt.get(paneId))) settleWhenQuiet(paneId)
     else if (pane.status === "idle") noticeWorkFromOutput(pane)
 
-    writeToTerminal(paneId, chunk)
+    // xterm refused the data (50 MB unparsed): said once in the pane, not for every chunk after it.
+    if (!writeToTerminal(paneId, chunk, written) && !discardNoted.has(paneId)) {
+      discardNoted.add(paneId)
+      report(t("terminal.outputDiscarded"), "warning", paneId)
+    }
     screenRequests.fed(paneId)
     if (!liveTerminals().has(paneId)) {
       setLiveTerminals((ids) => new Set(ids).add(paneId))
@@ -9161,7 +9190,7 @@ export function Workbench() {
         command: agent.command,
         args: extraArgs,
         cwd: workDir,
-        onData: (chunk) => {
+        onData: (chunk, written) => {
           const now = Date.now()
           firstByteAt ??= now
           lastByteAt = now
@@ -9173,7 +9202,9 @@ export function Workbench() {
             if (seen) paneClasses.set(paneId, seen)
           }
 
-          feedTerminal(paneId, chunk)
+          feedTerminal(paneId, chunk, written)
+          // The terminal answers the host when it has written the chunk (RS-7).
+          return true
         },
         onLine: (line, stream) => {
           appendLine(paneId, line, stream === "err" ? "note" : "step")
@@ -9475,13 +9506,14 @@ export function Workbench() {
         command: "ssh",
         args,
         ...(home ? { cwd: home } : {}),
-        onData: (chunk) => {
+        onData: (chunk, written) => {
           lastOutputAt.set(paneId, Date.now())
           noteBracketedPaste(paneId, chunk)
           tail = (tail + stripAnsi(chunk)).slice(-400)
           // Whole, up to a generous cap: a PowerShell 5.1 error is 400+ characters, and what says it comes first.
           sinceStep = (sinceStep + stripAnsi(chunk)).slice(-8000)
-          feedTerminal(paneId, chunk)
+          feedTerminal(paneId, chunk, written)
+          return true
         },
         onLine: (line, stream) => appendLine(paneId, line, stream === "err" ? "note" : "step"),
         onExit: (code) => {
@@ -10928,6 +10960,10 @@ export function Workbench() {
               dir: recordDir,
               onPickFolder: () => void pickRecordDir(),
               onExport: () => void exportLastTake(),
+              exporting,
+              exportProgress,
+              exportWaiting,
+              onCancelExport: cancelExport,
             }}
             updates={{
               checking: checkingUpdate,

@@ -27,6 +27,8 @@ export interface ExportInput {
   readonly bitrate?: number
   readonly signal?: AbortSignal
   readonly onProgress?: (fraction: number) => void
+  /** The window went away (`true`): the export waits until it is back (`false`). */
+  readonly onHidden?: (hidden: boolean) => void
 }
 
 export interface ExportResult {
@@ -133,6 +135,100 @@ export function startDue(waiting: readonly LatePlayer[], nowMs: number): LatePla
   return later
 }
 
+/** What the audio track of a clip costs, per second (the recorder is told the same figure). */
+export const AUDIO_BITS_PER_SECOND = 160_000
+
+/**
+ * The most a clip may weigh when it is made.
+ *
+ * It is kept whole in the renderer that also draws every terminal: the recorder's chunks, then the blob, then a copy
+ * of it for the write, so about twice this at the peak (audit 2026-11-02, MOD-4: a 30-minute take at the default
+ * level is 1.8 GB and the window went white). Above it the export is refused before it starts.
+ */
+export const MAX_EXPORT_BYTES = 400 * 1024 * 1024
+
+/** What a take of `durationMs` weighs once exported at `videoBitsPerSecond`; 0 when the length is not a number. */
+export function estimateExportBytes(durationMs: number, videoBitsPerSecond: number): number {
+  const seconds = Number.isFinite(durationMs) && durationMs > 0 ? durationMs / 1000 : 0
+  return Math.ceil((seconds * (videoBitsPerSecond + AUDIO_BITS_PER_SECOND)) / 8)
+}
+
+/** Throws, with a message that says what to change, when the clip would be past `MAX_EXPORT_BYTES`. */
+export function checkExportSize(durationMs: number, videoBitsPerSecond: number): void {
+  const bytes = estimateExportBytes(durationMs, videoBitsPerSecond)
+  if (bytes > MAX_EXPORT_BYTES) {
+    throw new Error(t("record.export.tooLong", Math.round(bytes / 1_048_576), Math.round(MAX_EXPORT_BYTES / 1_048_576)))
+  }
+}
+
+/** The part of `document` that says whether the window is hidden. */
+interface VisibilitySource {
+  readonly hidden: boolean
+  addEventListener(type: "visibilitychange", run: () => void): void
+  removeEventListener(type: "visibilitychange", run: () => void): void
+}
+
+interface Pausable {
+  paused: boolean
+  pause(): void
+  play(): Promise<void> | void
+}
+
+/** The part of a `MediaRecorder` that can be paused. */
+interface PausableRecorder {
+  readonly state: "inactive" | "recording" | "paused"
+  pause(): void
+  resume(): void
+}
+
+/**
+ * A recorder as something `pauseWhileHidden` can hold still with the media.
+ *
+ * Left running while the media stands still, it records a frozen picture over silence for as long as the window is
+ * hidden (review B3). First in the list, so it stops before the media and starts again with it.
+ */
+export function pausableRecorder(recorder: PausableRecorder): Pausable {
+  return {
+    get paused() {
+      return recorder.state !== "recording"
+    },
+    pause: () => recorder.pause(),
+    play: () => {
+      if (recorder.state === "paused") recorder.resume()
+    },
+  }
+}
+
+/**
+ * Stops what is playing while the window is hidden and plays only that again when it is back.
+ *
+ * The export runs as long as the take, so people switch windows during it; media left running under a loop that is
+ * not drawing records a frozen picture over live audio. What had not started yet (a late track) stays unstarted.
+ * Returns what takes the listener off.
+ */
+export function pauseWhileHidden(
+  doc: VisibilitySource,
+  media: readonly Pausable[],
+  /** Told when the window goes away (`true`) and when it is back (`false`). */
+  onChange?: (hidden: boolean) => void,
+): () => void {
+  if (typeof doc.addEventListener !== "function") return () => {}
+  let held: Pausable[] = []
+  const change = () => {
+    onChange?.(doc.hidden)
+    if (doc.hidden) {
+      held = media.filter((item) => !item.paused)
+      for (const item of held) item.pause()
+      return
+    }
+    const again = held
+    held = []
+    for (const item of again) void Promise.resolve(item.play()).catch(() => undefined)
+  }
+  doc.addEventListener("visibilitychange", change)
+  return () => doc.removeEventListener("visibilitychange", change)
+}
+
 /** How long the recorder may take to say it has stopped before the export goes on without it. */
 export const STOP_WAIT_MS = 5000
 
@@ -161,6 +257,7 @@ export async function exportPromo(input: ExportInput): Promise<ExportResult> {
 }
 
 async function render(input: ExportInput, cleanup: ReturnType<typeof createCleanup>): Promise<ExportResult> {
+  if (input.signal?.aborted) throw new Error(t("record.export.cancelled"))
   const events = readEvents(input.eventsText)
   const video = document.createElement("video")
   cleanup.add(() => video.removeAttribute("src"))
@@ -174,6 +271,8 @@ async function render(input: ExportInput, cleanup: ReturnType<typeof createClean
   const width = video.videoWidth
   const height = video.videoHeight
   const durationMs = video.duration * 1000
+  // Before the canvas, the audio and the recorder exist: a take that cannot fit costs nothing.
+  checkExportSize(durationMs, input.bitrate ?? 8_000_000)
   const mapping = mappingFor(events, width, height)
   const shots = planShots(events, mapping, durationMs)
 
@@ -233,11 +332,16 @@ async function render(input: ExportInput, cleanup: ReturnType<typeof createClean
   const recorder = new MediaRecorder(stream, {
     mimeType: mime.mimeType,
     videoBitsPerSecond: input.bitrate ?? 8_000_000,
-    audioBitsPerSecond: 160_000,
+    audioBitsPerSecond: AUDIO_BITS_PER_SECOND,
   })
   const chunks: Blob[] = []
+  // What the recorder has really made, against the same cap as the estimate (a bitrate the encoder overshoots).
+  let recordedBytes = 0
   recorder.addEventListener("dataavailable", (event) => {
-    if (event.data.size > 0) chunks.push(event.data)
+    if (event.data.size > 0) {
+      chunks.push(event.data)
+      recordedBytes += event.data.size
+    }
   })
   // Stopped and waited for once, on the way out or when something fails first.
   let stopping: Promise<void> | undefined
@@ -292,13 +396,21 @@ async function render(input: ExportInput, cleanup: ReturnType<typeof createClean
   cleanup.add(() => {
     running = false
   })
+  cleanup.add(pauseWhileHidden(document, [pausableRecorder(recorder), video, ...players], input.onHidden))
   const done = new Promise<void>((resolve, reject) => {
     const tick = () => {
       if (!running) return
       if (input.signal?.aborted) return reject(new Error(t("record.export.cancelled")))
+      if (recordedBytes > MAX_EXPORT_BYTES) {
+        return reject(
+          new Error(t("record.export.tooLong", Math.round(recordedBytes / 1_048_576), Math.round(MAX_EXPORT_BYTES / 1_048_576))),
+        )
+      }
       draw()
       if (!video.ended) requestAnimationFrame(tick)
     }
+    // A hidden window draws nothing (the media is stopped with it), so a cancel cannot wait for the next frame.
+    input.signal?.addEventListener("abort", () => reject(new Error(t("record.export.cancelled"))), { once: true })
     video.addEventListener(
       "ended",
       () => {
