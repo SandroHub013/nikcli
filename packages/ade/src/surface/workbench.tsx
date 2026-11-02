@@ -680,6 +680,7 @@ import {
 import type { LinkRequest } from "../terminal/links"
 import { OPENING_QUIET_MS, decideOpening } from "../session/opening"
 import { cleanTranscriptLine } from "../session/transcript-line"
+import { createLineWriter, withLines } from "./pane-lines"
 import { createRawWindows } from "../session/raw-window"
 import { NEW_PANE_ITEMS, showsNewPane, type NewPaneItem } from "./new-pane"
 import {
@@ -8496,6 +8497,26 @@ export function Workbench() {
   const dismissNotices = (id: string) => setWb((w) => updatePane(w, id, { notices: undefined }))
 
   /*
+   * The one write that happens thousands of times a minute, so it is the one
+   * that does not rebuild the workbench.
+   *
+   * `produce` sets the one array that grew. Going through the pure reducers
+   * instead would copy the pane, the pane list and the workbench, and then hand
+   * `reconcile` the whole thing to diff. Once per chunk: see `pane-lines.ts`.
+   */
+  const paneLines = createLineWriter<Pane["lines"][number]>((id, lines) => {
+    setWbStore(
+      produce((w) => {
+        const pane = w.panes.find((p) => p.id === id)
+        if (!pane) return
+        const next = withLines(unwrap(pane.lines), lines, MAX_PANE_LINES)
+        if (next) pane.lines = next
+      }),
+    )
+    setRevision((n) => n + 1)
+  })
+
+  /*
    * `from` says who wrote the line. ADE's own notes go in the transcript like
    * the rest, but they are not the agent: read as its report, «Cerco l'ultima
    * conversazione…» became the pane's activity and stayed in its header after
@@ -8517,30 +8538,7 @@ export function Workbench() {
      * and only the transcript is trimmed.
      */
     const shown = cleanTranscriptLine(text)
-    if (shown !== undefined) {
-      /*
-       * The one write that happens thousands of times a minute, so it is the
-       * one that does not rebuild the workbench.
-       *
-       * `produce` pushes onto the one array that grew. Going through the pure
-       * reducers instead would copy the pane, the pane list and the workbench
-       * for every line, and then hand `reconcile` the whole thing to diff —
-       * per line, per agent.
-       */
-      setWbStore(
-        produce((w) => {
-          const pane = w.panes.find((p) => p.id === id)
-          if (!pane) return
-          // A frame redrawn is the same line again; one entry says as much.
-          if (pane.lines.at(-1)?.text === shown) return
-          pane.lines.push({ kind, text: shown })
-          if (pane.lines.length > MAX_PANE_LINES) {
-            pane.lines.splice(0, pane.lines.length - MAX_PANE_LINES)
-          }
-        }),
-      )
-      setRevision((n) => n + 1)
-    }
+    if (shown !== undefined) paneLines.add(id, { kind, text: shown })
     if (from === "ade") return
     watchForPermission(id, text)
 
@@ -9323,6 +9321,7 @@ export function Workbench() {
           // The terminal answers the host when it has written the chunk (RS-7).
           return true
         },
+        linesTogether: paneLines.together,
         onLine: (line, stream) => {
           appendLine(paneId, line, stream === "err" ? "note" : "step")
           /*
@@ -9634,6 +9633,7 @@ export function Workbench() {
           feedTerminal(paneId, chunk, written)
           return true
         },
+        linesTogether: paneLines.together,
         onLine: (line, stream) => appendLine(paneId, line, stream === "err" ? "note" : "step"),
         onExit: (code) => {
           if (superseded) return

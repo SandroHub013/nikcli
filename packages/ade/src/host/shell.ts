@@ -105,6 +105,11 @@ export interface Host {
      */
     onData?: (chunk: string, written: () => void) => boolean | void
     onLine: (line: string, stream: "out" | "err") => void
+    /**
+     * Given, `read` is run through it for each chunk, and calls `onLine` for every line the chunk completed: a chunk of
+     * a flood is thousands of lines, and whoever writes each to a store can do it once at the end (`pane-lines.ts`).
+     */
+    linesTogether?: (read: () => void) => void
     onExit: (code: number | null) => void
     /**
      * The host refused to start the process: a program not found, an
@@ -630,6 +635,7 @@ export async function getHost(): Promise<Host | undefined> {
       rows,
       onData,
       onLine,
+      linesTogether,
       onExit,
       onRefused,
       link,
@@ -676,7 +682,11 @@ export async function getHost(): Promise<Host | undefined> {
            * want to notice what an agent *said* — a permission question, a token
            * count — do not have to understand cursor movement to find it.
            */
-          for (const line of lineStream.push(event.payload.data)) onLine(line, "out")
+          const read = () => {
+            for (const line of lineStream.push(event.payload.data)) onLine(line, "out")
+          }
+          if (linesTogether) linesTogether(read)
+          else read()
         }),
       )
 
