@@ -30,7 +30,7 @@ import {
   isWorkingAgentPane,
 } from "./before-unload"
 import { hideButtons, hideChoice, markTrayNoticed, planHide, trayNoticed } from "./tray-hide"
-import { RAGU_VERSION_EVERY_MS, parseRaguVersion, raguSingleEsc } from "../host/ragu-version"
+import { RAGU_VERSION_EVERY_MS, parseRaguVersion } from "../host/ragu-version"
 import {
   agentMissing,
   isRemoteRoot,
@@ -4982,7 +4982,7 @@ export function Workbench() {
       const pluginReady = Boolean(
         agentId === "ragu" && nonce && host?.requestAgentInterrupt && hooked(target.pane.id) && activityOf.has(target.pane.id),
       )
-      const plan = interruptPlan(agentId, pluginReady, raguSingleEsc(raguVersion()))
+      const plan = interruptPlan(agentId, pluginReady)
       if ("refusal" in plan) {
         await answer(plan.refusal)
         return true

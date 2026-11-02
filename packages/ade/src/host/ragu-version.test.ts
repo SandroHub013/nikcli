@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { RAGU_VERSION_EVERY_MS, parseRaguVersion, raguSingleEsc } from "./ragu-version"
+import { RAGU_VERSION_EVERY_MS, parseRaguVersion } from "./ragu-version"
 
 describe("the ragu version in the top bar", () => {
   test("reads what ragu actually prints on this machine", () => {
@@ -36,26 +36,5 @@ describe("the ragu version in the top bar", () => {
 
   test("is asked again seldom, because it changes only when ragu updates", () => {
     expect(RAGU_VERSION_EVERY_MS).toBe(21_600_000)
-  })
-})
-
-/*
- * Audit 2026-11-02, SES-5: from 0.2.11 a single Esc acts (it sends what was queued, or stops the turn), so the second
- * Esc of the old double-Esc aborted the turn the first one had just started.
- */
-describe("which ragu acts on a single Esc", () => {
-  test("0.2.11 and later do, in the 0.x line", () => {
-    expect(raguSingleEsc("v0.2.11")).toBe(true)
-    expect(raguSingleEsc("v0.2.14")).toBe(true)
-    expect(raguSingleEsc("v0.3.0")).toBe(true)
-    expect(raguSingleEsc("v0.2.11-rc.1")).toBe(true)
-  })
-
-  test("older ones, the 1.x line of the old build, and an unknown version keep the double Esc", () => {
-    expect(raguSingleEsc("v0.2.10")).toBe(false)
-    expect(raguSingleEsc("v0.1.99")).toBe(false)
-    expect(raguSingleEsc("v1.384.0")).toBe(false)
-    expect(raguSingleEsc(undefined)).toBe(false)
-    expect(raguSingleEsc("not a version")).toBe(false)
   })
 })

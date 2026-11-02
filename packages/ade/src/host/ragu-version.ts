@@ -70,18 +70,3 @@ export function parseRaguVersion(result: VersionResult | null | undefined): stri
   }
   return undefined
 }
-
-/**
- * Whether this ragu acts on a single Esc.
- *
- * From 0.2.11 one Esc does: with messages queued it sends them, with none it stops the turn. The double Esc of the old
- * rule (the first only arms it, as in OpenCode) then sent the queue with the first and aborted the turn that started
- * with the second (audit 2026-11-02, SES-5). Only the 0.x line of the lab build counts: the older 1.x builds, a version
- * that cannot be read and no version at all keep the double Esc.
- */
-export function raguSingleEsc(version: string | undefined): boolean {
-  const match = /^v?(\d+)\.(\d+)\.(\d+)/.exec(version ?? "")
-  if (!match) return false
-  const [major, minor, patch] = [Number(match[1]), Number(match[2]), Number(match[3])]
-  return major === 0 && (minor > 2 || (minor === 2 && patch >= 11))
-}

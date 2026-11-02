@@ -1004,19 +1004,6 @@ describe("stuck sessions, interrupts and relaunch notes", () => {
     expect(interruptPlan("grok", true)).toHaveProperty("refusal")
   })
 
-  /*
-   * Audit 2026-11-02, SES-5: on ragu 0.2.11 and later one Esc acts, so the second one aborted the turn the first had
-   * just started with the user's queued messages, while the sender was told they had gone.
-   */
-  test("interrupt: ragu 0.2.11 and later gets one Esc, with the plugin or without; older ragu and OpenCode keep two", () => {
-    const esc = String.fromCharCode(27)
-    expect(interruptPlan("ragu", false, true)).toEqual({ keys: [esc] })
-    expect(interruptPlan("ragu", true, true)).toEqual({ plugin: true, keys: [esc] })
-    expect(interruptPlan("ragu", false, false)).toEqual({ keys: [esc, esc] })
-    // The flag is ragu's: OpenCode has no such version.
-    expect(interruptPlan("opencode", false, true)).toEqual({ keys: [esc, esc] })
-  })
-
   describe("performInterrupt: the plugin's answer decides whether a key is sent", () => {
     const esc = String.fromCharCode(27)
     const rig = (answer?: () => Promise<boolean>, alive: () => boolean = () => true) => {

@@ -1365,9 +1365,6 @@ export const INTERRUPT_GAP_MS = 300
  * - Any other agent: not guessed. Ctrl-C quits most TUIs, so the sender is told
  *   to send a correcting line instead.
  *
- * ragu 0.2.11 and later (`singleEsc`) acts on one Esc: with queued messages it sends them, with none it stops the turn.
- * The second Esc of the double rule then aborted the turn the first had just started with the user's queue (SES-5).
- *
  * A ragu TUI whose plugin is reporting (`pluginReady`) is asked first, with no key
  * at all: the plugin aborts the session itself, and the same Esc, Esc stay behind as
  * the way out when it does not answer. The abort is the call an Esc makes, with one
@@ -1377,7 +1374,6 @@ export const INTERRUPT_GAP_MS = 300
 export function interruptPlan(
   agentId: string | undefined,
   pluginReady = false,
-  singleEsc = false,
 ): { keys: string[]; plugin?: true } | { refusal: string } {
   const esc = String.fromCharCode(27)
   switch (agentId) {
@@ -1385,10 +1381,8 @@ export function interruptPlan(
     case "codex":
     case "agy":
       return { keys: [esc] }
-    case "ragu": {
-      const keys = singleEsc ? [esc] : [esc, esc]
-      return pluginReady ? { plugin: true, keys } : { keys }
-    }
+    case "ragu":
+      return pluginReady ? { plugin: true, keys: [esc, esc] } : { keys: [esc, esc] }
     case "opencode":
       return { keys: [esc, esc] }
     case "terminal":
