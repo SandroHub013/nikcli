@@ -314,6 +314,12 @@ body[data-theme="glass"] #root,
   --ade-border: light-dark(#d9cdb6, #39332c);
   --ade-border-strong: light-dark(#c5b9a4, #463f37);
   --ade-highlight: light-dark(rgba(255, 250, 240, 0.6), rgba(244, 231, 205, 0.04));
+  /*
+   * The edge of a control that has no other edge (a field, a note): the ramp above draws separators, and at 1.2 to
+   * 1.6:1 it is not an edge anyone can find (WCAG 1.4.11 asks for 3:1; UX-19). Measured on the five grounds:
+   * dark 3.17:1 on overlay up to 4.27:1 on sunken, light 3.48:1 on sunken up to 4.36:1 on raised.
+   */
+  --ade-control-border: light-dark(#80755f, #7d7367);
 
   /* ── text ───────────────────────────────────────────────────────────────── */
   /*
@@ -498,6 +504,17 @@ body[data-theme="glass"] #root,
    * ground alone.
    */
   --ade-press: scale(0.97);
+
+  /*
+   * The three heights a control comes in (DS-8): `sm` for a row of chips, `md` in a panel, `lg` for the confirm of
+   * its sheet. The icon-only 20px sits beside them; its hit area is padded to 24 by the primitive (UX-18).
+   * A disabled control is one opacity, not the six the sheets had drifted into (0.35 to 0.6).
+   */
+  --ade-control-sm: 22px;
+  --ade-control-md: 26px;
+  --ade-control-lg: 32px;
+  --ade-control-icon-sm: 20px;
+  --ade-disabled-opacity: 0.45;
 
   /*
    * The one transition a button gets. Every sheet was writing its own — nine
@@ -685,8 +702,21 @@ body,
  * Every interactive element gets the same ring unless it defines its own.
  */
 :focus-visible {
-  outline: none;
+  /*
+   * The ring is a box-shadow, and a Windows contrast theme (forced colours) removes every box-shadow: the focus
+   * then vanished for the people who need it most (UX-19, WCAG 2.4.7). A transparent outline is invisible in
+   * the normal themes and is repainted in a system colour in forced colours — the standard way to keep both.
+   */
+  outline: 2px solid transparent;
   box-shadow: var(--ade-focus-ring);
+}
+
+/* A sheet that says `outline: none` on its own control still gets a visible focus when colours are forced. */
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: 2px solid Highlight !important;
+    outline-offset: 2px;
+  }
 }
 
 /* Thin, themed scrollbars everywhere. */

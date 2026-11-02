@@ -219,6 +219,7 @@ export const en: Messages = {
   "sidebar.menu.restart": "Restart",
   "sidebar.menu.resume": "Resume",
   "sidebar.menu.close": "Close",
+  "ui.notice.close": "Dismiss the notice",
   "sidebar.menu.copyId": "Copy id",
   "sidebar.menu.openSession": "Open session",
   "sidebar.menu.newSession": "New session",

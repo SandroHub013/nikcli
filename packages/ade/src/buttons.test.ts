@@ -102,7 +102,10 @@ describe("every sheet", () => {
           .join("\n")
         const declarations = body.slice(0, body.indexOf("}") + 1)
         const outline = declarations.match(/outline:\s*([^;]+);/)
-        if (outline && !/^none$/.test(outline[1]!.trim())) rolled.push(`${path}: ${outline[1]!.trim()}`)
+        // `none` is a sheet taking its own focus off; the transparent outline and the forced-colours `Highlight` one
+        // are the contrast-theme fallback (UX-19), which paints nothing in the normal themes.
+        if (outline && !/^(none|2px solid transparent|2px solid Highlight !important)$/.test(outline[1]!.trim()))
+          rolled.push(`${path}: ${outline[1]!.trim()}`)
       }
     }
     expect(rolled).toEqual([])

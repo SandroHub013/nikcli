@@ -227,6 +227,7 @@ export const it = {
   "sidebar.menu.restart": "Riavvia",
   "sidebar.menu.resume": "Riprendi",
   "sidebar.menu.close": "Chiudi",
+  "ui.notice.close": "Scarta l'avviso",
   "sidebar.menu.copyId": "Copia l'id",
   "sidebar.menu.openSession": "Apri la sessione",
   "sidebar.menu.newSession": "Nuova sessione",
