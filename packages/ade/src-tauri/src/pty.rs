@@ -34,6 +34,9 @@ struct Session {
      */
     writer: Arc<WriteQueue>,
     child: Box<dyn Child + Send + Sync>,
+    /// What ends the tree if ADE dies without saying so. See `PaneJob`.
+    #[allow(dead_code)]
+    job: Option<PaneJob>,
 }
 
 /// How much may wait for a pane that is not reading before a write is refused.
@@ -110,6 +113,41 @@ fn write_in_order(mut writer: Box<dyn Write + Send>, queue: &Receiver<Vec<u8>>, 
             *state.failure.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(format!("scrittura fallita: {error}"));
             return;
         }
+    }
+}
+
+/*
+ * What ends a pane's process tree when ADE itself goes without ending it.
+ *
+ * `kill_tree` needs ADE alive to run. A crash, a kill from Task Manager or `test:app stop`, or the NSIS setup that
+ * ends every `ade-desktop.exe` by name left the agents running headless, with their MCP servers and dev servers
+ * holding ports and worktree files (RS-4). A job with KILL_ON_JOB_CLOSE closes when ADE's last handle to it does, and
+ * the kernel closes that however the process ends. The descendants inherit the job; ADE itself is never in it, or
+ * the job would take the update's installer with it.
+ *
+ * Only for that. Dropping this value, which only a living ADE can do, takes the kill back first, so a pane that ends
+ * while ADE runs ends as it always has: `kill_tree` for a close, nothing for a program that exits by itself. Closing
+ * a Terminal pane must not take with it the VS Code that `code .` started from it, nor a daemon that other panes
+ * share. No process is meant to outlive a deliberate relaunch either: suspending, relaunching and restoring a pane
+ * all kill the old tree and spawn a new one, under a new job, and resume by conversation id.
+ *
+ * A job that cannot be made or joined is no reason to refuse a pane: it runs unguarded, as before. The child is
+ * joined right after it starts, not started suspended (portable-pty has no such option), so anything it created in
+ * those microseconds would stay out: a process that has not finished loading has not created anything yet.
+ */
+struct PaneJob(crate::ChildTreeGuard);
+
+impl PaneJob {
+    fn around(pid: Option<u32>) -> Option<Self> {
+        let job = crate::ChildTreeGuard::for_pane().ok()?;
+        job.assign_pid(pid?).ok()?;
+        Some(Self(job))
+    }
+}
+
+impl Drop for PaneJob {
+    fn drop(&mut self) {
+        self.0.release();
     }
 }
 
@@ -1123,6 +1161,7 @@ pub async fn pty_spawn(
         spawn_in_pty(builder, rows, cols).map_err(|e| spawn_failure(&command, &e))?
     };
     let Spawned { mut child, master, reader, writer, errors } = spawned;
+    let job = PaneJob::around(child.process_id());
 
     /*
      * The process is running now, so every failure below has to take it with
@@ -1159,6 +1198,7 @@ pub async fn pty_spawn(
                 master: master.map(|master| Arc::new(Mutex::new(master))),
                 writer,
                 child,
+                job,
             },
         );
     }
@@ -2035,7 +2075,7 @@ mod tests {
         drop(pair.slave);
         let pid = child.process_id().unwrap();
         let writer = Arc::new(WriteQueue::new(pair.master.take_writer().unwrap()));
-        (Session { master: Some(Arc::new(Mutex::new(pair.master))), writer, child }, pid)
+        (Session { master: Some(Arc::new(Mutex::new(pair.master))), writer, child, job: None }, pid)
     }
 
     /// A pipe end that takes nothing until it is told to, then hands over what it got.
@@ -2179,6 +2219,116 @@ mod tests {
         let (held, talks) = resize.split_once("session.master.clone()").expect("the master taken out");
         assert!(!held.contains(".resize("));
         assert!(talks.split("pub ").next().unwrap().contains(".resize("));
+    }
+
+    /// Whether `pid` is running, whatever its children do.
+    #[cfg(windows)]
+    fn is_running(pid: u32) -> bool {
+        use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+        let mut sys = System::new();
+        sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
+        sys.process(Pid::from_u32(pid)).is_some()
+    }
+
+    /// A job's handle closing, which is what the kernel does when ADE dies: a pane's real ConPTY tree goes with it.
+    #[cfg(windows)]
+    #[test]
+    fn a_job_that_closes_with_its_kill_on_ends_a_conpty_tree() {
+        let (session, pid) = sleeping_session();
+        // At once, as `pty_spawn` does: what the shell starts after this is in the job.
+        let job = crate::ChildTreeGuard::for_pane().unwrap();
+        job.assign_pid(pid).unwrap();
+        std::thread::sleep(Duration::from_millis(500));
+        assert!(tree_alive(pid));
+        drop(job);
+        wait_until("the tree outlived its job", || !tree_alive(pid));
+        drop(session);
+    }
+
+    /// A pane ending while ADE runs keeps today's rules: dropping the job kills nothing, `kill_tree` does.
+    #[cfg(windows)]
+    #[test]
+    fn a_pane_job_dropped_by_a_living_ade_kills_nothing() {
+        let (session, pid) = sleeping_session();
+        let job = PaneJob::around(Some(pid)).expect("the pane's job");
+        std::thread::sleep(Duration::from_millis(500));
+        drop(job);
+        std::thread::sleep(Duration::from_millis(500));
+        assert!(tree_alive(pid), "dropping the job killed the pane");
+        end_session(session);
+        wait_until("the tree outlived its session", || !tree_alive(pid));
+    }
+
+    /*
+     * The real thing, RS-4: the owner of the job is another process, as ADE is, and it dies by force, with no Drop and
+     * no exit handler. It is this test binary run again, told by a variable to play ADE: it starts a tree, puts it in
+     * a pane's job, prints the pids and waits to be killed. The descendant's parent has gone by then, so a walk of
+     * the process table could not have found it: only the job can.
+     */
+    #[cfg(windows)]
+    #[test]
+    fn a_forced_kill_of_ade_ends_the_panes_tree() {
+        use std::io::BufRead;
+        use std::process::{Command, Stdio};
+        const OWNER: &str = "ADE_TEST_PLAY_JOB_OWNER";
+        if std::env::var_os(OWNER).is_some() {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            let root = Command::new("cmd")
+                .args(["/c", "ping -n 2 127.0.0.1 >nul & start /b ping -n 120 127.0.0.1 >nul"])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .creation_flags(CREATE_NO_WINDOW)
+                .spawn()
+                .unwrap();
+            let job = PaneJob::around(Some(root.id())).expect("the pane's job");
+            println!("pane-root {}", root.id());
+            std::thread::sleep(Duration::from_secs(60));
+            // Not reached: the test kills this process first. Dropped here, it would take the kill back.
+            std::mem::forget(job);
+            return;
+        }
+        let mut owner = Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "pty::tests::a_forced_kill_of_ade_ends_the_panes_tree", "--nocapture", "--test-threads=1"])
+            .env(OWNER, "1")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let root: u32 = std::io::BufReader::new(owner.stdout.take().unwrap())
+            .lines()
+            .map_while(Result::ok)
+            .find_map(|line| line.split("pane-root ").nth(1).and_then(|pid| pid.trim().parse().ok()))
+            .expect("the owner never said its pane's pid");
+        // The child the root leaves behind, and the root gone: a detached process, as a dev server is.
+        let descendant = {
+            use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
+            let deadline = Instant::now() + Duration::from_secs(30);
+            loop {
+                let mut sys = System::new();
+                sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::everything());
+                let found = sys
+                    .processes()
+                    .values()
+                    .find(|process| {
+                        process.parent().map(|parent| parent.as_u32()) == Some(root)
+                            && process.name().to_string_lossy().eq_ignore_ascii_case("ping.exe")
+                            && process.cmd().iter().any(|arg| arg.to_string_lossy() == "120")
+                    })
+                    .map(|process| process.pid().as_u32());
+                if let Some(pid) = found {
+                    break pid;
+                }
+                assert!(Instant::now() < deadline, "the descendant never started");
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        };
+        wait_until("the root never ended", || !is_running(root));
+        assert!(is_running(descendant));
+        owner.kill().unwrap();
+        owner.wait().unwrap();
+        wait_until("the descendant outlived ADE", || !is_running(descendant));
     }
 
     /// Whether `pid`, or any process it started, is still running.
