@@ -1231,6 +1231,11 @@ export function requestState(
     running: boolean
     /** Suspended by the user (P1-C6): no process, and the request waits for "Riprendi" instead of closing. */
     suspended?: boolean
+    /**
+     * Between the old process and the new one of `ade-msg relaunch`: the pane is not closed, whatever the age of the
+     * request. If the new process then fails to start this goes false and the request closes with the truth.
+     */
+    relaunching?: boolean
     permissionPending: boolean
     activity?: Activity
     lastOutputAt?: number
@@ -1239,8 +1244,11 @@ export function requestState(
   },
   now: number,
 ): RequestState {
-  if (!target.running)
-    return target.suspended ? "sessione sospesa" : now - request.at < SPAWN_GRACE_MS ? "in avvio" : "sessione chiusa"
+  if (!target.running) {
+    if (target.suspended) return "sessione sospesa"
+    if (target.relaunching) return "in avvio"
+    return now - request.at < SPAWN_GRACE_MS ? "in avvio" : "sessione chiusa"
+  }
   // The reason a request is waiting on a question, from the hook or from the
   // screen: both mean the same thing to somebody reading `ade-msg list`, and a
   // prompt the hook reported is the one the screen usually does not.

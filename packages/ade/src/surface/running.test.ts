@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { codeOf } from "../test-support/source-text"
 import { RunningSessions } from "./running"
+import { requestState } from "../session/mailbox"
 import type { SpawnedSession } from "../host/shell"
 
 function session(kills: Array<{ tree?: boolean } | undefined>): SpawnedSession {
@@ -188,5 +189,75 @@ describe("a start the host refused", () => {
   test("the local start and the ssh start both say whether the host refused", () => {
     const source = codeOf(readFileSync(new URL("./workbench.tsx", import.meta.url), "utf8"))
     expect(source.split(codeOf("running.adopt(paneId, start, session, refused)")).length - 1).toBe(2)
+  })
+})
+
+/*
+ * Live test 2026-11-02, F1: `ade-msg relaunch` on a session with a request open for more than the spawn grace closed
+ * the request («si è chiusa senza rispondere») although the relaunch said open requests stay valid.
+ */
+describe("a pane being relaunched", () => {
+  const request = { id: "171-ab", kind: "spawn" as const, from: "n1-0", to: "n2-1", at: 0, brief: "x" }
+  const targetOf = (running: RunningSessions) => ({
+    running: running.has("n2-1"),
+    relaunching: running.relaunching("n2-1"),
+    permissionPending: false,
+  })
+
+  test("keeps an old open request open, and a failed start closes it with the truth", () => {
+    const kills: Array<{ tree?: boolean } | undefined> = []
+    const running = new RunningSessions()
+    running.set("n2-1", session(kills))
+    const tenMinutes = 10 * 60_000
+    expect(requestState(request, targetOf(running), tenMinutes)).toBe("in corso")
+
+    // The relaunch's own steps: the mark, then the old process goes.
+    const relaunch = running.beginRelaunch("n2-1")
+    running.delete("n2-1")
+    expect(requestState(request, targetOf(running), tenMinutes)).not.toBe("sessione chiusa")
+
+    // The new process is up: the request is the live one's.
+    const start = running.beginStart("n2-1")
+    running.adopt("n2-1", start, session(kills))
+    running.endRelaunch("n2-1", relaunch)
+    expect(requestState(request, targetOf(running), tenMinutes)).toBe("in corso")
+
+    // A relaunch whose start failed: nothing is running, and now the request does close.
+    running.delete("n2-1")
+    const second = running.beginRelaunch("n2-1")
+    expect(requestState(request, targetOf(running), tenMinutes)).not.toBe("sessione chiusa")
+    running.endRelaunch("n2-1", second)
+    expect(requestState(request, targetOf(running), tenMinutes)).toBe("sessione chiusa")
+  })
+
+  test("a later relaunch keeps its mark when an earlier one ends", () => {
+    const running = new RunningSessions()
+    const first = running.beginRelaunch("a")
+    const second = running.beginRelaunch("a")
+    running.endRelaunch("a", first)
+    expect(running.relaunching("a")).toBe(true)
+    running.endRelaunch("a", second)
+    expect(running.relaunching("a")).toBe(false)
+  })
+
+  test("closing the pane, or the surface going, ends the mark", () => {
+    const running = new RunningSessions()
+    running.beginRelaunch("a")
+    running.cancelStart("a")
+    expect(running.relaunching("a")).toBe(false)
+    running.beginRelaunch("b")
+    running.endAll()
+    expect(running.relaunching("b")).toBe(false)
+  })
+
+  test("the workbench marks it before the old process goes, and lifts it when the start is over", () => {
+    const source = codeOf(readFileSync(new URL("./workbench.tsx", import.meta.url), "utf8"))
+    const branch = source.slice(source.indexOf(codeOf('if (message.kind === "relaunch") {')))
+    const body = branch.slice(0, branch.indexOf(codeOf('if (message.kind === "close") {')))
+    expect(body.indexOf(codeOf("running.beginRelaunch(pane.id)"))).toBeGreaterThan(0)
+    expect(body.indexOf(codeOf("running.beginRelaunch(pane.id)"))).toBeLessThan(body.indexOf(codeOf("running.delete(pane.id)")))
+    expect(body).toContain(codeOf("void startProcess(pane.id, agentId, \"\").finally(() => running.endRelaunch(pane.id, relaunch))"))
+    expect(body).toContain(codeOf("void reopen(updated).finally(() => running.endRelaunch(pane.id, relaunch))"))
+    expect(source).toContain(codeOf("relaunching: running.relaunching(request.to),"))
   })
 })

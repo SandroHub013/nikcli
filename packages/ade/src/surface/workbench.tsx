@@ -3459,6 +3459,7 @@ export function Workbench() {
   const targetOf = (request: OpenRequest) => ({
     running: running.has(request.to),
     suspended: isSuspendedPane(request.to),
+    relaunching: running.relaunching(request.to),
     permissionPending: questionOpen(request.to),
     lastOutputAt: lastOutputAt.get(request.to),
     activity: activityOf.get(request.to),
@@ -5050,6 +5051,11 @@ export function Workbench() {
        * the pane, and then the new spawn's.
        */
       const old = running.get(pane.id)
+      /*
+       * Marked before the old process goes: a pane being relaunched is not a closed one, and its open requests stay
+       * open (live test, F1). Taken off when the new start is over, so one that fails closes them with the truth.
+       */
+      const relaunch = running.beginRelaunch(pane.id)
       running.delete(pane.id)
       touchRunning()
       void closeSuspendedTree(old)
@@ -5065,10 +5071,11 @@ export function Workbench() {
             )
           }
         }
-        void startProcess(pane.id, agentId, "")
+        void startProcess(pane.id, agentId, "").finally(() => running.endRelaunch(pane.id, relaunch))
       } else {
         const updated = wb().panes.find((candidate) => candidate.id === pane.id)
-        if (updated) void reopen(updated)
+        if (updated) void reopen(updated).finally(() => running.endRelaunch(pane.id, relaunch))
+        else running.endRelaunch(pane.id, relaunch)
       }
       tellPane(
         pane.id,

@@ -25,6 +25,7 @@ import type { SpawnedSession } from "../host/shell"
 export class RunningSessions extends Map<string, SpawnedSession> {
   #ended = false
   readonly #starts = new Map<string, symbol>()
+  readonly #relaunches = new Map<string, symbol>()
 
   override set(id: string, session: SpawnedSession): this {
     if (this.#ended) {
@@ -38,6 +39,7 @@ export class RunningSessions extends Map<string, SpawnedSession> {
   endAll(): number {
     this.#ended = true
     this.#starts.clear()
+    this.#relaunches.clear()
     const sessions = [...this.values()]
     this.clear()
     for (const session of sessions) void session.kill({ tree: true })
@@ -54,6 +56,32 @@ export class RunningSessions extends Map<string, SpawnedSession> {
   /** The pane is closing: the start in flight, if any, must not adopt its process. */
   cancelStart(id: string): void {
     this.#starts.delete(id)
+    this.#relaunches.delete(id)
+  }
+
+  /**
+   * `ade-msg relaunch` takes the old process away before the new one exists.
+   * In between the pane has no session, but it is not a closed pane: its open
+   * requests stay open (live test 2026-11-02, F1: a request older than the
+   * spawn grace was closed with «si è chiusa senza rispondere» and the child's
+   * later reply refused). The mark is the token of this relaunch; `endRelaunch`
+   * with it, once the start has finished either way, takes it off, and a start
+   * that failed then reads as the closed pane it is.
+   */
+  beginRelaunch(id: string): symbol {
+    const token = Symbol(id)
+    this.#relaunches.set(id, token)
+    return token
+  }
+
+  /** The relaunch `token` is over; a newer relaunch of the same pane keeps its own mark. */
+  endRelaunch(id: string, token: symbol): void {
+    if (this.#relaunches.get(id) === token) this.#relaunches.delete(id)
+  }
+
+  /** Whether the pane is between its old process and its new one. */
+  relaunching(id: string): boolean {
+    return !this.#ended && this.#relaunches.has(id)
   }
 
   /** Whether `token` is still the pane's current start. */
