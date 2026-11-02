@@ -1491,17 +1491,42 @@ fn drain_then_exit(
     grace: Duration,
     emit_exit: impl FnOnce(Option<i32>),
 ) {
+    drain_then_exit_capped(chunks, emit, take_session, late, grace, EXIT_HELD_MAX, emit_exit)
+}
+
+/// `drain_then_exit`, with the most that waiting for the page may add to the grace.
+fn drain_then_exit_capped(
+    chunks: &Receiver<String>,
+    emit: impl FnMut(String),
+    take_session: impl FnOnce() -> Option<Option<i32>>,
+    late: &Receiver<Option<i32>>,
+    grace: Duration,
+    held_max: Duration,
+    emit_exit: impl FnOnce(Option<i32>),
+) {
     // The code and the moment the grace ends, once the waiter has sent it.
     let seen: std::cell::Cell<Option<(Option<i32>, Instant)>> = std::cell::Cell::new(None);
+    // How long `emit` has taken since the exit was known: the sender waits there for the page (RS-7), and that wait is
+    // not the child's silence, so it does not count against the grace. Capped, so output that never stops cannot hold
+    // the exit for ever.
+    let held = std::cell::Cell::new(Duration::ZERO);
     let ended = || {
         if seen.get().is_none() {
             if let Ok(code) = late.try_recv() {
                 seen.set(Some((code, Instant::now() + grace)));
             }
         }
-        seen.get().map(|(_, at)| at)
+        seen.get().map(|(_, at)| at + held.get().min(held_max))
     };
-    pump_until(chunks, emit, &ended);
+    let mut emit = emit;
+    let timed_emit = |data: String| {
+        let started = Instant::now();
+        emit(data);
+        if seen.get().is_some() {
+            held.set(held.get() + started.elapsed());
+        }
+    };
+    pump_until(chunks, timed_emit, &ended);
     let code = match take_session() {
         Some(code) => code,
         None => match seen.get() {
@@ -1542,6 +1567,10 @@ fn pump(chunks: &Receiver<String>, emit: impl FnMut(String)) {
 
 /// How long the sender goes on draining once the child's exit is known, before the exit is said without the EOF.
 const EXIT_DRAIN: Duration = Duration::from_secs(1);
+
+/// The most that the sender's wait for the page may add to `EXIT_DRAIN` (RS-7): time spent inside `emit` is not the
+/// child's silence, and a child that flooded and exited with the page behind would lose its last output.
+const EXIT_HELD_MAX: Duration = Duration::from_secs(30);
 
 /// `pump`, which also ends when `ended` gives a moment that has passed, flushing what it holds first.
 ///
@@ -2839,6 +2868,65 @@ mod tests {
         drain_then_exit(&rx, |_| {}, || None, &exit_rx, Duration::from_millis(100), |_| said = true);
         assert!(said);
         assert!(started.elapsed() < Duration::from_millis(900), "took {:?}", started.elapsed());
+        drop(rx);
+        let _ = writer.join();
+    }
+
+    // Review round 2, R2-B1: the sender now waits for the page inside `emit`, and that wait must not eat the grace.
+    #[test]
+    fn time_spent_waiting_for_the_page_does_not_count_against_the_exit_grace() {
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        let (exit_tx, exit_rx) = std::sync::mpsc::channel::<Option<i32>>();
+        exit_tx.send(Some(0)).unwrap();
+        for _ in 0..4 {
+            tx.send("x".repeat(MAX_PENDING)).unwrap();
+        }
+        drop(tx);
+        let log = std::cell::RefCell::new(Vec::<String>::new());
+        drain_then_exit(
+            &rx,
+            |data| {
+                // A page that is behind: every frame takes as long as the whole grace.
+                std::thread::sleep(Duration::from_millis(100));
+                log.borrow_mut().push(format!("data:{}", data.len()));
+            },
+            || None,
+            &exit_rx,
+            Duration::from_millis(100),
+            |code| log.borrow_mut().push(format!("exit:{code:?}")),
+        );
+        let log = log.into_inner();
+        assert_eq!(log.len(), 5, "output lost before the exit: {log:?}");
+        assert_eq!(log.last().unwrap(), "exit:Some(0)");
+    }
+
+    // The cap: a grandchild that never stops printing, with a page that is always slow, still cannot hold the exit for ever.
+    #[test]
+    fn waiting_for_the_page_cannot_hold_the_exit_for_ever() {
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        let (exit_tx, exit_rx) = std::sync::mpsc::channel::<Option<i32>>();
+        exit_tx.send(Some(0)).unwrap();
+        let writer = std::thread::spawn(move || {
+            for _ in 0..400 {
+                if tx.send("x".repeat(MAX_PENDING)).is_err() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        });
+        let mut said = false;
+        let started = Instant::now();
+        drain_then_exit_capped(
+            &rx,
+            |_| std::thread::sleep(Duration::from_millis(50)),
+            || None,
+            &exit_rx,
+            Duration::from_millis(50),
+            Duration::from_millis(400),
+            |_| said = true,
+        );
+        assert!(said);
+        assert!(started.elapsed() < Duration::from_secs(3), "took {:?}", started.elapsed());
         drop(rx);
         let _ = writer.join();
     }
