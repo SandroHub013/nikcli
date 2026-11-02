@@ -15,8 +15,11 @@ export function PaneActions(props: {
   onClose?: () => void
   /** The pane fills the grid: the button says «Riduci», not «Ingrandisci». */
   expanded?: boolean
+  /** The pane's title, so the close button says which pane it closes («Chiudi Claude 2»), not just «Chiudi». */
+  title?: string
   children?: JSX.Element
 }) {
+  const closeLabel = () => (props.title ? t("pane.close.named", props.title) : t("pane.close"))
   return (
     <span class="acts" data-slot="pane-actions">
       {props.children}
@@ -43,8 +46,8 @@ export function PaneActions(props: {
         class="act"
         data-slot="pane-action"
         onClick={() => props.onClose?.()}
-        aria-label={t("pane.close")}
-        title={t("pane.close")}
+        aria-label={closeLabel()}
+        title={closeLabel()}
       >
         <svg class="gi" viewBox="0 0 16 16" aria-hidden="true">
           <path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />

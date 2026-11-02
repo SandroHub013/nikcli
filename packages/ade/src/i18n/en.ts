@@ -747,6 +747,7 @@ export const en: Messages = {
   "pane.mouseHint.tip":
     "The program gets the clicks and the wheel. To select and copy text, hold Shift and drag. Ctrl+click opens a link.",
   "pane.close": "Close",
+  "pane.close.named": (title: string) => `Close ${title}`,
   "hooks.foreign":
     "From another build of ADE, not this one: this build neither updates nor removes it, because the official ADE's sessions run through that file",
   "bar.raguVersion": (v) => `Ragù Code ${v}: the program new sessions start, not ADE`,

@@ -251,7 +251,7 @@ export function VideoPane(props: VideoPaneProps) {
           {props.path ? (props.path.split(/[\\/]/).pop() ?? props.title) : props.title}
         </h2>
         <span data-slot="video-header-gap" />
-        <PaneActions onExpand={() => props.onExpand?.()} onClose={() => props.onClose?.()}>
+        <PaneActions onExpand={() => props.onExpand?.()} onClose={() => props.onClose?.()} title={props.title}>
           {/* Only once a video is open: an empty pane already offers the choice in the middle. */}
           <Show when={props.onPick && props.path}>
             <button

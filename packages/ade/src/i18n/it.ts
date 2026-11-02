@@ -765,6 +765,7 @@ export const it = {
   "pane.mouseHint.tip":
     "Il programma riceve i clic e la rotella. Per selezionare e copiare il testo, tieni Maiusc e trascina. Ctrl+clic apre un link.",
   "pane.close": "Chiudi",
+  "pane.close.named": (title: string) => `Chiudi ${title}`,
   "hooks.foreign":
     "Di un'altra build di ADE, non di questa: questa non lo aggiorna e non lo rimuove, perché con quel file ci lavorano le sessioni dell'ADE ufficiale",
   "bar.raguVersion": (v: string) => `Ragù Code ${v}: è il programma con cui partono le sessioni, non ADE`,
