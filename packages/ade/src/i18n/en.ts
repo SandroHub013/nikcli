@@ -1515,7 +1515,7 @@ export const en: Messages = {
   "shots.more.left": "Earlier screenshots",
   "shots.more.right": "More screenshots",
   "shots.send": "Send to the focused session",
-  "shots.send.failed": "No session has the focus to give it to: open or pick a session and try again.",
+  "shots.send.failed": "It could not be given to the focused session (none is open, or it is waiting on a question): pick one that is free and try again.",
   "shots.close": "Close",
 
   // Extensions

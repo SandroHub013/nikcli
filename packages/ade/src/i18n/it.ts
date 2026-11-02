@@ -1548,7 +1548,7 @@ export const it = {
   "shots.more.left": "Schermate precedenti",
   "shots.more.right": "Altre schermate",
   "shots.send": "Manda alla sessione a fuoco",
-  "shots.send.failed": "Nessuna sessione a fuoco a cui darla: apri o scegli una sessione e riprova.",
+  "shots.send.failed": "Non si è potuta dare alla sessione a fuoco (non ce n'è una, o aspetta una risposta): scegline una libera e riprova.",
   "shots.close": "Chiudi",
 
   // Extensions

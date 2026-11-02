@@ -185,7 +185,7 @@ import { formatDroppedPaths } from "../sidebar/file-drag"
 import { IconButton, Notice as NoticeBanner } from "../ui/controls"
 import { SessionGrid } from "../grid/session-grid"
 import { requestRename } from "../grid/rename"
-import { focusResizeGrip } from "../grid/focus-input"
+import { focusPane, focusResizeGrip } from "../grid/focus-input"
 import { lazyComponent } from "../ui/lazy-component"
 import { EmptyProject } from "./empty-project"
 import { ProjectBar } from "./project-bar"
@@ -2938,14 +2938,19 @@ export function Workbench() {
    * Enter: `dictationHold` says it at length. The words are not written and the
    * pane says why, so the user answers with the keys or the card's buttons and
    * dictates again afterwards.
+   *
+   * Says whether the text was written, for a caller that has to tell the user it was not.
    */
-  const typeAsUser = (paneId: string, text: string) => {
+  const typeAsUser = (paneId: string, text: string): boolean => {
     const session = running.get(paneId)
-    if (!session) return
-    if (dictationHold({ alive: true, questionOpen: questionOpen(paneId) }))
-      return tellPane(paneId, t("note.dictationHeld"))
+    if (!session) return false
+    if (dictationHold({ alive: true, questionOpen: questionOpen(paneId) })) {
+      tellPane(paneId, t("note.dictationHeld"))
+      return false
+    }
     records.typed.update(paneId, (line) => typedAfter(line, text, Date.now()))
     session.write(text)
+    return true
   }
 
   /**
@@ -2957,7 +2962,11 @@ export function Workbench() {
     const paneId = wb().focusedId
     const text = formatDroppedPaths([path], project()?.root)
     if (!paneId || !text || !running.get(paneId)) return false
-    typeAsUser(paneId, `${text} `)
+    // False when the text was held back (a question is open, or a dictation is held): the viewer then stays and says so.
+    if (!typeAsUser(paneId, `${text} `)) return false
+    // The caret goes to the terminal it wrote into, while the viewer is still open: the viewer gives the focus back to
+    // whatever last took it from the sheet, so closing it next lands here and not on the tile behind it.
+    focusPane(document.querySelector(`[data-pane-id="${paneId}"]`))
     return true
   }
 
