@@ -5189,6 +5189,8 @@ export function Workbench() {
     // Read back from the saved queue before its session was started again: it waits for the process, not for ever.
     if (!session && waitsForRestore({ replayed: replayedMail.has(id), paneExists: paneExists(target.pane.id), sinceBoot: Date.now() - loadedAt }))
       return false
+    // Between the old process and the new one of a relaunch: not a closed pane, so what was held for it waits (review B4).
+    if (!session && running.relaunching(target.pane.id)) return false
     if (!session) {
       // Its sender stopped reading receipts when it was held: an ask is answered where the caller waits.
       if (held.delete(id)) {

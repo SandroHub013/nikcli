@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { codeOf } from "../test-support/source-text"
-import { RunningSessions } from "./running"
+import { RELAUNCH_MAX_MS, RunningSessions } from "./running"
 import { requestState } from "../session/mailbox"
 import type { SpawnedSession } from "../host/shell"
 
@@ -240,6 +240,42 @@ describe("a pane being relaunched", () => {
     expect(running.relaunching("a")).toBe(false)
   })
 
+  /*
+   * Review B3: a second relaunch during the first overwrote its token, the second's `reopen` returned at once (one run
+   * at a time), its `.finally` lifted the mark, and the first start, still in flight, read as closed.
+   */
+  test("a second relaunch that ends at once does not lift the mark of the first, still starting", () => {
+    const running = new RunningSessions()
+    const first = running.beginRelaunch("a")
+    const second = running.beginRelaunch("a")
+    running.endRelaunch("a", second)
+    expect(running.relaunching("a")).toBe(true)
+    running.endRelaunch("a", first)
+    expect(running.relaunching("a")).toBe(false)
+  })
+
+  /*
+   * Review B2: nothing on the start's path has a time limit (the keychain, git, another reopen in flight), and before the
+   * fix the 30 s grace was the limit. A relaunch that never comes back must close its requests, with the truth.
+   */
+  test("a relaunch that never ends stops counting after RELAUNCH_MAX_MS, and the request closes", () => {
+    const running = new RunningSessions()
+    const request = { id: "171-ab", kind: "spawn" as const, from: "n1-0", to: "n2-1", at: 0, brief: "x" }
+    running.beginRelaunch("n2-1", 1_000_000)
+    const at = (now: number) => requestState(request, { running: false, relaunching: running.relaunching("n2-1", now), permissionPending: false }, now)
+    expect(running.relaunching("n2-1", 1_000_000 + RELAUNCH_MAX_MS - 1)).toBe(true)
+    expect(at(1_000_000 + RELAUNCH_MAX_MS - 1)).toBe("in avvio")
+    expect(running.relaunching("n2-1", 1_000_000 + RELAUNCH_MAX_MS)).toBe(false)
+    expect(at(1_000_000 + RELAUNCH_MAX_MS)).toBe("sessione chiusa")
+  })
+
+  test("a fresh relaunch after a stale one counts from its own start", () => {
+    const running = new RunningSessions()
+    running.beginRelaunch("a", 0)
+    running.beginRelaunch("a", RELAUNCH_MAX_MS + 10)
+    expect(running.relaunching("a", RELAUNCH_MAX_MS + 20)).toBe(true)
+  })
+
   test("closing the pane, or the surface going, ends the mark", () => {
     const running = new RunningSessions()
     running.beginRelaunch("a")
@@ -259,5 +295,22 @@ describe("a pane being relaunched", () => {
     expect(body).toContain(codeOf("void startProcess(pane.id, agentId, \"\").finally(() => running.endRelaunch(pane.id, relaunch))"))
     expect(body).toContain(codeOf("void reopen(updated).finally(() => running.endRelaunch(pane.id, relaunch))"))
     expect(source).toContain(codeOf("relaunching: running.relaunching(request.to),"))
+  })
+})
+
+/*
+ * Review B4: a message held for a busy pane stayed queued across the parent's relaunch, and on the next pass the pane
+ * had no session and was not «waiting for restore»: a held ask was closed with «si è chiusa prima di ricevere la
+ * richiesta», a held send was told «non è stato consegnato». The pane was not closed.
+ */
+describe("mail held for a pane being relaunched", () => {
+  const source = codeOf(readFileSync(new URL("./workbench.tsx", import.meta.url), "utf8"))
+
+  test("stays in the queue until the new process is up, before any held message is closed for a missing session", () => {
+    const route = source.slice(source.indexOf(codeOf("const session = running.get(target.pane.id)\n    // Read back from the saved queue")))
+    const waits = route.indexOf(codeOf("if (!session && running.relaunching(target.pane.id)) return false"))
+    const closes = route.indexOf(codeOf("if (!session) {"))
+    expect(waits).toBeGreaterThan(-1)
+    expect(waits).toBeLessThan(closes)
   })
 })

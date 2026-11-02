@@ -1,5 +1,8 @@
 import type { SpawnedSession } from "../host/shell"
 
+/** The longest a relaunch counts as under way: `LIST_MS` + `MINT_MS` and the git calls of a start, with room. */
+export const RELAUNCH_MAX_MS = 3 * 60_000
+
 /**
  * The processes behind the panes, owned by the surface that started them.
  *
@@ -25,7 +28,8 @@ import type { SpawnedSession } from "../host/shell"
 export class RunningSessions extends Map<string, SpawnedSession> {
   #ended = false
   readonly #starts = new Map<string, symbol>()
-  readonly #relaunches = new Map<string, symbol>()
+  /** Per pane, each relaunch under way with the time it began (review B2, B3). */
+  readonly #relaunches = new Map<string, Map<symbol, number>>()
 
   override set(id: string, session: SpawnedSession): this {
     if (this.#ended) {
@@ -68,20 +72,31 @@ export class RunningSessions extends Map<string, SpawnedSession> {
    * with it, once the start has finished either way, takes it off, and a start
    * that failed then reads as the closed pane it is.
    */
-  beginRelaunch(id: string): symbol {
+  beginRelaunch(id: string, now: number = Date.now()): symbol {
     const token = Symbol(id)
-    this.#relaunches.set(id, token)
+    const marks = this.#relaunches.get(id) ?? new Map<symbol, number>()
+    marks.set(token, now)
+    this.#relaunches.set(id, marks)
     return token
   }
 
-  /** The relaunch `token` is over; a newer relaunch of the same pane keeps its own mark. */
+  /** The relaunch `token` is over; any other relaunch of the same pane still under way keeps its own mark. */
   endRelaunch(id: string, token: symbol): void {
-    if (this.#relaunches.get(id) === token) this.#relaunches.delete(id)
+    const marks = this.#relaunches.get(id)
+    if (!marks) return
+    marks.delete(token)
+    if (marks.size === 0) this.#relaunches.delete(id)
   }
 
-  /** Whether the pane is between its old process and its new one. */
-  relaunching(id: string): boolean {
-    return !this.#ended && this.#relaunches.has(id)
+  /**
+   * Whether the pane is between its old process and its new one: a relaunch under way that began less than
+   * `RELAUNCH_MAX_MS` ago. Nothing on a start's path has a time limit of its own, so the mark has one: past it the pane
+   * is the closed pane it looks like, and its requests close with the truth (review B2).
+   */
+  relaunching(id: string, now: number = Date.now()): boolean {
+    if (this.#ended) return false
+    for (const began of this.#relaunches.get(id)?.values() ?? []) if (now - began < RELAUNCH_MAX_MS) return true
+    return false
   }
 
   /** Whether `token` is still the pane's current start. */
