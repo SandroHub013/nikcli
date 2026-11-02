@@ -11,7 +11,7 @@ import postcss from "postcss"
  * light, dark and glass.
  *
  * What it cannot see, and the live script can: a ground that is a gradient or a `backdrop-filter` (the glass), the
- * pixels behind a translucent surface, a colour caught half-way through a `transition` (three of the live rows were
+ * pixels behind a translucent surface, a colour held from the previous theme by an element the capture could not see (three of the live rows were
  * that), and an SVG paint server (`url(#gradient)`, a mask). So the glass is computed on the grounds the report
  * measured plus the brightest the sheet can make (the reading ground over a white desktop), and the sheets' own
  * formulas are read here, not copied.
@@ -144,12 +144,32 @@ describe("the accent as text has its own token (AA on every ground it sits on)",
     expect(read("index.css")).toContain("--ade-accent: light-dark(#b83321, #e86e48);")
   })
 
+  /** Marks painted with `currentColor`: the filled N of the update dialog and the pot in the voice panel's header. */
+  const MARKS = ['[data-slot="update-dialog-mark"]', '[data-slot="header-mark"]']
+
+  test("the marks that are fills stay on the brand's tomato", () => {
+    const colorOf = (file: string, selector: string, root = src) => {
+      let value: string | undefined
+      postcss.parse(readFileSync(join(root, file), "utf-8")).walkRules((rule) => {
+        if (!rule.selector.includes(selector)) return
+        rule.walkDecls("color", (decl) => {
+          value = decl.value
+        })
+      })
+      return value
+    }
+    expect(colorOf("index.css", MARKS[0]!)).toBe("var(--ade-accent)")
+    expect(colorOf("ui/voice-settings.css", MARKS[1]!, voice)).toBe("var(--ade-accent)")
+  })
+
   test("no stylesheet sets `color` to the accent itself: text reads --ade-accent-text", () => {
     const offenders: string[] = []
     for (const root of [src, voice]) {
       for (const entry of new Bun.Glob("**/*.css").scanSync(root)) {
         const file = join(root, entry)
         postcss.parse(readFileSync(file, "utf-8")).walkDecls("color", (decl) => {
+          // A mark drawn in `currentColor` is a fill, not words: it keeps the brand's tomato (MARKS below).
+          if (decl.parent && "selector" in decl.parent && MARKS.some((mark) => decl.parent && "selector" in decl.parent && decl.parent.selector.includes(mark))) return
           if (/^var\(--ade-accent(-strong)?\s*[,)]/.test(decl.value.trim()))
             offenders.push(`${entry.replace(/\\/g, "/")}:${decl.source?.start?.line} ${decl.parent && "selector" in decl.parent ? decl.parent.selector : ""}`)
         })
@@ -222,6 +242,57 @@ describe("a field's edge is the control border (3:1)", () => {
       .map(({ file, selector, prop, value }) => `${file} ${selector} { ${prop}: ${value} }`)
     const onToken = rules.filter(({ selector, value }) => !/:focus/.test(selector) && value.includes("var(--ade-control-border")).length
     expect([onToken, onToken >= 12]).toEqual([onToken, true])
+    expect(offenders).toEqual([])
+  })
+
+  /**
+   * Every <input>, <select> and <textarea> in the .tsx files that carries its own data-slot, found from the markup: a field
+   * is a field whatever its slot is called (the name scan above missed five). Checkboxes, ranges and files are not fields.
+   */
+  function markupSlots(): Map<string, string> {
+    const found = new Map<string, string>()
+    for (const root of [src, voice]) {
+      for (const entry of new Bun.Glob("**/*.tsx").scanSync(root)) {
+        if (/\.test\./.test(entry)) continue
+        const text = readFileSync(join(root, entry), "utf-8")
+        for (const match of text.matchAll(/<(input|select|textarea)\b/g)) {
+          const rest = text.slice(match.index! + 1)
+          const next = rest.search(/\n\s*<[A-Za-z/]/)
+          const tag = rest.slice(0, Math.min(next < 0 ? 900 : next, 900))
+          if (/type="(checkbox|radio|range|file|hidden|color)"/.test(tag)) continue
+          const slot = /data-slot="([^"]+)"/.exec(tag)?.[1]
+          if (slot) found.set(slot, `${root === voice ? "voice/" : ""}${entry.replace(/\\/g, "/")}`)
+        }
+      }
+    }
+    return found
+  }
+
+  // Named, and each for a reason: the composers are the user's «semplice base nero» (composer-focus.test.ts), the sidebar's
+  // search is a filled field, the others draw no edge of their own.
+  const ON_THE_RAMP_BY_CHOICE = ["chat-input", "bots-composer-field", "search-input", "recipient-inline"]
+
+  test("every input, select and textarea in the markup draws no edge on the ramp", () => {
+    const slots = markupSlots()
+    // Rule 22: a scan that found nothing proves nothing.
+    expect([slots.size, slots.size > 15]).toEqual([slots.size, true])
+    const ramp = /var\(--ade-border(-subtle|-strong)?[,)]/
+    const offenders: string[] = []
+    for (const root of [src, voice]) {
+      for (const entry of new Bun.Glob("**/*.css").scanSync(root)) {
+        postcss.parse(readFileSync(join(root, entry), "utf-8")).walkRules((rule) => {
+          for (const selector of rule.selectors) {
+            const slot = /\[data-slot="([^"]+)"\](?::[a-z-]+(?:\([^)]*\))?)*$/.exec(selector.trim())?.[1]
+            if (!slot || !slots.has(slot) || ON_THE_RAMP_BY_CHOICE.includes(slot)) continue
+            if (/:hover|:active|:disabled|:invalid|::placeholder/.test(selector)) continue
+            rule.walkDecls(/^(border|border-color)$/, (decl) => {
+              if (ramp.test(decl.value) && !decl.value.includes("var(--ade-control-border"))
+                offenders.push(`${entry.replace(/\\/g, "/")} ${selector.trim()} { ${decl.prop}: ${decl.value} }`)
+            })
+          }
+        })
+      }
+    }
     expect(offenders).toEqual([])
   })
 
@@ -340,12 +411,18 @@ describe("the ⏎ hint on the launch button", () => {
       })
     })
     expect(Number.isNaN(opacity)).toBe(false)
+    // The primary Button's fill at rest is --ade-accent and under the pointer --ade-accent-strong (ui/controls.css):
+    // the hint is read on both. Glass takes the dark pair.
+    const css = read("ui/controls.css")
+    expect(css).toContain("--ade-btn-bg-hover: var(--ade-accent-strong);")
     for (const scheme of ["light", "dark"] as const) {
-      const fill = rgb(token("--ade-accent", scheme))
-      const ink = token("--ade-accent-fg", scheme)
-      const shown = over([ink[0], ink[1], ink[2], opacity], fill)
-      const value = ratio(shown, fill)
-      expect([scheme, value >= 4.5, value.toFixed(2)]).toEqual([scheme, true, value.toFixed(2)])
+      for (const name of ["--ade-accent", "--ade-accent-strong"]) {
+        const fill = rgb(token(name, scheme))
+        const ink = token("--ade-accent-fg", scheme)
+        const shown = over([ink[0], ink[1], ink[2], opacity], fill)
+        const value = ratio(shown, fill)
+        expect([scheme, name, value >= 4.5, value.toFixed(2)]).toEqual([scheme, name, true, value.toFixed(2)])
+      }
     }
   })
 })
@@ -353,18 +430,14 @@ describe("the ⏎ hint on the launch button", () => {
 // ── 4. marks that carry meaning ───────────────────────────────────────────────
 
 describe("the marks that carry meaning are 3:1 on the tile they sit on", () => {
-  test("Claude's mark takes the tile's colour, which is the one made for each theme", () => {
+  test("Claude's logo keeps the vendor's colour: a brand logo is exempt and does not soften (agent-mark.tsx)", () => {
     const tsx = read("session-new/agent-mark.tsx")
     const claude = tsx.slice(tsx.indexOf('"claude-code": (size, colored)'), tsx.indexOf("/*", tsx.indexOf('"claude-code": (size, colored)')))
-    expect(claude).toContain('"var(--cli-color, #D97757)"')
-    const css = read("session-new/session-new.css")
-    const pair = /\[data-agent-id="claude-code"\]\s*\{\s*--cli-color:\s*light-dark\((#[0-9a-f]{6}),\s*(#[0-9a-f]{6})\)/.exec(css)
-    expect(pair).not.toBeNull()
-    // The tile's own grounds in the live measure: the active tile's wash and the preview row's raised ground.
-    const light = worst(hex(pair![1]!), [hex("#f0d8c8"), hex("#f8e7da"), hex("#fcf8f0"), hex("#fffaf0")])
-    const dark = worst(hex(pair![2]!), [hex("#241c18"), hex("#383432"), hex("#241e1b"), hex("#342420")])
-    expect([light >= 3, light.toFixed(2)]).toEqual([true, light.toFixed(2)])
-    expect([dark >= 3, dark.toFixed(2)]).toEqual([true, dark.toFixed(2)])
+    expect(claude).toContain('fill={colored() ? "#D97757" : "currentColor"}')
+    expect(claude).not.toContain("--cli-color")
+    // It does not vanish (2.28 on the active tile, 2.95 on the launch row) and its name is beside it: exempt.
+    const light = worst(hex("#d97757"), [hex("#f0d8c8"), hex("#fcf8f0")])
+    expect(light).toBeGreaterThan(2)
   })
 
   test("the terminal's outline is lighter in dark and glass, where #334155 was 1.0 to 1.6:1", () => {
@@ -413,7 +486,7 @@ describe("the resize grip's focus ring in glass", () => {
 // ── 6. a finding that does not hold ───────────────────────────────────────────
 
 describe("the bot form's model chip", () => {
-  test("is the text on the page ground in every theme (the white the report saw was a theme change in flight)", () => {
+  test("is the text on the page ground in every theme (the white the report saw is the glass value held by a chip that was inside a closed section; not settled, to check live)", () => {
     let color: string | undefined
     let background: string | undefined
     sheet("chat/picker.css").walkRules('[data-slot="chip-menu"][data-below] [data-slot="chip"]', (rule) => {

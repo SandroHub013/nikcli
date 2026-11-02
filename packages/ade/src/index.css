@@ -1459,7 +1459,8 @@ body,
  */
 [data-component="update-dialog"] [data-slot="update-dialog-mark"] {
   display: inline-flex;
-  color: var(--ade-accent-text);
+  /* A filled N, not words: the brand's tomato (--ade-accent-text is for text). */
+  color: var(--ade-accent);
 }
 [data-component="update-dialog"] [data-slot="update-dialog-version"] {
   margin-left: auto;

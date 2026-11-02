@@ -130,8 +130,9 @@
 
 [data-slot="new-launch-hint"] {
   font-family: var(--ade-mono);
-  /* 0.9, not 0.65: the dimmed ⏎ was 3.3 to 3.6:1 on the accent fill (live measure); at 0.9 it is 4.9 or more. */
-  opacity: 0.9;
+  /* 0.95, not 0.65: the dimmed ⏎ was 3.3 to 3.6:1 on the accent fill (live measure), and 0.9 was 4.35 on the hover fill
+     (--ade-accent-strong, dark and glass). At 0.95 it is 4.56 or more on both fills. */
+  opacity: 0.95;
 }
 
 /* ── refinements ───────────────────────────────────────────────────────────── */

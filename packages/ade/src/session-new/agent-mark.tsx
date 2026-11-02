@@ -134,7 +134,7 @@ const MARKS: Record<string, (size: () => number, colored: () => boolean) => JSX.
       width={size()}
       height={size()}
       viewBox="0 0 24 24"
-      fill={colored() ? "var(--cli-color, #D97757)" : "currentColor"}
+      fill={colored() ? "#D97757" : "currentColor"}
       aria-hidden="true"
       data-mark="claude-code"
     >

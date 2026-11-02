@@ -198,7 +198,8 @@
 [data-component="voice-settings-panel"][data-status="live"] [data-slot="header-mark"],
 [data-component="voice-settings-panel"][data-status="ready"] [data-slot="header-mark"] {
   border-color: var(--ade-text-weak);
-  color: var(--ade-accent-text, var(--ade-accent));
+  /* The pot is drawn in currentColor, a mark and not words: the brand's tomato. */
+  color: var(--ade-accent);
 }
 
 [data-component="voice-settings-panel"] [data-slot="header-aura"] {
