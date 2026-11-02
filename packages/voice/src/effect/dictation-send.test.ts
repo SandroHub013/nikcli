@@ -369,4 +369,41 @@ describe("a dictation goes to the pane it was started for", () => {
     expect(sent(host)).toEqual([])
     expect(visible.join(" ")).toContain("rifai la migrazione del database")
   })
+
+  // Review NB4: the sentence path (transcription mode) had the same fallback, to «the only pane» left.
+  test("a sentence spoken to a pane closed before it ended goes nowhere, and is kept", async () => {
+    const host = new ChangingHost()
+    host.panes = [pane("pane-1", 1), pane("pane-2", 2)]
+    const typed: unknown[][] = []
+    host.insertText = async (paneId: string, text: string) => void typed.push([paneId, text])
+    host.sendPrompt = async (paneId: string, text: string) => void typed.push([paneId, text])
+    const focus = { paneId: "pane-2" }
+    const kept: string[] = []
+    const transcriber = createFakeTranscriber()
+    const layer = Layer.mergeAll(TranscriberFake(transcriber), SpeakerFake(createFakeSpeaker()), VoiceHostLive(host))
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* makeVoiceProgram({
+            getSettings: () => ({ ...DEFAULT_VOICE_SETTINGS, activation: "toggle", mode: "transcription" }),
+            getContext: () => ({ focusedPaneId: focus.paneId }),
+            onUndelivered: (text) => {
+              kept.push(text)
+              return true
+            },
+            onError: () => {},
+          })
+          transcriber.emit("rifai la", false)
+          yield* Effect.sleep(Duration.millis(10))
+          // Closed while the sentence is spoken; the focus lands on the pane left.
+          host.panes = [pane("pane-1", 1)]
+          focus.paneId = "pane-1"
+          transcriber.emit("rifai la migrazione", true)
+          yield* Effect.sleep(Duration.millis(30))
+        }),
+      ).pipe(Effect.provide(layer)),
+    )
+    expect(typed).toEqual([])
+    expect(kept).toEqual(["rifai la migrazione"])
+  })
 })

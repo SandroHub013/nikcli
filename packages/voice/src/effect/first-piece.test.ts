@@ -130,3 +130,50 @@ describe("dictation without a clear target asks instead of picking the first pan
     expect(host.calls).toContainEqual({ method: "sendPrompt", args: ["pane-1", "aggiungi un test"] })
   })
 })
+
+/*
+ * Review of invio-giusto, NB4: a sentence spoken to a pane that was closed before it ended went to «the only pane»
+ * left, another agent.
+ */
+describe("a sentence spoken to a pane closed since", () => {
+  const pane = (id: string, index: number): PaneSummary => ({
+    id,
+    title: id,
+    status: "working",
+    index,
+    hasLiveProcess: true,
+    isBrowser: false,
+    isFile: false,
+  })
+
+  const host = () => {
+    const calls: { method: string; args: unknown[] }[] = []
+    const fake = {
+      calls,
+      listPanes: () => [pane("pane-1", 1)],
+      sendPrompt: async (paneId: string, text: string) =>
+        void calls.push({ method: "sendPrompt", args: [paneId, text] }),
+      insertText: async (paneId: string, text: string) =>
+        void calls.push({ method: "insertText", args: [paneId, text] }),
+    }
+    return fake as unknown as VoiceHost & { calls: typeof calls }
+  }
+
+  test("is refused, never given to the only pane left", async () => {
+    for (const mode of ["auto", "manual"] as const) {
+      const target = host()
+      const result = await Effect.runPromise(
+        Effect.either(dispatchTranscription("rifai la migrazione", target, mode, "pane-2", true)),
+      )
+      expect(result._tag).toBe("Left")
+      if (result._tag === "Left") expect(result.left.message).toContain("è stato chiuso")
+      expect(target.calls).toEqual([])
+    }
+  })
+
+  test("a focus that is merely stale still finds the only pane, as before", async () => {
+    const target = host()
+    await Effect.runPromise(dispatchTranscription("rifai la migrazione", target, "auto", "pane-2"))
+    expect(target.calls).toEqual([{ method: "sendPrompt", args: ["pane-1", "rifai la migrazione"] }])
+  })
+})
