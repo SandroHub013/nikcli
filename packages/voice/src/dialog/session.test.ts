@@ -200,6 +200,23 @@ describe("dialog state machine", () => {
         expect(promptEffect.text).toBe("crea un test e chiudi il pannello poi aggiungi la funzione di login")
       }
     })
+
+    // MOD-3: the pane is taken by its id when the dictation starts.
+    test("the pane named, or the one in focus, is held by its id from the start", () => {
+      const panes = [
+        { id: "p-a", title: "Alfa", status: "working", index: 1, hasLiveProcess: true, isBrowser: false, isFile: false },
+        { id: "p-b", title: "Beta", status: "working", index: 2, hasLiveProcess: true, isBrowser: false, isFile: false },
+      ] as const
+      const ctx = { panes: [...panes], focusedPaneId: "p-a" }
+      const s0 = createInitialDialogState("idle")
+
+      expect(transition(s0, { type: "utterance", text: "inizia dettatura pannello 2" }, 1000, ctx).state.dictation?.paneId).toBe("p-b")
+      expect(transition(s0, { type: "utterance", text: "inizia dettatura" }, 1000, ctx).state.dictation?.paneId).toBe("p-a")
+
+      const missing = transition(s0, { type: "utterance", text: "inizia dettatura pannello 5" }, 1000, ctx)
+      expect(missing.state.status).toBe("idle")
+      expect(missing.effects.some((e) => e.type === "speak" && e.text.includes("Non trovo il pannello 5"))).toBe(true)
+    })
   })
 
   /*

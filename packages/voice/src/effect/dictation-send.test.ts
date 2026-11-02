@@ -266,3 +266,106 @@ describe("a dictated sentence goes to the pane it was spoken to", () => {
     expect(host.calls).toContainEqual({ method: "insertText", args: ["pane-2", "aggiungi un test"] })
   })
 })
+
+/*
+ * Audit 2026-11-02, MOD-3: the pane was resolved when the dictation ended. A long dictation to pane 2, during which
+ * the user closed pane 1 or clicked another session to read it, was submitted to a different agent.
+ */
+describe("a dictation goes to the pane it was started for", () => {
+  const pane = (id: string, index: number): PaneSummary => ({
+    id,
+    title: id,
+    status: "working",
+    index,
+    hasLiveProcess: true,
+    isBrowser: false,
+    isFile: false,
+  })
+
+  class ChangingHost implements VoiceHost {
+    calls: { method: string; args: unknown[] }[] = []
+    panes: PaneSummary[] = [pane("pane-1", 1), pane("pane-2", 2), pane("pane-3", 3)]
+    listPanes(): PaneSummary[] {
+      return this.panes
+    }
+    async sendPrompt(paneId: string, text: string): Promise<void> {
+      this.calls.push({ method: "sendPrompt", args: [paneId, text] })
+    }
+    focusPane(): void {}
+    async runCommand(): Promise<void> {}
+    async insertText(): Promise<void> {}
+    async openFile(): Promise<void> {}
+    async searchProject(): Promise<{ path: string; line?: number }[]> {
+      return []
+    }
+    setPaneView(): void {}
+    browserNavigate(): void {}
+    answerPermission(): void {}
+    setColumns(): void {}
+    setView(): void {}
+    scrollTranscript(): void {}
+    describeState(): VoiceStateSnapshot {
+      return {
+        totalSessions: this.panes.length,
+        workingSessions: this.panes.length,
+        waitingSessions: 0,
+        doneSessions: 0,
+        errorSessions: 0,
+        currentView: "code",
+        spokenSummary: "",
+      }
+    }
+  }
+
+  /** Starts with `start`, lets `meanwhile` change the panes or the focus, then finishes. */
+  async function dictate(start: string, meanwhile: (host: ChangingHost, focus: { paneId: string }) => void) {
+    const host = new ChangingHost()
+    const focus = { paneId: "pane-1" }
+    const visible: string[] = []
+    const layer = Layer.mergeAll(
+      TranscriberFake(createFakeTranscriber()),
+      SpeakerFake(createFakeSpeaker()),
+      VoiceHostLive(host),
+    )
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const handle = yield* makeVoiceProgram({
+            getSettings: () => ({ ...DEFAULT_VOICE_SETTINGS, activation: "toggle" }),
+            getContext: () => ({ focusedPaneId: focus.paneId }),
+            onError: (error) => visible.push(error),
+          })
+          yield* handle.submitText(start)
+          yield* handle.submitText("rifai la migrazione del database")
+          meanwhile(host, focus)
+          yield* handle.submitText("fine dettatura")
+        }),
+      ).pipe(Effect.provide(layer)),
+    )
+    return { host, visible }
+  }
+
+  const sent = (host: ChangingHost) => host.calls.filter((call) => call.method === "sendPrompt").map((call) => call.args)
+
+  test("pane 1 closed meanwhile: the text goes to the pane that was 2, not to the one that is 2 now", async () => {
+    const { host } = await dictate("inizia dettatura pannello 2", (host) => {
+      host.panes = [pane("pane-2", 1), pane("pane-3", 2)]
+    })
+    expect(sent(host)).toEqual([["pane-2", "rifai la migrazione del database"]])
+  })
+
+  test("no pane named: the one in focus when it started, not the one clicked since", async () => {
+    const { host } = await dictate("inizia dettatura", (_host, focus) => {
+      focus.paneId = "pane-3"
+    })
+    expect(sent(host)).toEqual([["pane-1", "rifai la migrazione del database"]])
+  })
+
+  test("its pane closed meanwhile: nothing is sent anywhere, and the words are kept", async () => {
+    const { host, visible } = await dictate("inizia dettatura pannello 2", (host) => {
+      host.panes = [pane("pane-1", 1), pane("pane-3", 2)]
+    })
+    expect(sent(host)).toEqual([])
+    expect(visible.join(" ")).toContain("rifai la migrazione del database")
+  })
+})

@@ -702,10 +702,14 @@ export function makeVoiceProgram(
                 ? (panes.find((p) => p.id === effect.paneId) ?? panes.find((p) => String(p.index) === effect.paneId))
                 : (panes.find((p) => p.id === focused) ?? panes[0])
               if (!target) {
+                // A number said, or the id of the pane the dictation was spoken to, closed since.
                 const missing = effect.paneId
-                  ? tr("voice.msg.program.noSuchPane", effect.paneId)
+                  ? /^\d+$/.test(effect.paneId)
+                    ? tr("voice.msg.program.noSuchPane", effect.paneId)
+                    : tr("voice.msg.program.paneGone")
                   : tr("voice.msg.program.noPaneOpen")
-                options.onError?.(missing)
+                // Refused, never sent to another pane (MOD-3); the words are kept where the user can take them.
+                options.onError?.(`${missing} ${tr("voice.msg.program.keptText", effect.text)}`)
                 yield* say(missing)
                 break
               }

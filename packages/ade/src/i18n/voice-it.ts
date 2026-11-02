@@ -541,6 +541,8 @@ export const voiceIt = {
   "voice.msg.program.insertFailed": "Errore durante l'inserimento del testo trascritto nel pannello.",
   "voice.msg.program.hostFailed": "Errore durante l'esecuzione del comando sul VoiceHost.",
   "voice.msg.program.noSuchPane": (paneId: string) => `Non trovo il pannello ${paneId}: la dettatura non è stata inviata.`,
+  "voice.msg.program.paneGone": "Il pannello a cui dettavi è stato chiuso: la dettatura non è stata inviata.",
+  "voice.msg.program.keptText": (text: string) => `Il testo dettato: «${text}»`,
   "voice.msg.program.noPaneOpen": "Nessun pannello aperto: la dettatura non è stata inviata.",
   "voice.msg.program.heardWhileThinking": (words: string) =>
     `Sentito mentre pensavo: «${words}». Di' «invia questa» per mandarla dopo, o lasciala: si scarta.`,

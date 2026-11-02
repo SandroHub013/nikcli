@@ -524,6 +524,8 @@ export const voiceEn: VoiceMessages = {
   "voice.msg.program.insertFailed": "Error inserting the transcribed text into the panel.",
   "voice.msg.program.hostFailed": "Error running the command on the VoiceHost.",
   "voice.msg.program.noSuchPane": (paneId) => `I can't find panel ${paneId}: the dictation was not sent.`,
+  "voice.msg.program.paneGone": "The panel you were dictating to was closed: the dictation was not sent.",
+  "voice.msg.program.keptText": (text) => `The dictated text: «${text}»`,
   "voice.msg.program.noPaneOpen": "No panel open: the dictation was not sent.",
   "voice.msg.program.heardWhileThinking": (words) =>
     `Heard while I was thinking: «${words}». Say «send this» to send it later, or leave it: it is dropped.`,
