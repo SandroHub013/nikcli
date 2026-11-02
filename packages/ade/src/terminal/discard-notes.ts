@@ -11,7 +11,11 @@ export interface DiscardNotes {
   dispose(): void
 }
 
-type Visibility = Pick<Document, "visibilityState" | "addEventListener" | "removeEventListener">
+interface Visibility {
+  readonly visibilityState: string
+  addEventListener(type: "visibilitychange", listener: () => void): void
+  removeEventListener(type: "visibilitychange", listener: () => void): void
+}
 
 export function createDiscardNotes(say: (paneId: string) => void, doc: Visibility = document): DiscardNotes {
   const noted = new Set<string>()
