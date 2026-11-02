@@ -25,8 +25,9 @@
 //! looks like when it lands, is `src/session/mailbox.ts`, where it is tested.
 
 use std::fs;
-use std::path::PathBuf;
-use std::time::{Duration, SystemTime};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant, SystemTime};
 
 use serde::Serialize;
 use tauri::Manager;
@@ -113,6 +114,70 @@ pub fn install(app: &tauri::AppHandle) {
                 let _ = fs::remove_file(entry.path());
             }
         }
+    }
+}
+
+/// What the page's mail round runs on, besides its own timer.
+const PENDING_EVENT: &str = "mailbox:pending";
+
+/// How often the outbox is looked at: a `read_dir` of a folder that is nearly always empty.
+const WATCH_EVERY: Duration = Duration::from_millis(200);
+
+/// The least time between two signals, unless new mail has just appeared.
+const SIGNAL_GAP: Duration = Duration::from_secs(1);
+
+/// Whether WebView2 was told the window is off screen (`follow_window_visibility`).
+static PAGE_HIDDEN: AtomicBool = AtomicBool::new(false);
+
+#[cfg(windows)]
+pub fn set_page_hidden(hidden: bool) {
+    PAGE_HIDDEN.store(hidden, Ordering::Relaxed);
+}
+
+fn outbox_has_mail(outbox: &Path) -> bool {
+    fs::read_dir(outbox).is_ok_and(|mut entries| {
+        entries.any(|entry| entry.is_ok_and(|entry| entry.path().extension().is_some_and(|ext| ext == "json")))
+    })
+}
+
+/// Whether to signal the page now, and with what: `true` for mail in the outbox, `false` for a hidden page's pulse.
+fn pending_signal(mail: bool, mail_before: bool, hidden: bool, since_last: Duration) -> Option<bool> {
+    if mail && (!mail_before || since_last >= SIGNAL_GAP) {
+        return Some(true);
+    }
+    if hidden && since_last >= SIGNAL_GAP {
+        return Some(false);
+    }
+    None
+}
+
+/// Tells the page when to run its mail round, from a thread no page throttling can reach.
+///
+/// The round was only a page timer. A minimised window has been `hidden` since
+/// P1-C1, and Chromium wakes a hidden page's chained timers once a minute after 5
+/// minutes, so every `ade-msg kv` hit its 10 s and printed «ADE non ha risposto»
+/// (2026-10-30). An event is script the host runs, and it runs at once in a hidden
+/// page. So the throttling stays on, with everything it saves in CPU and memory
+/// while hidden, and only the mail stops depending on it.
+pub fn watch_outbox(app: tauri::AppHandle) {
+    let Some(dir) = mailbox_path(&app) else { return };
+    let outbox = dir.join("outbox");
+    let started = std::thread::Builder::new().name("ade-mailbox-watch".into()).spawn(move || {
+        use tauri::Emitter;
+        let mut mail_before = false;
+        let mut last = Instant::now();
+        loop {
+            std::thread::sleep(WATCH_EVERY);
+            let mail = outbox_has_mail(&outbox);
+            if let Some(waiting) = pending_signal(mail, mail_before, PAGE_HIDDEN.load(Ordering::Relaxed), last.elapsed()) {
+                let _ = app.emit(PENDING_EVENT, waiting);
+                last = Instant::now();
+            }
+            mail_before = mail;
+        }
+    });
+    if let Err(error) = started {
+        eprintln!("ADE: la posta non ha il suo segnale nativo, resta il timer della pagina: {error}");
     }
 }
 
@@ -527,7 +592,11 @@ function PostAndConfirm($fields) {
 function PostAndPrint($fields) {
   $id = Post $fields
   $r = Receipt $id
-  if ($null -eq $r) { Fail 'ADE non ha risposto: riprova tra poco' }
+  # Said as failed, so taken back if nobody took it yet: ADE must not carry it out later.
+  if ($null -eq $r) {
+    Remove-Item -LiteralPath (Join-Path (Join-Path $box 'outbox') "$id.json") -ErrorAction SilentlyContinue
+    Fail 'ADE non ha risposto: riprova tra poco'
+  }
   if (-not $r.StartsWith('ok')) { Write-Output $r; exit 1 }
   $nl = $r.IndexOf("`n")
   if ($nl -ge 0) { Write-Output $r.Substring($nl + 1) } else { Write-Output $r }
@@ -911,7 +980,8 @@ confirm() {
 # Prints what ADE answered after its first line: the value, not the receipt.
 show() {
   post "$1"
-  receipt || fail "ADE non ha risposto: riprova tra poco"
+  # Said as failed, so taken back if nobody took it yet: ADE must not carry it out later.
+  receipt || { rm -f "$box/outbox/$id.json"; fail "ADE non ha risposto: riprova tra poco"; }
   case "$r" in
     ok*) case "$r" in *"
 "*) printf '%s\n' "${r#*
@@ -1166,6 +1236,75 @@ mod tests {
         let out = collector.join().expect("output");
         let _ = fs::remove_dir_all(&bin);
         assert!(out.contains("found-it"), "the child did not find the script: {out}");
+    }
+
+    #[test]
+    fn new_mail_is_signalled_at_once_and_a_stuck_outbox_only_once_a_second() {
+        let soon = Duration::from_millis(200);
+        let later = SIGNAL_GAP;
+        assert_eq!(pending_signal(true, false, false, soon), Some(true));
+        assert_eq!(pending_signal(true, true, false, soon), None);
+        assert_eq!(pending_signal(true, true, false, later), Some(true));
+    }
+
+    #[test]
+    fn a_hidden_page_gets_a_pulse_and_a_visible_one_keeps_its_own_timer() {
+        let soon = Duration::from_millis(200);
+        let later = SIGNAL_GAP;
+        assert_eq!(pending_signal(false, false, true, later), Some(false));
+        assert_eq!(pending_signal(false, false, true, soon), None);
+        assert_eq!(pending_signal(false, false, false, later), None);
+        // Mail says so even in a pulse's place.
+        assert_eq!(pending_signal(true, true, true, later), Some(true));
+    }
+
+    #[test]
+    fn only_a_whole_message_counts_as_mail() {
+        let base = std::env::current_dir().unwrap().join("target").join("mailbox-watch-test");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        assert!(!outbox_has_mail(&base));
+        fs::write(base.join("1757860000000-aaaa.part"), "half").unwrap();
+        assert!(!outbox_has_mail(&base));
+        fs::write(base.join("1757860000000-aaaa.json"), "{}").unwrap();
+        assert!(outbox_has_mail(&base));
+        let _ = fs::remove_dir_all(&base);
+        // A folder that is not there is not mail, and not a panic in the watcher.
+        assert!(!outbox_has_mail(&base));
+    }
+
+    #[test]
+    fn both_scripts_take_back_what_they_say_has_failed() {
+        assert!(PS1.contains(r#"(Join-Path (Join-Path $box 'outbox') "$id.json") -ErrorAction SilentlyContinue"#));
+        assert!(SH.contains(r#"receipt || { rm -f "$box/outbox/$id.json"; fail"#));
+    }
+
+    /// The whole of it on the real script: 10 s of nobody answering, then the message is gone with the failure.
+    #[cfg(windows)]
+    #[test]
+    fn a_kv_nobody_answered_is_withdrawn_from_the_outbox() {
+        use std::process::{Command, Stdio};
+        let scratch = Scratch::new("withdraw");
+        let base = scratch.0.clone();
+        for dir in ["outbox", "receipts", "results", "bin"] {
+            fs::create_dir_all(base.join(dir)).unwrap();
+        }
+        let script = base.join("bin").join("ade-msg.ps1");
+        fs::write(&script, PS1).unwrap();
+        let status = Command::new("powershell.exe")
+            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+            .arg(&script)
+            .args(["kv", "lock", "pc:prova"])
+            .current_dir(&base)
+            .env("ADE_MAILBOX", &base)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .unwrap();
+        assert_eq!(status.code(), Some(1));
+        let left: Vec<_> = fs::read_dir(base.join("outbox")).unwrap().flatten().map(|e| e.path()).collect();
+        assert!(left.is_empty(), "still in the outbox: {left:?}");
     }
 
     #[test]
