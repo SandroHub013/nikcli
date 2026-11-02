@@ -1,6 +1,7 @@
 import { Show } from "solid-js"
 import { t } from "../../i18n"
 import { appStateAside, type StateAside } from "./state-aside"
+import { Button } from "../../ui/controls"
 
 /**
  * Says once that the gateways' saved state could not be read and was put aside (N-A11a): the pairings must be done
@@ -13,9 +14,9 @@ export function StateAsideNotice(props: { aside?: StateAside }) {
       <div data-slot="gateway-state-aside" role="status">
         <p data-slot="bots-problem">{t("gateway.panel.stateAside", aside().copies().join(", "))}</p>
         <div data-slot="gateway-row">
-          <button type="button" data-slot="bots-btn" onClick={() => aside().dismiss()}>
+          <Button data-slot="bots-btn" onClick={() => aside().dismiss()}>
             {t("gateway.panel.stateAsideOk")}
-          </button>
+          </Button>
         </div>
       </div>
     </Show>

@@ -42,7 +42,7 @@ describe("the memory section", () => {
     expect(store.get("bot").notes).toEqual(["Preferisce risposte brevi"])
     press("Togli")
     // Two buttons now: «Annulla» and the danger one, also called «Togli».
-    ;[...document.querySelectorAll('[data-slot="bots-btn"][data-tone="danger"]')][0]!.dispatchEvent(
+    ;[...document.querySelectorAll('[data-slot="bots-btn"][data-variant="danger"]')][0]!.dispatchEvent(
       new MouseEvent("click", { bubbles: true }),
     )
     expect(store.get("bot").notes).toEqual([])

@@ -437,8 +437,8 @@ describe("settings shell", () => {
   test("M2: ogni scheda di Generale, Registrazione e Sistema apre con contenuto e senza h3 vecchio", () => {
     const cases: { tab: string; probe: string }[] = [
       { tab: "general/appearance", probe: "[data-theme-choice]" },
-      { tab: "general/language", probe: '[data-slot="settings-choice"]' },
-      { tab: "general/grid", probe: '[data-slot="settings-choice"]' },
+      { tab: "general/language", probe: "[data-locale]" },
+      { tab: "general/grid", probe: '[data-slot="ade-pill-tab"]' },
       { tab: "record/video", probe: "[data-quality]" },
       { tab: "system/updates", probe: '[data-action="update.check"]' },
       { tab: "system/about", probe: '[data-about="folder"]' },
@@ -584,7 +584,7 @@ describe("settings shell", () => {
   test("B4: la scelta della griglia sopravvive alla riapertura del foglio", () => {
     renderSettingsSheet({ initialTarget: "general/grid" })
     const choiceTwo = () =>
-      [...document.body.querySelectorAll<HTMLButtonElement>('[data-slot="settings-choice"]')].find(
+      [...document.body.querySelectorAll<HTMLButtonElement>('[data-slot="ade-pill-tab"]')].find(
         (button) => button.textContent?.trim() === "2",
       )
     // Trovato o mancante, qui: il find ritorna undefined, mai null.

@@ -218,6 +218,56 @@ describe("PillTabs", () => {
     expect(updatedButtons[1].querySelector('[data-slot="ade-pill-badge"]')?.textContent).toBe("1")
   })
 
+  test("a plain choice in a panel: pressed, with its own attributes, and no dialog popup (DS-11)", () => {
+    const root = document.createElement("div")
+    document.body.append(root)
+    let picked: string | undefined
+    cleanup = render(
+      () =>
+        createComponent(PillTabs, {
+          role: "button",
+          popup: false,
+          dataSlot: "ade-pill-tabs",
+          ariaLabel: "Lingua",
+          items: [
+            { id: "it", label: "Italiano", active: true, attrs: { "data-locale": "it", lang: "it" } },
+            { id: "system", label: "Sistema", attrs: { "data-locale": "system", lang: undefined } },
+          ],
+          onSelect: (id: string) => {
+            picked = id
+          },
+        }),
+      root,
+    )
+
+    expect(root.querySelector('[role="group"]')?.getAttribute("aria-label")).toBe("Lingua")
+    const [italiano, sistema] = [...root.querySelectorAll("button")] as HTMLButtonElement[]
+    expect(italiano!.getAttribute("aria-pressed")).toBe("true")
+    expect(sistema!.getAttribute("aria-pressed")).toBe("false")
+    expect(italiano!.getAttribute("aria-haspopup")).toBeNull()
+    expect(italiano!.getAttribute("data-locale")).toBe("it")
+    expect(italiano!.getAttribute("lang")).toBe("it")
+    expect(sistema!.getAttribute("lang")).toBeNull()
+    sistema!.click()
+    expect(picked).toBe("system")
+  })
+
+  test("a queue button still opens a dialog unless it says otherwise", () => {
+    const root = document.createElement("div")
+    document.body.append(root)
+    cleanup = render(
+      () =>
+        createComponent(PillTabs, {
+          role: "button",
+          ariaLabel: "Coda",
+          items: [{ id: "decisions", label: "Decisioni" }],
+          onSelect: () => {},
+        }),
+      root,
+    )
+    expect(root.querySelector("button")!.getAttribute("aria-haspopup")).toBe("dialog")
+  })
+
   test("lint: narrow responsive rules target ade-pill-tab for queue items", () => {
     const pillCss = readFileSync(new URL("./pill-tabs.css", import.meta.url), "utf8")
     expect(pillCss).toContain('[data-slot="ade-pill-tab"]:has([data-slot="ade-pill-label-short"]) [data-slot="ade-pill-label-full"]')

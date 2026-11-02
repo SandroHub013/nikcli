@@ -9,6 +9,7 @@
 
 import { createEffect, createMemo, createResource, createSignal, For, on, Show } from "solid-js"
 import { t } from "../i18n"
+import { Button } from "../ui/controls"
 import { APPROVAL_TIMEOUT_MS } from "./approval"
 import { approvalAction } from "./approval-signal"
 import { ConfirmAction } from "./confirm"
@@ -239,30 +240,27 @@ export function RoomMain(props: { deps: RoomPanelDeps; roomId: string; onRemoved
                     </Show>
                   </span>
                   <span data-slot="bots-permission-actions">
-                    <button
-                      type="button"
+                    <Button
                       data-slot="bots-btn"
                       onClick={() => props.deps.answer(speaking()!, "reject", pending().requestID)}
                     >
                       {t("bots.permission.deny")}
-                    </button>
+                    </Button>
                     <Show when={(pending().always?.length ?? 0) > 0}>
-                      <button
-                        type="button"
+                      <Button
                         data-slot="bots-btn"
                         onClick={() => props.deps.answer(speaking()!, "always", pending().requestID)}
                       >
                         {t("bots.approval.always")}
-                      </button>
+                      </Button>
                     </Show>
-                    <button
-                      type="button"
+                    <Button
                       data-slot="bots-btn"
-                      data-tone="primary"
+                      variant="primary"
                       onClick={() => props.deps.answer(speaking()!, "once", pending().requestID)}
                     >
                       {t("bots.permission.allow")}
-                    </button>
+                    </Button>
                   </span>
                 </div>
               )}
@@ -444,12 +442,12 @@ export function RoomForm(props: { deps: RoomPanelDeps; onCreated: (id: string) =
       </label>
       <div data-slot="bots-form-actions">
         <Show when={problem()}>{(text) => <span data-slot="bots-problem">{text()}</span>}</Show>
-        <button type="button" data-slot="bots-btn" onClick={() => props.onCancel()}>
+        <Button data-slot="bots-btn" onClick={() => props.onCancel()}>
           {t("bots.room.form.cancel")}
-        </button>
-        <button type="submit" data-slot="bots-btn" data-tone="primary" disabled={saving()}>
+        </Button>
+        <Button type="submit" data-slot="bots-btn" variant="primary" disabled={saving()}>
           {t("bots.room.form.create")}
-        </button>
+        </Button>
       </div>
     </form>
   )

@@ -13,6 +13,8 @@ export interface PillTabItem {
   readonly ariaLabel?: string
   readonly family?: string
   readonly active?: boolean
+  /** Extra attributes for the cell (a `data-*` a driver or a test looks for, `lang`). */
+  readonly attrs?: Readonly<Record<string, string | undefined>>
 }
 
 export interface PillTabsProps {
@@ -23,6 +25,11 @@ export interface PillTabsProps {
   readonly ariaLabel: string
   readonly dataSlot?: string
   readonly itemDataSlot?: string
+  /**
+   * Whether a `button` cell opens a dialog. The bar's queue buttons do, so it is the default; a plain choice in a
+   * panel does not, and announcing a popup there would be wrong.
+   */
+  readonly popup?: boolean
 }
 
 /**
@@ -55,13 +62,14 @@ export function PillTabs(props: PillTabsProps) {
               role={isTab() ? "tab" : "button"}
               aria-selected={isTab() ? isActive() : undefined}
               aria-pressed={!isTab() ? isActive() : undefined}
-              aria-haspopup={!isTab() ? "dialog" : undefined}
+              aria-haspopup={!isTab() && props.popup !== false ? "dialog" : undefined}
               data-slot={itemSlot()}
               data-active={isActive() ? "true" : undefined}
               data-attention={item().attention ? "true" : undefined}
               data-family={item().family}
               title={item().title}
               aria-label={item().ariaLabel}
+              {...item().attrs}
               onClick={() => props.onSelect(item().id)}
             >
               <Show when={item().attention}>

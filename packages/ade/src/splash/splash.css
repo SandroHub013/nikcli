@@ -6,9 +6,8 @@
  * status text grouped below.
  */
 
-[data-component="ade-splash"],
-[data-component="ade-shell"][data-theme="glass"] [data-component="ade-splash"][role="dialog"],
-[data-component="ade-shell"] [data-component="ade-splash"][role="dialog"] {
+/* A status, not a dialog: it has nothing to focus, so the glass `[role="dialog"]` ground never reaches it. */
+[data-component="ade-splash"] {
   position: fixed;
   inset: 0;
   width: 100vw;
@@ -90,6 +89,19 @@
   user-select: none;
   pointer-events: none;
   white-space: nowrap;
+}
+
+/* How to skip it: quieter than the status, on the same dark ground (the scheme is dark inside the splash). */
+[data-slot="splash-hint"] {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  font-family: var(--ade-mono, monospace);
+  font-size: var(--ade-font-xs);
+  color: var(--ade-text-weak);
+  text-align: center;
+  user-select: none;
+  pointer-events: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

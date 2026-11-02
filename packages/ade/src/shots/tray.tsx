@@ -1,6 +1,8 @@
 import { For, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
 import "./tray.css"
 import { t } from "../i18n"
+import { Button } from "../ui/controls"
+import { Sheet } from "../ui/sheet"
 
 /**
  * The screenshots you just took, waiting to be handed to an agent.
@@ -30,6 +32,11 @@ export interface ShotTrayProps {
   onDismiss: (path: string) => void
   /** Moves the file to the Recycle Bin; `false` when it could not be. */
   onDelete?: (path: string) => Promise<boolean>
+  /**
+   * Types the path into the session that has the focus, the way a drop would (UX-17: a screenshot reached an agent
+   * only by dragging). `false` when there is no session to give it to.
+   */
+  onSend?: (path: string) => boolean
   /**
    * True when this machine has no screenshots folder, so none will ever
    * arrive. The strip then says so in one line instead of staying blank.
@@ -157,11 +164,14 @@ export function ShotTray(props: ShotTrayProps) {
   // The viewer's delete: asked first («Elimina» only opens the question), and said when it failed.
   const [asking, setAsking] = createSignal(false)
   const [deleteFailed, setDeleteFailed] = createSignal(false)
+  // Handing the picture to the focused session found none to give it to.
+  const [sendFailed, setSendFailed] = createSignal(false)
   // The delete is running: the buttons wait, so a second click cannot ask the host twice.
   const [deleting, setDeleting] = createSignal(false)
   const resetViewer = () => {
     setAsking(false)
     setDeleteFailed(false)
+    setSendFailed(false)
     setDeleting(false)
   }
   const closeViewer = () => {
@@ -270,28 +280,22 @@ export function ShotTray(props: ShotTrayProps) {
               <For each={props.shots}>
                 {(shot) => (
                   /*
-                   * The tile is the drag handle and the open button at once.
+                   * The tile is the drag handle; the picture inside it is the open button.
                    *
                    * It used to wrap a <button> around the thumbnail, and in
                    * Chromium a button swallows the press that would have started
                    * the drag: `draggable` on the ancestor is simply never
                    * honoured, so the thumbnails looked draggable and were not.
-                   * The tile carries the role instead, and the only real button
-                   * left inside it is the dismiss, which is meant to be pressed.
+                   * So the picture carries the button role instead of being a
+                   * <button>. What it no longer does is hold the dismiss: that
+                   * was a real button nested inside a `role="button"`, which
+                   * assistive technology cannot read (UX-17). The two are
+                   * siblings now, and the tile is a plain container.
                    */
                   <figure
                     data-slot="shot"
                     title={[shot.name, t("shots.thumb.tip")].join("\n")}
                     draggable={true}
-                    role="button"
-                    tabindex={0}
-                    aria-label={t("shots.open.named", shot.name)}
-                    onClick={() => openViewer(shot)}
-                    onKeyDown={(event) => {
-                      if (event.key !== "Enter" && event.key !== " ") return
-                      event.preventDefault()
-                      openViewer(shot)
-                    }}
                     onDragStart={(event) => {
                       /*
                        * The path travels as plain text so any drop target that
@@ -304,15 +308,24 @@ export function ShotTray(props: ShotTrayProps) {
                       if (event.dataTransfer) event.dataTransfer.effectAllowed = "copy"
                     }}
                   >
-                    <Thumb shot={shot} load={props.load} />
+                    <div
+                      data-slot="shot-open"
+                      role="button"
+                      tabindex={0}
+                      aria-label={t("shots.open.named", shot.name)}
+                      onClick={() => openViewer(shot)}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return
+                        event.preventDefault()
+                        openViewer(shot)
+                      }}
+                    >
+                      <Thumb shot={shot} load={props.load} />
+                    </div>
                     <button
                       type="button"
                       data-slot="shot-dismiss"
-                      onClick={(event) => {
-                        // Or the tile behind it opens the picture being put away.
-                        event.stopPropagation()
-                        props.onDismiss(shot.path)
-                      }}
+                      onClick={() => props.onDismiss(shot.path)}
                       aria-label={t("shots.dismiss.named", shot.name)}
                       title={t("shots.dismiss")}
                     >
@@ -376,49 +389,65 @@ export function ShotTray(props: ShotTrayProps) {
         />
       </aside>
 
-      {/* Opened at full size, over everything, closed by anything: the picture
-          is being looked at for a second, not worked in. */}
+      {/* Opened at full size, over everything: the picture is being looked at for a second, not worked in. It is a
+          Sheet, so Esc and a press outside close it, the focus moves into it and comes back to the tile, and the
+          page behind is out of reach of Tab (UX-17). */}
       <Show when={opened()}>
         {(shot) => (
-          <div data-component="shot-viewer" role="dialog" aria-label={shot().name} onClick={closeViewer}>
-            <figure data-slot="shot-viewer-frame" onClick={(event) => event.stopPropagation()}>
+          <Sheet component="shot-viewer" surface={false} label={shot().name} onClose={closeViewer}>
+            <figure data-slot="shot-viewer-frame">
               <Thumb shot={shot()} load={props.load} />
               <figcaption data-slot="shot-viewer-caption">
                 <span data-slot="shot-viewer-name">{shot().name}</span>
                 <span data-slot="shot-viewer-hint">{t("shots.hint")}</span>
+                {/* The keyboard's way to give the picture to an agent: the same text a drop types, into the session
+                    that has the focus. */}
+                <Show when={props.onSend && !asking()}>
+                  <Button
+                    size="sm"
+                    data-slot="shot-viewer-send"
+                    onClick={() => {
+                      const sent = props.onSend?.(shot().path) ?? false
+                      setSendFailed(!sent)
+                      if (sent) closeViewer()
+                    }}
+                  >
+                    {t("shots.send")}
+                  </Button>
+                </Show>
                 {/* Deleting is offered here and not on the thumbnail: the × in
                     the tray puts a screenshot away, and a click that sends the
                     file to the Recycle Bin must not sit a few pixels from one
                     that does not. It asks first, and says when it did not work. */}
                 <Show when={props.onDelete && !asking()}>
-                  <button
-                    type="button"
+                  <Button
+                    size="sm"
+                    variant="danger"
                     data-slot="shot-viewer-close"
-                    data-tone="danger"
                     onClick={() => {
                       setDeleteFailed(false)
                       setAsking(true)
                     }}
                   >
                     {t("shots.delete")}
-                  </button>
+                  </Button>
                 </Show>
                 <Show when={asking()}>
                   <span data-slot="shot-viewer-ask">{t("shots.delete.ask", shot().name)}</span>
                   {/* «Tieni» takes the place «Elimina» had, under the cursor: a double click keeps the file. */}
-                  <button
-                    type="button"
+                  <Button
+                    size="sm"
                     data-slot="shot-viewer-close"
                     disabled={deleting()}
                     ref={(button) => queueMicrotask(() => button.focus())}
                     onClick={() => setAsking(false)}
                   >
                     {t("shots.delete.keep")}
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="danger"
                     data-slot="shot-viewer-close"
-                    data-tone="danger"
                     disabled={deleting()}
                     onClick={async (event) => {
                       // The second click of a double click on «Elimina» lands here: it is not a yes.
@@ -429,29 +458,40 @@ export function ShotTray(props: ShotTrayProps) {
                       // The viewer may have been closed or moved on meanwhile: its state is not this one's.
                       if (opened()?.path !== path) return
                       setDeleting(false)
-                      if (done) closeViewer()
-                      else {
+                      if (done) {
+                        // The tile that opened the viewer is gone, and the viewer gives the focus back to it: a focus
+                        // on a detached node is a focus on the page. Moving it to a tile first, while the viewer is
+                        // still open, makes that tile the one the focus goes back to. Scrolled into view: the first tile
+                        // can be out of the strip, and a focus the user cannot see is a lost one.
+                        strip()?.querySelector<HTMLElement>('[data-slot="shot-open"]')?.focus()
+                        closeViewer()
+                      } else {
                         setAsking(false)
                         setDeleteFailed(true)
                       }
                     }}
                   >
                     {t("shots.delete.confirm")}
-                  </button>
+                  </Button>
                 </Show>
                 <Show when={deleteFailed()}>
                   <span data-slot="shot-viewer-error" role="alert">
                     {t("shots.delete.failed")}
                   </span>
                 </Show>
+                <Show when={sendFailed()}>
+                  <span data-slot="shot-viewer-error" role="alert">
+                    {t("shots.send.failed")}
+                  </span>
+                </Show>
                 <Show when={!asking()}>
-                  <button type="button" data-slot="shot-viewer-close" onClick={closeViewer}>
+                  <Button size="sm" data-slot="shot-viewer-close" onClick={closeViewer}>
                     {t("shots.close")}
-                  </button>
+                  </Button>
                 </Show>
               </figcaption>
             </figure>
-          </div>
+          </Sheet>
         )}
       </Show>
     </Show>

@@ -848,7 +848,7 @@ export function SessionPane(props: SessionPaneProps) {
           </span>
         </Show>
 
-        <PaneActions onExpand={() => props.onExpand?.()} onClose={() => props.onClose?.()} expanded={props.expanded}>
+        <PaneActions onExpand={() => props.onExpand?.()} onClose={() => props.onClose?.()} expanded={props.expanded} title={props.title}>
           <Show when={props.suspend}>
             {(suspend) => (
               <button
@@ -878,10 +878,16 @@ export function SessionPane(props: SessionPaneProps) {
           data-tip={props.expanded ? t("pane.restore") : t("pane.expand")}
           onClick={() => props.onExpand?.()}
         >
+          {/* The expand glyph, the same as the full-width button's: «⋯» means «more actions» everywhere else in ADE, and
+              this control only expands the pane (UX-21). */}
           <svg class="gi" viewBox="0 0 16 16" aria-hidden="true">
-            <circle class="f" cx="3.5" cy="8" r="1.2" />
-            <circle class="f" cx="8" cy="8" r="1.2" />
-            <circle class="f" cx="12.5" cy="8" r="1.2" />
+            <path
+              d="M3 6V3h3M10 3h3v3M13 10v3h-3M6 13H3v-3"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.2"
+              stroke-linecap="round"
+            />
           </svg>
         </button>
       </header>

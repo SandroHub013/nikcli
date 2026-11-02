@@ -13,11 +13,13 @@ describe("splash delayed loading and graceful fallback (Passo 4)", () => {
     document.body.appendChild(container)
     let disposeFn: (() => void) | undefined
     createRoot((dispose) => {
+      // `render` opens a root of its own, which disposing the outer one does not reach: its window listeners stayed.
+      const unmount = render(() => createComponent(Splash, props), container)
       disposeFn = () => {
+        unmount()
         dispose()
         container.remove()
       }
-      render(() => createComponent(Splash, props), container)
     })
     return {
       container,

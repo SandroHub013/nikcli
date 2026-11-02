@@ -33,11 +33,12 @@ describe("the document is ink until the shell's first frame (DS-26)", () => {
     document.body.appendChild(container)
     let setVisibleSignal!: (v: boolean) => void
     let disposeFn: (() => void) | undefined
+    let unmount: (() => void) | undefined
     createRoot((dispose) => {
       disposeFn = dispose
       const [visible, setVisible] = createSignal(true)
       setVisibleSignal = setVisible
-      render(
+      unmount = render(
         () =>
           createComponent(Splash, {
             get visible() {
@@ -52,6 +53,7 @@ describe("the document is ink until the shell's first frame (DS-26)", () => {
       setVisibleSignal(false)
       expect(document.documentElement.hasAttribute("data-boot")).toBe(false)
     } finally {
+      unmount?.()
       disposeFn?.()
       container.remove()
       document.documentElement.removeAttribute("data-boot")

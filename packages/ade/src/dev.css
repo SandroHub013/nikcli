@@ -353,19 +353,7 @@
   overflow-wrap: anywhere;
 }
 
-[data-slot="ade-notice-dismiss"] {
-  flex: 0 0 auto;
-  border: 0;
-  background: transparent;
-  color: var(--ade-text-weak);
-  font-size: var(--ade-font-md);
-  line-height: 1;
-  cursor: pointer;
-}
-
-[data-slot="ade-notice-dismiss"]:hover {
-  color: var(--ade-text);
-}
+/* An IconButton (sm): nothing to add. */
 
 [data-slot="ade-notice-link"],
 [data-slot="ade-notice-action"] {
@@ -636,30 +624,12 @@
   overflow-wrap: anywhere;
 }
 
-[data-slot="ade-notice-close"] {
-  flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
-  border: 1px solid transparent;
-  border-radius: var(--ade-radius-sm);
-  background: none;
-  color: var(--ade-text-soft);
-  font-size: var(--ade-font-sm);
-  line-height: 1;
-  cursor: pointer;
-  transition:
-    background var(--ade-dur-fast) var(--ade-ease),
-    color var(--ade-dur-fast) var(--ade-ease);
-}
-
-[data-slot="ade-notice-close"]:hover {
-  background: var(--ade-hover);
-  color: var(--ade-text);
-}
-
-[data-slot="ade-notice-close"]:focus-visible {
-  outline: none;
-  box-shadow: var(--ade-focus-ring);
+/* An IconButton (sm) closes the notice; the voice notice is a Notice laid across the bar's foot. */
+[data-slot="ade-voice-notice"] {
+  border-width: 0 0 1px;
+  border-radius: 0;
+  padding: var(--ade-space-2) var(--ade-space-6);
+  font-family: var(--ade-sans);
 }
 
 @media (max-width: 640px) {
@@ -1056,27 +1026,9 @@
   line-height: var(--ade-leading);
 }
 
+/* A Button (primary, lg): the screen with no project only decides where it sits. */
 [data-slot="empty-action"] {
   margin-top: var(--ade-space-2);
-  padding: var(--ade-space-4) var(--ade-space-7);
-  border: 0;
-  border-radius: var(--ade-radius-md);
-  background: var(--ade-accent);
-  color: var(--ade-accent-fg);
-  font-family: var(--ade-sans);
-  font-size: var(--ade-font-md);
-  font-weight: var(--ade-weight-semibold);
-  cursor: pointer;
-  transition: background var(--ade-dur-fast) var(--ade-ease);
-}
-
-[data-slot="empty-action"]:hover {
-  background: var(--ade-accent-strong);
-}
-
-[data-slot="empty-action"]:focus-visible {
-  outline: none;
-  box-shadow: var(--ade-focus-ring);
 }
 
 /* ── body layout ──────────────────────────────────────────────────────────── */

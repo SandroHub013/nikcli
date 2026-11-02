@@ -219,6 +219,7 @@ export const en: Messages = {
   "sidebar.menu.restart": "Restart",
   "sidebar.menu.resume": "Resume",
   "sidebar.menu.close": "Close",
+  "ui.notice.close": "Dismiss the notice",
   "sidebar.menu.copyId": "Copy id",
   "sidebar.menu.openSession": "Open session",
   "sidebar.menu.newSession": "New session",
@@ -665,6 +666,7 @@ export const en: Messages = {
 
   // Splash & logo
   "splash.aria": "Ragù Code is starting",
+  "splash.skip": "Press Enter to skip",
 
   // Voice shortcut & permission
   "voice.shortcut.feature.agent": "voice assistant",
@@ -747,6 +749,7 @@ export const en: Messages = {
   "pane.mouseHint.tip":
     "The program gets the clicks and the wheel. To select and copy text, hold Shift and drag. Ctrl+click opens a link.",
   "pane.close": "Close",
+  "pane.close.named": (title: string) => `Close ${title}`,
   "hooks.foreign":
     "From another build of ADE, not this one: this build neither updates nor removes it, because the official ADE's sessions run through that file",
   "bar.raguVersion": (v) => `Ragù Code ${v}: the program new sessions start, not ADE`,
@@ -788,7 +791,7 @@ export const en: Messages = {
   "tray.hide.notice":
     "ADE stays in the notification area while a chat connection is on, so the chats still reach their bots. The microphone closes while the window is hidden. To bring it back: click the icon; to close ADE: Exit, in the icon's menu.",
   "bell.title": "Notifications",
-  "bell.dismiss": "Dismiss",
+  "bell.dismiss.named": (text: string) => `Dismiss: ${text}`,
 
   // Export, stuck note
   "record.export.busy": "An export is already running.",
@@ -1513,6 +1516,8 @@ export const en: Messages = {
   "shots.open.named": (name) => `Open ${name}`,
   "shots.more.left": "Earlier screenshots",
   "shots.more.right": "More screenshots",
+  "shots.send": "Send to the focused session",
+  "shots.send.failed": "It could not be given to the focused session (none is open, or it is waiting on a question): pick one that is free and try again.",
   "shots.close": "Close",
 
   // Extensions

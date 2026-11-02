@@ -1,5 +1,6 @@
 import { createSignal, Show } from "solid-js"
 import { t } from "../i18n"
+import { Button } from "../ui/controls"
 
 /**
  * The one way the bot's screens confirm something that cannot be taken back
@@ -87,24 +88,22 @@ export function ConfirmAction(props: {
         }}
       >
         <span data-slot="bots-confirm-question">{props.question}</span>
-        <button
+        <Button
           ref={(element) => (cancel = element)}
-          type="button"
           data-slot="bots-btn"
           disabled={busy()}
           onClick={back}
         >
           {t("bots.confirm.cancel")}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
           data-slot="bots-btn"
-          data-tone="danger"
+          variant="danger"
           disabled={busy() || props.disabled}
           onClick={() => void run()}
         >
           {props.confirm}
-        </button>
+        </Button>
       </span>
     </Show>
   )

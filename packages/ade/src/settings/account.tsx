@@ -4,6 +4,7 @@ import { providerState, type ProviderState } from "../bots/providers"
 import { RUNNERS, runnerAccount, type Runner } from "../bots/runners"
 import { MAX_PARALLEL_TURNS } from "../bots/terms"
 import { t } from "../i18n"
+import { Button } from "../ui/controls"
 
 export interface AccountSectionProps {
   /** Opens the runner's sign-in in a terminal pane. Absent: no button. */
@@ -146,9 +147,7 @@ export function AccountSection(props: AccountSectionProps): JSX.Element {
                     <Show
                       when={isConfirming()}
                       fallback={
-                        <button
-                          type="button"
-                          data-slot="settings-choice"
+                        <Button
                           data-action={kind() === "connected" ? "switch" : "login"}
                           onClick={() => (needsConfirmation(kind()) ? ask(runner.id) : props.onLogin?.(runner))}
                           title={`${runner.command} ${runner.login.join(" ")}`}
@@ -156,7 +155,7 @@ export function AccountSection(props: AccountSectionProps): JSX.Element {
                           {kind() === "connected"
                             ? t("settings.providers.switchAccount")
                             : t("settings.providers.login")}
-                        </button>
+                        </Button>
                       }
                     >
                       <div data-slot="switch-confirm" role="group" aria-labelledby={`switch-prompt-${runner.id}`}>
@@ -164,8 +163,9 @@ export function AccountSection(props: AccountSectionProps): JSX.Element {
                           {t("settings.providers.switchPrompt", runner.label)}
                         </p>
                         <div data-slot="switch-buttons">
-                          <button
-                            type="button"
+                          <Button
+                            variant="primary"
+                            size="sm"
                             data-slot="switch-continue"
                             onClick={(event) => {
                               /*
@@ -178,10 +178,10 @@ export function AccountSection(props: AccountSectionProps): JSX.Element {
                             }}
                           >
                             {t("settings.providers.switchContinue")}
-                          </button>
-                          <button type="button" data-slot="switch-cancel" onClick={() => closeQuestion()}>
+                          </Button>
+                          <Button size="sm" data-slot="switch-cancel" onClick={() => closeQuestion()}>
                             {t("settings.providers.switchCancel")}
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     </Show>
@@ -194,9 +194,9 @@ export function AccountSection(props: AccountSectionProps): JSX.Element {
       </div>
 
       <div data-slot="settings-choices">
-        <button type="button" data-slot="settings-choice" disabled={checking()} onClick={check}>
+        <Button disabled={checking()} onClick={check}>
           {checking() ? t("settings.providers.checking") : t("settings.providers.checkAgain")}
-        </button>
+        </Button>
       </div>
     </>
   )

@@ -8,6 +8,7 @@
 
 import { createMemo, createResource, createSignal, For, Show } from "solid-js"
 import { t } from "../i18n"
+import { Button } from "../ui/controls"
 import { ConfirmAction } from "./confirm"
 import type { BotAccount } from "./account"
 import type { AgentFile } from "./ragu"
@@ -208,13 +209,12 @@ export function RoutineSection(props: {
                     <div data-slot="gateway-confirm">
                       <span data-slot="bots-hint">{consentText()}</span>
                       <span data-slot="gateway-row">
-                        <button type="button" data-slot="bots-btn" onClick={() => setReconsenting(undefined)}>
+                        <Button data-slot="bots-btn" onClick={() => setReconsenting(undefined)}>
                           {t("bots.routine.cancel")}
-                        </button>
-                        <button
-                          type="button"
+                        </Button>
+                        <Button
                           data-slot="bots-btn"
-                          data-tone="primary"
+                          variant="primary"
                           onClick={async () => {
                             const failed = await props.deps.reconsent(props.bot, routine.id)
                             setReconsenting(undefined)
@@ -222,7 +222,7 @@ export function RoutineSection(props: {
                           }}
                         >
                           {t("bots.routine.reconsentConfirm")}
-                        </button>
+                        </Button>
                       </span>
                     </div>
                   </Show>
@@ -235,9 +235,9 @@ export function RoutineSection(props: {
         <Show
           when={composing()}
           fallback={
-            <button type="button" data-slot="bots-btn" onClick={() => setComposing(true)}>
+            <Button data-slot="bots-btn" onClick={() => setComposing(true)}>
               {t("bots.routine.new")}
-            </button>
+            </Button>
           }
         >
           <form data-slot="gateway-block" onSubmit={(event) => void save(event)}>
@@ -327,12 +327,12 @@ export function RoutineSection(props: {
             </label>
             <Show when={problem()}>{(text) => <p data-slot="bots-problem">{text()}</p>}</Show>
             <span data-slot="gateway-row">
-              <button type="button" data-slot="bots-btn" onClick={reset}>
+              <Button data-slot="bots-btn" onClick={reset}>
                 {t("bots.routine.cancel")}
-              </button>
-              <button type="submit" data-slot="bots-btn" data-tone="primary" disabled={busy() || !agreed()}>
+              </Button>
+              <Button type="submit" data-slot="bots-btn" variant="primary" disabled={busy() || !agreed()}>
                 {t("bots.routine.save")}
-              </button>
+              </Button>
             </span>
           </form>
         </Show>

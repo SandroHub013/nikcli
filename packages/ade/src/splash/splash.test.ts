@@ -7,6 +7,7 @@ compileSolidJsx()
 const { createComponent, createRoot, createSignal } = await import("solid-js")
 const { render } = await import("solid-js/web")
 const { Splash } = await import("./splash")
+const { t } = await import("../i18n")
 const { layoutSceneContainer } = await import("./scene")
 
 describe("splash component (step 3)", () => {
@@ -46,31 +47,22 @@ describe("splash component (step 3)", () => {
     expect(css).toMatch(/background:\s*#211410/)
   })
 
-  test("maintains scene background in glass theme over index.css dialog rule without removing dialog role (Passo 1)", () => {
-    // 1. Accessibility: role="dialog" remains on root
+  test("is a status, not a dialog, so the glass dialog ground never reaches the scene background (UX-28)", () => {
     const handle = mountSplash({ visible: true })
     try {
       const splash = container.querySelector('[data-component="ade-splash"]')
       expect(splash).not.toBeNull()
-      expect(splash?.getAttribute("role")).toBe("dialog")
+      expect(splash?.getAttribute("role")).toBe("status")
     } finally {
       handle.dispose()
     }
 
-    // 2. Specificity verification: splash.css glass rule has higher specificity than index.css dialog rule
+    // index.css paints every `[role="dialog"]` with the overlay ground in glass; the splash must stay the scene's.
     const splashCss = readFileSync(join(import.meta.dir, "splash.css"), "utf8")
     const indexCss = readFileSync(join(import.meta.dir, "../index.css"), "utf8")
-
-    // index.css matches: [data-component="ade-shell"][data-theme="glass"] [role="dialog"] (specificity 0,3,0)
     expect(indexCss).toMatch(/\[data-component="ade-shell"\]\[data-theme="glass"\]\s*\[role="dialog"\]/)
-
-    // splash.css overrides with higher specificity (0,4,0) binding scene background (#211410)
-    expect(splashCss).toMatch(
-      /\[data-component="ade-shell"\]\[data-theme="glass"\]\s*\[data-component="ade-splash"\]\[role="dialog"\]/,
-    )
-    expect(splashCss).toMatch(
-      /\[data-component="ade-shell"\]\[data-theme="glass"\]\s*\[data-component="ade-splash"\]\[role="dialog"\][\s\S]*?\{[^}]*background:\s*#211410/,
-    )
+    expect(splashCss.replace(/\/\*[\s\S]*?\*\//g, "")).not.toContain('[role="dialog"]')
+    expect(splashCss).toMatch(/\[data-component="ade-splash"\] \{[^}]*background:\s*#211410/)
   })
 
   test("status is placed inside scene container and stays within innerHeight across viewports (P1-2)", () => {
@@ -154,14 +146,16 @@ describe("splash component (step 3)", () => {
     }
   })
 
-  test("renders dialog with accessibility attributes and canvas", () => {
+  test("renders a status with a name, a way to skip, and the canvas", () => {
     const handle = mountSplash({ visible: true })
     try {
       const splash = container.querySelector('[data-component="ade-splash"]')
       expect(splash).not.toBeNull()
-      expect(splash?.getAttribute("role")).toBe("dialog")
-      expect(splash?.getAttribute("aria-modal")).toBe("true")
+      // It has nothing to focus, so it is not a modal dialog: a status with a name.
+      expect(splash?.getAttribute("role")).toBe("status")
+      expect(splash?.getAttribute("aria-modal")).toBeNull()
       expect(splash?.getAttribute("aria-label")).toBeTruthy()
+      expect(container.querySelector('[data-slot="splash-hint"]')?.textContent).toBe(t("splash.skip"))
 
       const canvas = container.querySelector('[data-slot="splash-canvas"]')
       expect(canvas).not.toBeNull()
@@ -214,15 +208,101 @@ describe("splash component (step 3)", () => {
     }
   })
 
+  test("a skipping key is taken by the splash and never reaches what is under it", () => {
+    // The splash covers the workbench but does not hold the focus: a textarea behind it is still the active element,
+    // so an Enter meant to skip would also have typed a newline into the composer, and a Space a space.
+    const field = document.createElement("textarea")
+    document.body.appendChild(field)
+    field.focus()
+    let reached = 0
+    field.addEventListener("keydown", () => reached++)
+    let dismissed = 0
+    const handle = mountSplash({ visible: true, onDismiss: () => { dismissed++ } })
+    try {
+      for (const key of ["Escape", "Enter", " "]) {
+        const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })
+        field.dispatchEvent(event)
+        expect(event.defaultPrevented).toBe(true)
+      }
+      expect(dismissed).toBe(3)
+      expect(reached).toBe(0)
+
+      // A chord is somebody else's (Ctrl+Enter sends, Alt+Space opens a window menu): not taken, not a skip.
+      const chord = new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true, cancelable: true })
+      field.dispatchEvent(chord)
+      expect(chord.defaultPrevented).toBe(false)
+      expect(dismissed).toBe(3)
+      expect(reached).toBe(1)
+
+      // Any other key goes through.
+      field.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true, cancelable: true }))
+      expect(reached).toBe(2)
+    } finally {
+      handle.dispose()
+      field.remove()
+    }
+  })
+
+  test("once the splash is leaving, the keys belong to the workbench again", () => {
+    const field = document.createElement("textarea")
+    document.body.appendChild(field)
+    let reached = 0
+    field.addEventListener("keydown", () => reached++)
+    const [visible, setVisible] = createSignal(true)
+    let disposeFn: (() => void) | undefined
+    createRoot((dispose) => {
+      const unmount = render(() => createComponent(Splash, { get visible() { return visible() } }), container)
+      disposeFn = () => {
+        unmount()
+        dispose()
+      }
+    })
+    try {
+      setVisible(false)
+      const event = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })
+      field.dispatchEvent(event)
+      expect(event.defaultPrevented).toBe(false)
+      expect(reached).toBe(1)
+    } finally {
+      disposeFn?.()
+      field.remove()
+    }
+  })
+
+  test("the skip hint sits on the status line's row, out of the flow, so the scene does not move", () => {
+    const css = readFileSync(join(import.meta.dir, "splash.css"), "utf8").replace(/\r\n/g, "\n")
+    const at = css.indexOf('[data-slot="splash-hint"] {')
+    expect(at).toBeGreaterThan(-1)
+    const body = css.slice(at, css.indexOf("}", at))
+    expect(body).toMatch(/position: absolute;/)
+    expect(body).toMatch(/right: 0;/)
+    expect(body).toMatch(/bottom: 0;/)
+    // Nothing that adds height to the column the approved scene was laid out in.
+    expect(body).not.toMatch(/margin-top|padding-top/)
+  })
+
+  test("the splash is not marked busy itself: a status that is busy is announced as nothing to wait for", () => {
+    const handle = mountSplash({ visible: true })
+    try {
+      expect(container.querySelector('[data-component="ade-splash"]')?.hasAttribute("aria-busy")).toBe(false)
+    } finally {
+      handle.dispose()
+    }
+  })
+
   test("sets data-leaving when visible flips to false, and unmounts after fade", async () => {
     let setVisibleSignal!: (v: boolean) => void
     let disposeFn: (() => void) | undefined
+    let unmount: (() => void) | undefined
 
     createRoot((dispose) => {
-      disposeFn = dispose
+      disposeFn = () => {
+        unmount?.()
+        dispose()
+      }
       const [visible, setVisible] = createSignal(true)
       setVisibleSignal = setVisible
-      render(() => createComponent(Splash, { get visible() { return visible() } }), container)
+      unmount = render(() => createComponent(Splash, { get visible() { return visible() } }), container)
     })
 
     try {
@@ -247,14 +327,18 @@ describe("splash component (step 3)", () => {
     let setVisibleSignal!: (v: boolean) => void
     let setStatusSignal!: (s: string | undefined) => void
     let disposeFn: (() => void) | undefined
+    let unmount: (() => void) | undefined
 
     createRoot((dispose) => {
-      disposeFn = dispose
+      disposeFn = () => {
+        unmount?.()
+        dispose()
+      }
       const [visible, setVisible] = createSignal(true)
       const [status, setStatus] = createSignal<string | undefined>("Inizializzazione...")
       setVisibleSignal = setVisible
       setStatusSignal = setStatus
-      render(
+      unmount = render(
         () => createComponent(Splash, {
           get visible() { return visible() },
           get status() { return status() },
@@ -293,12 +377,16 @@ describe("splash component (step 3)", () => {
     let dismissed = false
     let setVisibleSignal!: (v: boolean) => void
     let disposeFn: (() => void) | undefined
+    let unmount: (() => void) | undefined
 
     createRoot((dispose) => {
-      disposeFn = dispose
+      disposeFn = () => {
+        unmount?.()
+        dispose()
+      }
       const [visible, setVisible] = createSignal(true)
       setVisibleSignal = setVisible
-      render(
+      unmount = render(
         () => createComponent(Splash, {
           get visible() { return visible() },
           onDismiss: () => { dismissed = true },
@@ -467,10 +555,13 @@ describe("splash component (step 3)", () => {
     try {
       let setVisibleSignal!: (v: boolean) => void
       createRoot((dispose) => {
-        disposeRoot = dispose
         const [visible, setVisible] = createSignal(true)
         setVisibleSignal = setVisible
-        render(() => createComponent(Splash, { get visible() { return visible() } }), container)
+        const unmount = render(() => createComponent(Splash, { get visible() { return visible() } }), container)
+        disposeRoot = () => {
+          unmount()
+          dispose()
+        }
       })
 
       // Active listeners counted upon mount

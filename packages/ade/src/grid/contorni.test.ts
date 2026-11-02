@@ -199,6 +199,9 @@ describe("lint: no pane draws its focus in accent", () => {
             if (node.type !== "decl" || !/^(box-shadow|outline)$/.test(node.prop)) continue
             const value = node.value.trim()
             if (/^(none|0)$/.test(value) || OWN_TONE.test(value)) continue
+            // The contrast-theme fallback (UX-19): a transparent outline paints nothing in the normal themes, and in
+            // forced colours the system repaints it, so there is no ring colour here to measure.
+            if (/^2px solid (transparent|Highlight( !important)?)$/.test(value)) continue
             rings++
             // The token, with or without the fallback the voice package gives it
             // for a host that does not define it.

@@ -15,7 +15,3 @@
   width: 22px;
   height: 22px;
 }
-
-[data-slot="sheet-empty"] > [data-slot="empty-icon"] {
-  margin-inline: 0;
-}

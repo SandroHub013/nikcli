@@ -1,0 +1,314 @@
+/*
+ * Button, IconButton, Field, Notice and EmptyState (DS-8, DS-9, DS-10, DS-16, DS-17).
+ *
+ * Every rule is wrapped in :where(), so the primitive costs no specificity: a surface that needs one different
+ * margin, width or alignment says so in its own sheet and wins without a fight. What a surface may not do is
+ * redraw the control — its height, radius, ground, press and disabled look are decided here, once.
+ */
+
+/* ── Button ───────────────────────────────────────────────────────────────── */
+
+:where([data-ui="button"]) {
+  --ade-btn-bg: var(--ade-raised);
+  --ade-btn-fg: var(--ade-text);
+  --ade-btn-border: var(--ade-border-strong);
+  --ade-btn-bg-hover: var(--ade-hover);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ade-space-3);
+  box-sizing: border-box;
+  height: var(--ade-control-md);
+  padding: 0 var(--ade-space-6);
+  border: 1px solid var(--ade-btn-border);
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-btn-bg);
+  color: var(--ade-btn-fg);
+  font-family: inherit;
+  font-size: var(--ade-font-sm);
+  font-weight: var(--ade-weight-semibold);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: var(--ade-btn-transition);
+}
+
+:where([data-ui="button"][data-size="sm"]) {
+  height: var(--ade-control-sm);
+  padding: 0 var(--ade-space-5);
+}
+
+:where([data-ui="button"][data-size="lg"]) {
+  height: var(--ade-control-lg);
+  padding: 0 var(--ade-space-7);
+  border-radius: var(--ade-radius-md);
+  font-size: var(--ade-font-md);
+}
+
+:where([data-ui="button"][data-variant="primary"]) {
+  --ade-btn-bg: var(--ade-accent);
+  --ade-btn-fg: var(--ade-accent-fg);
+  --ade-btn-border: transparent;
+  --ade-btn-bg-hover: var(--ade-accent-strong);
+}
+
+:where([data-ui="button"][data-variant="ghost"]) {
+  --ade-btn-bg: transparent;
+  --ade-btn-fg: var(--ade-text-soft);
+  --ade-btn-border: transparent;
+}
+
+:where([data-ui="button"][data-variant="danger"]) {
+  --ade-btn-bg: var(--ade-error-bg);
+  --ade-btn-fg: var(--ade-error);
+  --ade-btn-border: color-mix(in srgb, var(--ade-error) 40%, transparent);
+  --ade-btn-bg-hover: color-mix(in srgb, var(--ade-error) 20%, transparent);
+}
+
+:where([data-ui="button"]:hover:not(:disabled)) {
+  background: var(--ade-btn-bg-hover);
+}
+
+:where([data-ui="button"][data-variant="ghost"]:hover:not(:disabled)) {
+  color: var(--ade-text);
+}
+
+:where([data-ui="button"]:active:not(:disabled)) {
+  transform: var(--ade-press);
+}
+
+/*
+ * Disabled: a sunken ground and weak text, drawn from the variables, not a dimmed copy of the enabled look (a primary
+ * at 45% is a faded orange that still invites a press). A busy button keeps its own look: it is working, not unavailable.
+ */
+:where([data-ui="button"]:disabled:not([aria-busy="true"])) {
+  --ade-btn-bg: var(--ade-sunken);
+  --ade-btn-fg: var(--ade-text-weak);
+  --ade-btn-border: var(--ade-border);
+  cursor: not-allowed;
+}
+
+/* A ghost has no ground to sink: it stays bare, with the weak text alone. */
+:where([data-ui="button"][data-variant="ghost"]:disabled:not([aria-busy="true"])) {
+  --ade-btn-bg: transparent;
+  --ade-btn-border: transparent;
+}
+
+/*
+ * Loading: the label stays where it is (so the button keeps its width) and goes transparent; a 12px ring turns
+ * on top of it. `aria-busy` is the one switch, so a screen reader hears the same state the eye sees.
+ */
+:where([data-ui="button"][aria-busy="true"]) {
+  color: transparent;
+  cursor: progress;
+}
+
+:where([data-ui="button"][aria-busy="true"])::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: var(--ade-icon-size);
+  height: var(--ade-icon-size);
+  border: 2px solid var(--ade-btn-fg);
+  border-right-color: transparent;
+  border-radius: var(--ade-radius-full);
+  animation: ade-button-spin var(--ade-loop) linear infinite var(--ade-loops, running);
+}
+
+@keyframes ade-button-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where([data-ui="button"][aria-busy="true"])::after {
+    animation: none;
+    border-right-color: var(--ade-btn-fg);
+    opacity: 0.6;
+  }
+}
+
+/* ── IconButton ───────────────────────────────────────────────────────────── */
+
+:where([data-ui="icon-button"]) {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  box-sizing: border-box;
+  width: var(--ade-control-md);
+  height: var(--ade-control-md);
+  padding: 0;
+  border: 0;
+  border-radius: var(--ade-radius-sm);
+  background: transparent;
+  color: var(--ade-text-soft);
+  cursor: pointer;
+  transition: var(--ade-btn-transition);
+}
+
+:where([data-ui="icon-button"][data-size="sm"]) {
+  width: var(--ade-control-icon-sm);
+  height: var(--ade-control-icon-sm);
+}
+
+/*
+ * A 20px glyph is a small target. The hit area grows to 24px with a transparent ::before (WCAG 2.5.8) while the
+ * glyph and the visible ground stay as drawn.
+ */
+:where([data-ui="icon-button"][data-size="sm"])::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+}
+
+:where([data-ui="icon-button"]:hover:not(:disabled)) {
+  background: var(--ade-hover);
+  color: var(--ade-text);
+}
+
+/* Under 24px a press scales to a flicker: only the ground answers (index.css, --ade-press). */
+:where([data-ui="icon-button"]:active:not(:disabled)) {
+  background: var(--ade-active);
+}
+:where([data-ui="icon-button"][data-size="md"]:active:not(:disabled)) {
+  transform: var(--ade-press);
+}
+
+:where([data-ui="icon-button"]:disabled) {
+  opacity: var(--ade-disabled-opacity);
+  cursor: not-allowed;
+}
+
+/* The cross, as the one mask every close control shares (DS-21). */
+:where([data-ui="icon-cross"]) {
+  display: block;
+  width: var(--ade-icon-size);
+  height: var(--ade-icon-size);
+  background: currentColor;
+  mask: var(--ade-icon-cross) center / contain no-repeat;
+}
+
+/* Colours forced: the mask's `currentColor` ground is forced to Canvas, and the cross vanishes on the Canvas behind it. */
+@media (forced-colors: active) {
+  :where([data-ui="icon-cross"]) {
+    forced-color-adjust: none;
+    background: ButtonText;
+  }
+}
+
+/* ── Field ────────────────────────────────────────────────────────────────── */
+
+:where([data-ui="field"]) {
+  box-sizing: border-box;
+  height: var(--ade-control-md);
+  min-width: 0;
+  padding: 0 var(--ade-space-5);
+  border: 1px solid var(--ade-control-border);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-sunken);
+  color: var(--ade-text);
+  font-family: inherit;
+  font-size: var(--ade-font-md);
+  transition:
+    border-color var(--ade-dur-fast) var(--ade-ease),
+    background var(--ade-dur-fast) var(--ade-ease),
+    box-shadow var(--ade-dur-fast) var(--ade-ease);
+}
+
+:where([data-ui="field"][data-size="sm"]) {
+  height: var(--ade-control-sm);
+}
+
+:where([data-ui="field"][data-shape="pill"]) {
+  border-radius: var(--ade-radius-full);
+}
+
+:where([data-ui="field"])::placeholder {
+  color: var(--ade-text-weak);
+}
+
+:where([data-ui="field"]:disabled) {
+  opacity: var(--ade-disabled-opacity);
+  cursor: not-allowed;
+}
+
+/* The ring is the global one (with its forced-colours outline); the border only keeps pace with it. */
+:where([data-ui="field"]:focus-visible) {
+  border-color: var(--ade-text-weak);
+}
+
+:where([data-ui="field"][aria-invalid="true"]) {
+  border-color: var(--ade-error);
+}
+
+:where([data-ui="field-message"]) {
+  display: block;
+  margin-top: var(--ade-space-2);
+  color: var(--ade-error);
+  font-size: var(--ade-font-xs);
+}
+
+/* ── Notice ───────────────────────────────────────────────────────────────── */
+
+:where([data-ui="notice"]) {
+  --ade-notice-fg: var(--ade-text-soft);
+  --ade-notice-bg: var(--ade-hover);
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-4);
+  box-sizing: border-box;
+  padding: var(--ade-space-3) var(--ade-space-5);
+  border: 1px solid color-mix(in srgb, var(--ade-notice-fg) 30%, transparent);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-notice-bg);
+  color: var(--ade-notice-fg);
+  font-size: var(--ade-font-sm);
+}
+
+:where([data-ui="notice"][data-tone="working"]) {
+  --ade-notice-fg: var(--ade-working);
+  --ade-notice-bg: var(--ade-working-bg);
+}
+
+:where([data-ui="notice"][data-tone="error"]) {
+  --ade-notice-fg: var(--ade-error);
+  --ade-notice-bg: var(--ade-error-bg);
+}
+
+:where([data-ui="notice-text"]) {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ── EmptyState ───────────────────────────────────────────────────────────── */
+
+:where([data-ui="empty-state"]) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--ade-space-3);
+  padding: var(--ade-space-9) var(--ade-space-7);
+  text-align: center;
+}
+
+:where([data-ui="empty-title"]) {
+  margin: 0;
+  color: var(--ade-text);
+  font-size: var(--ade-font-lg);
+  font-weight: var(--ade-weight-semibold);
+}
+
+:where([data-ui="empty-body"]) {
+  max-width: 36ch;
+  margin: 0;
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-md);
+}
+
+:where([data-ui="empty-state"] > [data-ui="button"]) {
+  margin-top: var(--ade-space-3);
+}

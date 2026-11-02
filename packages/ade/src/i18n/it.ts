@@ -227,6 +227,7 @@ export const it = {
   "sidebar.menu.restart": "Riavvia",
   "sidebar.menu.resume": "Riprendi",
   "sidebar.menu.close": "Chiudi",
+  "ui.notice.close": "Scarta l'avviso",
   "sidebar.menu.copyId": "Copia l'id",
   "sidebar.menu.openSession": "Apri la sessione",
   "sidebar.menu.newSession": "Nuova sessione",
@@ -683,6 +684,7 @@ export const it = {
 
   // Splash & logo
   "splash.aria": "Ragù Code si sta avviando",
+  "splash.skip": "Invio per saltare",
 
   // Voice shortcut & permission
   "voice.shortcut.feature.agent": "assistente vocale",
@@ -765,6 +767,7 @@ export const it = {
   "pane.mouseHint.tip":
     "Il programma riceve i clic e la rotella. Per selezionare e copiare il testo, tieni Maiusc e trascina. Ctrl+clic apre un link.",
   "pane.close": "Chiudi",
+  "pane.close.named": (title: string) => `Chiudi ${title}`,
   "hooks.foreign":
     "Di un'altra build di ADE, non di questa: questa non lo aggiorna e non lo rimuove, perché con quel file ci lavorano le sessioni dell'ADE ufficiale",
   "bar.raguVersion": (v: string) => `Ragù Code ${v}: è il programma con cui partono le sessioni, non ADE`,
@@ -806,7 +809,7 @@ export const it = {
   "tray.hide.notice":
     "ADE resta nell'area di notifica finché un collegamento chat è acceso, così le chat continuano a raggiungere i bot. Il microfono si chiude finché la finestra è nascosta. Per riaprirla: clic sull'icona; per chiudere ADE: Esci, nel menu dell'icona.",
   "bell.title": "Notifiche",
-  "bell.dismiss": "Togli",
+  "bell.dismiss.named": (text: string) => `Togli: ${text}`,
 
   // Export, stuck note
   "record.export.busy": "Un'esportazione è già in corso.",
@@ -1546,6 +1549,8 @@ export const it = {
   "shots.open.named": (name: string) => `Apri ${name}`,
   "shots.more.left": "Schermate precedenti",
   "shots.more.right": "Altre schermate",
+  "shots.send": "Manda alla sessione a fuoco",
+  "shots.send.failed": "Non si è potuta dare alla sessione a fuoco (non ce n'è una, o aspetta una risposta): scegline una libera e riprova.",
   "shots.close": "Chiudi",
 
   // Extensions

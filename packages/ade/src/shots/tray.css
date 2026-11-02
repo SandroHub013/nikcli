@@ -307,9 +307,22 @@
   cursor: grabbing;
 }
 
-[data-slot="shot"]:focus-visible {
+/* The open control inside fills the tile, and the tile clips; so the ring is drawn on the tile when it is focused. */
+[data-slot="shot"]:has([data-slot="shot-open"]:focus-visible) {
   outline: none;
   box-shadow: var(--ade-focus-ring);
+}
+
+[data-slot="shot-open"] {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: inherit;
+}
+
+[data-slot="shot-open"]:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 [data-slot="shot-image"] {
@@ -360,6 +373,13 @@
     transform var(--ade-dur-fast) var(--ade-ease);
 }
 
+/* 18px to look at, 24px to hit (WCAG 2.5.8, UX-18): the reach is drawn, not the glyph. */
+[data-slot="shot-dismiss"]::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+}
+
 [data-slot="shot-dismiss"]:hover {
   background: var(--ade-surface);
 }
@@ -373,11 +393,23 @@
   box-shadow: var(--ade-focus-ring);
 }
 
+/* Shown when the tile is pointed at or holds the focus; the ring is only for the dismiss itself having it. */
 [data-slot="shot"]:hover [data-slot="shot-dismiss"],
+[data-slot="shot"]:focus-within [data-slot="shot-dismiss"] {
+  opacity: 1;
+}
+
 [data-slot="shot-dismiss"]:focus-visible {
   opacity: 1;
   outline: none;
   box-shadow: var(--ade-focus-ring);
+}
+
+/* Colours forced: the tile clips what is outside it, so the Highlight outline is drawn inside (index.css offsets it out). */
+@media (forced-colors: active) {
+  [data-slot="shot-open"]:focus-visible {
+    outline-offset: -2px;
+  }
 }
 
 /* ── the opened screenshot ─────────────────────────────────────────────────── */
@@ -390,6 +422,13 @@
   place-items: center;
   padding: var(--ade-space-6);
   background: var(--ade-scrim);
+}
+
+/* The Sheet's dialog is a bare layout frame, and a frame is capped at --ade-surface-max (560px) by ui/layout.css:
+   a 1920px screenshot would open about 546px wide. The figure inside bounds the picture, so the frame takes none. */
+[data-component="shot-viewer"] [data-layout="frame"] {
+  width: auto;
+  max-width: none;
 }
 
 [data-slot="shot-viewer-frame"] {
@@ -446,24 +485,10 @@
   white-space: nowrap;
 }
 
-[data-slot="shot-viewer-close"] {
+/* The caption's buttons are Buttons (sm); they only must not shrink in the caption row. */
+[data-slot="shot-viewer-close"],
+[data-slot="shot-viewer-send"] {
   flex: 0 0 auto;
-  padding: var(--ade-space-1) var(--ade-space-3);
-  border: 1px solid var(--ade-border);
-  border-radius: var(--ade-radius-sm);
-  background: var(--ade-raised);
-  color: var(--ade-text);
-  font-family: inherit;
-  font-size: inherit;
-  cursor: pointer;
-}
-
-[data-slot="shot-viewer-close"]:hover {
-  background: var(--ade-hover);
-}
-
-[data-slot="shot-viewer-close"][data-tone="danger"] {
-  color: var(--ade-error);
 }
 
 [data-slot="shot-viewer-ask"],

@@ -181,9 +181,11 @@ import { willLaunch, type LaunchEntry } from "../session-new/launch"
 import type { PresetId } from "../session-new/preset"
 import { defaultPaneTitle } from "./pane-title"
 import { Sidebar } from "../sidebar"
+import { formatDroppedPaths } from "../sidebar/file-drag"
+import { IconButton, Notice as NoticeBanner } from "../ui/controls"
 import { SessionGrid } from "../grid/session-grid"
 import { requestRename } from "../grid/rename"
-import { focusResizeGrip } from "../grid/focus-input"
+import { focusPane, focusResizeGrip } from "../grid/focus-input"
 import { lazyComponent } from "../ui/lazy-component"
 import { EmptyProject } from "./empty-project"
 import { ProjectBar } from "./project-bar"
@@ -962,6 +964,9 @@ export function Workbench() {
    * the notice is now the shell's own, rendered above the section.
    */
   const [notice, setNotice] = createSignal<string>()
+  // What the strip is showing: an error is announced as an alert, the rest are read in turn.
+  const [noticeKind, setNoticeKind] = createSignal<NoticeKind>("error")
+  const noticeRole = (): "alert" | "status" => (noticeKind() === "error" ? "alert" : "status")
   // Where the last answer of a sheet went, once the sheet is gone (`surface/toast.ts`).
   const toast = createToast()
 
@@ -986,6 +991,7 @@ export function Workbench() {
   /** Says it once, in both places: the strip now, the bell afterwards. */
   const report = (text: string, kind: NoticeKind = "error", paneId?: string) => {
     setNotice(text)
+    setNoticeKind(kind)
     setNotices((list) => addNotice(list, { kind, text, at: Date.now(), ...(paneId ? { paneId } : {}) }))
   }
   /** The kept copy of the saved sessions put back as the workspace, and the page reloaded to read it. After the user's yes only. */
@@ -2941,14 +2947,36 @@ export function Workbench() {
    * Enter: `dictationHold` says it at length. The words are not written and the
    * pane says why, so the user answers with the keys or the card's buttons and
    * dictates again afterwards.
+   *
+   * Says whether the text was written, for a caller that has to tell the user it was not.
    */
-  const typeAsUser = (paneId: string, text: string) => {
+  const typeAsUser = (paneId: string, text: string): boolean => {
     const session = running.get(paneId)
-    if (!session) return
-    if (dictationHold({ alive: true, questionOpen: questionOpen(paneId) }))
-      return tellPane(paneId, t("note.dictationHeld"))
+    if (!session) return false
+    if (dictationHold({ alive: true, questionOpen: questionOpen(paneId) })) {
+      tellPane(paneId, t("note.dictationHeld"))
+      return false
+    }
     records.typed.update(paneId, (line) => typedAfter(line, text, Date.now()))
     session.write(text)
+    return true
+  }
+
+  /**
+   * Gives a screenshot to the session that has the focus, from the keyboard: what a drop onto it does, for the
+   * people who cannot drag (UX-17, WCAG 2.1.1). The path goes into the line, not submitted, relative to the
+   * project and quoted like a dropped one; `false` when no session is there to take it.
+   */
+  const sendShotToFocused = (path: string): boolean => {
+    const paneId = wb().focusedId
+    const text = formatDroppedPaths([path], project()?.root)
+    if (!paneId || !text || !running.get(paneId)) return false
+    // False when the text was held back (a question is open, or a dictation is held): the viewer then stays and says so.
+    if (!typeAsUser(paneId, `${text} `)) return false
+    // The caret goes to the terminal it wrote into, while the viewer is still open: the viewer gives the focus back to
+    // whatever last took it from the sheet, so closing it next lands here and not on the tile behind it.
+    focusPane(document.querySelector(`[data-pane-id="${paneId}"]`))
+    return true
   }
 
   /**
@@ -10382,38 +10410,17 @@ export function Workbench() {
       </header>
 
       <Show when={voiceNotice()}>
-        <div
+        {/* A Notice, not a hand-styled div: it escaped every stylesheet test with its inline style (DS-16). It stays an
+            alert — a voice problem is something to hear at once — in the working tone it always had. */}
+        <NoticeBanner
+          tone="working"
           role="alert"
           data-slot="ade-voice-notice"
-          style={{
-            display: "flex",
-            "align-items": "center",
-            "justify-content": "space-between",
-            padding: "var(--ade-space-2) var(--ade-space-6)",
-            background: "var(--ade-working-bg)",
-            color: "var(--ade-working)",
-            "border-bottom": "1px solid var(--ade-border)",
-            "font-size": "var(--ade-font-sm)",
-            "font-family": "var(--ade-sans)",
-          }}
+          closeLabel={t("bar.dismissNotice")}
+          onClose={() => setVoiceNotice(undefined)}
         >
-          <span>{voiceNotice()}</span>
-          <button
-            type="button"
-            style={{
-              background: "transparent",
-              border: "none",
-              color: "inherit",
-              cursor: "pointer",
-              "font-size": "var(--ade-font-sm)",
-              padding: "0 var(--ade-space-2)",
-            }}
-            onClick={() => setVoiceNotice(undefined)}
-            aria-label={t("bar.dismissNotice")}
-          >
-            ✕
-          </button>
-        </div>
+          {voiceNotice()}
+        </NoticeBanner>
       </Show>
 
       <div data-slot="ade-body" data-sidebar-hidden={sidebarHidden() ? "true" : undefined}>
@@ -10463,6 +10470,7 @@ export function Workbench() {
               load={shotSource.load}
               onDismiss={shotSource.dismiss}
               onDelete={shotSource.remove}
+              onSend={sendShotToFocused}
             />
           }
           /*
@@ -10573,7 +10581,6 @@ export function Workbench() {
                   data-action="notifications"
                   ref={noticesButton}
                   data-tone={bellTone(notices())}
-                  aria-haspopup="menu"
                   aria-expanded={noticesOpen()}
                   onClick={() => {
                     const opening = !noticesOpen()
@@ -10610,7 +10617,7 @@ export function Workbench() {
                   <div
                     data-slot="ade-menu"
                     data-wide="true"
-                    role="menu"
+                    role="region"
                     aria-label={t("bell.title")}
                     ref={(menu) =>
                       onCleanup(bindMenu(menu, { close: () => setNoticesOpen(false), anchor: noticesButton }))
@@ -10629,9 +10636,10 @@ export function Workbench() {
                       {checkingUpdate() ? t("update.checking") : t("palette.update.check")}
                     </button>
                     <Show when={notices().length > 0} fallback={<p data-slot="ade-menu-empty">{t("bell.empty")}</p>}>
+                      <div role="list" aria-label={t("bell.title")}>
                       <For each={notices()}>
                         {(notice) => (
-                          <div data-slot="ade-notice-row" data-kind={notice.kind}>
+                          <div data-slot="ade-notice-row" data-kind={notice.kind} role="listitem">
                             <span data-slot="ade-notice-text">{notice.text}</span>
                             <Show when={notice.restore}>
                               {(copy) => (
@@ -10724,17 +10732,19 @@ export function Workbench() {
                                 </Show>
                               )}
                             </Show>
-                            <button
-                              type="button"
+                            <IconButton
+                              size="sm"
                               data-slot="ade-notice-dismiss"
+                              label={t("bell.dismiss.named", notice.text)}
+                              title={t("bar.dismissNotice")}
                               onClick={() => setNotices((list) => dismissNotice(list, notice.id))}
-                              aria-label={t("bell.dismiss")}
                             >
-                              ×
-                            </button>
+                              <span data-ui="icon-cross" aria-hidden="true" />
+                            </IconButton>
                           </div>
                         )}
                       </For>
+                      </div>
                     </Show>
                   </div>
                 </Show>
@@ -10782,24 +10792,31 @@ export function Workbench() {
               read. */}
           <Show when={notice()}>
             {(text) => (
-              <div data-slot="ade-notice" role="status">
-                <span data-slot="ade-notice-text">{text()}</span>
-                <Show when={noticeAction()?.text === text() ? noticeAction() : undefined}>
-                  {(action) => (
-                    <button type="button" data-slot="ade-notice-action" onClick={() => action().run()}>
-                      {action().label}
-                    </button>
-                  )}
-                </Show>
-                <button
-                  type="button"
-                  data-slot="ade-notice-close"
-                  onClick={() => setNotice(undefined)}
-                  aria-label={t("bar.dismissNotice")}
-                >
-                  ✕
-                </button>
-              </div>
+              // Keyed on the role: a role changed on a live element is not reliably announced, so going from an info to
+              // an error re-creates the strip and the reader hears the alert inserted. Not keyed on the text: info after
+              // info must still be read.
+              <Show when={noticeRole()} keyed>
+                {(role) => (
+                  <div data-slot="ade-notice" role={role}>
+                    <span data-slot="ade-notice-text">{text()}</span>
+                    <Show when={noticeAction()?.text === text() ? noticeAction() : undefined}>
+                      {(action) => (
+                        <button type="button" data-slot="ade-notice-action" onClick={() => action().run()}>
+                          {action().label}
+                        </button>
+                      )}
+                    </Show>
+                    <IconButton
+                      size="sm"
+                      data-slot="ade-notice-close"
+                      label={t("bar.dismissNotice")}
+                      onClick={() => setNotice(undefined)}
+                    >
+                      <span data-ui="icon-cross" aria-hidden="true" />
+                    </IconButton>
+                  </div>
+                )}
+              </Show>
             )}
           </Show>
 

@@ -1,5 +1,6 @@
 import { For, Show, createMemo, createSignal } from "solid-js"
 import { EmptyIcon } from "../ui/empty-icon"
+import { EmptyState } from "../ui/controls"
 import { designAnswerByline, formatDay, formatMoment } from "./answer"
 import { isUsersOwnAnswer } from "../decisions/answer"
 import { submitControl } from "./card"
@@ -13,6 +14,7 @@ import "./design.css"
 import { t } from "../i18n"
 import { errorMessage } from "../session-new/start-failure"
 import { askerName } from "../choices/list"
+import { Button } from "../ui/controls"
 
 export function DesignPane(props: {
   hub: DesignHub
@@ -118,11 +120,9 @@ export function DesignPane(props: {
 
       <div data-slot="design-body">
         <Show when={!props.hub.register.path()}>
-          <div data-slot="sheet-empty">
-            <EmptyIcon name="design" />
-            <b>{t("design.noProject")}</b>
-            <span>{t("design.noProject.hint")}</span>
-          </div>
+          <EmptyState data-slot="sheet-empty" mark={<EmptyIcon name="design" />} title={t("design.noProject")}>
+              {t("design.noProject.hint")}
+            </EmptyState>
         </Show>
 
         <Show when={props.hub.register.error()}>
@@ -255,9 +255,8 @@ export function DesignPane(props: {
                                 )
                               : t("design.change.confirm", proposal.k)}
                           </span>
-                          <button
-                            type="button"
-                            data-slot="design-submit"
+                          <Button
+                            data-slot="design-submit" variant="primary" size="lg"
                             disabled={props.hub.busy(proposal.k)}
                             onClick={() => {
                               setConfirmingReopen(undefined)
@@ -265,7 +264,7 @@ export function DesignPane(props: {
                             }}
                           >
                             {t("design.reopen")}
-                          </button>
+                          </Button>
                           <button type="button" data-slot="design-ghost" onClick={() => setConfirmingReopen(undefined)}>
                             {t("new.cancel")}
                           </button>
@@ -354,9 +353,9 @@ function DesignRecipientPicker(props: { hub: DesignHub; queued: number }) {
               props.hub.sessions().find((p) => p.id === pending())?.title ?? pending() ?? "",
             )}
           </span>
-          <button type="button" data-slot="design-submit" onClick={applyPending}>
+          <Button data-slot="design-submit" variant="primary" size="lg" onClick={applyPending}>
             {t("design.recipient.deliver")}
-          </button>
+          </Button>
           <button type="button" data-slot="design-ghost" onClick={() => setPending(undefined)}>
             {t("new.cancel")}
           </button>

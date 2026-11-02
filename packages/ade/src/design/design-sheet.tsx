@@ -11,6 +11,8 @@ import { projectRootFromRegisterPath, type DesignHub } from "./hub"
 import { bucketProposals, type DesignProposal } from "./state"
 import "./design.css"
 import { t } from "../i18n"
+import { EmptyIcon } from "../ui/empty-icon"
+import { EmptyState } from "../ui/controls"
 import { errorMessage } from "../session-new/start-failure"
 
 export function DesignSheet(props: {
@@ -155,10 +157,9 @@ export function DesignSheet(props: {
           when={current()?.k}
           keyed
           fallback={
-            <div data-slot="sheet-empty">
-              <b>{t("design.none")}</b>
-              <span>{t("design.sheet.empty")}</span>
-            </div>
+            <EmptyState data-slot="sheet-empty" mark={<EmptyIcon name="design" />} title={t("design.none")}>
+                {t("design.sheet.empty")}
+              </EmptyState>
           }
         >
           {(k) => {

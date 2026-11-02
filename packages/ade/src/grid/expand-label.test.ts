@@ -15,10 +15,26 @@ const renderer = readFileSync(join(dir, "..", "surface", "pane-renderer.tsx"), "
 describe("the expanded pane's button says it reduces", () => {
   test("the pane actions and the pane's own button pick the label from `expanded`", () => {
     expect(actions).toContain('aria-label={props.expanded ? t("pane.restore") : t("pane.expand")}')
-    expect(pane).toContain(
-      "<PaneActions onExpand={() => props.onExpand?.()} onClose={() => props.onClose?.()} expanded={props.expanded}>",
-    )
+    expect(pane).toMatch(/<PaneActions onExpand=\{\(\) => props\.onExpand\?\.\(\)\}[^\n]*expanded=\{props\.expanded\}/)
     expect(pane).toContain('aria-label={props.expanded ? t("pane.restore") : t("pane.expand")}')
+  })
+
+  /*
+   * UX-21. The narrow header swaps the two buttons for one drawn as «⋯», which means «more actions» everywhere else
+   * in ADE and here only expanded the pane; and the close button was named «Chiudi» with no word of what it closes.
+   */
+  test("the narrow header's single button is drawn as an expand, not as «more actions»", () => {
+    const more = pane.slice(pane.indexOf('class="act more"'), pane.indexOf("</button>", pane.indexOf('class="act more"')))
+    expect(more).not.toContain("<circle")
+    expect(more).toContain("M3 6V3h3M10 3h3v3M13 10v3h-3M6 13H3v-3")
+  })
+
+  test("the close button names the pane it closes", async () => {
+    expect(actions).toContain('t("pane.close.named", props.title)')
+    expect(pane).toMatch(/<PaneActions [^\n]*title=\{props\.title\}/)
+    const { translate } = await import("../i18n")
+    expect(translate("it", "pane.close.named", "Claude 2")).toBe("Chiudi Claude 2")
+    expect(translate("en", "pane.close.named", "Claude 2")).toBe("Close Claude 2")
   })
 
   test("a session pane is told when it fills the grid", () => {

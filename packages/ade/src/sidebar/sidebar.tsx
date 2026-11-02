@@ -73,6 +73,7 @@ import {
 import { mergeChildren, markDirectoryError } from "./fs-tree"
 import { describeStats, type StatView } from "./system-stats"
 import { bindMenu } from "../ui/menu"
+import { Button, IconButton } from "../ui/controls"
 import { t } from "../i18n"
 import { activityLabel, isReadyActivity } from "../grid/activity"
 import { STATE_FULL, stateOfSession, type PaneState } from "../grid/pane-state"
@@ -228,11 +229,10 @@ export function WorkspaceHeaderRow(props: {
         {props.row.workspace.name}
       </span>
       <Show when={props.onSelectProject}>
-        <button
-          type="button"
+        <IconButton
+          size="sm"
           data-slot="workspace-open-project"
-          title={t("sidebar.openProjectSessions")}
-          aria-label={t("sidebar.openProjectSessions")}
+          label={t("sidebar.openProjectSessions")}
           onClick={(e) => {
             e.stopPropagation()
             props.onSelectProject?.(props.row.id)
@@ -253,7 +253,7 @@ export function WorkspaceHeaderRow(props: {
               stroke-linejoin="round"
             />
           </svg>
-        </button>
+        </IconButton>
       </Show>
       <Show when={props.row.workspace.missing}>
         <Badge
@@ -1303,13 +1303,7 @@ export function Sidebar(props: SidebarProps) {
             </button>
             <div data-slot="section-actions">
               <Show when={props.onAddProject}>
-                <button
-                  type="button"
-                  data-slot="section-add"
-                  aria-label={t("sidebar.addSpace")}
-                  title={t("sidebar.addSpace")}
-                  onClick={() => props.onAddProject?.()}
-                >
+                <IconButton size="sm" data-slot="section-add" label={t("sidebar.addSpace")} onClick={() => props.onAddProject?.()}>
                   <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
                     <path
                       d="M6 2v8M2 6h8"
@@ -1319,16 +1313,10 @@ export function Sidebar(props: SidebarProps) {
                       stroke-linecap="round"
                     />
                   </svg>
-                </button>
+                </IconButton>
               </Show>
               <Show when={props.onAddRemote}>
-                <button
-                  type="button"
-                  data-slot="section-add"
-                  aria-label={t("sidebar.addRemote")}
-                  title={t("sidebar.addRemote")}
-                  onClick={() => props.onAddRemote?.()}
-                >
+                <IconButton size="sm" data-slot="section-add" label={t("sidebar.addRemote")} onClick={() => props.onAddRemote?.()}>
                   <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
                     <rect
                       x="1.5"
@@ -1349,7 +1337,7 @@ export function Sidebar(props: SidebarProps) {
                       stroke-linejoin="round"
                     />
                   </svg>
-                </button>
+                </IconButton>
               </Show>
             </div>
           </div>
@@ -1426,13 +1414,7 @@ export function Sidebar(props: SidebarProps) {
             </button>
             <div data-slot="section-actions">
               <Show when={props.onNewSession}>
-                <button
-                  type="button"
-                  data-slot="section-add"
-                  aria-label={t("sidebar.newAgentSession")}
-                  title={t("sidebar.newAgentSession")}
-                  onClick={() => props.onNewSession?.()}
-                >
+                <IconButton size="sm" data-slot="section-add" label={t("sidebar.newAgentSession")} onClick={() => props.onNewSession?.()}>
                   <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
                     <path
                       d="M6 2v8M2 6h8"
@@ -1442,7 +1424,7 @@ export function Sidebar(props: SidebarProps) {
                       stroke-linecap="round"
                     />
                   </svg>
-                </button>
+                </IconButton>
               </Show>
             </div>
           </div>
@@ -1455,9 +1437,9 @@ export function Sidebar(props: SidebarProps) {
                   <div data-slot="active-agents-empty">
                     <p data-slot="section-empty">{t("sidebar.noAgents")}</p>
                     <Show when={props.onNewSession}>
-                      <button type="button" data-slot="empty-action-btn" onClick={() => props.onNewSession?.()}>
+                      <Button size="sm" data-slot="empty-action-btn" onClick={() => props.onNewSession?.()}>
                         {t("sidebar.startAgent")}
-                      </button>
+                      </Button>
                     </Show>
                   </div>
                 }
@@ -1539,14 +1521,14 @@ export function Sidebar(props: SidebarProps) {
                   onKeyDown={onSearchKeyDown}
                 />
                 <Show when={searchQuery()}>
-                  <button
-                    type="button"
+                  <IconButton
+                    size="sm"
                     data-slot="search-clear"
-                    aria-label={t("sidebar.search.clear")}
+                    label={t("sidebar.search.clear")}
                     onClick={() => setSearchQuery("")}
                   >
-                    ×
-                  </button>
+                    <span data-ui="icon-cross" aria-hidden="true" />
+                  </IconButton>
                 </Show>
               </div>
               {/* Two chips that cannot both be off: turning off the last one

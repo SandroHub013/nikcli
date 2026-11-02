@@ -2,6 +2,7 @@ import { createEffect, createSignal, onCleanup, Show } from "solid-js"
 import { t } from "../../i18n"
 import { remainingClock, remainingMs } from "../approvals"
 import type { PairingLinkInfo } from "./panel-state"
+import { Button } from "../../ui/controls"
 
 /** The address without what comes after the `?`: `https://t.me/mio_bot?start=…` as `t.me/mio_bot`. Never the token. */
 export function addressOf(url: string): string {
@@ -55,15 +56,14 @@ export function PairLink(props: {
         when={props.link()}
         fallback={
           <div data-slot="gateway-row">
-            <button
-              type="button"
+            <Button
               data-slot="bots-btn"
-              data-tone="primary"
+              variant="primary"
               disabled={props.busy() || !props.live()}
               onClick={() => props.onMake()}
             >
               {t("gateway.panel.linkMake")}
-            </button>
+            </Button>
             <Show when={!props.live()}>
               <span data-slot="bots-hint">{t("gateway.panel.linkNeedsOn")}</span>
             </Show>
@@ -101,9 +101,9 @@ export function PairLink(props: {
               <p data-slot="bots-hint">{t("gateway.panel.linkHow")}</p>
             </Show>
             <div data-slot="gateway-row">
-              <button type="button" data-slot="bots-btn" disabled={props.busy() || !props.live()} onClick={() => props.onMake()}>
+              <Button data-slot="bots-btn" disabled={props.busy() || !props.live()} onClick={() => props.onMake()}>
                 {t("gateway.panel.linkAnother")}
-              </button>
+              </Button>
             </div>
           </div>
         )}

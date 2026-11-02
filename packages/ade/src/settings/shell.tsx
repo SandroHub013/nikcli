@@ -1,5 +1,6 @@
 import { createEffect, createMemo, createSignal, For, onMount, Show, type JSX } from "solid-js"
 import { Sheet } from "../ui/sheet"
+import { Button, IconButton } from "../ui/controls"
 import { t } from "../i18n"
 import {
   CATEGORIES,
@@ -191,13 +192,9 @@ export function SettingsShell(props: SettingsShellProps): JSX.Element {
             <Show when={props.version}>
               {(v) => <span data-slot="settings-version">ADE {v()}</span>}
             </Show>
-            <button
-              type="button"
-              data-slot="settings-check-update"
-              onClick={() => props.onCheckUpdates?.()}
-            >
+            <Button variant="ghost" size="sm" data-slot="settings-check-update" onClick={() => props.onCheckUpdates?.()}>
               {t("palette.update.check")}
-            </button>
+            </Button>
           </div>
         </nav>
 
@@ -211,15 +208,9 @@ export function SettingsShell(props: SettingsShellProps): JSX.Element {
               </h3>
               <p data-slot="settings-subtitle">{t(currentCategory().descKey)}</p>
             </div>
-            <button
-              type="button"
-              data-slot="settings-close"
-              onClick={props.onClose}
-              aria-label={t("sidebar.menu.close")}
-              title={t("sidebar.menu.close")}
-            >
+            <IconButton data-slot="settings-close" label={t("sidebar.menu.close")} onClick={props.onClose}>
               <CloseIcon />
-            </button>
+            </IconButton>
           </header>
 
           {/* Tab list */}
@@ -275,13 +266,9 @@ export function SettingsShell(props: SettingsShellProps): JSX.Element {
           {/* Footer */}
           <footer data-slot="settings-footer">
             {props.footerExtra?.(activeCategory())}
-            <button
-              type="button"
-              data-slot="settings-done"
-              onClick={props.onClose}
-            >
+            <Button variant="secondary" size="lg" data-slot="settings-done" onClick={props.onClose}>
               {t("settings.done")}
-            </button>
+            </Button>
           </footer>
         </div>
       </div>

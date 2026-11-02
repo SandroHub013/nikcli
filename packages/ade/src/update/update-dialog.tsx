@@ -3,6 +3,7 @@ import { Overlay, Surface } from "../ui/layout"
 import { locale, t } from "../i18n"
 import { nextFocusIndex, updateDialogView } from "./dialog-state"
 import { formatMb, progressPercent, type UpdateProgress } from "./progress"
+import { Button } from "../ui/controls"
 
 /**
  * The question ADE asks before updating itself (S71), drawn in the window.
@@ -166,16 +167,16 @@ export function UpdateDialog(props: {
               <kbd>{t("update.dialog.escKey")}</kbd> {t("update.restart.later").toLocaleLowerCase(locale())}
             </span>
           </Show>
-          <button type="button" data-slot="decision-ghost" disabled={!view().ghost.enabled} onClick={refuse}>
+          <Button data-slot="decision-ghost" disabled={!view().ghost.enabled} onClick={refuse}>
             {view().ghost.label === "close"
               ? t("update.dialog.close")
               : view().ghost.label === "hide"
                 ? t("update.dialog.hide")
                 : t("update.restart.later")}
-          </button>
-          <button type="button" data-slot="decision-submit" disabled={!view().submit.enabled} onClick={props.onGo}>
+          </Button>
+          <Button data-slot="decision-submit" variant="primary" disabled={!view().submit.enabled} onClick={props.onGo}>
             {view().submit.label === "retry" ? t("update.dialog.retry") : t("update.restart.ok")}
-          </button>
+          </Button>
         </footer>
       </Surface>
     </Overlay>

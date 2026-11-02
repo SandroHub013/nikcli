@@ -6,8 +6,8 @@ import "./empty-icon.css"
  * sheet decides its colour and size. One per view. The pixel pot is not here on purpose: it is for the screen
  * with no project (`surface/empty-project.tsx`), and anywhere else it would stop meaning «this is Ragu Code».
  *
- * A small stand-in for the shared `EmptyState` component, which comes with the Button/Field/Notice work: it
- * holds only the icon and where it goes.
+ * The mark that goes into the shared `EmptyState` (`ui/controls.tsx`): `<EmptyState mark={<EmptyIcon name="chat" />} …>`.
+ * It holds only the icon; the title, the line of help and the action are the component's.
  */
 export const EMPTY_ICONS = {
   /** A prompt in a terminal window. */

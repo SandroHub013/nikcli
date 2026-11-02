@@ -427,41 +427,17 @@
   margin-right: var(--ade-space-4);
 }
 
+/* An IconButton (sm, 20px): the row only decides that it shows on hover or focus. */
 [data-slot="section-add"] {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  flex: 0 0 auto;
-  padding: 0;
-  border: 0;
-  border-radius: var(--ade-radius-sm);
-  background: transparent;
-  color: var(--ade-text-weak);
-  cursor: pointer;
   opacity: 0;
   transition:
     opacity var(--ade-dur-fast) var(--ade-ease),
-    transform var(--ade-dur-fast) var(--ade-ease);
-}
-
-[data-slot="section-add"]:active {
-  transform: var(--ade-press);
+    var(--ade-btn-transition);
 }
 
 [data-slot="section-header-row"]:hover [data-slot="section-add"],
 [data-slot="section-add"]:focus-visible {
   opacity: 1;
-}
-
-[data-slot="section-add"]:hover {
-  background: var(--ade-hover);
-  color: var(--ade-text);
-}
-
-[data-slot="section-add"]:focus-visible {
-  outline: none;
-  box-shadow: var(--ade-focus-ring);
 }
 
 /*
@@ -1005,35 +981,17 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
   margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: var(--ade-radius-sm);
-  background: transparent;
-  color: var(--ade-text-weak);
-  cursor: pointer;
+  /* An IconButton (sm, 20px): here only where it sits, and that it shows on hover or focus. */
   opacity: 0;
   transition:
     opacity var(--ade-dur-fast) var(--ade-ease),
-    background var(--ade-dur-fast) var(--ade-ease),
-    color var(--ade-dur-fast) var(--ade-ease);
+    var(--ade-btn-transition);
 }
 
 [data-slot="workspace-header"]:hover [data-slot="workspace-open-project"],
 [data-slot="workspace-open-project"]:focus-visible {
   opacity: 1;
-}
-
-[data-slot="workspace-open-project"]:hover {
-  background: var(--ade-hover);
-  color: var(--ade-text);
-}
-
-[data-slot="workspace-open-project"]:focus-visible {
-  outline: none;
-  box-shadow: var(--ade-focus-ring);
 }
 
 /* Look and tone from `Badge` in `ui/layout`; here only where it sits in the row. */
@@ -1317,32 +1275,6 @@
   text-align: center;
 }
 
-[data-slot="empty-action-btn"] {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--ade-space-2);
-  padding: var(--ade-space-2) var(--ade-space-5);
-  border-radius: var(--ade-radius-sm);
-  font-size: var(--ade-font-xs);
-  font-weight: var(--ade-weight-medium);
-  background: var(--ade-active);
-  color: var(--ade-text);
-  border: 1px solid var(--ade-border);
-  cursor: pointer;
-  transition:
-    background var(--ade-dur-fast) var(--ade-ease),
-    transform var(--ade-dur-fast) var(--ade-ease);
-}
-
-[data-slot="empty-action-btn"]:active {
-  transform: var(--ade-press);
-}
-
-[data-slot="empty-action-btn"]:hover {
-  background: var(--ade-hover);
-  border-color: var(--ade-text-weak);
-}
-
 /* ══ Conchiglia · C2 "Perla" ══════════════════════════════════════════════════
  *
  * La variante scelta fra le tre evoluzioni della conchiglia
@@ -1573,28 +1505,9 @@ aside[data-component="ade-sidebar"] {
   position: relative;
 }
 
+/* An IconButton (sm): it sits inside the field, so the field only keeps a margin from its edge. */
 [data-slot="search-clear"] {
-  flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-  margin-right: 4px;
-  border: 0;
-  border-radius: var(--ade-radius-full);
-  background: transparent;
-  color: var(--ade-text-weak);
-  font-size: var(--ade-font-lg);
-  line-height: 1;
-  cursor: pointer;
-  transition: var(--ade-btn-transition);
-}
-
-[data-slot="search-clear"]:active {
-  transform: var(--ade-press);
-}
-
-[data-slot="search-clear"]:hover {
-  background: var(--ade-hover);
-  color: var(--ade-text);
+  margin-right: var(--ade-space-2);
 }
 
 [data-slot="search-kinds"] {
@@ -1779,7 +1692,7 @@ aside[data-component="ade-sidebar"] {
 
 @container ade-sidebar (max-width: 279px) {
   [data-component="ade-sidebar"] [data-slot="workspace-count"] {
-    margin-right: calc(18px + var(--ade-space-4));
+    margin-right: calc(var(--ade-control-icon-sm) + var(--ade-space-4));
   }
 
   [data-slot="workspace-open-project"] {
@@ -1790,8 +1703,9 @@ aside[data-component="ade-sidebar"] {
 @container (max-width: 230px) {
   [data-slot="sidebar-settings"],
   [data-slot="sidebar-footer-actions"] [data-slot="ade-icon"] {
-    width: 22px;
-    height: 22px;
+    /* 24px, the WCAG 2.5.8 minimum: they were 22 here (UX-18). */
+    width: 24px;
+    height: 24px;
   }
 
   [data-slot="sidebar-stats"] {

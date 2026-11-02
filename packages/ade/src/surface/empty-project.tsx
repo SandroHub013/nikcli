@@ -1,6 +1,7 @@
 import { Show } from "solid-js"
 import { t } from "../i18n"
 import { RaguPotMark } from "./ragu-pot-mark"
+import { Button } from "../ui/controls"
 
 export interface EmptyProjectProps {
   /** False in the browser build, where nothing can be read or run. */
@@ -28,9 +29,9 @@ export function EmptyProject(props: EmptyProjectProps) {
 
         <Show when={props.hasHost} fallback={<p data-slot="empty-text">{t("empty.browser")}</p>}>
           <p data-slot="empty-text">{t("empty.desktop")}</p>
-          <button type="button" data-slot="empty-action" onClick={() => props.onOpenProject?.()}>
+          <Button data-slot="empty-action" variant="primary" size="lg" onClick={() => props.onOpenProject?.()}>
             {t("empty.open")}
-          </button>
+          </Button>
         </Show>
       </div>
     </div>

@@ -45,6 +45,7 @@ import {
   type JSX,
 } from "solid-js"
 import { t } from "../i18n"
+import { Button } from "../ui/controls"
 import { APPROVAL_TIMEOUT_MS, localAlwaysStore } from "./approval"
 import { askDialog, askYesNo } from "../host/ask"
 import { getHost, type Host } from "../host/shell"
@@ -1285,9 +1286,9 @@ export function BotsMain(props: BotsMainProps) {
               fallback={
                 <>
                   <p data-slot="bots-blank-text">{t("bots.blank.empty")}</p>
-                  <button type="button" data-slot="bots-btn" data-tone="primary" onClick={startNewBot}>
+                  <Button data-slot="bots-btn" variant="primary" onClick={startNewBot}>
                     {t("bots.blank.create")}
-                  </button>
+                  </Button>
                 </>
               }
             >
@@ -1296,9 +1297,9 @@ export function BotsMain(props: BotsMainProps) {
               <div data-slot="bots-blank-list">
                 <For each={ordered()}>
                   {(bot) => (
-                    <button type="button" data-slot="bots-btn" onClick={() => open(bot)}>
+                    <Button data-slot="bots-btn" onClick={() => open(bot)}>
                       {bot.identifier}
-                    </button>
+                    </Button>
                   )}
                 </For>
               </div>
@@ -1411,8 +1412,7 @@ function FacePicker(props: {
           </For>
         </div>
         <div data-slot="bots-face-actions">
-          <button
-            type="button"
+          <Button
             data-slot="bots-btn"
             data-face="random"
             title={t("bots.face.randomTip")}
@@ -1422,16 +1422,15 @@ function FacePicker(props: {
             }}
           >
             {t("bots.face.random")}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
             data-slot="bots-btn"
             data-face="upload"
             title={t("bots.face.uploadHint")}
             onClick={() => fileField?.click()}
           >
             {t("bots.face.upload")}
-          </button>
+          </Button>
           {/* The page's own file field: the WebView reads the one file picked, with no permission of ADE's. */}
           <input
             ref={(element) => (fileField = element)}
@@ -1768,27 +1767,25 @@ function Thread(props: {
                 </Show>
               </span>
               <span data-slot="bots-permission-actions">
-                <button type="button" data-slot="bots-btn" onClick={() => props.onAnswer("reject", asked().requestID)}>
+                <Button data-slot="bots-btn" onClick={() => props.onAnswer("reject", asked().requestID)}>
                   {t("bots.permission.deny")}
-                </button>
+                </Button>
                 {/* ADE's «Sempre», for this bot: ragu's own would be every bot's. */}
                 <Show when={(asked().always?.length ?? 0) > 0}>
-                  <button
-                    type="button"
+                  <Button
                     data-slot="bots-btn"
                     onClick={() => props.onAnswer("always", asked().requestID)}
                   >
                     {t("bots.approval.always")}
-                  </button>
+                  </Button>
                 </Show>
-                <button
-                  type="button"
+                <Button
                   data-slot="bots-btn"
-                  data-tone="primary"
+                  variant="primary"
                   onClick={() => props.onAnswer("once", asked().requestID)}
                 >
                   {t("bots.permission.allow")}
-                </button>
+                </Button>
               </span>
             </div>
           )}
@@ -1800,9 +1797,9 @@ function Thread(props: {
             <div data-slot="bots-permission" role="group" aria-label={t("bots.permission.request")}>
               <span data-slot="bots-permission-text">{t("bots.approval.offer", offer().command)}</span>
               <span data-slot="bots-permission-actions">
-                <button type="button" data-slot="bots-btn" onClick={() => props.onGrant()}>
+                <Button data-slot="bots-btn" onClick={() => props.onGrant()}>
                   {t("bots.approval.always")}
-                </button>
+                </Button>
               </span>
             </div>
           )}
@@ -2210,22 +2207,21 @@ function PageHead(props: {
       <div data-slot="bots-page-actions">
         <Show when={props.onLaunch}>
           {(launch) => (
-            <button
-              type="button"
+            <Button
               data-slot="bots-btn"
               disabled={props.bot.mode === "subagent"}
               onClick={() => launch()(props.bot)}
               title={props.bot.mode === "subagent" ? t("bots.terminal.subagentTip") : t("bots.terminal.launchTip")}
             >
               {t("bots.terminal.button")}
-            </button>
+            </Button>
           )}
         </Show>
         <Show when={props.onOpenFile}>
           {(open) => (
-            <button type="button" data-slot="bots-btn" onClick={() => open()(props.bot.path)}>
+            <Button data-slot="bots-btn" onClick={() => open()(props.bot.path)}>
               {t("bots.openFile")}
-            </button>
+            </Button>
           )}
         </Show>
       </div>
@@ -2787,12 +2783,12 @@ function BotForm(props: {
       </Show>
 
       <div data-slot="bots-form-actions">
-        <button type="button" data-slot="bots-btn" onClick={() => props.onCancel()} disabled={busy()}>
+        <Button data-slot="bots-btn" onClick={() => props.onCancel()} disabled={busy()}>
           {t("bots.form.cancel")}
-        </button>
-        <button type="submit" data-slot="bots-btn" data-tone="primary" disabled={busy()}>
+        </Button>
+        <Button type="submit" data-slot="bots-btn" variant="primary" disabled={busy()}>
           {busy() ? t("bots.form.creating") : generating() ? t("bots.form.generateWithRagu") : t("bots.form.create")}
-        </button>
+        </Button>
       </div>
       <Show when={busy() && generating()}>
         {/* The generation is a model call: several seconds with nothing on
@@ -3269,9 +3265,9 @@ function BotSettings(props: {
         <span data-slot="bots-hint" data-state={saved() && !dirty() ? "saved" : undefined}>
           {saved() && !dirty() ? t("bots.settings.saved") : dirty() ? t("bots.settings.unsaved") : ""}
         </span>
-        <button type="submit" data-slot="bots-btn" data-tone="primary" disabled={busy() || !dirty()}>
+        <Button type="submit" data-slot="bots-btn" variant="primary" disabled={busy() || !dirty()}>
           {busy() ? t("bots.settings.saving") : t("bots.settings.save")}
-        </button>
+        </Button>
       </div>
     </form>
   )
