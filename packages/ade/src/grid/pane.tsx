@@ -2,6 +2,7 @@ import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCl
 import { parseAnsi, type Span } from "../session/stream"
 import { dragCarriesPaths, readDraggedPaths } from "../sidebar/file-drag"
 import { focusPane, holdsFocusInTile } from "./focus-input"
+import { createHeldRows } from "./held-rows"
 import { RENAME_EVENT, commitRename } from "./rename"
 import { attachTerminal } from "../terminal/registry"
 import type { LinkRequest } from "../terminal/links"
@@ -320,6 +321,12 @@ export function SessionPane(props: SessionPaneProps) {
     scroller.scrollTop = scroller.scrollHeight
     setFollowing(true)
   }
+
+  // Behind a live terminal the transcript is hidden, and its rows are not built for each chunk of output.
+  const rows = createHeldRows(
+    () => props.lines,
+    () => Boolean(props.terminalId),
+  )
 
   createEffect(() => {
     // Reading the length is what subscribes this effect to new output.
@@ -967,7 +974,7 @@ export function SessionPane(props: SessionPaneProps) {
             terminal does: the newest line is always next to the prompt, so a
             three-line session does not float in a field of empty card. */}
         <div data-slot="pane-lines">
-          <For each={props.lines}>
+          <For each={rows()}>
             {(line) => (
               <div data-slot="pane-line" data-kind={line.kind}>
                 <Show when={line.kind === "step"}>
