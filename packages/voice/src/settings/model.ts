@@ -269,7 +269,7 @@ export interface VoiceSettings {
    * task completions, or open decisions.
    *
    * Off by default to avoid unexpected speech or consumption (S48). When on,
-   * it speaks a brief announcement and opens a single 6-8s response window.
+   * it speaks a brief announcement; listening for an answer is `alertsListen`.
    */
   readonly spokenAlerts: boolean
   /**

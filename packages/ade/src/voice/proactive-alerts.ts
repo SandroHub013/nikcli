@@ -232,7 +232,12 @@ export function createProactiveAlerts(deps: ProactiveAlertsDeps) {
         // Formulate spoken text
         let phrase = ""
         if (event.type === "permission") {
-          phrase = t("voice.alert.permission", event.paneTitle, permissionSpeechLabel(event.kind))
+          // The question «Vuoi consentire?» only when a spoken answer will be listened for (review N13).
+          phrase = t(
+            deps.listensForAnswer?.() === true ? "voice.alert.permission" : "voice.alert.permissionStated",
+            event.paneTitle,
+            permissionSpeechLabel(event.kind),
+          )
         } else if (event.type === "completion") {
           phrase = event.summary
             ? t("voice.alert.completed", event.paneTitle, event.summary)

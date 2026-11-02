@@ -1720,6 +1720,7 @@ export const en: Messages = {
     "Local transcription has been removed: from now on your voice is transcribed by OpenRouter, in the cloud, with your key.",
   "voice.parakeetRemovedListeningOff": (always) =>
     `Local transcription has been removed: from now on your voice is transcribed by OpenRouter, in the cloud, and listening all the time is off, because every voice in the room would have been sent to the paid service. To have it back, turn on “${always}” in the voice settings.`,
+  "voice.alert.permissionStated": (pane, what) => `${pane} is requesting permission for: ${what}.`,
   "voice.alert.permission": (pane, what) => `${pane} is requesting permission for: ${what}. Do you want to allow it?`,
   "voice.alert.completed": (pane, details) => `${pane} has finished: ${details}.`,
   "voice.alert.completedSimple": (pane) => `${pane} has finished the work.`,

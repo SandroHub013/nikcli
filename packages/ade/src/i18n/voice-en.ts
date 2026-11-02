@@ -161,7 +161,8 @@ export const voiceEn: VoiceMessages = {
   "vui.replies.voice": "Reply voice",
   "vui.replies.source": "Source",
   "vui.replies.note":
-    "Natural voices are downloaded the first time they're needed (about 85 MB, Windows only) and then work offline. Until the download finishes, the system voice answers.",
+    "Natural voices are free and work offline, but they have to be downloaded (about 85 MB, Windows only): the download starts only when you press «Download voice». Until then the system voice answers.",
+  "vui.replies.download": "Download voice",
   "vui.replies.retry": "Try again",
   "vui.replies.downloading": "Downloading…",
   "vui.reply.male": "Male",
@@ -177,7 +178,7 @@ export const voiceEn: VoiceMessages = {
   "vui.reply.lessac.licence": "Model dataset licensed for research only.",
   "vui.reply.system": "System voice",
   "vui.reply.system.desc": "The Windows one, nothing to download",
-  "vui.reply.fallbackNotice": "Natural voice is unavailable: using system voice.",
+  "vui.reply.fallbackNotice": "I am using the system voice. If you like, you can download the better one in the voice settings.",
   "vui.replies.backend": "Kind of voice",
   "vui.backend.piper": "Piper",
   "vui.backend.piper.desc": "Local voices, Italian and one English",

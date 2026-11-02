@@ -533,3 +533,22 @@ describe("proactive-alerts", () => {
     expect(spoken).toHaveLength(16)
   })
 })
+
+describe("the permission alert's question (N13)", () => {
+  test("«Vuoi consentire?» is spoken only when an answer will be listened for", async () => {
+    for (const [listens, asks] of [[true, true], [false, false]] as const) {
+      const spoken: string[] = []
+      const alerts = createProactiveAlerts({
+        now: () => 1000,
+        isLocked: async () => false,
+        isEnabled: () => true,
+        listensForAnswer: () => listens,
+        speak: async (text) => void spoken.push(text),
+        openResponseWindow: async () => {},
+      })
+      alerts.notifyPermission("p1", "Prova-voce", "ls", "shell")
+      await new Promise((r) => setTimeout(r, 20))
+      expect([listens, spoken[0]?.includes("Vuoi consentire")]).toEqual([listens, asks])
+    }
+  })
+})

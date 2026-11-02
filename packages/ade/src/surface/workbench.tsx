@@ -5925,7 +5925,7 @@ export function Workbench() {
    * looked up per call, so the browser harness simply never gets past status.
    */
   /*
-   * Piper's 63 MB are fetched only after the user pressed «Scarica» in the voice settings (once, remembered): a fresh
+   * Piper's 63 MB are fetched only after the user pressed «Scarica voce» in the voice settings or in the Agent checklist (once, remembered): a fresh
    * profile speaks with the system voice until then, and a reply never starts a download by itself (review N8).
    */
   const DOWNLOAD_CONSENT_KEY = "ade.voice.download-consent"
@@ -10684,6 +10684,7 @@ export function Workbench() {
           onOpenVoiceSource={(voice) => void getHost().then((host) => host?.ttsOpenVoiceSource?.(voice))}
           naturalVoiceError={voiceError()}
           naturalVoiceDownloading={voiceDownloading()}
+          naturalVoiceInstalled={voiceInstalled()}
           onDownloadNaturalVoice={() => void downloadNaturalVoice()}
           naturalVoiceProgress={piperProgress() ?? undefined}
           onCancelInstall={(provider) =>

@@ -162,7 +162,8 @@ export const voiceIt = {
   "vui.replies.voice": "Voce delle risposte",
   "vui.replies.source": "Fonte",
   "vui.replies.note":
-    "Le voci naturali si scaricano la prima volta che servono (circa 85 MB, solo su Windows) e poi funzionano senza rete. Finché il download non finisce risponde la voce di sistema.",
+    "Le voci naturali sono gratuite e funzionano senza rete, ma vanno scaricate (circa 85 MB, solo su Windows): il download parte solo quando premi «Scarica voce». Finché non l'hai scaricata risponde la voce di sistema.",
+  "vui.replies.download": "Scarica voce",
   "vui.replies.retry": "Riprova",
   "vui.replies.downloading": "Download in corso…",
   "vui.reply.male": "Maschile",
@@ -177,7 +178,7 @@ export const voiceIt = {
   "vui.reply.lessac.licence": "Modello concesso per sola ricerca.",
   "vui.reply.system": "Voce di sistema",
   "vui.reply.system.desc": "Quella di Windows, senza scaricare nulla",
-  "vui.reply.fallbackNotice": "Voce naturale non disponibile: uso la voce di sistema.",
+  "vui.reply.fallbackNotice": "Uso la voce di sistema. Se vuoi, nelle impostazioni voce puoi scaricare quella migliore.",
   "vui.replies.backend": "Tipo di voce",
   "vui.backend.piper": "Piper",
   "vui.backend.piper.desc": "Voci locali, italiane e una inglese",

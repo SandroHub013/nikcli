@@ -1767,6 +1767,8 @@ export const it = {
     `La trascrizione locale è stata rimossa: da ora la voce si trascrive con OpenRouter, in cloud, e l'ascolto continuo è spento, perché ogni voce in stanza sarebbe stata mandata al servizio a pagamento. Se lo vuoi, riaccendilo con «${always}» nelle impostazioni della voce.`,
   "voice.alert.permission": (pane: string, what: string) =>
     `${pane} richiede il permesso per: ${what}. Vuoi consentire?`,
+  /* Without listening for an answer the alert does not ask: nobody would hear the reply (review N13). */
+  "voice.alert.permissionStated": (pane: string, what: string) => `${pane} richiede il permesso per: ${what}.`,
   "voice.alert.completed": (pane: string, details: string) => `${pane} ha finito: ${details}.`,
   "voice.alert.completedSimple": (pane: string) => `${pane} ha finito il lavoro.`,
   "voice.alert.decision": (title: string) => `C'è una decisione aperta nel registro: ${title}.`,

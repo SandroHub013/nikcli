@@ -114,6 +114,18 @@ export function ReplyPage(p: { state: VoiceSettingsState; bare?: boolean }): JSX
         </div>
         <Show when={replyBackendNow() === "piper"}>
           <p data-slot="sub-choice-note">{t("vui.replies.note")}</p>
+          {/* The one place where the download is asked for: nothing fetches a voice by itself (review N8, R2). */}
+          <Show when={props.naturalVoiceInstalled === false && !props.naturalVoiceError && props.onDownloadNaturalVoice}>
+            <button
+              type="button"
+              data-slot="ghost-btn"
+              data-action="download-voice"
+              disabled={props.naturalVoiceDownloading}
+              onClick={() => props.onDownloadNaturalVoice?.()}
+            >
+              {props.naturalVoiceDownloading ? t("vui.replies.downloading") : t("vui.replies.download")}
+            </button>
+          </Show>
           <Show when={props.naturalVoiceDownloading && piperDownload()}>
             {(view) => (
               <InstallBar

@@ -235,7 +235,7 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
           <fieldset data-slot="new-section">
             <legend data-slot="new-legend">{t("new.preview")}</legend>
             <div data-slot="new-launch">
-              <For each={entries()}>
+              <For each={agentId() ? entries() : []}>
                 {(entry) => (
                   <div data-slot="new-launch-row" data-role={entry.role}>
                     <span data-slot="new-launch-index">{entry.index}</span>
