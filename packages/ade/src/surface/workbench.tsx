@@ -181,6 +181,7 @@ import { willLaunch, type LaunchEntry } from "../session-new/launch"
 import type { PresetId } from "../session-new/preset"
 import { defaultPaneTitle } from "./pane-title"
 import { Sidebar } from "../sidebar"
+import { formatDroppedPaths } from "../sidebar/file-drag"
 import { SessionGrid } from "../grid/session-grid"
 import { requestRename } from "../grid/rename"
 import { focusResizeGrip } from "../grid/focus-input"
@@ -2927,6 +2928,19 @@ export function Workbench() {
       return tellPane(paneId, t("note.dictationHeld"))
     records.typed.update(paneId, (line) => typedAfter(line, text, Date.now()))
     session.write(text)
+  }
+
+  /**
+   * Gives a screenshot to the session that has the focus, from the keyboard: what a drop onto it does, for the
+   * people who cannot drag (UX-17, WCAG 2.1.1). The path goes into the line, not submitted, relative to the
+   * project and quoted like a dropped one; `false` when no session is there to take it.
+   */
+  const sendShotToFocused = (path: string): boolean => {
+    const paneId = wb().focusedId
+    const text = formatDroppedPaths([path], project()?.root)
+    if (!paneId || !text || !running.get(paneId)) return false
+    typeAsUser(paneId, `${text} `)
+    return true
   }
 
   /**
@@ -10336,6 +10350,7 @@ export function Workbench() {
               load={shotSource.load}
               onDismiss={shotSource.dismiss}
               onDelete={shotSource.remove}
+              onSend={sendShotToFocused}
             />
           }
           /*

@@ -1,4 +1,5 @@
 import { afterAll, afterEach, describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
 import { GlobalRegistrator } from "@happy-dom/global-registrator"
 import { compileSolidJsx } from "../test-support/solid-jsx"
 import { resetLocaleForTests } from "../i18n/locale"
@@ -11,6 +12,11 @@ const { ShotTray } = await import("./tray")
 const { t } = await import("../i18n")
 
 let dispose: (() => void) | undefined
+
+/** Esc, as a keyboard sends it: the dialog's layer listens on the document. */
+function pressEscape() {
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+}
 afterEach(() => {
   dispose?.()
   dispose = undefined
@@ -148,10 +154,10 @@ describe("deleting a screenshot from the viewer", () => {
   const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
   const open = (onDelete: (path: string) => Promise<boolean>) => {
     const host = mount({ shots: [shot], onDelete })
-    host.querySelector<HTMLElement>('[data-slot="shot"]')!.click()
+    host.querySelector<HTMLElement>('[data-slot="shot-open"]')!.click()
     return host
   }
-  const buttons = (host: HTMLElement) => [...host.querySelectorAll<HTMLElement>('[data-slot="shot-viewer-close"]')]
+  const buttons = (host: HTMLElement) => [...document.querySelectorAll<HTMLElement>('[data-slot="shot-viewer-close"]')]
   const byText = (host: HTMLElement, text: string) => buttons(host).find((button) => button.textContent === text)
 
   test("the first click only asks, with the file's name", () => {
@@ -160,7 +166,7 @@ describe("deleting a screenshot from the viewer", () => {
     byText(host, t("shots.delete"))!.click()
 
     expect(deleted).toEqual([])
-    expect(host.querySelector('[data-slot="shot-viewer-ask"]')?.textContent).toBe(t("shots.delete.ask", "a.png"))
+    expect(document.querySelector('[data-slot="shot-viewer-ask"]')?.textContent).toBe(t("shots.delete.ask", "a.png"))
     expect(byText(host, t("shots.delete.confirm"))).toBeDefined()
     expect(byText(host, t("shots.delete.keep"))).toBeDefined()
   })
@@ -172,8 +178,8 @@ describe("deleting a screenshot from the viewer", () => {
     byText(host, t("shots.delete.keep"))!.click()
 
     expect(deleted).toEqual([])
-    expect(host.querySelector('[data-slot="shot-viewer-ask"]')).toBeNull()
-    expect(host.querySelector('[data-component="shot-viewer"]')).not.toBeNull()
+    expect(document.querySelector('[data-slot="shot-viewer-ask"]')).toBeNull()
+    expect(document.querySelector('[data-component="shot-viewer"]')).not.toBeNull()
   })
 
   test("confirming deletes and closes the viewer", async () => {
@@ -184,7 +190,7 @@ describe("deleting a screenshot from the viewer", () => {
     await settle()
 
     expect(deleted).toEqual([shot.path])
-    expect(host.querySelector('[data-component="shot-viewer"]')).toBeNull()
+    expect(document.querySelector('[data-component="shot-viewer"]')).toBeNull()
   })
 
   test("a failure keeps the viewer open and says why", async () => {
@@ -193,8 +199,8 @@ describe("deleting a screenshot from the viewer", () => {
     byText(host, t("shots.delete.confirm"))!.click()
     await settle()
 
-    expect(host.querySelector('[data-component="shot-viewer"]')).not.toBeNull()
-    expect(host.querySelector('[data-slot="shot-viewer-error"]')?.textContent).toBe(t("shots.delete.failed"))
+    expect(document.querySelector('[data-component="shot-viewer"]')).not.toBeNull()
+    expect(document.querySelector('[data-slot="shot-viewer-error"]')?.textContent).toBe(t("shots.delete.failed"))
   })
 
   test("the second click of a double click does not confirm", async () => {
@@ -205,7 +211,7 @@ describe("deleting a screenshot from the viewer", () => {
     confirm.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 2 }))
     await settle()
     expect(deleted).toEqual([])
-    expect(host.querySelector('[data-component="shot-viewer"]')).not.toBeNull()
+    expect(document.querySelector('[data-component="shot-viewer"]')).not.toBeNull()
     confirm.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }))
     await settle()
     expect(deleted).toEqual([shot.path])
@@ -239,19 +245,111 @@ describe("deleting a screenshot from the viewer", () => {
     expect(calls).toBe(1)
     finish(false)
     await settle()
-    expect(host.querySelector('[data-slot="shot-viewer-error"]')).not.toBeNull()
+    expect(document.querySelector('[data-slot="shot-viewer-error"]')).not.toBeNull()
   })
 
   test("the alert of one picture is not shown on the next one", async () => {
     const other = { path: "C:/Pictures/Screenshots/b.png", name: "b.png", modified_ms: 0 }
     const host = mount({ shots: [shot, other], onDelete: async () => false })
-    host.querySelector<HTMLElement>('[data-slot="shot"]')!.click()
+    host.querySelector<HTMLElement>('[data-slot="shot-open"]')!.click()
     byText(host, t("shots.delete"))!.click()
     byText(host, t("shots.delete.confirm"))!.click()
     await settle()
-    expect(host.querySelector('[data-slot="shot-viewer-error"]')).not.toBeNull()
-    host.querySelector<HTMLElement>('[data-component="shot-viewer"]')!.click()
-    host.querySelectorAll<HTMLElement>('[data-slot="shot"]')[1]!.click()
-    expect(host.querySelector('[data-slot="shot-viewer-error"]')).toBeNull()
+    expect(document.querySelector('[data-slot="shot-viewer-error"]')).not.toBeNull()
+    pressEscape()
+    host.querySelectorAll<HTMLElement>('[data-slot="shot-open"]')[1]!.click()
+    expect(document.querySelector('[data-slot="shot-viewer-error"]')).toBeNull()
+  })
+})
+
+/*
+ * The tray and the viewer for people who do not use a mouse (UX-17): no button inside a button, Esc closes the
+ * viewer and the focus goes into it, and a screenshot can be handed to the focused session without dragging.
+ */
+describe("the screenshot tray and viewer, by keyboard and screen reader", () => {
+  const shot = { path: "C:/Pictures/Screenshots/a.png", name: "a.png", modified_ms: 1 }
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 20))
+
+  test("a tile is a plain container; opening and dismissing are siblings, not a button in a button", () => {
+    const host = mount({ shots: [shot] })
+    const tile = host.querySelector('[data-slot="shot"]')!
+    expect(tile.getAttribute("role")).toBeNull()
+    expect(tile.getAttribute("tabindex")).toBeNull()
+    const open = tile.querySelector('[data-slot="shot-open"]')!
+    expect(open.getAttribute("role")).toBe("button")
+    expect(open.getAttribute("aria-label")).toBe(t("shots.open.named", "a.png"))
+    // Nothing interactive inside the control that opens: that is what a reader could not announce.
+    expect(open.querySelector('button, [role="button"], a[href], input')).toBeNull()
+    const dismiss = tile.querySelector('button[data-slot="shot-dismiss"]')!
+    expect(open.contains(dismiss)).toBe(false)
+    // The tile stays draggable: the drag is on the container, the picture is not a real <button>.
+    expect(tile.getAttribute("draggable")).toBe("true")
+    expect(open.tagName).not.toBe("BUTTON")
+  })
+
+  test("Enter and Space on the picture open the viewer", async () => {
+    const host = mount({ shots: [shot] })
+    const open = host.querySelector<HTMLElement>('[data-slot="shot-open"]')!
+    open.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+    await settle()
+    expect(document.querySelector('[data-component="shot-viewer"]')).not.toBeNull()
+  })
+
+  test("dismissing a tile puts it away without opening it", () => {
+    const dismissed: string[] = []
+    const host = mount({ shots: [shot], onDismiss: (path: string) => dismissed.push(path) })
+    host.querySelector<HTMLElement>('[data-slot="shot-dismiss"]')!.click()
+    expect(dismissed).toEqual([shot.path])
+    expect(document.querySelector('[data-component="shot-viewer"]')).toBeNull()
+  })
+
+  test("the viewer is a modal dialog named by the picture, and Esc closes it", async () => {
+    const host = mount({ shots: [shot] })
+    host.querySelector<HTMLElement>('[data-slot="shot-open"]')!.click()
+    await settle()
+    const dialog = document.querySelector('[data-component="shot-viewer"] [role="dialog"]')!
+    expect(dialog.getAttribute("aria-modal")).toBe("true")
+    expect(dialog.getAttribute("aria-label")).toBe("a.png")
+    // The focus moves into the viewer, instead of staying on the tile behind it.
+    expect(dialog.contains(document.activeElement)).toBe(true)
+    pressEscape()
+    await settle()
+    expect(document.querySelector('[data-component="shot-viewer"]')).toBeNull()
+  })
+
+  test("«Manda alla sessione a fuoco» gives the path to the session and closes the viewer", async () => {
+    const sent: string[] = []
+    const host = mount({ shots: [shot], onSend: (path: string) => (sent.push(path), true) })
+    host.querySelector<HTMLElement>('[data-slot="shot-open"]')!.click()
+    await settle()
+    const send = document.querySelector<HTMLButtonElement>('[data-slot="shot-viewer-send"]')!
+    expect(send.textContent).toBe(t("shots.send"))
+    send.click()
+    expect(sent).toEqual([shot.path])
+    await settle()
+    expect(document.querySelector('[data-component="shot-viewer"]')).toBeNull()
+  })
+
+  test("with no session to take it, the viewer stays open and says so", async () => {
+    const host = mount({ shots: [shot], onSend: () => false })
+    host.querySelector<HTMLElement>('[data-slot="shot-open"]')!.click()
+    await settle()
+    document.querySelector<HTMLButtonElement>('[data-slot="shot-viewer-send"]')!.click()
+    await settle()
+    expect(document.querySelector('[data-component="shot-viewer"]')).not.toBeNull()
+    expect(document.querySelector('[data-slot="shot-viewer-error"]')?.textContent).toBe(t("shots.send.failed"))
+  })
+
+  test("there is no send button where nothing can take the picture", async () => {
+    const host = mount({ shots: [shot] })
+    host.querySelector<HTMLElement>('[data-slot="shot-open"]')!.click()
+    await settle()
+    expect(document.querySelector('[data-slot="shot-viewer-send"]')).toBeNull()
+  })
+
+  test("the tile's dismiss has a 24px reach and shows when the tile has the focus", () => {
+    const css = readFileSync(new URL("./tray.css", import.meta.url), "utf8")
+    expect(css).toMatch(/\[data-slot="shot-dismiss"\]::before \{[^}]*inset: -3px/)
+    expect(css).toContain('[data-slot="shot"]:focus-within [data-slot="shot-dismiss"]')
   })
 })

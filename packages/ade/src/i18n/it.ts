@@ -1545,6 +1545,8 @@ export const it = {
   "shots.open.named": (name: string) => `Apri ${name}`,
   "shots.more.left": "Schermate precedenti",
   "shots.more.right": "Altre schermate",
+  "shots.send": "Manda alla sessione a fuoco",
+  "shots.send.failed": "Nessuna sessione a fuoco a cui darla: apri o scegli una sessione e riprova.",
   "shots.close": "Chiudi",
 
   // Extensions
