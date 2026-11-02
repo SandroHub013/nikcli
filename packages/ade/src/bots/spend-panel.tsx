@@ -6,6 +6,7 @@
 
 import { createSignal, Show } from "solid-js"
 import { t } from "../i18n"
+import { Button } from "../ui/controls"
 import type { BotAccount } from "./account"
 import { ACCOUNT_PLAN } from "./account"
 import type { AgentFile } from "./ragu"
@@ -78,9 +79,9 @@ export function SpendCapField(props: SpendPieceProps) {
                 setSaved(false)
               }}
             />
-            <button type="submit" data-slot="bots-btn">
+            <Button type="submit" data-slot="bots-btn">
               {t("bots.daily.capSave")}
-            </button>
+            </Button>
           </form>
           {/* A paid bot with no cap spends without a limit: said here, beside the field that fixes it. */}
           <Show when={store().get(props.bot.path).capUsd === undefined}>

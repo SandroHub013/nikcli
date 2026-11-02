@@ -125,6 +125,6 @@ describe("the one way to confirm what cannot be taken back", () => {
     const { press } = mount(() => {})
     expect(document.querySelector('[data-slot="bots-link"][data-tone="danger"]')).not.toBeNull()
     press("Elimina routine")
-    expect(document.querySelector('[data-slot="bots-btn"][data-tone="danger"]')).not.toBeNull()
+    expect(document.querySelector('[data-slot="bots-btn"][data-variant="danger"]')).not.toBeNull()
   })
 })

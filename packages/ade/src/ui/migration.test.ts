@@ -44,6 +44,21 @@ const SURFACES: Surface[] = [
     forbidden: REDRAWN,
   },
   {
+    name: "the bots",
+    tsx: [
+      "bots/bots.tsx",
+      "bots/confirm.tsx",
+      "bots/memory-panel.tsx",
+      "bots/room-panel.tsx",
+      "bots/routine-panel.tsx",
+      "bots/spend-panel.tsx",
+      "bots/waiting-list.tsx",
+    ],
+    slots: ["bots-btn"],
+    css: ["bots/bots.css"],
+    forbidden: REDRAWN,
+  },
+  {
     name: "the sidebar",
     tsx: ["sidebar/sidebar.tsx"],
     slots: ["workspace-open-project", "section-add", "empty-action-btn", "search-clear"],

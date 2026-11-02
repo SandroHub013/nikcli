@@ -1,5 +1,6 @@
 import { createEffect, createSignal, For, onCleanup, Show } from "solid-js"
 import { t } from "../i18n"
+import { Button } from "../ui/controls"
 import { approvalAction, sourcesText } from "./approval-signal"
 import { visibleText } from "./visible-text"
 import { decideApproval, remainingClock, remainingMs, type ApprovalChoice, type WaitingApproval } from "./approvals"
@@ -57,20 +58,19 @@ export function WaitingList(props: {
                 </span>
                 <span data-slot="bots-waiting-actions">
                   <Show when={waiting.choices.includes("once")}>
-                    <button type="button" data-slot="bots-btn" disabled={expired(waiting)} onClick={() => decide(waiting, "once")}>
+                    <Button data-slot="bots-btn" disabled={expired(waiting)} onClick={() => decide(waiting, "once")}>
                       {t("bots.permission.allow")}
-                    </button>
+                    </Button>
                   </Show>
                   <Show when={waiting.choices.includes("reject")}>
-                    <button
-                      type="button"
+                    <Button
                       data-slot="bots-btn"
-                      data-tone="danger"
+                      variant="danger"
                       disabled={expired(waiting)}
                       onClick={() => decide(waiting, "reject")}
                     >
                       {t("bots.permission.deny")}
-                    </button>
+                    </Button>
                   </Show>
                 </span>
               </li>

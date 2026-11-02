@@ -6,6 +6,7 @@
 
 import { createSignal, For, Show } from "solid-js"
 import { t } from "../i18n"
+import { Button } from "../ui/controls"
 import { ConfirmAction } from "./confirm"
 import {
   applyMemoryOp,
@@ -136,9 +137,9 @@ export function MemorySection(props: { bot: string; store: MemoryStore }) {
                     setDrafts((all) => ({ ...all, [block]: value }))
                   }}
                 />
-                <button type="submit" data-slot="bots-btn" disabled={drafts()[block].trim().length === 0}>
+                <Button type="submit" data-slot="bots-btn" disabled={drafts()[block].trim().length === 0}>
                   {t("bots.memory.add")}
-                </button>
+                </Button>
               </form>
             </div>
           )

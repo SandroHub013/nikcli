@@ -72,7 +72,7 @@ describe("lint: the bot's Invia", () => {
     const roomComposer = rooms.slice(roomStart, rooms.indexOf("</form>", roomStart))
     for (const view of [slice('<div data-slot="bots-composer-row">', "</form>"), roomComposer]) {
       expect(view).toContain('type="submit" data-slot="bots-send"')
-      expect(view).not.toContain('type="submit" data-slot="bots-btn" data-tone="primary"')
+      expect(view).not.toContain('type="submit" data-slot="bots-btn" variant="primary"')
     }
     for (const state of ["", ":disabled"]) {
       expect(body(bots, `[data-slot="bots-send"]${state}`)).toBe(body(chat, `[data-slot="chat-send"]${state}`))
