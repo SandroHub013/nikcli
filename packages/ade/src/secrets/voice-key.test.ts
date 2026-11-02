@@ -154,7 +154,7 @@ describe("lint: the wiring", () => {
   const shell = codeOf(readFileSync(join(import.meta.dir, "../host/shell.ts"), "utf8"))
 
   test("ragu's key is copied into the keychain, not into the voice's settings", () => {
-    expect(workbench).toContain(codeOf("await saveVoiceKey(host, copied)"))
+    expect(workbench).toContain(codeOf("await saveVoiceKey(host, key)"))
     expect(workbench).not.toContain(
       codeOf("save: (key) => handleVoiceSettingsChange({ ...voiceSettings(), openRouterApiKey: key })"),
     )

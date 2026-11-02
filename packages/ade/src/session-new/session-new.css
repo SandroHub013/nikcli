@@ -181,11 +181,24 @@
   transition: var(--ade-btn-transition);
 }
 
-[data-slot="new-launch-btn"]:hover {
+[data-slot="new-launch-btn"]:hover:not(:disabled) {
   background: var(--ade-accent-strong);
 }
 
-[data-slot="new-launch-btn"]:active {
+/* Off while the agents are being looked up, or when none is installed: the line above the cards says which. */
+[data-slot="new-launch-btn"]:disabled {
+  background: var(--ade-active);
+  color: var(--ade-text-weak);
+  cursor: not-allowed;
+}
+
+[data-slot="new-agents-note"] {
+  margin: 0 0 var(--ade-space-4);
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-md);
+}
+
+[data-slot="new-launch-btn"]:active:not(:disabled) {
   background: var(--ade-accent-strong);
   transform: var(--ade-press);
 }

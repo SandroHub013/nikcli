@@ -57,6 +57,7 @@ describe("proactive-alerts", () => {
       speak: async (text) => {
         spoken.push(text)
       },
+      listensForAnswer: () => true,
       openResponseWindow: async (opts) => {
         windows.push(opts)
       },
@@ -80,6 +81,25 @@ describe("proactive-alerts", () => {
       durationMs: RESPONSE_WINDOW_MS,
       permission: { paneId: "p1", what: raw, kind: "shell" },
     })
+  })
+
+  test("a permission alert never opens the microphone unless listening for an answer is on (MOD-16)", async () => {
+    for (const listens of [undefined, () => false]) {
+      const windows: any[] = []
+      const spoken: string[] = []
+      const alerts = createProactiveAlerts({
+        now: () => 1000,
+        isLocked: async () => false,
+        isEnabled: () => true,
+        ...(listens ? { listensForAnswer: listens } : {}),
+        speak: async (text) => void spoken.push(text),
+        openResponseWindow: async (opts) => void windows.push(opts),
+      })
+      alerts.notifyPermission("p1", "Prova-voce", "ls", "shell")
+      await new Promise((r) => setTimeout(r, 20))
+      expect(spoken).toHaveLength(1)
+      expect(windows).toHaveLength(0)
+    }
   })
 
   test("an invalid runtime kind falls back to a generic action", async () => {
@@ -145,8 +165,8 @@ describe("proactive-alerts", () => {
 
     expect(spoken).toHaveLength(1)
     expect(spoken[0]).toContain("Prova-voce ha finito: tre test verdi.")
-    expect(windows).toHaveLength(1)
-    expect(windows[0].durationMs).toBe(RESPONSE_WINDOW_MS)
+    // A completion is announced and the microphone stays shut (audit MOD-16): nothing is listened to or paid for.
+    expect(windows).toHaveLength(0)
   })
 
   test("two consecutive turns of a full pane both notify", async () => {
@@ -511,5 +531,24 @@ describe("proactive-alerts", () => {
     await new Promise((r) => setTimeout(r, 20))
     // Nothing further spoken while locked
     expect(spoken).toHaveLength(16)
+  })
+})
+
+describe("the permission alert's question (N13)", () => {
+  test("«Vuoi consentire?» is spoken only when an answer will be listened for", async () => {
+    for (const [listens, asks] of [[true, true], [false, false]] as const) {
+      const spoken: string[] = []
+      const alerts = createProactiveAlerts({
+        now: () => 1000,
+        isLocked: async () => false,
+        isEnabled: () => true,
+        listensForAnswer: () => listens,
+        speak: async (text) => void spoken.push(text),
+        openResponseWindow: async () => {},
+      })
+      alerts.notifyPermission("p1", "Prova-voce", "ls", "shell")
+      await new Promise((r) => setTimeout(r, 20))
+      expect([listens, spoken[0]?.includes("Vuoi consentire")]).toEqual([listens, asks])
+    }
   })
 })

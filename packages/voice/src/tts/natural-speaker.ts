@@ -97,6 +97,11 @@ export interface NaturalSpeakerDeps {
   voiceFor: (detected: ReplyLanguage | undefined) => { voice: string; locale: TtsLocale }
   /** Whether the voice can speak now, and whether it can ever on this host. */
   status: (voice: string) => Promise<{ supported: boolean; installed: boolean }>
+  /**
+   * Whether the user has agreed to the download of a voice that is missing (the panel's «Scarica» is the click). Absent:
+   * always, as before. A reply or a «Prova» never fetches 63 MB on a profile that did not ask (review N8).
+   */
+  mayDownload?: (voice: string) => boolean
   /** Downloads what the voice needs. Called once per voice, in the background. */
   install: (voice: string) => Promise<void>
   /**
@@ -127,6 +132,10 @@ export interface NaturalSpeakerDeps {
   onInstall?: (voice: string, state: "downloading" | "ready" | "failed", problem?: string) => void
   /** Spoken notice when natural voice is chosen but unavailable before using system voice. */
   fallbackNotice?: () => string
+  /** The notice was already said once for this profile: it is not said again (Master's decision, 2026-11-02). */
+  fallbackNoticeSeen?: () => boolean
+  /** Told when the notice has been said, so the host can remember it. */
+  onFallbackNotice?: () => void
   /** Shuts down the resident process on the host after silence, freeing memory (P1-C4). */
   stop?: () => Promise<{ busy: boolean }> | { busy: boolean }
   /** How long silence lasts before Piper is shut down (default 120_000 ms = 2 min). */
@@ -488,8 +497,10 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
   async function announceFallbackOnce(voice: string): Promise<void> {
     if (voice === "system" || fallbackNotified || !deps.fallbackNotice) return
     fallbackNotified = true
+    if (deps.fallbackNoticeSeen?.() === true) return
     const notice = deps.fallbackNotice()
     if (notice && notice.trim().length > 0) {
+      deps.onFallbackNotice?.()
       await deps.fallback.speak(notice)
     }
   }
@@ -570,7 +581,8 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
    * 63 MB and the panel says so on the voice itself.
    */
   function mayDownload(voice: string): boolean {
-    return !isKokoroVoice(voice as ReplyVoice)
+    if (isKokoroVoice(voice as ReplyVoice)) return false
+    return deps.mayDownload ? deps.mayDownload(voice) : true
   }
 
   /**

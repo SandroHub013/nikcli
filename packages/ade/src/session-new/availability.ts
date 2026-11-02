@@ -101,9 +101,14 @@ export function startable(statuses: AgentStatus[]): AgentStatus[] {
  * one guarantees the first launch fails.
  */
 export function defaultAgentId(statuses: AgentStatus[]): string | undefined {
-  const present = statuses.find((status) => status.availability === "presente" && isProbeable(status.agent))
+  /*
+   * The shell is not an agent: every PC has one, so counting it made «nessun agente installato» impossible and
+   * preselected a Terminal on a machine with nothing to start (audit UX-1). It stays a card the user can click.
+   */
+  const real = statuses.filter((status) => status.agent.id !== "terminal")
+  const present = real.find((status) => status.availability === "presente" && isProbeable(status.agent))
   if (present) return present.agent.id
-  const unknown = statuses.find((status) => status.availability === "sconosciuto" && isProbeable(status.agent))
+  const unknown = real.find((status) => status.availability === "sconosciuto" && isProbeable(status.agent))
   return unknown?.agent.id
 }
 

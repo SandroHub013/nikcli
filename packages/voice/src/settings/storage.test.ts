@@ -358,8 +358,9 @@ describe("ADE Test e la voce cloud", () => {
         testIdentity: true,
       }),
     ).toBe(false)
-    // Fuori da ADE Test lo stesso profilo nuovo è Rosa.
-    expect(loadVoiceSettings(new MemoryStorage()).settings.replyVoice).toBe("it-IT-Rosa")
+    // Fuori da ADE Test lo stesso profilo nuovo è Ugo: nessun profilo nuovo parte su una voce a pagamento (MOD-9).
+    const outside = loadVoiceSettings(new MemoryStorage()).settings
+    expect([outside.replyVoice, outside.replyBackend]).toEqual(["ugo", "piper"])
   })
 
   test("il primo salvataggio in ADE Test non scrive Rosa sul disco", () => {
@@ -456,9 +457,9 @@ describe("ADE Test e la voce cloud", () => {
     store.setItem(VOICE_SETTINGS_STORAGE_KEY, "{}")
     store.setItem(VOICE_API_KEY_STORAGE_KEY, "sk-or-v1-finta")
     expect(loadVoiceSettings(store).settings.replyVoice).toBe("ugo")
-    // Senza niente salvato, con la sola chiave, è nuovo: Rosa.
+    // Senza niente salvato, con la sola chiave, è nuovo: Ugo, anche con la chiave in mano.
     const fresh = new MemoryStorage()
     fresh.setItem(VOICE_API_KEY_STORAGE_KEY, "sk-or-v1-finta")
-    expect(loadVoiceSettings(fresh).settings.replyVoice).toBe("it-IT-Rosa")
+    expect(loadVoiceSettings(fresh).settings.replyVoice).toBe("ugo")
   })
 })

@@ -272,6 +272,12 @@ export const it = {
   "new.launch": (count: number) => (count === 1 ? "Avvia 1 sessione" : `Avvia ${count} sessioni`),
   "new.agent": "Agente",
   "new.missing": "assente",
+  "new.looking": "Cerco gli agenti installati…",
+  "new.noneInstalled":
+    "Nessun agente installato su questo computer. Scegline uno qui sotto per vedere come installarlo.",
+  "new.noAgentChosen": "nessun agente scelto",
+  "pane.noAgent":
+    "Questa sessione non può partire: non è stato scelto nessun agente. Chiudila e scegline uno in Nuova sessione.",
   "install.cardHint": "non installato: clicca per installarlo",
   "install.title": (agent: string) => `Installa ${agent}`,
   "install.command": "Comando ufficiale",
@@ -289,7 +295,13 @@ export const it = {
   "install.requiresPage": (program: string) => `Come installare ${program}`,
   "install.found": (agent: string) => `${agent} trovato: ora si può avviare.`,
   "install.notFound":
-    "Ancora non lo trovo. Quando l'installazione nel terminale è finita, premi di nuovo Ricontrolla.",
+    "Non lo trovo ancora. Se il terminale mostra un errore, l'installazione non è finita: correggi e riprova. Se è finita, chiudi e riapri Nuova sessione.",
+  "install.paneNote": (agent: string) =>
+    `A installazione finita ADE ricontrolla da sola e riapre Nuova sessione con ${agent} pronto. Se l'installazione dà errore, di solito il terminale resta aperto.`,
+  "install.stillMissing": "Non lo trovo ancora. Apri Nuova sessione e premi Ricontrolla sulla sua scheda.",
+  "install.readyElsewhere": (agent: string) => `${agent} è installato: apri Nuova sessione (Ctrl+N) per avviarlo.`,
+  "install.autoFoundElsewhere": (agent: string) => `${agent} installato: apri Nuova sessione (Ctrl+N) per avviarlo.`,
+  "install.autoFound": (agent: string) => `${agent} installato: ora puoi avviarlo da Nuova sessione.`,
   "install.source": (source: string, date: string) => `Fonte: ${source}, controllata il ${date}`,
   "install.caveat.subscription": "Per usarlo serve un abbonamento GitHub Copilot.",
   "install.caveat.wsl": "Su Windows la documentazione consiglia WSL per l'esperienza migliore.",
@@ -1755,6 +1767,8 @@ export const it = {
     `La trascrizione locale è stata rimossa: da ora la voce si trascrive con OpenRouter, in cloud, e l'ascolto continuo è spento, perché ogni voce in stanza sarebbe stata mandata al servizio a pagamento. Se lo vuoi, riaccendilo con «${always}» nelle impostazioni della voce.`,
   "voice.alert.permission": (pane: string, what: string) =>
     `${pane} richiede il permesso per: ${what}. Vuoi consentire?`,
+  /* Without listening for an answer the alert does not ask: nobody would hear the reply (review N13). */
+  "voice.alert.permissionStated": (pane: string, what: string) => `${pane} richiede il permesso per: ${what}.`,
   "voice.alert.completed": (pane: string, details: string) => `${pane} ha finito: ${details}.`,
   "voice.alert.completedSimple": (pane: string) => `${pane} ha finito il lavoro.`,
   "voice.alert.decision": (title: string) => `C'è una decisione aperta nel registro: ${title}.`,

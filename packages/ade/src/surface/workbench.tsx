@@ -65,6 +65,9 @@ import { formatChord, parseChord } from "../keyboard/keymap"
 import { CommandPalette } from "../command/palette"
 import { paletteStep } from "../command/palette-keys"
 import { SessionNew } from "../session-new/session-new"
+import { isSavedInstallPane } from "../session-new/install"
+import { watchInstall, installExit, typedInstallLine, type InstallWatch } from "../session-new/install-follow"
+import { recheckAgents } from "../session-new/availability"
 import { AGENTS, agentById, agentLabel } from "../session-new/agents"
 import { oneAtATime } from "./one-at-a-time"
 import { RunningSessions } from "./running"
@@ -855,6 +858,8 @@ export function Workbench() {
   // The launch screen is a state, not an empty grid: it has to be reachable with
   // six sessions already running, which is exactly when a seventh is wanted.
   const [starting, setStarting] = createSignal(false)
+  /* The agent «Nuova sessione» opens on, set when an install the user started has just finished. */
+  const [launcherAgent, setLauncherAgent] = createSignal<string>()
   const [remoteOpen, setRemoteOpen] = createSignal(false)
   const themeState = createThemeState()
   const theme = themeState.theme
@@ -5919,7 +5924,22 @@ export function Workbench() {
    * system voice underneath while it downloads or when it fails. The host is
    * looked up per call, so the browser harness simply never gets past status.
    */
+  /*
+   * Piper's 63 MB are fetched only after the user pressed «Scarica voce» in the voice settings or in the Agent checklist (once, remembered): a fresh
+   * profile speaks with the system voice until then, and a reply never starts a download by itself (review N8).
+   */
+  const DOWNLOAD_CONSENT_KEY = "ade.voice.download-consent"
+  let consentedNow = false
+  const downloadConsented = () => {
+    if (consentedNow) return true
+    try {
+      return localStorage.getItem(DOWNLOAD_CONSENT_KEY) === "1"
+    } catch {
+      return false
+    }
+  }
   const naturalSpeaker = createNaturalSpeaker({
+    mayDownload: () => downloadConsented(),
     /*
      * Which voice speaks, and in which language — one answer, because the voice
      * is chosen *for* the language and two of them could come apart. The
@@ -6002,6 +6022,21 @@ export function Workbench() {
     },
     fallback: systemSpeaker,
     fallbackNotice: () => t("vui.reply.fallbackNotice"),
+    // Said once for the profile, not at every start of ADE.
+    fallbackNoticeSeen: () => {
+      try {
+        return localStorage.getItem("ade.voice.fallback-notice") === "1"
+      } catch {
+        return false
+      }
+    },
+    onFallbackNotice: () => {
+      try {
+        localStorage.setItem("ade.voice.fallback-notice", "1")
+      } catch {
+        // Said again next time, which is harmless.
+      }
+    },
     onInstall: (voice, state, problem) => {
       if (voice !== speakingVoice()) return
       if (state === "ready") {
@@ -6158,6 +6193,13 @@ export function Workbench() {
 
   const downloadNaturalVoice = async () => {
     if (voiceDownloading()) return
+    // The click is the consent; remembered, so a later start does not ask again.
+    consentedNow = true
+    try {
+      localStorage.setItem(DOWNLOAD_CONSENT_KEY, "1")
+    } catch {
+      // Without storage the consent lasts until the page is reloaded.
+    }
     const v = activePiperVoice()
     setVoiceDownloading(true)
     speaker.prepare()
@@ -6290,6 +6332,7 @@ export function Workbench() {
     // and the profile was written back on the way in, so it does not return.
     setVoiceSettingsNotice(undefined)
     const before = listensByItself(voiceSettings())
+    const choosesMai = next.replyBackend === "mai" && voiceSettings().replyBackend !== "mai"
     const previousVoice = activePiperVoice()
     const stored = saveVoiceSettings(next, undefined, { testIdentity: testBuild })
     // The key is not the panel's to change: it is the keychain's, whatever `next` says.
@@ -6304,6 +6347,12 @@ export function Workbench() {
     }
     await voiceEngine.updateSettings(saved.settings)
     await registerGlobalShortcuts?.(saved.settings)
+    // The user just picked the paid voice and has no key: ragu's is offered to it now, not before (audit MOD-9).
+    if (choosesMai && !voiceKey()) {
+      const host = await voiceKeyHost()
+      const copied = host ? await copyRaguKey(host) : undefined
+      if (copied) await applyVoiceKey(copied)
+    }
     const after = listensByItself(saved.settings)
     // The switch is the switch: on opens the microphone, off closes it.
     if (after && !before) listenForName()
@@ -6351,11 +6400,34 @@ export function Workbench() {
     await refreshVoiceKey()
   }
 
+  /**
+   * ragu's OpenRouter key from its `auth.json`, copied into the keychain, or undefined. Never under ADE Test's identity
+   * (`syncOpenRouterKey`): its profiles would get the user's paid key.
+   */
+  const copyRaguKey = async (host: VoiceKeyHost): Promise<string | undefined> => {
+    const shell = await getHost()
+    if (!shell?.homeDir || !shell.readTextFile) return undefined
+    let copied: string | undefined
+    await syncOpenRouterKey({
+      identifier: async () => (await import("@tauri-apps/api/app")).getIdentifier(),
+      homeDir: () => shell.homeDir!(),
+      readTextFile: (path, maxBytes) => shell.readTextFile!(path, maxBytes),
+      save: async (key) => {
+        await saveVoiceKey(host, key)
+        copied = key
+      },
+      removed: isOpenRouterKeyRemoved,
+    })
+    return copied
+  }
+
   /*
    * At start: the key moves out of browser storage into the keychain (once),
-   * the keychain's is read into memory, and only when there is none is
-   * ragu's `auth.json` copied, into the keychain too. Never under ADE Test's
-   * identity (`syncOpenRouterKey`): its profiles would get the user's paid key.
+   * the keychain's is read into memory, and ragu's `auth.json` is copied only
+   * for a profile that chose the paid MAI voice (audit MOD-9): a fresh profile
+   * starts on a local voice and never gets the key behind the user's back. A
+   * profile that picks MAI later gets the copy at that moment
+   * (`handleVoiceSettingsChange`).
    */
   const startVoiceKey = async () => {
     const host = await voiceKeyHost()
@@ -6370,21 +6442,7 @@ export function Workbench() {
       console.warn("ADE: chiave OpenRouter non spostata nel portachiavi:", migration.reason)
     }
     let key = await host.read().catch(() => undefined)
-    if (!key) {
-      const shell = await getHost()
-      if (shell?.homeDir && shell.readTextFile) {
-        await syncOpenRouterKey({
-          identifier: async () => (await import("@tauri-apps/api/app")).getIdentifier(),
-          homeDir: () => shell.homeDir!(),
-          readTextFile: (path, maxBytes) => shell.readTextFile!(path, maxBytes),
-          save: async (copied) => {
-            await saveVoiceKey(host, copied)
-            key = copied
-          },
-          removed: isOpenRouterKeyRemoved,
-        })
-      }
-    }
+    if (!key && voiceSettings().replyBackend === "mai") key = await copyRaguKey(host)
     await applyVoiceKey(key)
   }
 
@@ -6404,6 +6462,7 @@ export function Workbench() {
     now: () => Date.now(),
     isLocked: isScreenLocked,
     isEnabled: () => voiceSettings().spokenAlerts === true,
+    listensForAnswer: () => voiceSettings().alertsListen === true,
     isBusy: () => voiceEngine.isBusy(),
     speak: async (text) => {
       await speaker.speak(text)
@@ -6671,8 +6730,16 @@ export function Workbench() {
     const savedWorkspace = readSavedWorkspace(localStorage, Date.now())
     let restored: WorkspaceState | undefined
     if (savedWorkspace.state) {
-      restored = savedWorkspace.state
-      setWb(fromWorkspaceState(savedWorkspace.state))
+      /*
+       * An install pane saved by 0.18.0 has no `installFor` and its task is the install line: both boot paths would
+       * type it again. Dropped here, once, before either reads the list; the next save writes it without them.
+       */
+      const state: WorkspaceState = {
+        ...savedWorkspace.state,
+        panes: savedWorkspace.state.panes.filter((pane) => !isSavedInstallPane(pane)),
+      }
+      restored = state
+      setWb(fromWorkspaceState(state))
       // The suspended sessions' queues, now that their panes are back (P1-C6).
       // Also for a pane resumed just before ADE closed: its mail waits for the session to start again.
       heldLines.push(...parseSuspendedMail(readStored(SUSPENDED_MAIL_KEY)).filter((line) => paneExists(line.paneId)))
@@ -7852,6 +7919,13 @@ export function Workbench() {
   const finish = (id: string, code: number | null, failed?: "startFailed" | "connectFailed") => {
     running.delete(id)
     touchRunning()
+    // An install pane whose installer succeeded: the agents are looked up again and the launcher opens (UX-2).
+    // The agent is on the pane itself (`Pane.installFor`), so a refused first start that is retried is still followed.
+    const installing = wb().panes.find((pane) => pane.id === id)?.installFor
+    if (installing) {
+      const watched = { agentId: installing, label: agentLabel(installing) }
+      if (installExit(watched, { code, ...(failed ? { failed } : {}) })) void installFinished(id, watched)
+    }
     forgetQuiet(id)
     // Whatever was half-written belonged to the process that has gone. Left
     // behind, it would hold mail back from the session that starts next.
@@ -7864,6 +7938,37 @@ export function Workbench() {
         activity: failed ?? (code === 0 ? "done" : exitedActivity(code)),
       }),
     )
+  }
+
+  /**
+   * The installer in an install pane ended cleanly: the agents are looked up again (the PATH reread first) and, with
+   * the agent there, «Nuova sessione» opens on it. Not there: the pane says so and stays (UX-2).
+   */
+  const installFinished = async (paneId: string, watch: InstallWatch) => {
+    const host = await getHost()
+    const outcome = await watchInstall(watch, () => recheckAgents(host))
+    if (outcome === "missing") {
+      if (wb().panes.some((pane) => pane.id === paneId)) tellPane(paneId, t("install.stillMissing"))
+      return
+    }
+    /*
+     * The launcher takes the whole grid, so it opens only when the user is still looking at the install pane, in the
+     * project it belongs to. Anywhere else a note in the pane and a toast say it is ready (audit UX-2).
+     */
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    const here =
+      pane !== undefined &&
+      wb().view === "code" &&
+      wb().focusedId === paneId &&
+      paneProject(pane, project(), recents()).kind === "open"
+    if (!here) {
+      if (pane) tellPane(paneId, t("install.readyElsewhere", watch.label))
+      toast.show(t("install.autoFoundElsewhere", watch.label))
+      return
+    }
+    setLauncherAgent(watch.agentId)
+    setStarting(true)
+    toast.show(t("install.autoFound", watch.label))
   }
 
   /*
@@ -8621,7 +8726,16 @@ export function Workbench() {
     if (wb().panes.some((pane) => pane.id === paneId && pane.gone))
       setWb((w) => updatePane(w, paneId, { gone: undefined }))
     const p = host ? await projectOfPane(host, paneId) : undefined
-    if (!agent || !agent.command || !host || !p) return
+    /*
+     * A pane for an agent that is not in the catalogue (none was chosen, or it was removed): said, not left on «Pronta»
+     * for ever with nothing behind it (audit UX-1). Retrying cannot help, so the note says to close it.
+     */
+    if (!agent) {
+      setWb((w) => updatePane(w, paneId, { status: "error", activity: "startFailed" }))
+      tellPane(paneId, t("pane.noAgent"))
+      return
+    }
+    if (!agent.command || !host || !p) return
     if (p.remote) return startRemoteProcess(paneId, agentId, agent.command, task, p.remote, host, start)
 
     /*
@@ -8931,7 +9045,7 @@ export function Workbench() {
        * gone, where nothing could reach it and the opening task was typed in.
        */
       if (!wb().panes.some((pane) => pane.id === paneId)) running.cancelStart(paneId)
-      if (!running.adopt(paneId, start, session)) {
+      if (!running.adopt(paneId, start, session, refused)) {
         superseded = true
         return
       }
@@ -9209,7 +9323,7 @@ export function Workbench() {
       })
       // As for a local session: closed or started again meanwhile, the connection is ended (SES-2).
       if (!wb().panes.some((pane) => pane.id === paneId)) running.cancelStart(paneId)
-      if (!running.adopt(paneId, start, session)) {
+      if (!running.adopt(paneId, start, session, refused)) {
         superseded = true
         return
       }
@@ -10444,17 +10558,36 @@ export function Workbench() {
                     path={project()?.root || ""}
                     /* Cancelling is only offered when there is something to go
                        back to; on an empty workbench it would lead nowhere. */
-                    onClose={gridPanes().length > 0 ? () => setStarting(false) : undefined}
-                    onLaunch={(input) => launchSessions(input)}
+                    onClose={
+                      gridPanes().length > 0
+                        ? () => {
+                            setLauncherAgent(undefined)
+                            setStarting(false)
+                          }
+                        : undefined
+                    }
+                    {...(launcherAgent() ? { initialAgent: launcherAgent()! } : {})}
+                    onLaunch={(input) => {
+                      setLauncherAgent(undefined)
+                      launchSessions(input)
+                    }}
                     /* The install line of a missing agent, typed into a terminal the user can see: a shell's task is
                        the command itself (`withIntro` leaves it alone), run as the user's own, never hidden and never
                        elevated. */
-                    onInstall={(input) =>
-                      void addAgent(
-                        { agentId: "terminal", count: 1, task: input.line, title: t("install.paneTitle", input.label) },
+                    onInstall={(input) => {
+                      const made = addAgent(
+                        {
+                          agentId: "terminal",
+                          count: 1,
+                          task: typedInstallLine(input.line),
+                          title: t("install.paneTitle", input.label),
+                        },
                         { index: 1, agentId: "terminal", role: "agent" },
                       )
-                    }
+                      // The form goes away with the new pane: the pane follows its own end and says what comes next.
+                      setWb((w) => updatePane(w, made.id, { installFor: input.agentId }))
+                      tellPane(made.id, t("install.paneNote", input.label))
+                    }}
                   />
                 }
               >
@@ -10566,6 +10699,7 @@ export function Workbench() {
           onOpenVoiceSource={(voice) => void getHost().then((host) => host?.ttsOpenVoiceSource?.(voice))}
           naturalVoiceError={voiceError()}
           naturalVoiceDownloading={voiceDownloading()}
+          naturalVoiceInstalled={voiceInstalled()}
           onDownloadNaturalVoice={() => void downloadNaturalVoice()}
           naturalVoiceProgress={piperProgress() ?? undefined}
           onCancelInstall={(provider) =>

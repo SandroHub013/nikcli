@@ -261,6 +261,11 @@ export interface Pane {
    * does not start a sign-in nobody asked for.
    */
   signIn?: string[]
+  /**
+   * The agent this terminal is installing («Installa» on a missing agent's card). Not saved: an install is run by a
+   * click, and a pane left in the grid must never run its installer again when ADE opens.
+   */
+  installFor?: string
   /** The cells the user resized this tile to; absent means the default size. See `grid/arrange.ts`. */
   span?: Span
   /**
@@ -634,7 +639,7 @@ export function toWorkspaceState(workbench: Workbench): WorkspaceState {
    */
   const saved = workbench.panes
     // A sign-in is not a session to bring back (`Pane.signIn`).
-    .filter((p) => !isPanelPane(p) && !p.signIn)
+    .filter((p) => !isPanelPane(p) && !p.signIn && !p.installFor)
     .map((p) => ({
       id: p.id,
       title: p.title,

@@ -232,6 +232,42 @@ export function ModePage(p: { state: VoiceSettingsState; bare?: boolean }): JSX.
         </div>
 
         {/*
+        Listening for an answer after a permission alert: a microphone and a paid transcription, so its own switch,
+        off, and shown only while alerts are on (audit MOD-16).
+      */}
+        <Show when={props.settings.spokenAlerts === true}>
+          <div data-slot="sub-choice-box">
+            <span id="agent-alerts-listen-label" data-slot="sub-choice-label">
+              {t("vui.alertsListen.title")}
+            </span>
+            <div role="radiogroup" aria-labelledby="agent-alerts-listen-label" data-slot="sub-choice-row">
+              <div
+                role="radio"
+                data-value="on"
+                aria-checked={props.settings.alertsListen === true}
+                tabIndex={props.settings.alertsListen === true ? 0 : -1}
+                data-slot="sub-choice-item"
+                onClick={() => updateSettings({ alertsListen: true })}
+              >
+                <span data-slot="sub-item-title">{t("vui.alertsListen.on")}</span>
+                <span data-slot="sub-item-desc">{t("vui.alertsListen.on.desc")}</span>
+              </div>
+              <div
+                role="radio"
+                data-value="off"
+                aria-checked={props.settings.alertsListen !== true}
+                tabIndex={props.settings.alertsListen !== true ? 0 : -1}
+                data-slot="sub-choice-item"
+                onClick={() => updateSettings({ alertsListen: false })}
+              >
+                <span data-slot="sub-item-title">{t("vui.alertsListen.off")}</span>
+                <span data-slot="sub-item-desc">{t("vui.alertsListen.off.desc")}</span>
+              </div>
+            </div>
+          </div>
+        </Show>
+
+        {/*
         What answers what the grammar does not know. A CLI the user is
         signed in to, so it runs on their subscription; see
         `VoiceSettings.agentEngine`.

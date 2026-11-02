@@ -122,7 +122,7 @@ describe("the workbench's starts", () => {
 
   test("a spawn becomes the pane's session only through its start", () => {
     expect(source).not.toContain("running.set(")
-    expect(source.match(/running\.adopt\(paneId,start,session\)/g)?.length).toBe(2)
+    expect(source.match(/running\.adopt\(paneId,start,session,refused\)/g)?.length).toBe(2)
   })
 
   /*
@@ -155,5 +155,38 @@ describe("the workbench", () => {
    */
   test("ends its sessions when it is disposed, registered as the map is made", () => {
     expect(source).toContain(codeOf("const running = new RunningSessions() onCleanup(() => running.endAll())"))
+  })
+})
+
+/*
+ * Audit SES-1: `host.spawn` hands back a session object even when the host refused the start (binary not on PATH,
+ * key refused, ssh unreachable), already dead and already exited. The workbench used to adopt it all the same, so the
+ * pane said «Avvio non riuscito» while `isRunning` was true: no «Riprova», mail «sent» into nothing.
+ */
+describe("a start the host refused", () => {
+  test("is not adopted as the pane's session, so the pane can be retried", () => {
+    const kills: Array<{ tree?: boolean } | undefined> = []
+    const running = new RunningSessions()
+    const token = running.beginStart("a")
+
+    expect(running.adopt("a", token, session(kills), true)).toBe(false)
+    expect(running.has("a")).toBe(false)
+    expect(running.starting("a", token)).toBe(false)
+  })
+
+  test("a start that went through is adopted as before", () => {
+    const kills: Array<{ tree?: boolean } | undefined> = []
+    const running = new RunningSessions()
+    const token = running.beginStart("a")
+    const one = session(kills)
+
+    expect(running.adopt("a", token, one, false)).toBe(true)
+    expect(running.get("a")).toBe(one)
+    expect(kills).toEqual([])
+  })
+
+  test("the local start and the ssh start both say whether the host refused", () => {
+    const source = codeOf(readFileSync(new URL("./workbench.tsx", import.meta.url), "utf8"))
+    expect(source.split(codeOf("running.adopt(paneId, start, session, refused)")).length - 1).toBe(2)
   })
 })
