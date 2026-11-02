@@ -14,6 +14,15 @@ export interface GatewayAttentionSyncDeps {
   readonly botName?: (botPath: string) => string
 }
 
+/** The reason Rust gives for a link that needs attention, said in ADE's language; any other is shown as it is. */
+export const QUEUE_FULL_REASON = "coda_piena"
+
+export function attentionText(reason: string | null | undefined): string | undefined {
+  if (reason === "timeout_10m") return t("gateway.panel.attentionTimeout")
+  if (reason === QUEUE_FULL_REASON) return t("gateway.panel.attentionQueueFull")
+  return reason ?? undefined
+}
+
 export function syncGatewayAttention(deps: GatewayAttentionSyncDeps): { stop: () => void } {
   let stopped = false
   let unlisten: (() => void) | undefined
@@ -23,10 +32,7 @@ export function syncGatewayAttention(deps: GatewayAttentionSyncDeps): { stop: ()
   const handleStatus = (status: Pick<LinkStatus, "bot" | "platform" | "needsAttention" | "attentionReason">) => {
     const key = `gateway:${status.bot}:${status.platform}`
     if (status.needsAttention) {
-      const reason =
-        status.attentionReason === "timeout_10m"
-          ? t("gateway.panel.attentionTimeout")
-          : status.attentionReason ?? undefined
+      const reason = attentionText(status.attentionReason)
       deps.approvals.openAttention({
         id: key,
         bot: status.bot,

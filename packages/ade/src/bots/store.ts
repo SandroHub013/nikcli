@@ -451,7 +451,13 @@ export type ForgetGateways = (bot: string) => Promise<void>
 
 const forgetGateways: ForgetGateways = async (bot) => {
   const { invoke } = await import("@tauri-apps/api/core")
-  await invoke("gateway_forget_bot", { bot })
+  try {
+    await invoke("gateway_forget_bot", { bot })
+  } finally {
+    // Rust stopped the links before it touched the keychain, so what the page had queued or running for them
+    // stops whether or not the clearing succeeded. Loaded here, not at the top: the bridge imports this file.
+    ;(await import("./gateway/bridge")).switchOffBotGateways(bot)
+  }
 }
 
 /**
