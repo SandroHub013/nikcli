@@ -455,6 +455,8 @@ export const en: Messages = {
   "design.waiter.taken": (key) => `Choice on ${key} delivered to the ade-msg command waiting for it`,
   "workspace.unreadable":
     "I could not read the saved sessions (they may come from a newer version of ADE). I kept a copy: update ADE to get them back.",
+  "workspace.unreadableBroken": (copy) =>
+    `The saved sessions are damaged and no version of ADE can read them: updating will not help. I kept a copy, but it cannot be restored from here: it is in ADE's storage under the name "${copy}".`,
   "workspace.unreadableNoCopy":
     "I could not read the saved sessions and could not keep a copy (no room left). Until there is room, this run's sessions are not saved.",
   "workspace.saveFailed": "I cannot save the sessions: ADE's storage is full. Close the sessions you do not need.",
@@ -1767,6 +1769,7 @@ export const en: Messages = {
   "note.updateFrom": (from, state, text) => `Update from ${from}: ${state} — ${text}`,
   "note.memory": (line) => `Memory: ${line}`,
   "note.subagent": (title) => `Subagent started: ${title}`,
+  "note.mailHeldByLine": "A message for this session is waiting: you have a line half written. Send or clear the line and it arrives.",
   "note.interruptedBy": (from) => `Interrupted by ${from}`,
   "note.restarted": (from, model) => `Restarted by ${from}${model ? ` with model ${model}` : ""}`,
   "note.restartedFresh": (from, model) => `Restarted from scratch by ${from}${model ? ` with model ${model}` : ""}`,

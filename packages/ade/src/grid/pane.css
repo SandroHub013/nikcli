@@ -167,10 +167,10 @@
   min-width: 0;
   overflow: hidden;
   /*
-   * None at all. Padding here is bought with terminal columns, and at two
-   * panes across, four characters of gutter is a wrapped line in every
-   * paragraph the agent writes. There is no border left for the text to sit
-   * off, so the emulator gets the whole box.
+   * None on this box. Padding here is not subtracted from the width FitAddon
+   * measures (it reads the parent's whole width and takes off only the
+   * terminal element's own padding), so it would be bought with a wrapped
+   * line. The gutter is on `.xterm` below, where the fit counts it.
    */
   padding: 0;
   background: var(--ade-terminal-bg, var(--ade-sunken));
@@ -187,8 +187,16 @@
   background: transparent !important;
 }
 
+/*
+ * The gutter the approved mockup has (terminale-A, about 12 px): on the emulator's own element, because that is the
+ * padding FitAddon takes off the width before it counts columns, so the columns that fit are whole and no cell is cut
+ * by the pane's edge. Left only: the scrollbar is `right: 0` of `.xterm-scrollable-element`, which sits inside the content
+ * box, so it never goes into the gutter and a right padding would only cost two columns. (Which leaves the thumb cut by
+ * the round corner as in the base: two columns are worth more than that.)
+ */
 [data-slot="pane-terminal"] .xterm {
   height: 100%;
+  padding: 0 0 0 var(--ade-space-6);
 }
 
 /* Says a selection was copied; never in the way of the next one. */
@@ -935,6 +943,19 @@
   > [data-slot="pane-header"]
   ~ *:not([data-slot="pane-dock"]):not([data-slot="pane-toast"]) {
   padding-top: 42px;
+}
+
+/*
+ * The transcript scrolls, and with its room for the pill as padding the text scrolled up into it and showed through the
+ * pill (92 % opaque), a half line cut under its lower edge (live test 2026-11-02, V2). The room is a border of the
+ * terminal's own ground instead: the scroll area starts below the pill, and the first line still clears it. The same
+ * 42 px, so a pane with and without a transcript does not move.
+ */
+[data-component="session-pane"]
+  > [data-slot="pane-header"]
+  ~ [data-slot="pane-transcript"]:not([data-slot="pane-dock"]):not([data-slot="pane-toast"]) {
+  padding-top: var(--ade-space-2);
+  border-top: 42px solid var(--ade-terminal-bg, var(--ade-sunken));
 }
 
 /* ══ Proposta A · Barra densa (S8) ═════════════════════════════════════════ */

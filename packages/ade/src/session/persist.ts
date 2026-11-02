@@ -389,6 +389,21 @@ export function migrateWorkspace(raw: Record<string, unknown>): Record<string, u
 // ---------------------------------------------------------------------------
 
 /**
+ * Why `parseWorkspace` gave up on `json`: a `version` newer than this build knows (updating ADE brings the sessions
+ * back) or damage no version can read (broken JSON, not an object, a migration that fails). The two need different
+ * words: telling the second «update ADE» sends the user to wait for something that cannot help (live test F3).
+ */
+export function unreadableReason(json: string): "newer" | "broken" {
+  try {
+    const parsed: unknown = JSON.parse(json)
+    if (isObject(parsed) && typeof parsed.version === "number" && parsed.version > CURRENT_VERSION) return "newer"
+  } catch {
+    // Not JSON at all: broken.
+  }
+  return "broken"
+}
+
+/**
  * Parse a JSON string into a `WorkspaceState`, tolerating every kind of damage.
  *
  * Returns `undefined` only when nothing useful can be recovered: invalid JSON

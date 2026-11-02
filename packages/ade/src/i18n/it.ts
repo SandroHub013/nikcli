@@ -467,6 +467,8 @@ export const it = {
   "design.waiter.taken": (key: string) => `Scelta su ${key} consegnata al comando ade-msg che la aspettava`,
   "workspace.unreadable":
     "Non sono riuscita a leggere le sessioni salvate (forse sono di una versione più nuova di ADE). Ne ho tenuto una copia: aggiorna ADE per riaverle.",
+  "workspace.unreadableBroken": (copy: string) =>
+    `Le sessioni salvate sono danneggiate e nessuna versione di ADE le può leggere: aggiornare non serve. Ne ho tenuto una copia, ma non si ripristina da qui: è nell'archivio di ADE con il nome «${copy}».`,
   "workspace.unreadableNoCopy":
     "Non sono riuscita a leggere le sessioni salvate e non ho potuto tenerne una copia (manca spazio). Finché non se ne libera, le sessioni di questa volta non vengono salvate.",
   "workspace.saveFailed":
@@ -1811,6 +1813,7 @@ export const it = {
   "note.updateFrom": (from: string, state: string, text: string) => `Aggiornamento da ${from}: ${state} — ${text}`,
   "note.memory": (line: string) => `Memoria: ${line}`,
   "note.subagent": (title: string) => `Subagent avviato: ${title}`,
+  "note.mailHeldByLine": "Un messaggio per questa sessione aspetta: hai una riga a metà. Invia o cancella la riga e arriva.",
   "note.interruptedBy": (from: string) => `Interrotta da ${from}`,
   "note.restarted": (from: string, model: string) => `Riavviata da ${from}${model ? ` con il modello ${model}` : ""}`,
   "note.restartedFresh": (from: string, model: string) =>

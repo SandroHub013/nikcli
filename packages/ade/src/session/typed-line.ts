@@ -51,6 +51,11 @@ export interface TypedLine {
    * left the count at zero with the text still there.
    */
   escape?: boolean
+  /**
+   * The one key typed into a menu has been taken for its answer (`typedAfter`, `menuOpen`). A second key before an Enter
+   * is no answer: it is the start of what the user types next, and counts.
+   */
+  answered?: boolean
 }
 
 /** Whether a delivery here would land inside something the user is writing. */
@@ -58,13 +63,29 @@ export function isTyping(line: TypedLine | undefined): boolean {
   return (line?.pending ?? 0) > 0
 }
 
-/** The count after `data` reached the session as the user's input. */
-export function typedAfter(line: TypedLine | undefined, data: string, now: number): TypedLine | undefined {
+/**
+ * The count after `data` reached the session as the user's input.
+ *
+ * `menuOpen`: a menu was standing when the key arrived. The FIRST key there, on an empty line, is the menu's answer
+ * («y», «q», «2») and goes into no input line, so it is not a draft: counting it left the pane looking half-written
+ * for ever after a one-key answer with no Enter, and every message to it held without limit (live test 2026-11-02,
+ * F2). Only the first: xterm hands over typing one key at a time, and a menu the hook still reports while a tool runs
+ * would otherwise swallow the whole instruction the user types ahead, and the mail would land in it (review B1). The
+ * second key before an Enter counts, a key on top of a draft counts, and so do a paste and any sequence. Over-counting
+ * is healed by the next Enter; under-counting is the damage this file exists to prevent.
+ */
+export function typedAfter(
+  line: TypedLine | undefined,
+  data: string,
+  now: number,
+  menuOpen = false,
+): TypedLine | undefined {
   const pending = line?.pending ?? 0
   if (data.length === 0) return line
 
   if (data === INTERRUPT) return undefined
   if (data === ESC) return line?.escape ? undefined : { pending, at: now, escape: true }
+  if (menuOpen && isOneKey(data) && !line?.pending && !line?.answered) return { pending: 0, at: now, answered: true }
 
   /*
    * A declared paste never submits, whatever it contains: the newline inside
@@ -107,6 +128,27 @@ export function typedAfter(line: TypedLine | undefined, data: string, now: numbe
   }
   if (count === 0) return undefined
   return data.endsWith("\\") ? { pending: count, at: now, backslash: true } : { pending: count, at: now }
+}
+
+/** One printable character: not an Enter (which sends), not a sequence, not a paste. */
+function isOneKey(data: string): boolean {
+  return [...data].length === 1 && data !== "\r" && data !== "\n" && data >= " " && data !== "\u007f"
+}
+
+/**
+ * Whether `data` is worth asking whether a menu stands: one printable key. Asked of everything, the screen would be read
+ * for every mouse report and arrow of an any-event TUI (review B1).
+ */
+export function isAnswerKey(data: string): boolean {
+  return isOneKey(data)
+}
+
+/**
+ * A new question opened: the key that answered the last one says nothing about this one, so its first key is an answer
+ * again. A real draft stays (re-review B7: two prompts in one turn, each answered with a digit and no Enter).
+ */
+export function questionOpened(line: TypedLine | undefined): TypedLine | undefined {
+  return line?.answered ? undefined : line
 }
 
 /** The line as it was, minus a pending Escape, with the clock moved on. */

@@ -446,6 +446,22 @@ describe("the page and ADE, over one port", () => {
     expect(secondo.onmessage).toBeUndefined()
   })
 
+  test("ADE's theme reaches a page that is open, and only the two schemes there are (V4)", async () => {
+    const { win, parent, port, offer } = fakePage(`#n=${NONCE}&t=dark`)
+    await boot(win)
+    expect(document.documentElement.dataset.theme).toBe("dark")
+    const taken = port()
+    offer(parent, [taken])
+    const say = (data: unknown) => (taken.onmessage as (event: { data: unknown }) => void)({ data })
+    say({ type: "theme", theme: "light" })
+    expect(document.documentElement.dataset.theme).toBe("light")
+    say({ type: "theme", theme: "sepia" })
+    say({ type: "theme" })
+    expect(document.documentElement.dataset.theme).toBe("light")
+    say({ type: "theme", theme: "dark" })
+    expect(document.documentElement.dataset.theme).toBe("dark")
+  })
+
   test("the progress comes from ADE, and only `progress` is believed", async () => {
     const { win, parent, port, offer } = fakePage(`#n=${NONCE}`)
     await boot(win)

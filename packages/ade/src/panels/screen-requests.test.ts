@@ -172,11 +172,15 @@ describe("lint: the workbench reads the screen and leaves those lines out of onL
   const workbench = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
 
   test("lint: every chunk fed to a terminal arms the screen reading", () => {
-    const feed = workbench.slice(
-      workbench.indexOf("const feedTerminal = "),
-      workbench.indexOf("const feedTerminal = ") + 1500,
-    )
-    expect(codeOf(feed)).toContain(codeOf("writeToTerminal(paneId, chunk)\n    screenRequests.fed(paneId)"))
+    const start = workbench.indexOf("const feedTerminal = ")
+    // Up to the next top-level helper, so a longer comment or a line between the two calls does not matter.
+    const end = workbench.indexOf("\n  const ", start + 1)
+    const feed = codeOf(workbench.slice(start, end))
+    const written = feed.indexOf(codeOf("writeToTerminal(paneId, chunk"))
+    const armed = feed.indexOf(codeOf("screenRequests.fed(paneId)"))
+    expect(written).toBeGreaterThan(-1)
+    // The reading is armed after the chunk is written, in the same function.
+    expect(armed).toBeGreaterThan(written)
   })
 
   test("lint: a process started says whether it reopened a conversation, and a closed pane is forgotten", () => {

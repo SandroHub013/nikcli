@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { serializeWorkspace, type WorkspaceState } from "./persist"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+import { serializeWorkspace, unreadableReason, type WorkspaceState } from "./persist"
 import {
   MAX_UNREADABLE,
   WORKSPACE_KEY,
@@ -232,5 +234,69 @@ describe("«Ignora» on the offer", () => {
     store.setItem(`${WORKSPACE_KEY}.unreadable.1`, copyOf("one"))
     ignoreRestore(store, `${WORKSPACE_KEY}.unreadable.1`)
     expect(unreadableCopies(store, WORKSPACE_KEY)).toEqual([`${WORKSPACE_KEY}.unreadable.1`])
+  })
+})
+
+/*
+ * Live test 2026-11-02, F3: a truncated `ade.workspace` got the notice «aggiorna ADE per riaverle», which cannot help:
+ * the text is broken and no version will read it. A newer version's text is the one updating cures.
+ */
+describe("why a saved workspace does not read", () => {
+  test("damage is not a newer version: the two are told apart", () => {
+    expect(unreadableReason("{not json")).toBe("broken")
+    expect(unreadableReason(future.slice(0, future.length / 2))).toBe("broken")
+    expect(unreadableReason("[1,2]")).toBe("broken")
+    expect(unreadableReason('"text"')).toBe("broken")
+    expect(unreadableReason(future)).toBe("newer")
+  })
+
+  test("the boot is told the reason, and where the copy is", () => {
+    const broken = new FakeStore()
+    broken.setItem(WORKSPACE_KEY, future.slice(0, future.length / 2))
+    const damaged = readSavedWorkspace(broken, 1000)
+    expect(damaged.reason).toBe("broken")
+    expect(damaged.copyKey).toBe("ade.workspace.unreadable.1000")
+
+    const newer = new FakeStore()
+    newer.setItem(WORKSPACE_KEY, future)
+    const saved = readSavedWorkspace(newer, 1000)
+    expect(saved.reason).toBe("newer")
+    expect(saved.copyKey).toBe("ade.workspace.unreadable.1000")
+  })
+
+  test("the same damaged text found again names the copy a previous start made", () => {
+    const store = new FakeStore()
+    store.setItem(WORKSPACE_KEY, "{broken")
+    readSavedWorkspace(store, 1000)
+    expect(readSavedWorkspace(store, 9000).copyKey).toBe("ade.workspace.unreadable.1000")
+  })
+
+  test("no copy made, no name given", () => {
+    const store = new FakeStore()
+    store.full = true
+    store.setItem = () => {
+      throw new Error("QuotaExceededError")
+    }
+    store.data.set(WORKSPACE_KEY, "{broken")
+    const saved = readSavedWorkspace(store, 1)
+    expect(saved.saveBlocked).toBe(true)
+    expect(saved.copyKey).toBeUndefined()
+  })
+
+  test("the notice for damage does not tell the user to update, in either language; the one for a newer version does", async () => {
+    const { it } = await import("../i18n/it")
+    const { en } = await import("../i18n/en")
+    for (const dict of [it, en] as Array<Record<string, unknown>>) {
+      const broken = (dict["workspace.unreadableBroken"] as (copy: string) => string)("ade.workspace.unreadable.7")
+      expect(broken).toContain("ade.workspace.unreadable.7")
+      expect(broken.toLowerCase()).not.toMatch(/aggiorna ade per|update ade to get/)
+      expect(String(dict["workspace.unreadable"]).toLowerCase()).toMatch(/aggiorna ade|update ade/)
+    }
+  })
+
+  test("lint: the boot picks the notice by the reason", () => {
+    const source = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf-8").replace(/\r\n/g, "\n")
+    expect(source).toContain('savedWorkspace.reason === "broken" && savedWorkspace.copyKey')
+    expect(source).toContain('t("workspace.unreadableBroken", savedWorkspace.copyKey)')
   })
 })
