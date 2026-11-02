@@ -945,7 +945,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--ade-accent);
+  color: var(--ade-accent-text);
   font: inherit;
   font-size: var(--ade-font-sm);
   text-align: start;
@@ -1002,7 +1002,7 @@
 }
 
 [data-slot="bots-tab"][data-active="true"] {
-  color: var(--ade-accent);
+  color: var(--ade-accent-text);
   /* Not the accent: no accent contour without an accent fill (contorni.test.ts). */
   border-bottom-color: var(--ade-text);
   font-weight: var(--ade-weight-semibold);
@@ -1142,7 +1142,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--ade-accent);
+  color: var(--ade-accent-text);
   font: inherit;
   font-size: var(--ade-font-sm);
   text-align: start;
@@ -1221,7 +1221,7 @@
   width: 100%;
   box-sizing: border-box;
   padding: var(--ade-space-3) var(--ade-space-4);
-  border: 1px solid var(--ade-border);
+  border: 1px solid var(--ade-control-border);
   border-radius: var(--ade-radius-md);
   background: var(--ade-bg);
   color: var(--ade-text);
@@ -1237,7 +1237,7 @@
 [data-slot="bots-input"]:focus-visible {
   outline: none;
   box-shadow: var(--ade-focus-ring);
-  border-color: var(--ade-border-strong);
+  border-color: var(--ade-text-weak);
 }
 
 [data-slot="bots-row-fields"] {
@@ -1293,7 +1293,7 @@
   border: 0;
   padding: 0;
   background: none;
-  color: var(--ade-accent);
+  color: var(--ade-accent-text);
   font: inherit;
   font-size: var(--ade-font-sm);
   cursor: pointer;

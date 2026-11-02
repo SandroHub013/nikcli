@@ -159,6 +159,15 @@
   --ade-border-subtle: rgba(255, 255, 255, 0.08);
   --ade-border: rgba(255, 255, 255, 0.12);
   --ade-border-strong: rgba(255, 255, 255, 0.22);
+  /*
+   * The edge of a field over a desktop. The ramp above is a veil, 1.46:1 on the reading ground, and the dark palette's
+   * control border (#7d7367) is 3.17:1 only on the ground the report measured: over a white desktop at half the slider
+   * it is 1.7. This is the dark palette's soft text, #b0a693: 6.1:1 or more on the grounds the report measured, 3.3:1
+   * on the brightest the sheet makes (the reading ground over a white desktop at 50%).
+   */
+  --ade-control-border: #b0a693;
+  /* Accent words in glass: 5.9:1 on the measured grounds, 4.8:1 under the wash on the brightest (white desktop, 75%). */
+  --ade-accent-text: #f7b088;
   --ade-highlight: rgba(255, 255, 255, 0.15);
   /*
    * Here hover and press darken. Everywhere else they lighten.
@@ -365,6 +374,14 @@ body[data-theme="glass"] #root,
   --ade-accent-strong: light-dark(#a3271b, #df4a2b);
   --ade-accent-fg: light-dark(#fffaf0, #120d0b);
   --ade-accent-glow: light-dark(rgba(184, 51, 33, 0.15), rgba(232, 110, 72, 0.2));
+  /*
+   * The accent as words. `--ade-accent` is a fill as much as a colour (thirty sheets set it as a ground), and as
+   * text it was 3.8 to 4.5:1 on the tinted grounds the live measure found it on (a chip, a badge, a raised card), so
+   * text has its own step and the fills stay the brand's tomato. Light is the palette's own red `-strong` (4.84:1 on
+   * the worst ground measured, #ecccb4, the wash on cream); dark is the palette's hi #f39a6b (4.97:1 on the worst
+   * measured, #4f3830, and 5.5 or more on the five token grounds). Glass has its own, brighter, in its block.
+   */
+  --ade-accent-text: light-dark(#a3271b, #f39a6b);
 
   /* ── status ─────────────────────────────────────────────────────────────── */
   /*
@@ -966,6 +983,15 @@ body,
 }
 
 /*
+ * The grip sits on the pane's corner, so half its ring falls outside the pane, on the floor: in glass that is the
+ * desktop under the veil, and the glass ring (#ebe7e5) is 1.7:1 against it (live measure; 1.71 computed here). A dark
+ * halo one pixel past the ring puts the ring beside the glass ground (15.7:1) whatever the desktop is.
+ */
+[data-component="ade-shell"][data-theme="glass"] [data-slot="tile-resize"]:focus-visible {
+  box-shadow: var(--ade-focus-ring), 0 0 0 3px var(--ade-glass-ground);
+}
+
+/*
  * A press still says something when movement is turned down: the ground
  * changes, only the geometry stops. One token, so no button has to remember.
  */
@@ -1433,6 +1459,7 @@ body,
  */
 [data-component="update-dialog"] [data-slot="update-dialog-mark"] {
   display: inline-flex;
+  /* A filled N, not words: the brand's tomato (--ade-accent-text is for text). */
   color: var(--ade-accent);
 }
 [data-component="update-dialog"] [data-slot="update-dialog-version"] {
@@ -1443,7 +1470,7 @@ body,
   color: var(--ade-text-weak);
 }
 [data-component="update-dialog"] [data-slot="update-dialog-version"] b {
-  color: var(--ade-accent);
+  color: var(--ade-accent-text);
   font-weight: var(--ade-weight-semibold);
 }
 [data-component="update-dialog"] [data-slot="update-dialog-body"] {
@@ -1468,7 +1495,7 @@ body,
 [data-component="update-dialog"] [data-slot="update-dialog-link"] {
   width: fit-content;
   font-size: var(--ade-font-sm);
-  color: var(--ade-accent);
+  color: var(--ade-accent-text);
   text-decoration: none;
   border-radius: 3px;
 }

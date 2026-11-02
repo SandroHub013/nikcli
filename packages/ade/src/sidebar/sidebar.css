@@ -530,7 +530,7 @@
 
 /* Highlight match */
 .highlight-match {
-  color: var(--ade-accent);
+  color: var(--ade-accent-text);
   font-weight: var(--ade-weight-semibold);
 }
 
@@ -1219,11 +1219,11 @@
 }
 
 [data-slot="agent-card-sep"] {
-  color: var(--ade-border);
+  /* The weak text, whole: the border step at 70% was 1.04 to 1.33:1 (live measure). The dot is aria-hidden. */
+  color: var(--ade-text-weak);
   flex-shrink: 0;
   font-size: var(--ade-font-xs);
   margin-inline: 1px;
-  opacity: 0.7;
 }
 
 [data-slot="agent-card-branch"] {
@@ -1575,7 +1575,7 @@ aside[data-component="ade-sidebar"] {
 }
 
 [data-slot="file-result"][data-kind="directory"] [data-slot="file-result-icon"] {
-  color: var(--ade-accent);
+  color: var(--ade-accent-text);
 }
 
 [data-slot="file-result-name"] {

@@ -115,7 +115,7 @@
   font-family: var(--ade-mono);
   font-size: var(--ade-font-sm);
   /* The accent, not its hover fill: in dark that is pomodoro, 3.6:1 as text. */
-  color: var(--ade-accent);
+  color: var(--ade-accent-text);
 }
 
 [data-slot="decision-title"] {
@@ -275,7 +275,7 @@
 [data-slot="decision-date"] {
   height: 22px;
   padding: 0 6px;
-  border: 1px solid var(--ade-border);
+  border: 1px solid var(--ade-control-border);
   border-radius: var(--ade-radius-sm);
   background: var(--ade-surface);
   color: var(--ade-text);
@@ -458,7 +458,7 @@ button[data-slot="decision-row"]:hover {
   font: inherit;
   color: var(--ade-text);
   background: var(--ade-surface, transparent);
-  border: 1px solid var(--ade-border, currentColor);
+  border: 1px solid var(--ade-control-border, currentColor);
   border-radius: var(--ade-radius-sm);
 }
 

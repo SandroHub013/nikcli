@@ -548,7 +548,7 @@
 }
 
 [data-slot="pane-caret"] {
-  color: var(--ade-accent);
+  color: var(--ade-accent-text);
   font-family: var(--ade-mono);
   font-size: var(--ade-font-md);
   line-height: 18px;
