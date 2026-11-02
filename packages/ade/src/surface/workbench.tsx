@@ -6773,7 +6773,7 @@ export function Workbench() {
   // Proactive alerts: session completed work
   createEffect(
     on(
-      () => wb().panes.map((p) => ({ id: p.id, title: p.title, status: p.status, lines: p.lines })),
+      () => wb().panes.map((p) => ({ id: p.id, title: p.title, status: p.status })),
       (currentPanes, previousPanes) => {
         if (!previousPanes) return
         for (const pane of currentPanes) {
@@ -6784,7 +6784,9 @@ export function Workbench() {
             continue
           }
           if (prev.status === "working" && pane.status === "idle") {
-            proactiveAlerts.notifyCompletion(pane.id, pane.title, pane.lines, completionTurns.get(pane.id) ?? 0)
+            // Read here, not in the source above: a pane's lines change with every chunk it prints.
+            const lines = wb().panes.find((p) => p.id === pane.id)?.lines ?? []
+            proactiveAlerts.notifyCompletion(pane.id, pane.title, lines, completionTurns.get(pane.id) ?? 0)
           }
         }
       },
