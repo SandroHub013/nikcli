@@ -130,7 +130,7 @@ export const HOOK_TARGETS: readonly HookTarget[] = [
    */
   {
     id: "ragu",
-    label: "Ragu Code",
+    label: "Ragù Code",
     agent: "ragu",
     config: [],
     // As it lands on Windows. Rust puts it under ragu's configuration folder on every platform (`config_home`).

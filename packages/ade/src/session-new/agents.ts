@@ -62,7 +62,7 @@ export const AGENTS: AgentOption[] = [
   { id: "claude-code", label: "Claude Code", command: "claude" },
   { id: "codex", label: "Codex", command: "codex" },
   { id: "opencode", label: "OpenCode", command: "opencode" },
-  { id: "ragu", label: "Ragu Code", command: "ragu" },
+  { id: "ragu", label: "Ragù Code", command: "ragu" },
   { id: "grok", label: "Grok", command: "grok" },
   { id: "agy", label: "agy", command: "agy" },
   { id: "kimi", label: "Kimi Code", command: "kimi" },

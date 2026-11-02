@@ -86,6 +86,7 @@ export const CATEGORIES: readonly CategoryItem[] = [
     tabs: [
       { id: "system/updates", labelKey: "settings.tab.updates" },
       { id: "system/space", labelKey: "settings.tab.space" },
+      { id: "system/about", labelKey: "settings.tab.about" },
     ],
   },
 ]

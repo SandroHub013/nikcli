@@ -29,7 +29,7 @@ obiettivi:
 fonti:
   - id: F10
     titolo: "ragu docs, Sessions"
-    url: "https://github.com/nikcli/nikcli/blob/live-main/packages/web/src/pages/docs/sessions.astro"
+    url: "https://github.com/SandroHub013/nikcli/blob/live-main/packages/web/src/pages/docs/sessions.astro"
   - id: F11
     titolo: "git-worktree"
     url: "https://git-scm.com/docs/git-worktree"

@@ -15,8 +15,28 @@ pub fn name() -> &'static str {
     })
 }
 
+/// The name people read: the window title, the tray, the dialogs. `name` is
+/// productName (the installer, the install folder and the updater hang off
+/// it) and stays «ADE»; this one is «Ragù Code ADE». Falls back to `name`.
+pub fn title() -> &'static str {
+    static TITLE: OnceLock<String> = OnceLock::new();
+    TITLE.get_or_init(|| {
+        serde_json::from_str::<serde_json::Value>(include_str!("../../brand.json"))
+            .ok()
+            .and_then(|brand| brand["title"].as_str().map(str::to_owned))
+            .filter(|title| !title.is_empty())
+            .unwrap_or_else(|| name().to_owned())
+    })
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_title_is_the_visible_name_and_the_product_name_is_untouched() {
+        assert_eq!(super::title(), "Ragù Code ADE");
+        assert_eq!(super::name(), "ADE");
+    }
+
     #[test]
     fn brand_json_names_the_product() {
         assert!(!super::name().is_empty());

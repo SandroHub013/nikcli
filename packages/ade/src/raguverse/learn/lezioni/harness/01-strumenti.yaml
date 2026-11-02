@@ -38,7 +38,7 @@ fonti:
     url: "https://modelcontextprotocol.io/introduction"
   - id: F4
     titolo: "ragu docs, Tools"
-    url: "https://github.com/nikcli/nikcli/blob/live-main/packages/web/src/pages/docs/tools.astro"
+    url: "https://github.com/SandroHub013/nikcli/blob/live-main/packages/web/src/pages/docs/tools.astro"
 
 teoria:
   - id: T1

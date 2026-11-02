@@ -249,7 +249,7 @@ describe("lint: no teal and no old grey left in ADE's sources", () => {
     /#eae7e4/i,
     /rgba\(19, ?17, ?17/,
   ]
-  // Left out on purpose: the splash (another choice of the user), the RaguVerse
+  // Left out on purpose: the splash (another choice of the user), the RagùVerse
   // scene, and the terminal's sixteen ANSI colours (cyan is an ANSI colour, not the accent).
   const SKIP = ["splash", "raguverse"]
 

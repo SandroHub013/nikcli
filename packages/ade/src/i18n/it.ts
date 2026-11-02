@@ -93,7 +93,7 @@ export const it = {
   "palette.decisions.pane": "Apri pannello Decisioni",
   "palette.design.open": "Proposte di design per te",
   "palette.design.pane": "Apri pannello Design",
-  "palette.raguverse.pane": "Apri pannello RaguVerse",
+  "palette.raguverse.pane": "Apri pannello RagùVerse",
   "palette.update.check": "Controlla aggiornamenti",
   "palette.process.kill": "Uccidi processo",
   "palette.process.none": "Il pannello a fuoco non ha un processo vivo",
@@ -160,7 +160,7 @@ export const it = {
   "newPane.decisions.hint": "tutto il registro: aperte, risposte, rimandate, chiuse",
   "newPane.design": "Design",
   "newPane.design.hint": "proposte grafiche, varianti e anteprime",
-  "newPane.raguverse": "RaguVerse",
+  "newPane.raguverse": "RagùVerse",
   "newPane.raguverse.hint": "la città delle tue sessioni, in tempo reale",
   "learn.title": "Impara",
   "learn.back": "Torna al mondo",
@@ -174,11 +174,11 @@ export const it = {
   "learn.progressUnreadable": "I progressi non sono un documento che ADE sa leggere.",
   "learn.noHost": "Senza ADE non ci sono progressi da salvare.",
   "raguverse.unloaded": "Mondo scaricato per risparmiare memoria: torna su questo pannello per riaprirlo.",
-  "raguverse.assets.fetching": (megabytes: number) => `Scarico il mondo di RaguVerse (${megabytes} MB), solo la prima volta…`,
+  "raguverse.assets.fetching": (megabytes: number) => `Scarico il mondo di RagùVerse (${megabytes} MB), solo la prima volta…`,
   "raguverse.assets.failed": (reason: string) =>
-    `Non sono riuscita a scaricare il mondo di RaguVerse: ${reason} Per ora vedi i segnaposto.`,
+    `Non sono riuscita a scaricare il mondo di RagùVerse: ${reason} Per ora vedi i segnaposto.`,
   "raguverse.assets.retry": "Riprova",
-  "raguverse.ask": (what: string) => `RaguVerse chiede di: ${what}`,
+  "raguverse.ask": (what: string) => `RagùVerse chiede di: ${what}`,
   "raguverse.allow": "Consenti",
   "raguverse.deny": "Nega",
   "raguverse.late": "Il mondo non si è aperto: riprova, oppure apri la lista.",
@@ -338,7 +338,7 @@ export const it = {
   "hooks.broken":
     "C'è una voce di ADE nella configurazione, ma non corrisponde allo script sul disco: la CLI sta eseguendo un hook che non fa nulla. Reinstalla per sistemarla.",
   "hooks.plugin":
-    "Un plugin del TUI di Ragu Code, non una voce di configurazione: dice ad ADE quale conversazione mostra il pannello, anche dopo /new, /sessions o un cambio di scheda. Non fa nulla in un Ragu Code che ADE non ha avviato.",
+    "Un plugin del TUI di Ragù Code, non una voce di configurazione: dice ad ADE quale conversazione mostra il pannello, anche dopo /new, /sessions o un cambio di scheda. Non fa nulla in un Ragù Code che ADE non ha avviato.",
   "hooks.install": "Installa",
   "hooks.reinstall": "Reinstalla",
   "hooks.update": "Aggiorna",
@@ -350,7 +350,7 @@ export const it = {
   "hooks.removeOnly":
     "Gli hook PowerShell non funzionano su questo sistema, e questo fallisce a ogni evento di ogni sessione di Claude Code o Codex. Si può solo rimuovere.",
   "hooks.windowsOnly":
-    "Gli hook di Claude Code e Codex sono script PowerShell, quindi ADE li installa solo su Windows. Su questo sistema si offre solo il plugin di Ragu Code.",
+    "Gli hook di Claude Code e Codex sono script PowerShell, quindi ADE li installa solo su Windows. Su questo sistema si offre solo il plugin di Ragù Code.",
   "agent.mic.start": "Avvia il microfono",
   "agent.mic.stop": "Ferma il microfono",
   "agent.settings": "Impostazioni",
@@ -530,6 +530,10 @@ export const it = {
   "settings.tab.recordVideo": "Registrazione video",
   "settings.tab.updates": "Aggiornamenti",
   "settings.tab.space": "Spazio su disco",
+  "settings.tab.about": "Informazioni",
+  "settings.about.version": "Versione",
+  "settings.about.folder": "Cartella dei dati",
+  "settings.about.unknown": "non disponibile",
   "settings.group.voice": "Voce",
   "settings.record.quality": "Qualità del video",
   "settings.record.mic": "Microfono nelle registrazioni",
@@ -551,7 +555,7 @@ export const it = {
   "space.desc": "Quello che ADE tiene sul tuo computer e si può togliere. Prima di cancellare dice quanto libera; il lavoro non integrato, i segreti, le decisioni e la memoria dei progetti non si toccano mai.",
   "space.empty": "Non c'è niente da togliere.",
   "space.group.voices": "Voci locali",
-  "space.group.assets": "Asset di RaguVerse",
+  "space.group.assets": "Asset di RagùVerse",
   "space.group.worktrees": "Worktree delle sessioni finite",
   "space.group.branches": "Branch di ADE già integrati",
   "space.group.project": "Catture e risultati vecchi",
@@ -562,7 +566,7 @@ export const it = {
   "space.piper.runtime": "Con l'ultima voce se ne va anche il programma di Piper",
   "space.piper.leftover": "Piper · programma senza voci",
   "space.kokoro": "Kokoro · voce locale",
-  "space.raguverse": "Asset di RaguVerse",
+  "space.raguverse": "Asset di RagùVerse",
   "space.raguverse.again": "Si riscaricano alla prossima apertura del mondo",
   "space.worktree.remove": "Togli",
   "space.worktree.unknown": "Non riesco a controllare se il lavoro è integrato",
@@ -590,16 +594,16 @@ export const it = {
   "settings.mcp.instead":
     "Le CLI agente che ADE avvia usano intanto la propria configurazione MCP, quella che userebbero da un terminale.",
   "settings.bots.title": "Bot",
-  "settings.bots.desc": "I bot di Ragu Code che questa macchina conosce: con quale modello girano, e se appartengono al progetto o a tutti. Si creano e si modificano nella vista Bot.",
-  "settings.bots.empty": "Nessun bot Ragu Code. Se ne crea uno dalla vista Bot.",
-  "settings.bots.reading": "Lettura delle cartelle di Ragu Code…",
-  "settings.bots.defaultModel": "modello di Ragu Code",
+  "settings.bots.desc": "I bot di Ragù Code che questa macchina conosce: con quale modello girano, e se appartengono al progetto o a tutti. Si creano e si modificano nella vista Bot.",
+  "settings.bots.empty": "Nessun bot Ragù Code. Se ne crea uno dalla vista Bot.",
+  "settings.bots.reading": "Lettura delle cartelle di Ragù Code…",
+  "settings.bots.defaultModel": "modello di Ragù Code",
   "settings.bots.scopeProject": "progetto",
   "settings.bots.scopeGlobal": "globale",
   "settings.skills.title": "Strumenti",
   "settings.skills.desc":
-    "Quali strumenti sono stati tolti a un bot. Chi non compare qui li ha tutti: Ragu Code registra nel file solo le rinunce.",
-  "settings.skills.empty": "Nessun bot ha limitazioni: tutti possono usare ogni strumento di Ragu Code.",
+    "Quali strumenti sono stati tolti a un bot. Chi non compare qui li ha tutti: Ragù Code registra nel file solo le rinunce.",
+  "settings.skills.empty": "Nessun bot ha limitazioni: tutti possono usare ogni strumento di Ragù Code.",
   "settings.skills.none": "Nessuno strumento",
   "settings.skills.addHint": "Aggiungi o rimuovi limitazioni configurando il bot nella vista Bot.",
   "settings.skills.without": (tools: string) => `senza ${tools}`,
@@ -607,7 +611,7 @@ export const it = {
   "settings.account.intro":
     "I programmi su cui possono girare i bot, ognuno con l'account della propria CLI.",
   "settings.providers.desc1":
-    "I programmi su cui può girare un bot, ognuno con l'account della propria CLI: l'abbonamento Anthropic passa da Claude Code, quello ChatGPT da Codex, le chiavi e gli altri abbonamenti da Ragu Code. Il motore, il modello e lo sforzo si scelgono nella scheda di ogni bot.",
+    "I programmi su cui può girare un bot, ognuno con l'account della propria CLI: l'abbonamento Anthropic passa da Claude Code, quello ChatGPT da Codex, le chiavi e gli altri abbonamenti da Ragù Code. Il motore, il modello e lo sforzo si scelgono nella scheda di ogni bot.",
   "settings.providers.desc2Before": (max: number) =>
     `ADE non chiede né legge le credenziali: l'accesso si fa nel flusso ufficiale di ogni CLI. Gli abbonamenti sono per uso personale e ADE tiene al massimo ${max} turni insieme per ognuno; per automazioni intensive o non presidiate accedi alla CLI con una chiave API (Claude Code accetta la chiave della Console Anthropic, Codex la chiave OpenAI con `,
   "settings.providers.desc2After": ").",
@@ -711,7 +715,7 @@ export const it = {
   "pane.close": "Chiudi",
   "hooks.foreign":
     "Di un'altra build di ADE, non di questa: questa non lo aggiorna e non lo rimuove, perché con quel file ci lavorano le sessioni dell'ADE ufficiale",
-  "bar.raguVersion": (v: string) => `Ragu Code ${v}: è il programma con cui partono le sessioni, non ADE`,
+  "bar.raguVersion": (v: string) => `Ragù Code ${v}: è il programma con cui partono le sessioni, non ADE`,
   "bar.sessions": (count: number) => `${count} ${count === 1 ? "sessione" : "sessioni"}`,
   "bar.meta.ade": (version: string) => `ADE ${version}`,
   "bar.info": (facts: string) => `Dettagli del progetto: ${facts}`,
@@ -849,22 +853,22 @@ export const it = {
     "Non potrà eseguire comandi né toccare .git e le impostazioni degli strumenti (.claude, .ragu, .codex, .vscode, .husky, .github/workflows), ma potrà modificare gli altri file del progetto.",
   "bots.trust.can.claudeReadOnly": "Non potrà eseguire comandi né modificare file: potrà solo leggere il progetto.",
   "bots.trust.can.ragu":
-    "Potrà fare quello che la tua configurazione di Ragu Code concede: il file del bot non può concedersi altro.",
+    "Potrà fare quello che la tua configurazione di Ragù Code concede: il file del bot non può concedersi altro.",
   "bots.trust.selfApproves": (name: string, what: string, line: string) =>
-    `Il bot «${name}» di questo progetto si concede da solo «${what}» nel suo file, con la riga «${line}», e Ragu Code lo eseguirebbe senza chiedere: non lo avvio. Togli quella riga dal file, oppure copia il bot tra i tuoi.`,
+    `Il bot «${name}» di questo progetto si concede da solo «${what}» nel suo file, con la riga «${line}», e Ragù Code lo eseguirebbe senza chiedere: non lo avvio. Togli quella riga dal file, oppure copia il bot tra i tuoi.`,
   "bots.projectTrust.new": (root: string, files: string) =>
-    `La cartella ${root} ha una configurazione di Ragu Code sua (${files}): plugin, strumenti e impostazioni che Ragu Code carica ed esegue a ogni turno, con il tuo account, scritti da chi ha scritto il progetto. Li carichi? Se dici di no, qui i bot su Ragu Code non partono; quelli su Claude Code e Codex sì, perché non la leggono.`,
+    `La cartella ${root} ha una configurazione di Ragù Code sua (${files}): plugin, strumenti e impostazioni che Ragù Code carica ed esegue a ogni turno, con il tuo account, scritti da chi ha scritto il progetto. Li carichi? Se dici di no, qui i bot su Ragù Code non partono; quelli su Claude Code e Codex sì, perché non la leggono.`,
   "bots.projectTrust.changed": (root: string, files: string) =>
-    `La configurazione di Ragu Code della cartella ${root} è cambiata da quando l'hai accettata (${files}): Ragu Code la carica ed esegue a ogni turno. La carichi così com'è ora?`,
+    `La configurazione di Ragù Code della cartella ${root} è cambiata da quando l'hai accettata (${files}): Ragù Code la carica ed esegue a ogni turno. La carichi così com'è ora?`,
   "bots.projectTrust.listMore": (list: string, count: number) => `${list} e altri ${count}`,
   "bots.projectTrust.refused": (root: string) =>
-    `I bot su Ragu Code non partono in ${root} finché non accetti la configurazione di Ragu Code del progetto. I bot su Claude Code e Codex non la leggono.`,
+    `I bot su Ragù Code non partono in ${root} finché non accetti la configurazione di Ragù Code del progetto. I bot su Claude Code e Codex non la leggono.`,
   "bots.ask.yes": "Sì",
   "bots.ask.no": "No",
   "bots.ask.failed": (name: string) =>
     `ADE non è riuscita a farti la domanda sul bot «${name}» di questo progetto: non lo avvio.`,
   "bots.projectTrust.failed": (root: string) =>
-    `ADE non è riuscita a farti la domanda sulla configurazione di Ragu Code di ${root}: i bot su Ragu Code qui non partono.`,
+    `ADE non è riuscita a farti la domanda sulla configurazione di Ragù Code di ${root}: i bot su Ragù Code qui non partono.`,
   "bots.trust.unreadable": (name: string) => `Non riesco a leggere il file del bot «${name}»: non lo avvio.`,
   // A bot's gateway, in the chat it answers (G4): what the bot says there on its own.
   "gateway.recoveredNotice":
@@ -942,7 +946,7 @@ export const it = {
   "gateway.chat.configUnreadable": (name: string) =>
     `Non riesco a leggere la configurazione di questo progetto, che potrebbe concedere la shell al bot «${name}»: da qui non lo avvio. Il file è indicato nel pannello del bot, in ADE.`,
   "gateway.chat.notAdmitted":
-    "Questo progetto non è ancora ammesso per Ragu Code, o è cambiato: apri il bot nel pannello di ADE, rispondi alla domanda e riprova.",
+    "Questo progetto non è ancora ammesso per Ragù Code, o è cambiato: apri il bot nel pannello di ADE, rispondi alla domanda e riprova.",
   "gateway.approve.question": (permission: string, what: string) =>
     `Il bot chiede il permesso «${permission}» per:\n${what}\n\nLo permetto questa volta? Senza risposta entro 5 minuti vale no.`,
   "gateway.approve.once": "Sì, questa volta",
@@ -1120,11 +1124,11 @@ export const it = {
     "La Chat non è ancora collegata a questo progetto: si collega quando scegli un modello o invii un messaggio.",
   "chat.connect": "Collega adesso",
   "chat.status.admitting": "Controllo la fiducia nel progetto…",
-  "chat.status.connecting": "Collegamento al server di Ragu Code…",
+  "chat.status.connecting": "Collegamento al server di Ragù Code…",
   "chat.status.retrying": "Collegamento perso: riprovo…",
   "chat.status.refused": "La Chat non può lavorare in questo progetto.",
   "chat.rules.always":
-    "La Chat chiede prima di ogni comando e di ogni modifica, ma un «sempre» dato nel terminale di Ragu Code resta salvato (per questo progetto, o per questa cartella se non è un repository git) e vale anche qui dopo il prossimo avvio di ADE: quella richiesta non comparirà. Per toglierlo: chiudi ADE e Ragu Code ed esegui «ragu permissions reset» in questa cartella.",
+    "La Chat chiede prima di ogni comando e di ogni modifica, ma un «sempre» dato nel terminale di Ragù Code resta salvato (per questo progetto, o per questa cartella se non è un repository git) e vale anche qui dopo il prossimo avvio di ADE: quella richiesta non comparirà. Per toglierlo: chiudi ADE e Ragù Code ed esegui «ragu permissions reset» in questa cartella.",
   "chat.question.label": "Domanda del modello",
   "chat.question.typed": "Oppure scrivi la tua risposta",
   "chat.question.send": "Rispondi",
@@ -1451,7 +1455,7 @@ export const it = {
   "mods.title": "Mod",
   "mods.pane": "Mod del progetto",
   "mods.command": "Mostra i mod del progetto",
-  "mods.explain": "I mod sono plugin che girano nel server Ragu Code e disegnano qui, nel terminale e sul telefono.",
+  "mods.explain": "I mod sono plugin che girano nel server Ragù Code e disegnano qui, nel terminale e sul telefono.",
   "mods.connect": "Collega i mod del progetto",
   "mods.connecting": "Collego i mod…",
   "mods.failed": "Non riesco a collegare i mod di questo progetto.",
@@ -1715,7 +1719,7 @@ export const it = {
   "resume.noneHere": (agent: string) =>
     `Nessuna conversazione di ${agent} di questa cartella da riaprire: ne parte una nuova`,
   "resume.otherFolder": (dir: string) =>
-    `Questa conversazione è di un'altra cartella (${dir}): le schede di Ragu Code sono comuni a tutti i progetti. Il pannello ora la segue, anche al riavvio`,
+    `Questa conversazione è di un'altra cartella (${dir}): le schede di Ragù Code sono comuni a tutti i progetti. Il pannello ora la segue, anche al riavvio`,
   "resume.shared": (pane: string) =>
     `La conversazione è già aperta nel pannello «${pane}»: qui non la riapro, per non scrivere in due nella stessa`,
   "resume.alsoOpen": (pane: string) =>
@@ -1948,15 +1952,15 @@ export const it = {
   "effort.high": "alto",
   "effort.xhigh": "molto alto",
   "effort.max": "massimo",
-  "bots.models.noHost": "ADE non può eseguire Ragu Code qui",
-  "bots.models.notFound": "Ragu Code non si avvia (ragu è nel PATH?)",
+  "bots.models.noHost": "ADE non può eseguire Ragù Code qui",
+  "bots.models.notFound": "Ragù Code non si avvia (ragu è nel PATH?)",
   "bots.models.exit": (code: string, detail: string) =>
     `ragu models è uscito con ${code}${detail ? `: ${detail}` : ""}`,
-  "bots.models.empty": "Ragu Code non ha elencato nessun modello",
+  "bots.models.empty": "Ragù Code non ha elencato nessun modello",
   "chat.model.choose": "Scegli un modello",
   "chat.model.none": "Nessun modello disponibile",
   "chat.model.missing": (model: string) =>
-    `Il modello ${model} non è nel catalogo del server di Ragu Code: è stato tolto, o il suo provider non è collegato. Non è partito niente: scegline un altro.`,
+    `Il modello ${model} non è nel catalogo del server di Ragù Code: è stato tolto, o il suo provider non è collegato. Non è partito niente: scegline un altro.`,
   "chat.agent.label": "Agente",
   "chat.agent.none": "Nessun agente disponibile",
   "chat.agent.name.build": "Assistente",
@@ -1966,7 +1970,7 @@ export const it = {
   "chat.new": "Nuova conversazione",
   "chat.empty.title": "Chiedi qualcosa.",
   "chat.empty.body":
-    "Una conversazione con Ragu Code in questo progetto: legge i file da sé, e prima di ogni comando o modifica ti chiede.",
+    "Una conversazione con Ragù Code in questo progetto: legge i file da sé, e prima di ogni comando o modifica ti chiede.",
   "chat.input.placeholder": "Scrivi un messaggio…",
   "chat.send": "Invia",
   "chat.stop": "Ferma",
@@ -1974,7 +1978,7 @@ export const it = {
   "chat.error.aborted": "Risposta fermata.",
   "chat.error.outputLength": "La risposta ha superato la lunghezza massima del modello ed è stata tagliata.",
   "chat.error.contextOverflow": "La conversazione non entra più nella finestra del modello: aprine una nuova.",
-  "chat.error.auth": "Il fornitore ha rifiutato le credenziali: controllale in Ragu Code.",
+  "chat.error.auth": "Il fornitore ha rifiutato le credenziali: controllale in Ragù Code.",
   "chat.error.credit": "Il credito presso il fornitore è finito.",
   "chat.error.modelMissing": "Il fornitore non trova questo modello: scegline un altro.",
   "chat.error.rateLimit":
@@ -1985,12 +1989,12 @@ export const it = {
   "chat.error.api": "Il fornitore ha risposto con un errore.",
   "chat.error.apiStatus": (status: number) => `Il fornitore ha risposto con un errore (${status}).`,
   "chat.error.unknown": "Qualcosa è andato storto.",
-  "chat.error.server": "Il server di Ragu Code non risponde.",
+  "chat.error.server": "Il server di Ragù Code non risponde.",
   "chat.error.notOpen": "La Chat non è aperta su una cartella.",
   "chat.error.otherFolder": (open: string, other: string) =>
     `La Chat è aperta su ${open}: una richiesta per ${other} non parte.`,
   "chat.error.otherOrigin": (origin: string) =>
-    `Il trasporto della Chat parla solo con il server di Ragu Code, non con ${origin}.`,
+    `Il trasporto della Chat parla solo con il server di Ragù Code, non con ${origin}.`,
   "chat.error.requestAborted": "La richiesta è stata interrotta.",
   "chat.retry": (attempt: number) => `Il fornitore ha dato un errore: nuovo tentativo, il ${attempt}°…`,
   "chat.attach.outside": (path: string) =>
@@ -2058,7 +2062,7 @@ export const it = {
   "bots.face.problem.unreadable": "Non riesco a leggere questa immagine: forse il file è rovinato.",
   "bots.face.problem.heavy":
     "Anche ridotta, l'immagine resta troppo pesante per il file del bot: provane una più semplice.",
-  "bots.subagent.note": "È un sottoagente: non risponde da solo, lo chiama un altro bot. Puoi comunque scrivergli, ma Ragu Code userà l'agente predefinito al suo posto.",
+  "bots.subagent.note": "È un sottoagente: non risponde da solo, lo chiama un altro bot. Puoi comunque scrivergli, ma Ragù Code userà l'agente predefinito al suo posto.",
   "bots.thread.label": (name: string) => `Conversazione con ${name}`,
   "bots.room.threadLabel": (name: string) => `Conversazione della stanza ${name}`,
   "bots.composer.label": (name: string) => `Scrivi a ${name}`,
@@ -2091,7 +2095,7 @@ export const it = {
     "fa girare comandi dentro un'altra shell, che la lista non sempre legge per intero",
   "bots.approval.reason.outside": "lavora fuori dalla cartella del progetto",
   "bots.approval.reason.tool": (tool: string) =>
-    `usa ${tool}, che Ragu Code chiede di confermare`,
+    `usa ${tool}, che Ragù Code chiede di confermare`,
   "bots.approval.why": (reason: string) => `Si ferma perché ${reason}.`,
   "bots.approval.always": "Sempre per questo bot",
   "bots.approval.timeout": (minutes: number) => `Senza risposta entro ${minutes} minuti vale come Nega.`,
@@ -2346,19 +2350,19 @@ export const it = {
   "bots.turn.cannotRefuse": (label: string) => `${label} non può rifiutare gli strumenti che questo turno esclude.`,
   "bots.turn.didNotStart": (label: string, why: string) => `${label} non si avvia: ${why}`,
   "bots.turn.raguOnServer":
-    "Un turno di Ragu Code gira sul server di Ragu Code di ADE, con le regole della sua sessione: qui non parte.",
-  "bots.serve.noFolder": "Un bot Ragu Code risponde da un progetto: apri una cartella per parlargli.",
+    "Un turno di Ragù Code gira sul server di Ragù Code di ADE, con le regole della sua sessione: qui non parte.",
+  "bots.serve.noFolder": "Un bot Ragù Code risponde da un progetto: apri una cartella per parlargli.",
   "bots.serve.notAdmitted": (root: string) =>
-    `Il progetto ${root} non è ancora ammesso per Ragu Code, o è cambiato: apri il bot nel pannello, rispondi alla domanda e riprova.`,
-  "bots.serve.noAgent": (name: string) => `Il server di Ragu Code non vede il bot «${name}» in questa cartella.`,
+    `Il progetto ${root} non è ancora ammesso per Ragù Code, o è cambiato: apri il bot nel pannello, rispondi alla domanda e riprova.`,
+  "bots.serve.noAgent": (name: string) => `Il server di Ragù Code non vede il bot «${name}» in questa cartella.`,
   "bots.serve.noModel": (model: string) =>
-    `Il modello ${model} non è nel catalogo del server di Ragu Code: è stato tolto, o il suo provider non è collegato. Il turno non è partito: cambia il modello del bot.`,
+    `Il modello ${model} non è nel catalogo del server di Ragù Code: è stato tolto, o il suo provider non è collegato. Il turno non è partito: cambia il modello del bot.`,
   "bots.serve.toolInPlanner": (tool: string) =>
     `Un turno senza strumenti ha provato a usare «${tool}»: il turno è stato fermato.`,
   "bots.serve.noFreeModel":
-    "Nel catalogo del server di Ragu Code non c'è nessun modello gratuito tra quelli previsti per questo turno: il turno non è partito.",
+    "Nel catalogo del server di Ragù Code non c'è nessun modello gratuito tra quelli previsti per questo turno: il turno non è partito.",
   "bots.serve.effortNoModel": (effort: string) =>
-    `Il ragionamento «${effort}» vale per un modello scelto: questo bot usa il modello predefinito di Ragu Code, e questo turno usa il ragionamento predefinito. Scegli un modello nelle impostazioni del bot.`,
+    `Il ragionamento «${effort}» vale per un modello scelto: questo bot usa il modello predefinito di Ragù Code, e questo turno usa il ragionamento predefinito. Scegli un modello nelle impostazioni del bot.`,
   "bots.serve.effortDropped": (effort: string, model: string, variants: string) =>
     `Il ragionamento «${effort}» non esiste per ${model}: questo turno usa quello predefinito. ${variants ? `Livelli di questo modello: ${variants}.` : "Questo modello non ha livelli di ragionamento."} Cambialo nelle impostazioni del bot.`,
   "bots.serve.agentTaken": (name: string) =>
@@ -2366,10 +2370,10 @@ export const it = {
   "bots.serve.newSession":
     "Conversazione nuova: la precedente era di «ragu run», o aveva altre regole, e sul server di ADE ogni conversazione di un bot nasce con le sue. Il bot non ricorda quello che c'era prima.",
   "bots.serve.refused": (permission: string, patterns: string) =>
-    `Rifiutato: Ragu Code ha chiesto «${permission}» (${patterns}) e qui nessuno può rispondere.`,
+    `Rifiutato: Ragù Code ha chiesto «${permission}» (${patterns}) e qui nessuno può rispondere.`,
   "bots.serve.rulesNote":
-    "Il bot chiede prima di ogni comando, e un «sempre» dato per questo progetto (per esempio nel terminale di Ragu Code) non lo raggiunge: la Chat ce l'ha, un bot no. Conta solo il «Sempre» che dai a questo bot qui, e mai per ciò che è bloccato.",
-  "bots.serve.lost": "Il server di Ragu Code ha chiuso il flusso degli eventi prima della fine del turno.",
+    "Il bot chiede prima di ogni comando, e un «sempre» dato per questo progetto (per esempio nel terminale di Ragù Code) non lo raggiunge: la Chat ce l'ha, un bot no. Conta solo il «Sempre» che dai a questo bot qui, e mai per ciò che è bloccato.",
+  "bots.serve.lost": "Il server di Ragù Code ha chiuso il flusso degli eventi prima della fine del turno.",
   "bots.runner.protectedPath": (paths: string) =>
     `Claude Code non ha potuto scrivere in un percorso protetto per i bot di progetto (${paths}): lì una scrittura diventa codice che parte dopo, quindi è negata di proposito.`,
   "bots.runner.permissionDenied": (names: string) =>
@@ -2389,15 +2393,15 @@ export const it = {
   "bots.login.noProvider": "Nessun provider collegato",
   "bots.store.noHost": "Nessun host: i bot si creano solo nell'app desktop.",
   "bots.store.noProject": "Nessun progetto aperto: scegli «globale» o apri un progetto.",
-  "bots.store.noGlobal": "Cartella di configurazione di Ragu Code non trovata.",
-  "bots.store.noRagu": "Questo host non può eseguire Ragu Code.",
+  "bots.store.noGlobal": "Cartella di configurazione di Ragù Code non trovata.",
+  "bots.store.noRagu": "Questo host non può eseguire Ragù Code.",
   "bots.store.noWrite": "Questo host non può scrivere file.",
   "bots.store.noRead": "Questo host non può leggere file.",
   "bots.store.noDir": "Questo host non può leggere cartelle.",
   "bots.store.hostMissing": "Nessun host.",
   "bots.store.gatewayKept": (error: string) =>
     `Non ho tolto i codici e i collegamenti alle app di messaggi di questo bot (${error}): il bot non è cancellato. Riprova: toglie quello che è rimasto.`,
-  "bots.store.raguExited": (code: string) => `Ragu Code è uscito con codice ${code}.`,
+  "bots.store.raguExited": (code: string) => `Ragù Code è uscito con codice ${code}.`,
   "bots.store.unknownCode": "sconosciuto",
   "bots.spend.plan": "abbonamento",
   "bots.spend.api": "chiave API",
@@ -2453,11 +2457,11 @@ export const it = {
   "bots.lastTurn.label": "ultimo turno:",
   "bots.lastTurn.unknownModel": "modello non riportato",
   "bots.conversation.total": "in questa conversazione:",
-  "bots.form.generateCostDefault": "Ragu Code scrive le istruzioni con il suo modello predefinito. Se quel modello è a pagamento, questa chiamata consuma credito.",
-  "bots.form.generateCostPaid": (model: string) => `Ragu Code scrive le istruzioni con ${model}. Questa chiamata consuma credito.`,
-  "bots.form.generateCostFree": (model: string) => `Ragu Code scrive le istruzioni con ${model}, un modello gratuito. Questa chiamata non consuma credito.`,
+  "bots.form.generateCostDefault": "Ragù Code scrive le istruzioni con il suo modello predefinito. Se quel modello è a pagamento, questa chiamata consuma credito.",
+  "bots.form.generateCostPaid": (model: string) => `Ragù Code scrive le istruzioni con ${model}. Questa chiamata consuma credito.`,
+  "bots.form.generateCostFree": (model: string) => `Ragù Code scrive le istruzioni con ${model}, un modello gratuito. Questa chiamata non consuma credito.`,
   "bots.terminal.subagentTip": "Un sottoagente non si avvia da solo: lo chiama un altro bot",
-  "bots.terminal.launchTip": "Apre la TUI di Ragu Code con questo bot in un pannello",
+  "bots.terminal.launchTip": "Apre la TUI di Ragù Code con questo bot in un pannello",
   "bots.terminal.button": "Terminale",
   "bots.tab.list": "Sezioni del bot",
   "bots.tab.talk": "Conversazione",
@@ -2523,7 +2527,7 @@ export const it = {
   "bots.card.file": "File",
   "bots.delete.button": "Elimina il bot",
   "bots.delete.confirmBtn": "Elimina",
-  "bots.form.problemDesc": "Serve una descrizione: è quello che Ragu Code usa per decidere quando chiamarlo.",
+  "bots.form.problemDesc": "Serve una descrizione: è quello che Ragù Code usa per decidere quando chiamarlo.",
   "bots.form.problemName": "Serve un nome: diventa l'identificativo del file.",
   "bots.form.title": "Nuovo bot",
   "bots.form.name": "Nome",
@@ -2539,12 +2543,12 @@ export const it = {
   "bots.form.objectivesPlaceholder": "Uno per riga. Restano veri in ogni conversazione.",
   "bots.form.persona": "Istruzioni (persona)",
   "bots.form.personaPlaceholder":
-    "Lascia vuoto e la scrive Ragu Code dalla descrizione. Oppure scrivila tu: come deve comportarsi, e cosa non deve fare.",
+    "Lascia vuoto e la scrive Ragù Code dalla descrizione. Oppure scrivila tu: come deve comportarsi, e cosa non deve fare.",
   "bots.form.cancel": "Annulla",
   "bots.form.creating": "Creazione…",
-  "bots.form.generateWithRagu": "Genera con Ragu Code",
+  "bots.form.generateWithRagu": "Genera con Ragù Code",
   "bots.form.create": "Crea",
-  "bots.form.generatingHint": "Ragu Code sta scrivendo il bot. Ci vuole qualche secondo.",
+  "bots.form.generatingHint": "Ragù Code sta scrivendo il bot. Ci vuole qualche secondo.",
   "bots.form.advanced": "Avanzate",
   "bots.form.summaryTip": "Apri «Avanzate»: programma, modello, ragionamento, dove, obiettivi e istruzioni",
   "bots.form.summaryCap": (cap: string) => `tetto ${cap} al giorno`,
@@ -2552,7 +2556,7 @@ export const it = {
   "bots.form.summaryProject": "nel progetto",
   "bots.form.summaryGlobal": "in tutti i progetti",
   "bots.engine.label": "Programma (runner)",
-  "bots.runner.account.ragu": "I provider collegati a Ragu Code (ragu auth).",
+  "bots.runner.account.ragu": "I provider collegati a Ragù Code (ragu auth).",
   "bots.runner.account.claude": "L'abbonamento Anthropic o la chiave API di Claude Code.",
   "bots.runner.account.codex": "L'abbonamento ChatGPT o la chiave API di Codex.",
   "bots.engine.accountHint": "Gli accessi si controllano in Impostazioni › Agenti e account › Account.",
@@ -2560,7 +2564,7 @@ export const it = {
     "ADE avvia la CLI ufficiale installata sul tuo computer, con l'account con cui vi hai fatto l'accesso, e non vede le tue credenziali. L'abbonamento è per uso personale e consuma i limiti del tuo piano: per automazioni intensive o non presidiate usa una chiave API nella CLI.",
   "bots.engine.model": "Modello",
   "bots.engine.modelDefaultOf": (label: string) => `predefinito di ${label}`,
-  "bots.engine.raguDefault": "Predefinito di Ragu Code",
+  "bots.engine.raguDefault": "Predefinito di Ragù Code",
   "bots.engine.effortField": "Ragionamento (effort)",
   "bots.engine.effort": "Ragionamento",
   "bots.engine.effortNotSupported": "non previsto",
@@ -2568,7 +2572,7 @@ export const it = {
     `Il ragionamento «${effort}» non esiste per questo modello: il bot usa quello predefinito. Scegline uno tra quelli del modello.`,
   "bots.engine.effortPickModel": "Scegli un modello per vedere i suoi livelli di ragionamento.",
   "bots.settings.whenToUse": "A cosa serve",
-  "bots.settings.whenToUseHint": "È il campo description del file: Ragu Code lo legge per decidere quando chiamare questo bot come sottoagente.",
+  "bots.settings.whenToUseHint": "È il campo description del file: Ragù Code lo legge per decidere quando chiamare questo bot come sottoagente.",
   "bots.settings.objectivesPlaceholder": "Uno per riga.\nEs. Segnala i rischi prima delle opinioni",
   "bots.settings.objectivesHint": (heading: string) => `Uno per riga. Finiscono nelle istruzioni, sotto «${heading}».`,
   "bots.settings.saved": "Salvato.",

@@ -36,6 +36,7 @@ import {
   RecordVideoSection,
   SkillsSection,
   ThemeSection,
+  AboutSection,
   UpdatesSection,
 } from "./sections"
 import { AccountSection } from "./account"
@@ -342,6 +343,9 @@ export function SettingsSheet(props: SettingsSheetProps): JSX.Element {
               />
             </Suspense>
           )
+        }
+        if (tab === "system/about") {
+          return <AboutSection version={props.version} />
         }
         return (
           <UpdatesSection

@@ -50,12 +50,12 @@ describe("the tabs of a bot's page", () => {
 })
 
 describe("the line under the bot's name (D14)", () => {
-  const base = { runner: "Ragu Code", model: "Grok 4", spend: "gratis", scope: "solo in questo progetto" }
+  const base = { runner: "Ragù Code", model: "Grok 4", spend: "gratis", scope: "solo in questo progetto" }
 
   test("is in words and carries neither «primary» nor the raw level", () => {
     const words = metaWords({ ...base, effort: "ragionamento alto" })
     expect([words.runner, words.model, words.spend, ...words.rest].join(" · ")).toBe(
-      "Ragu Code · Grok 4 · gratis · ragionamento alto · solo in questo progetto",
+      "Ragù Code · Grok 4 · gratis · ragionamento alto · solo in questo progetto",
     )
   })
 

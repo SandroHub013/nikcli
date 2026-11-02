@@ -112,7 +112,7 @@ describe("Permessi: «Da telefono» says once that a program runs no commands fr
     }
   })
 
-  test("Ragu Code keeps its switches", () => {
+  test("Ragù Code keeps its switches", () => {
     expect(hints("ragu")).toContain("comandi da remoto")
   })
 })

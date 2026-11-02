@@ -2182,7 +2182,7 @@ export function Workbench() {
     setWb((w) => ({
       ...addPane(w, {
         id: newPaneId("nv"),
-        title: "RaguVerse",
+        title: "RagùVerse",
         status: "working",
         model: "—",
         mode: "raguverse",
