@@ -293,7 +293,9 @@ describe("a dictation goes to the pane it was started for", () => {
     }
     focusPane(): void {}
     async runCommand(): Promise<void> {}
-    async insertText(): Promise<void> {}
+    async insertText(paneId: string, text: string): Promise<void> {
+      this.calls.push({ method: "insertText", args: [paneId, text] })
+    }
     async openFile(): Promise<void> {}
     async searchProject(): Promise<{ path: string; line?: number }[]> {
       return []
@@ -374,9 +376,6 @@ describe("a dictation goes to the pane it was started for", () => {
   test("a sentence spoken to a pane closed before it ended goes nowhere, and is kept", async () => {
     const host = new ChangingHost()
     host.panes = [pane("pane-1", 1), pane("pane-2", 2)]
-    const typed: unknown[][] = []
-    host.insertText = async (paneId: string, text: string) => void typed.push([paneId, text])
-    host.sendPrompt = async (paneId: string, text: string) => void typed.push([paneId, text])
     const focus = { paneId: "pane-2" }
     const kept: string[] = []
     const transcriber = createFakeTranscriber()
@@ -403,7 +402,7 @@ describe("a dictation goes to the pane it was started for", () => {
         }),
       ).pipe(Effect.provide(layer)),
     )
-    expect(typed).toEqual([])
+    expect(host.calls).toEqual([])
     expect(kept).toEqual(["rifai la migrazione"])
   })
 })
