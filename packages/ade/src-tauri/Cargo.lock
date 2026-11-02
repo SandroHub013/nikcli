@@ -15,6 +15,7 @@ dependencies = [
  "image",
  "junction",
  "keyring",
+ "objc2-foundation",
  "portable-pty",
  "qrcode",
  "reqwest",

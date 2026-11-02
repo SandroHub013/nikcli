@@ -1144,17 +1144,17 @@ fn to_recycle_bin(file: &std::path::Path) -> Result<(), String> {
     Ok(())
 }
 
-/// macOS: Finder's own delete, which is the Trash with "Put Back". No new crate.
+/// macOS: `NSFileManager trashItemAtURL`. It sends no Apple event, so it needs no permission in a bundled app (the
+/// Finder route is denied there without `NSAppleEventsUsageDescription`, with no prompt). The cost: Finder's "Put
+/// Back" may not be offered for it. It cannot be compiled on Windows: the CI macOS build is the first check.
 #[cfg(target_os = "macos")]
 fn to_recycle_bin(file: &std::path::Path) -> Result<(), String> {
-    let quoted = file.to_string_lossy().replace('\\', "\\\\").replace('"', "\\\"");
-    let script = format!("tell application \"Finder\" to delete POSIX file \"{quoted}\"");
-    let out = std::process::Command::new("osascript").args(["-e", &script]).output().map_err(|e| e.to_string())?;
-    if out.status.success() {
-        Ok(())
-    } else {
-        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
-    }
+    use objc2_foundation::{NSFileManager, NSString, NSURL};
+    let path = NSString::from_str(&file.to_string_lossy());
+    let url = NSURL::fileURLWithPath(&path);
+    NSFileManager::defaultManager()
+        .trashItemAtURL_resultingItemURL_error(&url, None)
+        .map_err(|error| error.localizedDescription().to_string())
 }
 
 /// Anywhere else there is no bin to move it to, and a screenshot is not thrown away for good.

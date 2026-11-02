@@ -151,19 +151,31 @@ pub async fn mailbox_take(app: tauri::AppHandle) -> Result<Vec<Outgoing>, String
 ///
 /// A refused message used to vanish: the sender waited for a receipt that
 /// never came and printed "ADE non ha ancora confermato", as if it would.
-/// The receipt for a message not read because of its size. A size that could
-/// not be read is said as such, not as "0 KiB".
-fn too_big_receipt(size: Option<u64>) -> String {
+/// The receipt for a message not read because of its size.
+fn too_big_receipt(len: u64) -> String {
     let max = MAX_MESSAGE_BYTES / 1024;
-    let why = match size {
-        Some(len) => format!("messaggio troppo grande ({} KiB, massimo {max} KiB)", len / 1024),
-        None => format!("dimensione del messaggio non leggibile (massimo {max} KiB)"),
-    };
-    format!("errore: {why}: mandalo come file con --file o scrivilo in un file e manda il percorso")
+    format!(
+        "errore: messaggio troppo grande ({} KiB, massimo {max} KiB): mandalo come file con --file o scrivilo in un file e manda il percorso",
+        len / 1024
+    )
 }
 
-/// How old a `.taking` claim must be before it is cleared as a leftover.
-const STALE_CLAIM: std::time::Duration = std::time::Duration::from_secs(60);
+/// The ids this process read (or answered with a receipt) whose `.taking` could not be deleted.
+///
+/// Only these claims are deleted when found again. Any other `.taking` is a message that was claimed and never read
+/// (the process died, or the read and the give-back both failed): it goes back to `.json`, so it is delivered and
+/// not lost without a word. The cost is a duplicate if a delete failed and the process then died, which is rare.
+fn undeleted() -> std::sync::MutexGuard<'static, std::collections::HashSet<String>> {
+    static SET: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
+    SET.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Deletes a claim that has been dealt with; if that fails, remembers it so it is never delivered again.
+fn finish_claim(claim: &std::path::Path, id: &str) {
+    if fs::remove_file(claim).is_err() {
+        undeleted().insert(id.to_string());
+    }
+}
 
 /// Takes the files of the outbox, one claimed at a time.
 ///
@@ -174,16 +186,27 @@ const STALE_CLAIM: std::time::Duration = std::time::Duration::from_secs(60);
 /// pass instead of being answered as if it were damaged (RS-10).
 fn take_outbox(outbox: &std::path::Path, receipts: &std::path::Path) -> Result<Vec<Outgoing>, String> {
     let mut out = Vec::new();
+    // What this call claimed itself: a claim given back must not be taken twice in the same pass.
+    let mut claimed_here = std::collections::HashSet::new();
     let entries = fs::read_dir(outbox).map_err(|e| format!("casella non leggibile: {e}"))?;
     for entry in entries.flatten() {
         let path = entry.path();
         match path.extension().and_then(|e| e.to_str()) {
             Some("json") => {}
-            // A claim left by a pass that was cut short, or whose delete failed: never delivered, only cleared away.
+            // A claim found again: cleared if this process already read it, otherwise it was never read and goes back.
             Some("taking") => {
-                let old = entry.metadata().and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).is_some_and(|age| age > STALE_CLAIM);
-                if old {
-                    let _ = fs::remove_file(&path);
+                let Some(id) = path.file_stem().and_then(|s| s.to_str()).map(str::to_string) else {
+                    continue;
+                };
+                if claimed_here.contains(&id) {
+                    continue;
+                }
+                if !valid_id(&id) || undeleted().contains(&id) {
+                    if fs::remove_file(&path).is_ok() {
+                        undeleted().remove(&id);
+                    }
+                } else {
+                    let _ = fs::rename(&path, path.with_extension("json"));
                 }
                 continue;
             }
@@ -196,11 +219,16 @@ fn take_outbox(outbox: &std::path::Path, receipts: &std::path::Path) -> Result<V
             let _ = fs::remove_file(&path);
             continue;
         }
+        // Given back a moment ago in this very pass: the next pass tries it again, this one does not loop on it.
+        if claimed_here.contains(&id) {
+            continue;
+        }
         // Held open by a scanner or the indexer: it is still there, so the next pass takes it.
         let claim = path.with_extension("taking");
         if fs::rename(&path, &claim).is_err() {
             continue;
         }
+        claimed_here.insert(id.clone());
         // Nothing below deletes the message unless it has been read, or can never be.
         let give_back = || {
             let _ = fs::rename(&claim, &path);
@@ -210,21 +238,21 @@ fn take_outbox(outbox: &std::path::Path, receipts: &std::path::Path) -> Result<V
             continue;
         };
         if meta.len() > MAX_MESSAGE_BYTES {
-            let said = too_big_receipt(Some(meta.len()));
+            let said = too_big_receipt(meta.len());
             let _ = write_whole(receipts.to_path_buf(), &format!("{id}.txt"), &said);
-            let _ = fs::remove_file(&claim);
+            finish_claim(&claim, &id);
             continue;
         }
         match fs::read_to_string(&claim) {
             Ok(body) => {
+                // If the delete fails the claim stays, and is not a `.json`: the message is not delivered again.
+                finish_claim(&claim, &id);
                 out.push(Outgoing { id, body });
-                // If this fails the claim stays, and is not a `.json`: the message is not delivered again.
-                let _ = fs::remove_file(&claim);
             }
             // Bytes that are not UTF-8 will never be: the sender is told. Any other error may pass.
             Err(e) if e.kind() == std::io::ErrorKind::InvalidData => {
                 let _ = write_whole(receipts.to_path_buf(), &format!("{id}.txt"), "errore: messaggio non leggibile (non è UTF-8)");
-                let _ = fs::remove_file(&claim);
+                finish_claim(&claim, &id);
             }
             Err(_) => give_back(),
         }
@@ -1262,8 +1290,9 @@ mod tests {
         fs::create_dir_all(&outbox).unwrap();
         fs::create_dir_all(&receipts).unwrap();
         fs::write(outbox.join("1757860000000-dddd.json"), [0xff, 0xfe, 0xfd]).unwrap();
-        // What a failed delete leaves behind: it must not come out a second time.
+        // What a failed delete leaves behind: this process read it, so it must not come out a second time.
         fs::write(outbox.join("1757860000000-eeee.taking"), "{\"kind\":\"send\"}").unwrap();
+        undeleted().insert("1757860000000-eeee".to_string());
 
         assert!(take_outbox(&outbox, &receipts).unwrap().is_empty());
         let receipt = fs::read_to_string(receipts.join("1757860000000-dddd.txt")).unwrap();
@@ -1271,15 +1300,36 @@ mod tests {
         assert!(!outbox.join("1757860000000-dddd.json").exists());
         assert!(!outbox.join("1757860000000-dddd.taking").exists());
         assert!(take_outbox(&outbox, &receipts).unwrap().is_empty(), "the leftover claim is not delivered on a later pass");
+        assert!(!outbox.join("1757860000000-eeee.taking").exists(), "and it is cleared away");
         let _ = fs::remove_dir_all(&base);
     }
 
     #[test]
-    fn a_size_that_cannot_be_read_is_not_said_as_zero() {
-        assert!(too_big_receipt(Some(300 * 1024)).contains("(300 KiB, massimo 256 KiB)"));
-        let unknown = too_big_receipt(None);
-        assert!(unknown.starts_with("errore: dimensione del messaggio non leggibile"));
-        assert!(!unknown.contains("0 KiB,"));
+    fn a_claim_that_was_never_read_goes_back_and_is_delivered_once() {
+        let base = std::env::current_dir().unwrap().join("target").join("mailbox-take-stale");
+        let _ = fs::remove_dir_all(&base);
+        let (outbox, receipts) = (base.join("outbox"), base.join("receipts"));
+        fs::create_dir_all(&outbox).unwrap();
+        fs::create_dir_all(&receipts).unwrap();
+        // What a crash between the rename and the read leaves, an hour after the client wrote it (the rename keeps that time).
+        let claim = outbox.join("1757860000000-ffff.taking");
+        fs::write(&claim, "{\"kind\":\"send\",\"to\":\"1\",\"text\":\"ciao\"}").unwrap();
+        let old = SystemTime::now() - Duration::from_secs(3600);
+        fs::File::options().write(true).open(&claim).unwrap().set_modified(old).unwrap();
+
+        let mut delivered = Vec::new();
+        for _ in 0..2 {
+            delivered.extend(take_outbox(&outbox, &receipts).unwrap());
+        }
+        assert_eq!(delivered.len(), 1, "delivered, and once");
+        assert_eq!(delivered[0].id, "1757860000000-ffff");
+        assert!(!claim.exists() && !outbox.join("1757860000000-ffff.json").exists());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn the_size_is_said_in_kib() {
+        assert!(too_big_receipt(300 * 1024).contains("(300 KiB, massimo 256 KiB)"));
     }
 
     #[test]
