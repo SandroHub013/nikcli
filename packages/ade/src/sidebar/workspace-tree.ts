@@ -45,7 +45,7 @@ export interface SidebarSession {
   status: WorkspaceSessionStatus
   workspaceId?: string
   activity?: string
-  /** Suspended by the user (P1-C6): the dot goes grey. */
+  /** Suspended by the user (P1-C6): its icon is the grey pause. */
   suspended?: true
   startTime?: number
   agent?: string

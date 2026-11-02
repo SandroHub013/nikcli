@@ -41,37 +41,6 @@
   container-type: inline-size;
 }
 
-/*
- * The status edge, and the liveness signal, in one hairline across the top.
- *
- * It was a 2px edge plus a separate 2px "pulse" lane under the header — four
- * pixels of every pane spent saying something one line can say. Absolutely
- * positioned, so it overlays the header instead of taking a row of its own and
- * costs no layout height at all.
- */
-[data-component="session-pane"]::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 1px;
-  z-index: 2;
-  background: var(--pane-status);
-  opacity: 0.6;
-  pointer-events: none;
-}
-
-/* Work in progress needs a sign that is not a word: across six panes the eye
-   finds motion long before it reads six activity labels. */
-[data-component="session-pane"][data-status="working"]::before,
-[data-component="session-pane"][data-status="provisioning"]::before {
-  opacity: 1;
-  background-image: linear-gradient(to right, transparent, var(--pane-status), transparent);
-  background-color: color-mix(in srgb, var(--pane-status) 25%, transparent);
-  background-size: 35% 100%;
-  background-repeat: no-repeat;
-  animation: ade-pane-sweep var(--ade-loop) var(--ade-ease) infinite var(--ade-loops, running);
-}
-
 [data-component="session-pane"][data-status="working"],
 [data-component="session-pane"][data-status="provisioning"] {
   --pane-status: var(--ade-working);
@@ -388,20 +357,6 @@
 }
 
 /* ── liveness ──────────────────────────────────────────────────────────────── */
-
-/*
- * The band travels by moving its background rather than the element, because
- * the element it lives on is the pane's own ::before: there is no lane to
- * translate inside any more, and none to pay for either.
- */
-@keyframes ade-pane-sweep {
-  0% {
-    background-position: -35% 0;
-  }
-  100% {
-    background-position: 135% 0;
-  }
-}
 
 /* ── transcript ────────────────────────────────────────────────────────────── */
 
@@ -794,37 +749,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ── narrow cards ──────────────────────────────────────────────────────────── */
-
-/*
- * Four columns on a laptop leaves each card around 300px, and now every fact
- * the pane carries shares one row with the window buttons. Secondary facts go
- * first and the status word goes last: a card that cannot say what it is doing
- * has stopped being useful, while one without a token count has not. The two
- * buttons are never dropped — they are the only way to resize or close the
- * pane with a pointer.
- */
-@container (max-width: 420px) {
-  [data-slot="pane-cost"],
-  [data-slot="pane-tree-note"],
-  [data-slot="pane-mode"] {
-    display: none;
-  }
-}
-
-@container (max-width: 340px) {
-  [data-slot="pane-tokens"],
-  [data-slot="pane-meta"] {
-    display: none;
-  }
-}
-
-@container (max-width: 260px) {
-  [data-slot="pane-tree"] {
-    display: none;
-  }
-}
-
 /* ── reduced motion ────────────────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
@@ -835,15 +759,6 @@
   [data-slot="pane-prompt"] {
     transition: none;
   }
-
-  /* Liveness still has to be visible without movement: the edge fills instead
-     of sweeping. */
-  [data-component="session-pane"][data-status="working"]::before,
-  [data-component="session-pane"][data-status="provisioning"]::before {
-    background-image: none;
-    background-color: var(--pane-status);
-    animation: none;
-  }
 }
 
 /* ══ Conchiglia · C2 "Vetro" ══════════════════════════════════════════════════
@@ -853,15 +768,14 @@
  * what changes is the shape they are drawn in.
  *
  * The terminal takes the whole shell, out to the rounded corners. The header
- * no longer owns a row above it: it is a pill of frosted glass floating over
- * the first lines, and what scrolls past underneath shows through. That costs
+ * no longer owns a row above it: it is a near-opaque pill floating over
+ * the first lines (no blur since DS-6). That costs
  * about two rows of terminal at the top — the one price of this direction —
  * and buys a pane that reads as one object rather than as a bar with a
  * terminal hung under it.
  *
  * Status moves off the top edge and onto the agent's mark: a halo in the
- * status colour, which pulses while the session works. The sweep along the
- * edge is gone with the edge.
+ * status colour, steady (the one motion of a state is the sidebar's).
  *
  * At the end of the file and scoped to the session pane throughout: the base
  * rules above are shared with the file, browser and video panes, which keep
@@ -873,11 +787,6 @@
 [data-component="session-pane"] {
   --ade-pane-ground: var(--ade-terminal-bg, var(--ade-sunken));
   transition: box-shadow var(--ade-dur-fast) var(--ade-ease);
-}
-
-/* No edge: the status lives on the mark now. */
-[data-component="session-pane"]::before {
-  content: none;
 }
 
 /*
@@ -906,17 +815,7 @@
   gap: var(--ade-space-4);
   border: 0;
   border-radius: var(--ade-radius-full);
-  /*
-   * No blur (DS-6): the pill floats over a canvas that repaints at every line
-   * of output, and a backdrop filter over it is re-sampled every frame, GPU
-   * work and a flicker source in WebView2. A near-opaque ground does the job.
-   * In light it is a crema step with a ring of the border colour (DS-24), so it
-   * does not vanish on a pale terminal.
-   */
-  background: color-mix(in srgb, light-dark(var(--ade-surface), var(--ade-raised)) 92%, transparent);
-  box-shadow:
-    var(--ade-shadow-sm),
-    inset 0 0 0 1px light-dark(var(--ade-border), rgba(255, 255, 255, 0.06));
+  /* Its ground and ring are `.pill.hA`'s: that rule comes later at the same weight, so it is the one that applies. */
   font-family: var(--ade-sans);
 }
 
@@ -926,7 +825,7 @@
 [data-component="session-pane"][data-focused] > [data-slot="pane-header"] {
   box-shadow:
     var(--ade-shadow-sm),
-    inset 0 0 0 1px var(--ade-border-subtle);
+    inset 0 0 0 1px light-dark(var(--ade-border), var(--ade-border-subtle));
 }
 
 /* The mark in a round chip, with the status as a halo around it. */
@@ -1086,7 +985,14 @@
   padding: 0 var(--ade-space-3) 0 var(--ade-space-4);
   border: 0;
   border-radius: var(--ade-radius-full);
-  background: color-mix(in srgb, var(--ade-raised) 92%, transparent);
+  /*
+   * No blur (DS-6): the pill floats over a canvas that repaints at every line
+   * of output, and a backdrop filter over it is re-sampled every frame, GPU
+   * work and a flicker source in WebView2. A near-opaque ground does the job.
+   * In light it is a crema step with a ring of the border colour (DS-24), so it
+   * does not vanish on a pale terminal; in dark, `raised`.
+   */
+  background: color-mix(in srgb, light-dark(var(--ade-surface), var(--ade-raised)) 92%, transparent);
   box-shadow:
     var(--ade-shadow-sm),
     inset 0 0 0 1px light-dark(var(--ade-border), rgba(255, 255, 255, 0.06));
@@ -1384,7 +1290,9 @@
   right: 0;
   z-index: 5;
   min-width: 200px;
-  max-width: min(320px, 90cqw);
+  /* The card is anchored at the trigger's right edge and must not leave the pane's left edge: 120px is the room the
+     pill's other parts take at the right of it. */
+  max-width: min(320px, calc(100cqw - 120px));
   padding: var(--ade-space-4);
   flex-direction: column;
   gap: var(--ade-space-3);
@@ -1422,13 +1330,45 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The cost stays in the pill (the user's rule: it is always visible), a little firmer than the rest. */
+.hA .cost {
+  flex: 0 0 auto;
+  font: var(--ade-weight-semibold) var(--ade-font-sm) var(--ade-sans);
+  color: var(--ade-text-soft);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Where the pill has no room for it, the card has it too: it is listed there at every width. */
+.hA .card-cost {
+  font: var(--ade-weight-semibold) var(--ade-font-sm) var(--ade-sans);
+  color: var(--ade-text-soft);
+}
+
+/* A bare «auto» means nothing: the mode wears its name. */
+.hA .card .mode-row {
+  display: inline-flex;
+  gap: var(--ade-space-3);
+}
+
+/* Not a handle: the card's text can be selected and the cursor is not a grab. */
+.hA .card {
+  cursor: default;
+}
+
+/* The row is the first thing in the card or not; either way its separator dot separates nothing here. */
+.hA .card [data-slot="pane-tree"]::before {
+  content: none;
+}
+
 .hA .card .a-brt {
   max-width: 28ch;
 }
 
 /* ── Container queries (collapse order, after DS-19) ──
- * The header keeps four things. What it still drops, narrow, is the cost and
- * the mouse hint first, then the detail beside the state, then the buttons. */
+ * The header keeps four things. Narrow, it drops the mouse hint first, then the
+ * detail beside the state, and the cost last (below 260px the card lists it); the
+ * buttons are never dropped. Nothing is hidden inside the card. */
 @container (max-width: 720px) {
   .hA .tok {
     display: none;
@@ -1466,6 +1406,13 @@
   }
   .hA .a-state {
     flex: 0 0 auto;
+  }
+}
+
+/* Down to 260px the pill keeps the cost. Below, the card lists it (and the buttons need the room). */
+@container (max-width: 260px) {
+  .hA > .cost {
+    display: none;
   }
 }
 

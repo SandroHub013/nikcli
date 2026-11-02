@@ -2,6 +2,7 @@ import { Show, createMemo } from "solid-js"
 import { BrowserPane } from "../browser"
 import { FilePane, editBuffer, revertBuffer, type ArchiveListing } from "../editor"
 import { SessionPane } from "../grid/pane"
+import { paneActivity } from "../grid/pane-state"
 import type { GridPane } from "../grid/session-grid"
 import type { LinkRequest } from "../terminal/links"
 import type { SpawnedSession } from "../host/shell"
@@ -448,8 +449,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         title={current().title}
         status={current().status}
         exited={!deps.isRunning(current().id)}
-        /* What the agent says it is doing beats the label ADE guessed; a suspended session is doing nothing. */
-        activity={current().suspended ? "suspended" : (reports()[current().id]?.activity ?? current().activity)}
+        activity={paneActivity(current(), reports()[current().id]?.activity)}
         elapsed={current().elapsed}
         tokens={(() => {
           const count = reports()[current().id]?.tokens

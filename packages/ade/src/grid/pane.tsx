@@ -18,12 +18,11 @@ import {
   type PaneState,
   STATE_FULL,
   STATE_SHORT,
-  cleanStateDetail,
+  chipDetail,
   resolvePaneState,
 } from "./pane-state"
 import { StateIcon } from "./state-icon"
 import { t } from "../i18n"
-import { activityLabel } from "./activity"
 import { FolderGlyph, PaneActions } from "./pane-actions"
 
 export { type PaneStatus, type PaneState, STATE_FULL, STATE_SHORT, resolvePaneState, StateIcon }
@@ -139,8 +138,6 @@ export interface SessionPaneProps {
   state?: PaneState
   /** The process behind the pane has ended: a pane "done" is then closed, not asking. */
   exited?: boolean
-  /** Detailed reason or tool description (e.g. "Edit · pane.css", "Vuole eseguire Bash", "finestra 5h esaurita"). */
-  stateDetail?: string
   /** Live quota view for the session's provider. When omitted, derived from agent / quota module. */
   quota?: SessionQuota
   /** What the agent is doing, in the present tense. Empty when it is idle. */
@@ -464,44 +461,60 @@ export function SessionPane(props: SessionPaneProps) {
 
   const cardId = createUniqueId()
   const [cardDismissed, setCardDismissed] = createSignal(false)
+  let info: HTMLSpanElement | undefined
+  let infoTrigger: HTMLButtonElement | undefined
+  /*
+   * Escape closes the card (WCAG 1.4.13, dismissible). Heard on the document in
+   * the capture phase because a card opened by hover leaves the focus in the
+   * terminal, and an Escape that reached it would interrupt the agent's turn
+   * while the card stayed open. It is taken only while the card is open. With the
+   * focus on a row inside the card, the focus goes back to the trigger first, or
+   * hiding the row would drop it on the page.
+   */
+  const closeCardOnEscape = (event: KeyboardEvent) => {
+    if (event.key !== "Escape" || !info?.matches(":hover, :has(:focus-visible)")) return
+    event.preventDefault()
+    event.stopPropagation()
+    if (info.contains(document.activeElement) && document.activeElement !== infoTrigger)
+      infoTrigger?.focus({ preventScroll: true })
+    setCardDismissed(true)
+  }
+  document.addEventListener("keydown", closeCardOnEscape, true)
+  onCleanup(() => document.removeEventListener("keydown", closeCardOnEscape, true))
   /** Whether the card has anything to say: every fact in it can be absent. */
   const hasDetails = () =>
-    Boolean(missing() || reading() || props.mode || props.tree || props.status === "provisioning" || props.tokens)
+    Boolean(
+      missing() || reading() || props.mode || props.tree || props.status === "provisioning" || props.tokens || props.cost,
+    )
 
   /* Buttons of the pane's own (resume, retry) make a pane «perm» too; then the label is theirs. */
   const hasActions = () => Boolean(props.actions && props.actions.length > 0)
   /* A permission prompt in a live terminal is answered in the terminal itself, since the pane has no buttons for it. */
-  const answerInTerminal = () => state() === "perm" && !hasActions()
+  const answerInTerminal = () => state() === "perm" && !hasActions() && Boolean(props.terminalId)
 
   /*
-   * What the chip says beside the state's word. The agent's own status line is
-   * scraped, spinner glyphs and all, and it used to land here whole
-   * («Permesso Mustering…Mustering…✻Mustering…3Musterin»): it is cleaned, and
-   * for a permission prompt it is not used at all, the words are fixed and say
-   * where the answer goes (UX-8, DS-18).
+   * What the chip says beside the state's word. For a permission prompt the
+   * words are fixed and say where the answer goes (UX-8); for the rest it is
+   * the agent's report, cleaned of spinner glyphs and repeats and dropped when
+   * it only restates the state (`chipDetail`, DS-18).
    */
   const stateHead = createMemo(() => {
     if (answerInTerminal()) return t("paneState.perm.here")
-    const detail = cleanStateDetail(props.stateDetail)
+    const detail = chipDetail({ activity: props.activity })
     if (detail) return detail
     // "Sospesa" is the label already: said twice it would read "Sospesa · Sospesa".
-    if (state() === "off") return ""
-    if (props.activity) return activityLabel(props.activity)
     const st = state()
     if (st === "limit")
       return reading()?.countdown ? t("pane.limit.window", String(reading()?.bindingKey ?? "")) : t("pane.limit")
-    if (st === "work") return props.mode ?? t("activity.running")
-    if (st === "perm") return props.actions?.[0]?.label ?? t("paneState.short.perm")
-    if (st === "err") return t("paneState.err")
-    return STATE_FULL[st]
+    if (st === "perm") return props.actions?.[0]?.label ?? ""
+    return ""
   })
 
   /* The full sentence, for the tooltip and the screen reader; the chip is the short one. */
   const stateDetail = createMemo(() => {
-    const detail = cleanStateDetail(props.stateDetail) || undefined
-    if (answerInTerminal()) return detail ? `${t("paneState.perm.tip")}
-${detail}` : t("paneState.perm.tip")
-    return detail ?? activityLabel(props.activity) ?? STATE_FULL[state()]
+    const detail = chipDetail({ activity: props.activity }) || undefined
+    if (answerInTerminal()) return detail ? `${t("paneState.perm.tip")}\n${detail}` : t("paneState.perm.tip")
+    return detail ?? STATE_FULL[state()]
   })
 
   const tipAll = createMemo(() => {
@@ -673,6 +686,7 @@ ${detail}` : t("paneState.perm.tip")
         */}
         <span
           class="chip a-state"
+          role="img"
           tabIndex={0}
           title={tipState()}
           data-tip={tipState()}
@@ -689,7 +703,7 @@ ${detail}` : t("paneState.perm.tip")
         <span class="sp"></span>
 
         <Show when={props.cost}>
-          <span class="tok" data-slot="pane-cost">
+          <span class="cost" data-slot="pane-cost">
             {props.cost}
           </span>
         </Show>
@@ -704,12 +718,14 @@ ${detail}` : t("paneState.perm.tip")
         {/*
           DS-19. The header keeps what is read at a glance (title, state, cost,
           buttons); quota, mode, folder and tokens wait in this card. It opens
-          on hover and on keyboard focus (not on a click, which would pin it), closes with Escape (WCAG 1.4.13),
-          and the card sits inside the trigger's wrapper so the pointer can
-          cross into it and read it.
+          on hover and on keyboard focus (not on a click, which would pin it)
+          and closes with Escape (see `closeCardOnEscape`). The card sits
+          inside the trigger's wrapper so the pointer can cross into it and
+          read it.
         */}
         <Show when={hasDetails()}>
           <span
+            ref={info}
             class="info"
             data-slot="pane-info"
             data-dismissed={cardDismissed() ? "" : undefined}
@@ -718,18 +734,16 @@ ${detail}` : t("paneState.perm.tip")
               if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget))
                 setCardDismissed(false)
             }}
-            onKeyDown={(event) => {
-              if (event.key !== "Escape" || !event.currentTarget.matches(":hover, :has(:focus-visible)")) return
-              event.stopPropagation()
-              setCardDismissed(true)
-            }}
           >
             <button
+              ref={infoTrigger}
               type="button"
               class="act"
               data-slot="pane-info-trigger"
               aria-label={t("pane.details")}
               aria-describedby={cardId}
+              /* A click must not take the keyboard from the terminal: the button opens nothing, the card is hover and focus. */
+              onMouseDown={(event) => event.preventDefault()}
             >
               <svg class="gi" viewBox="0 0 16 16" aria-hidden="true">
                 <circle cx="8" cy="8" r="5.8" />
@@ -774,15 +788,24 @@ ${detail}` : t("paneState.perm.tip")
                 )}
               </Show>
 
+              <Show when={props.cost}>
+                <span class="card-cost" data-slot="pane-cost-card">
+                  {props.cost}
+                </span>
+              </Show>
+
               <Show when={props.mode}>
-                <span class="a-mode" data-slot="pane-mode">
-                  {props.mode}
+                <span class="mode-row">
+                  <span class="qk">{t("pane.mode")}</span>
+                  <span class="a-mode" data-slot="pane-mode">
+                    {props.mode}
+                  </span>
                 </span>
               </Show>
 
               {/* While provisioning decides, the same slot holds a placeholder so the
-                  handover to a real branch never reshapes the row. The fidelity note
-                  stays on the row, not only in the title: a tree that is behind, or
+                  handover to a real branch never reshapes the card. The fidelity note
+                  stays beside the branch, not only in the title: a tree that is behind, or
                   has no dependencies, changes what the agent can do in it. */}
               <Show
                 when={props.tree}

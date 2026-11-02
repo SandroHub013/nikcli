@@ -87,14 +87,11 @@
   margin-left: 5px;
 }
 
-[data-family="decisions"] [data-slot="ade-pill-badge"] {
-  background: var(--ade-working);
-  color: var(--ade-accent-fg);
-}
-
+/* What waits for the user is blue everywhere (DS-1): the Decisions and Design counts are «needs you», and pomodoro is for buttons. */
+[data-family="decisions"] [data-slot="ade-pill-badge"],
 [data-family="design"] [data-slot="ade-pill-badge"] {
-  background: var(--ade-accent-strong);
-  color: var(--ade-accent-fg);
+  background: var(--ade-state-perm);
+  color: var(--ade-on-status);
 }
 
 /* ── Attention dot and pulse ──────────────────────────────────────────────── */
@@ -103,7 +100,7 @@
   width: 6px;
   height: 6px;
   border-radius: var(--ade-radius-full);
-  background: var(--ade-warning);
+  background: var(--ade-state-perm);
   margin-right: 5px;
   flex: none;
 }
@@ -121,12 +118,10 @@
 
 @keyframes ade-pill-pulse {
   0%, 100% {
-    transform: scale(1);
     opacity: 1;
   }
   50% {
-    transform: scale(1.35);
-    opacity: 0.6;
+    opacity: 0.45;
   }
 }
 

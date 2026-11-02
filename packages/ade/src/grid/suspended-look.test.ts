@@ -15,7 +15,8 @@ import { resolvePaneState, STATE_SHORT } from "./pane-state"
  * of a state that must stay still is not one of them.
  */
 
-const css = readFileSync(join(import.meta.dir, "pane.css"), "utf-8")
+// The icon lives in its own sheet since DS-1; both are scanned.
+const css = ["pane.css", "state-icon.css"].map((name) => readFileSync(join(import.meta.dir, name), "utf-8")).join("\n")
 
 /** What a suspended session resolves to, and a closed one. */
 const SUSPENDED = resolvePaneState({

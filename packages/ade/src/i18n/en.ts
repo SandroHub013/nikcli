@@ -238,6 +238,7 @@ export const en: Messages = {
   "pane.name": "Session name",
   "pane.quota": "quota",
   "pane.details": "Session details",
+  "pane.mode": "mode",
   "pane.quota.na": "n/a",
   "pane.toBottom": "Jump to bottom",
   "pane.input": "Message the agent…",

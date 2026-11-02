@@ -195,7 +195,7 @@
 }
 
 [data-slot="chat-session-mark"][data-kind="waiting"] {
-  color: var(--ade-warning);
+  color: var(--ade-state-perm);
 }
 
 [data-slot="chat-session-input"] {

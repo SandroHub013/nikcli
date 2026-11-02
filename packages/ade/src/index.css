@@ -407,7 +407,7 @@ body[data-theme="glass"] #root,
   --ade-state-idle: var(--ade-done);
   --ade-state-off: var(--ade-text-weak);
   --ade-state-closed: var(--ade-text-soft);
-  /* The one loop: a slow breathe, the pace of «working» in the sidebar. Nothing else loops at its own rhythm. */
+  /* The one loop for a session's state: a slow breathe, the pace of «working» in the sidebar. Other loops (the caret, a recording, a progress bar) keep the rhythm of what they are. */
   --ade-loop: 2.4s;
   --ade-loop-ease: ease-in-out;
   /* What a recording paints over a secret: one opaque block in every theme, glass included. */

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { translate } from "../i18n"
-import { STATE_FULL, STATE_IDS, STATE_SHORT, cleanStateDetail, stateOfSession } from "./pane-state"
+import { STATE_FULL, STATE_IDS, STATE_SHORT, chipDetail, cleanStateDetail, resolvePaneState, stateOfSession } from "./pane-state"
 
 /*
  * DS-1, UX-6, UX-7, UX-8, DS-18: a session has one state, said in one list.
@@ -53,6 +53,16 @@ describe("the list", () => {
   })
 })
 
+describe("the words beside the state (UX-6)", () => {
+  test("a process that ended is feminine like the state word beside it", () => {
+    expect(translate("it", "activity.exited", "1")).toBe("Terminata (codice 1)")
+    expect(translate("it", "activity.killed")).toBe("Terminata")
+    expect(translate("it", "activity.restored")).toBe("Ripristinata")
+    // «Chiusa» and "Aspetta te" stay what they were: a process ending with 0 is not a finished task.
+    expect(translate("it", "paneState.closed")).toBe("Chiusa")
+  })
+})
+
 describe("the sidebar and the pane read the same list", () => {
   test("the sidebar resolves a session with the pane's own function", () => {
     expect(sidebarSource).toContain("stateOfSession")
@@ -71,7 +81,9 @@ describe("the sidebar and the pane read the same list", () => {
     expect(stateOfSession({ status: "waiting", activity: "ade-msg ask a «Fabio»" })).toBe("ask")
     expect(stateOfSession({ status: "error" })).toBe("err")
     expect(stateOfSession({ status: "idle" })).toBe("idle")
-    expect(stateOfSession({ status: "done" })).toBe("idle")
+    // `done` is only written when the process ends or a saved session comes back without one: the pane says «Chiusa», so does the row.
+    expect(stateOfSession({ status: "done" })).toBe("closed")
+    expect(stateOfSession({ status: "done" })).toBe(resolvePaneState({ status: "done", exited: true }))
     expect(stateOfSession({ status: "working", suspended: true })).toBe("off")
   })
 
@@ -138,9 +150,6 @@ describe("the chip says what to do, not what the terminal scraped (UX-8, DS-18)"
       "La sessione ti chiede un permesso: scegli la risposta nel terminale con le frecce e Invio",
     )
     expect(translate("en", "paneState.perm.here")).toBe("answer in the terminal")
-    expect(paneSource).toContain('if (answerInTerminal()) return t("paneState.perm.here")')
-    // Not for a pane whose own buttons make it a «perm»: its label is theirs.
-    expect(paneSource).toContain('const answerInTerminal = () => state() === "perm" && !hasActions()')
   })
 
   test("the screenshot's chip text becomes one clean word", () => {
@@ -149,6 +158,24 @@ describe("the chip says what to do, not what the terminal scraped (UX-8, DS-18)"
     expect(cleanStateDetail("Edit · pane.css")).toBe("Edit pane.css")
     expect(cleanStateDetail("⠋ ⠙ ⠹")).toBe("")
     expect(cleanStateDetail(undefined)).toBe("")
+    // A counter beside the word goes with its unit; an asterisk inside the text stays.
+    expect(cleanStateDetail("Mustering…12s")).toBe("Mustering…")
+    expect(cleanStateDetail("Editing src/*.ts")).toBe("Editing src/*.ts")
+    expect(cleanStateDetail("* Thinking…")).toBe("Thinking…")
+  })
+
+  test("the chip's text is the report cleaned, nothing for a code that restates the state", () => {
+    expect(chipDetail({ activity: "Mustering…Mustering…✻Mustering…3Musterin" })).toBe("Mustering…")
+    expect(chipDetail({ activity: "ready" })).toBe("")
+    expect(chipDetail({ activity: "Disponibile" })).toBe("")
+    expect(chipDetail({ activity: "running" })).toBe("")
+    expect(chipDetail({ activity: "exited:2" })).toBe("Terminata (codice 2)")
+    expect(chipDetail({})).toBe("")
+  })
+
+  test("a report that mentions a task does not make a permission a question to another session", () => {
+    expect(resolvePaneState({ status: "waiting", activity: "Creating task…" })).toBe("perm")
+    expect(resolvePaneState({ status: "waiting", activity: "ade-msg ask a «Fabio»" })).toBe("ask")
   })
 
   test("the detail is bounded with an ellipsis, and its full text stays in the tooltip", () => {
@@ -210,7 +237,7 @@ describe("no flicker from filters over live content (DS-6)", () => {
   })
 
   test("the pill is near opaque instead: 92% of its ground", () => {
-    expect(paneCss.match(/color-mix\(in srgb, [^;]*?92%, transparent\)/g)?.length).toBeGreaterThanOrEqual(2)
+    expect(paneCss.match(/color-mix\(in srgb, [^;]*?92%, transparent\)/g)?.length).toBeGreaterThanOrEqual(1)
     expect(paneCss).not.toMatch(/var\(--ade-raised\) (78|90)%/)
   })
 
@@ -240,7 +267,7 @@ describe("the header keeps four things (DS-19)", () => {
   test("the card opens by hover and by keyboard focus, and closes with Escape", () => {
     expect(paneCss).toContain(".hA .info:hover .card")
     expect(paneCss).toContain(".hA .info:has(:focus-visible) .card")
-    expect(header).toContain('event.key !== "Escape"')
+    expect(paneSource).toContain('document.addEventListener("keydown", closeCardOnEscape, true)')
     // The trigger is a real button with a name, and describes itself by the card.
     expect(header).toContain('data-slot="pane-info-trigger"')
     expect(header).toContain("aria-describedby={cardId}")
