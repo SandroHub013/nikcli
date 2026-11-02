@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test"
 import { createComputed, createRoot, mapArray } from "solid-js"
 import { createStore, produce, unwrap } from "solid-js/store"
 import type { TranscriptLine } from "../grid/pane"
-import { createLineWriter, withLines } from "./pane-lines"
+import { WATCHED_TAIL, createLineWriter, withLines } from "./pane-lines"
 
 const MAX = 200
 const WORKBENCH = readFileSync(join(import.meta.dir, "workbench.tsx"), "utf8")
@@ -173,5 +173,88 @@ describe("a flood's chunk, written to the transcript", () => {
     const panes = sites.filter((site) => site.includes("feedTerminal(paneId, chunk, written)"))
     expect(panes.length).toBe(2)
     for (const site of panes) expect(site).toContain("linesTogether: paneLines.together")
+  })
+})
+
+/*
+ * A chunk of `yes` is 85,000 lines, and the search for a question per line took 80% of the page's time on it: blocks of
+ * 0.6 s, and a key in another pane took 0.8 s to appear (live test of 2026-11-02, E2).
+ */
+describe("the search for a question in a chunk", () => {
+  const writer = (fail?: string) => {
+    const searched: string[] = []
+    const written: string[][] = []
+    const lines = createLineWriter<string>(
+      (_, added) => written.push(added),
+      (_, raw) => {
+        if (raw === fail) throw new Error("boom")
+        searched.push(raw)
+      },
+    )
+    return { lines, searched, written }
+  }
+
+  test("outside a chunk a line is searched at once", () => {
+    const { lines, searched } = writer()
+    lines.watch("p", "uno")
+    expect(searched).toEqual(["uno"])
+  })
+
+  test("a chunk no longer than a screen has every line searched, in order, once it is over", () => {
+    const { lines, searched } = writer()
+    const all = Array.from({ length: WATCHED_TAIL }, (_, i) => `riga ${i}`)
+    lines.together(() => {
+      for (const line of all) lines.watch("p", line)
+      expect(searched).toEqual([])
+    })
+    expect(searched).toEqual(all)
+  })
+
+  test("a chunk of a flood has only its tail searched, however long it is", () => {
+    const { lines, searched } = writer()
+    const count = WATCHED_TAIL * 400 + 7
+    lines.together(() => {
+      for (let i = 0; i < count; i++) lines.watch("p", String(i))
+    })
+    expect(searched).toEqual(Array.from({ length: WATCHED_TAIL }, (_, i) => String(count - WATCHED_TAIL + i)))
+  })
+
+  test("each pane has its own tail", () => {
+    const seen: Array<[string, string]> = []
+    const lines = createLineWriter<string>(
+      () => {},
+      (id, raw) => seen.push([id, raw]),
+    )
+    lines.together(() => {
+      lines.watch("a", "1")
+      lines.watch("b", "2")
+      lines.watch("a", "3")
+    })
+    expect(seen).toEqual([
+      ["a", "1"],
+      ["a", "3"],
+      ["b", "2"],
+    ])
+  })
+
+  test("a line that throws costs only that line, and the transcript is written", () => {
+    const realError = console.error
+    console.error = () => {}
+    try {
+      const { lines, searched, written } = writer("rotta")
+      lines.together(() => {
+        lines.add("p", "uno")
+        for (const line of ["uno", "rotta", "tre"]) lines.watch("p", line)
+      })
+      expect(searched).toEqual(["uno", "tre"])
+      expect(written).toEqual([["uno"]])
+    } finally {
+      console.error = realError
+    }
+  })
+
+  test("lint: the workbench's output goes through this search and not around it", () => {
+    expect(WORKBENCH).toContain("paneLines.watch(id, text)")
+    expect(WORKBENCH).not.toContain("    watchForPermission(id, text)\n")
   })
 })

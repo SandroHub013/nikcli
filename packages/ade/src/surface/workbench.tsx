@@ -8505,17 +8505,20 @@ export function Workbench() {
    * instead would copy the pane, the pane list and the workbench, and then hand
    * `reconcile` the whole thing to diff. Once per chunk: see `pane-lines.ts`.
    */
-  const paneLines = createLineWriter<Pane["lines"][number]>((id, lines) => {
-    setWbStore(
-      produce((w) => {
-        const pane = w.panes.find((p) => p.id === id)
-        if (!pane) return
-        const next = withLines(unwrap(pane.lines), lines, MAX_PANE_LINES)
-        if (next) pane.lines = next
-      }),
-    )
-    setRevision((n) => n + 1)
-  })
+  const paneLines = createLineWriter<Pane["lines"][number]>(
+    (id, lines) => {
+      setWbStore(
+        produce((w) => {
+          const pane = w.panes.find((p) => p.id === id)
+          if (!pane) return
+          const next = withLines(unwrap(pane.lines), lines, MAX_PANE_LINES)
+          if (next) pane.lines = next
+        }),
+      )
+      setRevision((n) => n + 1)
+    },
+    (id, raw) => watchForPermission(id, raw),
+  )
 
   /*
    * `from` says who wrote the line. ADE's own notes go in the transcript like
@@ -8541,7 +8544,7 @@ export function Workbench() {
     const shown = cleanTranscriptLine(text)
     if (shown !== undefined) paneLines.add(id, { kind, text: shown })
     if (from === "ade") return
-    watchForPermission(id, text)
+    paneLines.watch(id, text)
 
     // Agents print what they are spending in among everything else. Reading it
     // here is the only way the pane's counters are real rather than decorative.
@@ -8558,8 +8561,8 @@ export function Workbench() {
   /*
    * An agent that stops to ask something looks, from the outside, exactly like
    * one that is thinking: the process is alive and the output has stopped. The
-   * difference is in the last few lines, which is why every line is read for a
-   * question before it scrolls away.
+   * difference is in the last few lines, which is why the lines are read for a
+   * question before they scroll away (`paneLines.watch`: in a long chunk, its tail).
    */
   const watchForPermission = (paneId: string, text: string) => {
     const pane = wb().panes.find((p) => p.id === paneId)
