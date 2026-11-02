@@ -574,8 +574,9 @@ export function cleanScreenSequence(rows: number, written: boolean): string {
  * alternate buffer with no scrollback (audit 2026-11-02, SES-7).
  */
 export function modeResetSequence(): string {
-  const modes = [1049, 1000, 1002, 1003, 1005, 1006, 1015, 2004, 1004, 1]
-  return "[!p" + modes.map((mode) => `[?${mode}l`).join("")
+  // Not 1049: on the normal buffer it sends the cursor to 1;1 (see `startOnCleanScreen`).
+  const modes = [1000, 1002, 1003, 1005, 1006, 1015, 2004, 1004, 1]
+  return "\u001b[!p" + modes.map((mode) => `\u001b[?${mode}l`).join("")
 }
 
 /** Gives the next process in `id` an empty screen at 1;1, the old one kept in the scrollback, and no mode of the old one. */
@@ -584,9 +585,14 @@ export function startOnCleanScreen(id: string): void {
   if (!session) return
   const { terminal } = session
   const buffer = terminal.buffer.active
+  const alternate = buffer.type === "alternate"
   // Leaving the alternate buffer shows the normal one again, which is the screen to scroll away.
-  const written = buffer.type === "alternate" || buffer.baseY > 0 || buffer.cursorY > 0 || buffer.cursorX > 0
-  terminal.write(modeResetSequence() + cleanScreenSequence(terminal.rows, written))
+  const written = alternate || buffer.baseY > 0 || buffer.cursorY > 0 || buffer.cursorX > 0
+  /*
+   * `?1049l` only when there is an alternate buffer to leave: on the normal one xterm restores a cursor saved at 0;0,
+   * so the newlines that scroll the screen away started from the top and left the old lines on screen (review B1).
+   */
+  terminal.write((alternate ? "\u001b[?1049l" : "") + modeResetSequence() + cleanScreenSequence(terminal.rows, written))
 }
 
 /** Prints a line of ADE's own, marked so it cannot be mistaken for the agent. */
