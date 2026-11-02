@@ -186,6 +186,32 @@ describe("host/test-app start and stop", () => {
       expect(calls.at(-1)).toBe("record")
     })
 
+    // Review N7: stopped from a shell without the CARGO_TARGET_DIR it was started with, the app under the shared folder
+    // was not recognised and was killed with the rest instead of closed.
+    test("the folder the build went to is the record's, not that of the shell that stops it", () => {
+      const shared = "D:\\cargo-shared"
+      const sharedExe = `${shared}\\debug\\ade-test.exe`
+      const rows = [
+        { pid: 10, ppid: 1, created: startedAt + 5, cmd: `bun.exe x tauri dev --config ${plan.configPath}` },
+        { pid: 20, ppid: 10, created: startedAt + 60_000, exe: sharedExe, cmd: sharedExe },
+        { pid: 21, ppid: 20, created: startedAt + 61_000, cmd: `msedgewebview2.exe --user-data-dir=${plan.profileDir}` },
+      ]
+      const closed: number[] = []
+      stopInstance({
+        rows,
+        record: { port: 5270, label: plan.label, root, startedAt, targetDir: shared, sharedTarget: true },
+        plan,
+        root,
+        selfPid: 4242,
+        kill: () => {},
+        removeRecord: () => {},
+        close: (pid) => void closed.push(pid),
+        waitExit: () => [],
+        reread: () => rows,
+      })
+      expect(closed).toEqual([20])
+    })
+
     test("an app that does not exit in time is killed, after its children", () => {
       const { result, calls } = run(false)
       expect(calls[0]).toBe("close 20")

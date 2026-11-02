@@ -28,6 +28,7 @@ import {
   instanceRunning,
   parseRecord,
   parseTestAppArgs,
+  planOfRecord,
   planTestApp,
   stopInstance,
   superviseStart,
@@ -173,7 +174,8 @@ function stripAnsi(text: string): string {
 function state(target: TestAppPlan, treeRoot: string, record?: TestAppRecord): boolean | undefined {
   const rows = processTable()
   if (!rows) return undefined
-  return instanceRunning(instanceProcesses(rows, target, treeRoot, record?.port, record?.startedAt), target, treeRoot)
+  const built = planOfRecord(target, record)
+  return instanceRunning(instanceProcesses(rows, built, treeRoot, record?.port, record?.startedAt), built, treeRoot)
 }
 
 // ---------------------------------------------------------------------------
@@ -253,7 +255,15 @@ async function start(): Promise<void> {
     }
   }
 
-  const record: TestAppRecord = { port, cdpPort, label: plan.label, root, startedAt }
+  const record: TestAppRecord = {
+    port,
+    cdpPort,
+    label: plan.label,
+    root,
+    startedAt,
+    targetDir: plan.targetDir,
+    sharedTarget: plan.sharedTarget,
+  }
   writeFileSync(plan.recordPath, JSON.stringify(record, null, 2))
 
   console.log(

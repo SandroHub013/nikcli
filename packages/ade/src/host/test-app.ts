@@ -63,6 +63,16 @@ export interface TestAppRecord {
    * `instanceProcesses`. Absent in records written before it existed.
    */
   startedAt?: number
+  /** Where cargo built it (`CARGO_TARGET_DIR` of the launcher), so `stop` finds the app there whatever its own shell says. */
+  targetDir?: string
+  sharedTarget?: boolean
+}
+
+/** The plan as the instance was started: the folder of its build is the record's, when the record has one. */
+export function planOfRecord(plan: TestAppPlan, record: TestAppRecord | undefined): TestAppPlan {
+  return record?.targetDir === undefined
+    ? plan
+    : { ...plan, targetDir: record.targetDir, sharedTarget: record.sharedTarget ?? plan.sharedTarget }
 }
 
 /** One row of the OS process table, as far as telling instances apart needs. */
@@ -405,7 +415,8 @@ export function stopInstance(input: {
   reread?: () => readonly ProcessRow[] | undefined
   closeTimeoutMs?: number
 }): StopOutcome {
-  const { rows, record, plan, root } = input
+  const { rows, record, root } = input
+  const plan = planOfRecord(input.plan, record)
   if (record?.startedAt === undefined) {
     const found = instanceProcesses(rows, plan, root, record?.port)
     if (found.length > 0) return { outcome: "refused", pids: found.map((row) => row.pid) }
