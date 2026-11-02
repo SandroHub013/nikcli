@@ -97,7 +97,7 @@ describe("lint: the workbench writes the queue and reads it back", () => {
   })
 
   test("read back once the saved layout is, and a held message's sender is told when its session is gone", () => {
-    const layout = source.indexOf("setWb(fromWorkspaceState(state))")
+    const layout = source.indexOf("setWb(fromWorkspaceState(savedWorkspace.state))")
     const restored = source.indexOf("await restoreMail(host)", layout)
     expect(layout).toBeGreaterThan(0)
     expect(restored).toBeGreaterThan(layout)
@@ -116,5 +116,52 @@ describe("the lines held for a running session are saved too, not only those of 
       { paneId: "gone", text: "per un pannello chiuso", inbox: { id: "r4", kind: "send", from: "m" } },
     ]
     expect(suspendedMailToSave(held, (id) => id === "a").map((line) => line.inbox?.id)).toEqual(["r1", "r2"])
+  })
+})
+
+/*
+ * Source checks for the wiring of the audit's data-safety fixes (review of ade/dati-salvi): the pure parts have
+ * their own tests; these pin that the workbench actually uses them, in the order that matters.
+ */
+describe("the data-safety wiring in the workbench", () => {
+  const source = readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8")
+  test("the update persists the mail and the mail round waits for the install", () => {
+    const run = source.indexOf("const runUpdate = async () => {")
+    const flush = source.indexOf("autosave.flush()", run)
+    const persisted = source.indexOf("persistMail()", flush)
+    const install = source.indexOf('invoke("ade_update_install")', run)
+    expect(persisted).toBeGreaterThan(flush)
+    expect(install).toBeGreaterThan(persisted)
+    // One pause for the timer and the native signal alike (`createMailRound`), not a line in the timer only.
+    expect(source).toContain("paused: () => updating(),")
+  })
+
+  test("the reload prompt does not come after a restore, and a restore refuses an unsaved file first", () => {
+    const leaving = source.indexOf("const handleBeforeUnload = (event: BeforeUnloadEvent) => {")
+    expect(source.indexOf("if (closingConfirmed || workspaceRestoring) return", leaving)).toBeGreaterThan(leaving)
+    const restore = source.indexOf("const restoreSessions = (copyKey: string) => {")
+    const dirty = source.indexOf("buffer.dirty", restore)
+    const written = source.indexOf("restoreCopy(localStorage, copyKey)", restore)
+    expect(dirty).toBeGreaterThan(restore)
+    expect(written).toBeGreaterThan(dirty)
+    expect(source.slice(dirty, written)).toContain('report(t("workspace.restore.saveFirst"))')
+  })
+
+  test("the question says running agents stop, in both languages", () => {
+    const text = readFileSync(new URL("../i18n/en.ts", import.meta.url), "utf8") + readFileSync(new URL("../i18n/it.ts", import.meta.url), "utf8")
+    expect(text).toContain("running agents stop")
+    expect(text).toContain("gli agenti in corso si fermano")
+  })
+
+  test("the autosave never throws, never writes over a restore, and respects the block", () => {
+    const write = source.indexOf("write: () => {\n      if (workspaceRestoring) return")
+    expect(write).toBeGreaterThan(0)
+    const block = source.indexOf("if (workspaceSaveBlocked) {", write)
+    const save = source.indexOf('localStorage.setItem("ade.workspace"', write)
+    const caught = source.indexOf("} catch {", save)
+    expect(block).toBeGreaterThan(write)
+    expect(save).toBeGreaterThan(block)
+    expect(caught).toBeGreaterThan(save)
+    expect(source).toContain("retryUnreadableCopy(localStorage, Date.now())")
   })
 })

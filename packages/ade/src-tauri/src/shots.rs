@@ -1100,12 +1100,67 @@ pub async fn shot_bytes(watch: tauri::State<'_, Watch>, path: String) -> Result<
     std::fs::read(&file).map_err(|e| format!("non leggibile: {e}"))
 }
 
-/// Removes a screenshot from disk. Used by the tray's own delete, never by the
-/// dismiss — closing a thumbnail hides it, it does not throw the file away.
+/// Moves a screenshot to the Recycle Bin (the Trash on a Mac). Used by the tray's
+/// own delete, never by the dismiss — closing a thumbnail hides it, it does not
+/// throw the file away. It is the user's own file, in their Screenshots folder:
+/// it is never removed from the disk for good.
 #[tauri::command]
 pub async fn shot_delete(watch: tauri::State<'_, Watch>, path: String) -> Result<(), String> {
     let file = check_shot(&watch, &path)?;
-    std::fs::remove_file(&file).map_err(|e| format!("non eliminabile: {e}"))
+    to_recycle_bin(&file).map_err(|e| format!("non eliminabile: {e}"))
+}
+
+/// Windows: the shell's own delete with undo. No new crate: `windows` is already a dependency with `Win32_UI_Shell`.
+///
+/// When the volume has no Recycle Bin, or the file is too big for it, the shell would delete it for good without a
+/// word; `FOF_WANTNUKEWARNING` makes it ask first, and a "no" comes back as an abort, which is reported as a failure.
+#[cfg(windows)]
+fn to_recycle_bin(file: &std::path::Path) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::Win32::UI::Shell::{
+        SHFileOperationW, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT, FOF_WANTNUKEWARNING, FO_DELETE,
+        SHFILEOPSTRUCTW,
+    };
+    // `pFrom` is a list of names, each ending in a NUL, and the list ends in a second one.
+    let from: Vec<u16> = file.as_os_str().encode_wide().chain([0, 0]).collect();
+    let mut op = SHFILEOPSTRUCTW {
+        wFunc: FO_DELETE,
+        pFrom: windows::core::PCWSTR(from.as_ptr()),
+        fFlags: (FOF_ALLOWUNDO.0 | FOF_NOCONFIRMATION.0 | FOF_NOERRORUI.0 | FOF_SILENT.0 | FOF_WANTNUKEWARNING.0) as u16,
+        ..Default::default()
+    };
+    // SAFETY: `op` and `from` outlive the call, and `from` is double-NUL terminated.
+    let code = unsafe { SHFileOperationW(&mut op) };
+    if code != 0 {
+        return Err(format!("codice {code:#x}"));
+    }
+    if op.fAnyOperationsAborted.as_bool() {
+        return Err("annullata".into());
+    }
+    // A file the shell skipped without an error would still be there.
+    if file.exists() {
+        return Err("il file è ancora lì".into());
+    }
+    Ok(())
+}
+
+/// macOS: `NSFileManager trashItemAtURL`. It sends no Apple event, so it needs no permission in a bundled app (the
+/// Finder route is denied there without `NSAppleEventsUsageDescription`, with no prompt). The cost: Finder's "Put
+/// Back" may not be offered for it. It cannot be compiled on Windows: the CI macOS build is the first check.
+#[cfg(target_os = "macos")]
+fn to_recycle_bin(file: &std::path::Path) -> Result<(), String> {
+    use objc2_foundation::{NSFileManager, NSString, NSURL};
+    let path = NSString::from_str(&file.to_string_lossy());
+    let url = NSURL::fileURLWithPath(&path);
+    NSFileManager::defaultManager()
+        .trashItemAtURL_resultingItemURL_error(&url, None)
+        .map_err(|error| error.localizedDescription().to_string())
+}
+
+/// Anywhere else there is no bin to move it to, and a screenshot is not thrown away for good.
+#[cfg(not(any(windows, target_os = "macos")))]
+fn to_recycle_bin(_file: &std::path::Path) -> Result<(), String> {
+    Err("il Cestino non è disponibile su questo sistema".into())
 }
 
 /*

@@ -462,6 +462,16 @@
   color: var(--ade-error);
 }
 
+[data-slot="shot-viewer-ask"],
+[data-slot="shot-viewer-error"] {
+  min-width: 0;
+  color: var(--ade-text);
+}
+
+[data-slot="shot-viewer-error"] {
+  color: var(--ade-error);
+}
+
 /* ── the pane being dropped on ─────────────────────────────────────────────── */
 
 /*

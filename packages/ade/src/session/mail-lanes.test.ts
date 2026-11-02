@@ -700,6 +700,29 @@ describe("a kv while the page's timers do not fire", () => {
     expect(stuck).toEqual(["move"])
   })
 
+  test("paused, neither the timer nor the native signal takes anything, and it goes on when the pause ends", async () => {
+    let paused = true
+    let takes = 0
+    const round = createMailRound({
+      sessions: () => 1,
+      take: async () => {
+        takes++
+      },
+      move: async () => {},
+      watch: async () => {},
+      onStuck: () => {},
+      paused: () => paused,
+    })
+    round(false)
+    round(true)
+    await flush()
+    expect(takes).toBe(0)
+    paused = false
+    round(true)
+    await flush()
+    expect(takes).toBe(1)
+  })
+
   test("with no session running only mail known to be waiting skips the wait", async () => {
     const { outbox, answered, round, stop } = setup(0)
     outbox.push(kv)

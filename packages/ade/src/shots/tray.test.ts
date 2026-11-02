@@ -138,3 +138,120 @@ describe("the empty screenshot tray", () => {
     expect(host.querySelector('[data-slot="shot-tray-folder"]')).toBeNull()
   })
 })
+
+/*
+ * «elimina» used to remove the file from the disk at once, with no question, and a failure closed the viewer as if it
+ * had worked. It asks first, sends the file to the Recycle Bin, and says when that did not happen.
+ */
+describe("deleting a screenshot from the viewer", () => {
+  const shot = { path: "C:/Pictures/Screenshots/a.png", name: "a.png", modified_ms: 1 }
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+  const open = (onDelete: (path: string) => Promise<boolean>) => {
+    const host = mount({ shots: [shot], onDelete })
+    host.querySelector<HTMLElement>('[data-slot="shot"]')!.click()
+    return host
+  }
+  const buttons = (host: HTMLElement) => [...host.querySelectorAll<HTMLElement>('[data-slot="shot-viewer-close"]')]
+  const byText = (host: HTMLElement, text: string) => buttons(host).find((button) => button.textContent === text)
+
+  test("the first click only asks, with the file's name", () => {
+    const deleted: string[] = []
+    const host = open(async (path) => (deleted.push(path), true))
+    byText(host, t("shots.delete"))!.click()
+
+    expect(deleted).toEqual([])
+    expect(host.querySelector('[data-slot="shot-viewer-ask"]')?.textContent).toBe(t("shots.delete.ask", "a.png"))
+    expect(byText(host, t("shots.delete.confirm"))).toBeDefined()
+    expect(byText(host, t("shots.delete.keep"))).toBeDefined()
+  })
+
+  test("«Tieni» goes back and deletes nothing", () => {
+    const deleted: string[] = []
+    const host = open(async (path) => (deleted.push(path), true))
+    byText(host, t("shots.delete"))!.click()
+    byText(host, t("shots.delete.keep"))!.click()
+
+    expect(deleted).toEqual([])
+    expect(host.querySelector('[data-slot="shot-viewer-ask"]')).toBeNull()
+    expect(host.querySelector('[data-component="shot-viewer"]')).not.toBeNull()
+  })
+
+  test("confirming deletes and closes the viewer", async () => {
+    const deleted: string[] = []
+    const host = open(async (path) => (deleted.push(path), true))
+    byText(host, t("shots.delete"))!.click()
+    byText(host, t("shots.delete.confirm"))!.click()
+    await settle()
+
+    expect(deleted).toEqual([shot.path])
+    expect(host.querySelector('[data-component="shot-viewer"]')).toBeNull()
+  })
+
+  test("a failure keeps the viewer open and says why", async () => {
+    const host = open(async () => false)
+    byText(host, t("shots.delete"))!.click()
+    byText(host, t("shots.delete.confirm"))!.click()
+    await settle()
+
+    expect(host.querySelector('[data-component="shot-viewer"]')).not.toBeNull()
+    expect(host.querySelector('[data-slot="shot-viewer-error"]')?.textContent).toBe(t("shots.delete.failed"))
+  })
+
+  test("the second click of a double click does not confirm", async () => {
+    const deleted: string[] = []
+    const host = open(async (path) => (deleted.push(path), true))
+    byText(host, t("shots.delete"))!.click()
+    const confirm = byText(host, t("shots.delete.confirm"))!
+    confirm.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 2 }))
+    await settle()
+    expect(deleted).toEqual([])
+    expect(host.querySelector('[data-component="shot-viewer"]')).not.toBeNull()
+    confirm.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }))
+    await settle()
+    expect(deleted).toEqual([shot.path])
+  })
+
+  test("the buttons are capitalised in both languages", () => {
+    expect(t("shots.delete")).toBe("Elimina")
+    expect(t("shots.close")).toBe("Chiudi")
+    resetLocaleForTests("en")
+    expect(t("shots.delete")).toBe("Delete")
+    expect(t("shots.close")).toBe("Close")
+    resetLocaleForTests("it")
+  })
+
+  test("a second click while the delete runs does not ask the host again", async () => {
+    let calls = 0
+    let finish: (done: boolean) => void = () => {}
+    const host = open(
+      () =>
+        new Promise<boolean>((resolve) => {
+          calls++
+          finish = resolve
+        }),
+    )
+    byText(host, t("shots.delete"))!.click()
+    const confirm = byText(host, t("shots.delete.confirm"))!
+    confirm.click()
+    await settle()
+    expect(byText(host, t("shots.delete.confirm"))?.hasAttribute("disabled")).toBe(true)
+    confirm.click()
+    expect(calls).toBe(1)
+    finish(false)
+    await settle()
+    expect(host.querySelector('[data-slot="shot-viewer-error"]')).not.toBeNull()
+  })
+
+  test("the alert of one picture is not shown on the next one", async () => {
+    const other = { path: "C:/Pictures/Screenshots/b.png", name: "b.png", modified_ms: 0 }
+    const host = mount({ shots: [shot, other], onDelete: async () => false })
+    host.querySelector<HTMLElement>('[data-slot="shot"]')!.click()
+    byText(host, t("shots.delete"))!.click()
+    byText(host, t("shots.delete.confirm"))!.click()
+    await settle()
+    expect(host.querySelector('[data-slot="shot-viewer-error"]')).not.toBeNull()
+    host.querySelector<HTMLElement>('[data-component="shot-viewer"]')!.click()
+    host.querySelectorAll<HTMLElement>('[data-slot="shot"]')[1]!.click()
+    expect(host.querySelector('[data-slot="shot-viewer-error"]')).toBeNull()
+  })
+})

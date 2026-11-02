@@ -33,7 +33,8 @@ const NOTICES: readonly string[] = ["not-a-folder", "too-broad", "system", "not-
 export interface ShotSource {
   shots: () => Shot[]
   dismiss: (path: string) => void
-  remove: (path: string) => Promise<void>
+  /** Moves the file to the Recycle Bin. `false` when it could not be: the file is still there, and so is the shot in the tray. */
+  remove: (path: string) => Promise<boolean>
   load: (path: string) => Promise<Uint8Array | null>
   /** Where the host is watching, once it has answered. Undefined in the browser. */
   folder: () => string | undefined
@@ -75,7 +76,8 @@ async function call<T>(command: string, args?: Record<string, unknown>): Promise
   return invoke<T>(command, args)
 }
 
-export function createShotSource(inTauri: boolean): ShotSource {
+/** `ask` is the host's command call; a test passes its own. */
+export function createShotSource(inTauri: boolean, ask: typeof call = call): ShotSource {
   const [shots, setShots] = createSignal<Shot[]>([])
   const [folder, setFolder] = createSignal<string>()
   const [state, setState] = createSignal<ShotState>(inTauri ? "asking" : "none")
@@ -187,10 +189,17 @@ export function createShotSource(inTauri: boolean): ShotSource {
       setShots((current) => current.filter((shot) => shot.path !== path))
     },
     remove: async (path) => {
+      if (inTauri) {
+        // A failure is said, not swallowed: the viewer used to close as if the file were gone.
+        const done = await ask("shot_delete", { path }).then(
+          () => true,
+          () => false,
+        )
+        if (!done) return false
+      }
       dismissed.add(path)
       setShots((current) => current.filter((shot) => shot.path !== path))
-      if (!inTauri) return
-      await call("shot_delete", { path }).catch(() => undefined)
+      return true
     },
     load: async (path) => {
       if (!inTauri) return null

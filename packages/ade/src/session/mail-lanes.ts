@@ -354,6 +354,8 @@ export function createMailRound(options: {
   move: () => Promise<unknown>
   watch: () => Promise<unknown>
   onStuck: (part: MailPart, afterMs: number) => void
+  /** True while nothing may be taken or typed (an update is installing): neither the timer nor the native signal runs a round. */
+  paused?: () => boolean
 }): (mailWaiting: boolean) => void {
   const part = (name: MailPart, deadlineMs: number) =>
     createWatchedStep(deadlineMs, (afterMs) => options.onStuck(name, afterMs))
@@ -362,6 +364,8 @@ export function createMailRound(options: {
   const watch = part("watch", MAIL_WATCH_ROUND_MS)
   let calls = 0
   return (mailWaiting) => {
+    // The installer is about to kill every session: the outbox keeps what arrives meanwhile.
+    if (options.paused?.()) return
     calls++
     if (!mailWaiting && options.sessions() === 0 && calls % 4 !== 0) return
     take(options.take)
