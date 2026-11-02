@@ -2628,6 +2628,7 @@ pub fn run() {
         .manage(pty::Registry::default())
         .manage(raguverse_assets::Assets::default())
         .manage(record::Recorder::default())
+        .manage(update::Pending::default())
         .manage(frontend::DevServer::default())
         .manage(serve::Server::default())
         .manage(serve_proxy::Requests::default())
@@ -2709,6 +2710,7 @@ pub fn run() {
             browser_shot::browser_shot,
             vision::capture_window,
             vision::vision_allowed,
+            update::ade_update_download,
             update::ade_update_install,
             record::record_start,
             record::record_stop,
@@ -2869,6 +2871,9 @@ pub fn run() {
 /// the updater's `exit(0)` means that event never comes.
 pub(crate) fn end_everything(app: &tauri::AppHandle) {
     use tauri::Manager;
+    // The net under the page, which waits for a take before it closes or updates: the process ending would kill the
+    // thread inside `encoder.finish()` and lose the MP4. With a limit, because `RunEvent::Exit` is on the main thread.
+    app.state::<record::Recorder>().wait_for_take(std::time::Duration::from_secs(60));
     app.state::<gateway::Gateway>().shutdown();
     // Open transcription sockets end with the app, not at the server's timeout.
     app.state::<stt_stream::Sessions>().close_all();

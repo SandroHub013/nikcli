@@ -68,17 +68,31 @@ pub(crate) fn install_refused(identifier: &str, dev_build: bool) -> Option<Strin
     None
 }
 
-/// Downloads the newest signed ADE release, installs it and restarts into it.
+/// A release downloaded and verified, waiting for the page to say it can go.
+struct Downloaded {
+    update: tauri_plugin_updater::Update,
+    bytes: Vec<u8>,
+    /// Set by the hook: from there on, ADE has ended its sessions and hidden its window.
+    sessions_ended: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+/// What `ade_update_download` hands to `ade_update_install`.
+#[derive(Default)]
+pub struct Pending(std::sync::Mutex<Option<Downloaded>>);
+
+/// Downloads the newest signed ADE release and verifies it; `ade_update_install` then installs it.
+///
+/// Two commands and not one, because the page has work to do between them: it stops the mail and saves what it holds
+/// only once the download is done (`updateInSteps`), and the install ends this process. A download can take minutes,
+/// and during it the mail keeps moving. The plugin's event at the end of the download could not do this: the setup
+/// starts right after it, and nothing waits for the page.
 ///
 /// Everything happens here rather than through the updater plugin's JavaScript
 /// API, so no updater permission is granted to the window: a page in the
-/// browser pane cannot trigger an install, and the only thing this command can
+/// browser pane cannot trigger an install, and the only thing these commands can
 /// install is what the fork's manifest, signed with ADE's key, points at.
-///
-/// On Windows the NSIS installer takes over and closes ADE itself; elsewhere
-/// the new bundle is in place when the download returns, and ADE restarts.
 #[tauri::command]
-pub async fn ade_update_install(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn ade_update_download(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(refusal) = install_refused(&app.config().identifier, cfg!(debug_assertions)) {
         return Err(refusal);
     }
@@ -88,16 +102,15 @@ pub async fn ade_update_install(app: tauri::AppHandle) -> Result<(), String> {
      * On Windows the plugin launches the setup and calls `exit(0)`, so `RunEvent::Exit` never comes: the agents' trees
      * ran on headless, beside the new ADE (RS-3). The plugin runs this hook right before the setup. It replaces the
      * plugin's own default, which is the `cleanup_before_exit` below. Elsewhere the hook does not run, and `restart`
-     * from this worker goes through `RunEvent::Exit`.
+     * goes through `RunEvent::Exit`.
      */
-    let ended_panes = std::sync::Arc::new(std::sync::Mutex::new(None::<Vec<String>>));
+    let sessions_ended = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let updater = {
-        let (app, ended) = (app.clone(), ended_panes.clone());
+        let (app, ended) = (app.clone(), sessions_ended.clone());
         app.clone()
             .updater_builder()
             .on_before_exit(move || {
-                let panes = app.state::<crate::pty::Registry>().ids();
-                *ended.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(panes);
+                ended.store(true, std::sync::atomic::Ordering::SeqCst);
                 crate::end_everything(&app);
                 app.cleanup_before_exit();
             })
@@ -121,22 +134,17 @@ pub async fn ade_update_install(app: tauri::AppHandle) -> Result<(), String> {
      * not with ten minutes "elapsed". `started` switches the allowance from
      * the first-byte one to the between-bytes one; `finished` stops the watch
      * the moment the last byte is in. The plugin calls that callback before
-     * it verifies the signature and before the installer runs, so neither the
-     * verification nor the install is ever timed.
+     * it verifies the signature, so the verification is never timed.
      *
-     * Nor could they be: from there on the plugin runs synchronously inside
-     * this future (a minisign check of the bytes in memory, then a write to
-     * the temp folder and the launch of the setup), and `select!` can only
-     * drop a future at a point where it yields. A watch would have to abandon
-     * the thread mid-install, which is worse than the wait: the verification
-     * is milliseconds, and the write is a few megabytes that an antivirus can
-     * slow down but not hold forever.
+     * Nor could it be: the plugin runs it synchronously inside this future (a
+     * minisign check of the bytes in memory, milliseconds), and `select!` can
+     * only drop a future at a point where it yields.
      */
     let idle = Arc::new(AtomicU32::new(0));
     let started = Arc::new(AtomicBool::new(false));
     let finished = Arc::new(AtomicBool::new(false));
     let (chunk_idle, chunk_started, finish_done) = (idle.clone(), started.clone(), finished.clone());
-    let download = update.download_and_install(
+    let download = update.download(
         move |chunk, total| {
             downloaded += chunk as u64;
             chunk_idle.store(0, Ordering::Relaxed);
@@ -166,22 +174,9 @@ pub async fn ade_update_install(app: tauri::AppHandle) -> Result<(), String> {
             }
         }
     };
-    // Dropping the download future closes its connection: a download given
-    // up here cannot finish later and run the installer unasked.
-    tokio::select! {
-        result = download => {
-            if let Err(error) = result {
-                let ended = ended_panes.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take();
-                return Err(match ended {
-                    None => error.to_string(),
-                    // The setup refused to start after the hook ran (a blocked file, a refused UAC prompt).
-                    Some(panes) => {
-                        crate::pty::say_ended(&app, panes);
-                        format!("Il setup non è partito ({error}). Le sessioni sono già state chiuse: riapri ADE per riprenderle.")
-                    }
-                });
-            }
-        }
+    // Dropping the download future closes its connection: a download given up here cannot finish later.
+    let bytes = tokio::select! {
+        result = download => result.map_err(|e| e.to_string())?,
         (waited, started) = stalled => {
             return Err(if started {
                 format!("nessun dato ricevuto per {waited} secondi")
@@ -189,6 +184,51 @@ pub async fn ade_update_install(app: tauri::AppHandle) -> Result<(), String> {
                 format!("nessuna risposta dal server per {waited} secondi")
             });
         }
+    };
+    *app.state::<Pending>().0.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) =
+        Some(Downloaded { update, bytes, sessions_ended });
+    Ok(())
+}
+
+/// Installs what `ade_update_download` left, and restarts into it.
+///
+/// On Windows the NSIS installer takes over and closes ADE itself; elsewhere
+/// the new bundle is in place when the install returns, and ADE restarts.
+#[tauri::command]
+pub async fn ade_update_install(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    let downloaded = app
+        .state::<Pending>()
+        .0
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .take()
+        .ok_or_else(|| "nessun aggiornamento scaricato".to_string())?;
+    // The hook ends every session, and a dialog may wait for the user: none of it on an async worker.
+    tauri::async_runtime::spawn_blocking(move || install_downloaded(app, downloaded))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+fn install_downloaded(app: tauri::AppHandle, downloaded: Downloaded) -> Result<(), String> {
+    let Downloaded { update, bytes, sessions_ended } = downloaded;
+    if let Err(error) = update.install(&bytes) {
+        if !sessions_ended.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err(error.to_string());
+        }
+        /*
+         * The setup did not start, and the hook had already run (a blocked file, a refused UAC prompt). The window and
+         * the tray are gone and the sessions ended, so an error for the page reaches nobody; the process holds the
+         * one-ADE lock, so opening ADE again would only look for this same hidden window. Said in a dialog that needs
+         * no window, then a restart: the page saved everything first, and the sessions come back.
+         */
+        use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+        app.dialog()
+            .message(format!("Il setup dell'aggiornamento non è partito: {error}\n\nADE ora si riavvia e riprende le sessioni."))
+            .title(crate::brand::name().to_string())
+            .kind(MessageDialogKind::Error)
+            .buttons(MessageDialogButtons::Ok)
+            .blocking_show();
     }
     /*
      * The one-ADE lock (`tray::single_instance`) goes before the new process
@@ -429,10 +469,9 @@ mod tests {
     #[test]
     fn an_update_ends_what_an_exit_ends_before_the_setup_takes_over() {
         let source = include_str!("update.rs");
-        let install = &source[source.find("pub async fn ade_update_install").unwrap()..];
-        let install = &install[..install.find("#[cfg(test)]").unwrap()];
-        assert!(!install.contains("app.updater()"), "the plugin's default hook only cleans up the tray");
-        let hook = &install[install.find(".on_before_exit(").expect("the hook")..];
+        let code = &source[..source.find("#[cfg(test)]").unwrap()];
+        assert!(!code.contains("app.updater()"), "the plugin's default hook only cleans up the tray");
+        let hook = &code[code.find(".on_before_exit(").expect("the hook")..];
         let hook = &hook[..hook.find(".build()").expect("the builder")];
         assert!(hook.contains("crate::end_everything(&app)"));
         assert!(hook.contains("app.cleanup_before_exit()"));
@@ -445,5 +484,45 @@ mod tests {
         for step in ["gateway::Gateway", "stt_stream::Sessions", "serve::Server", "pty::Registry", "tts::KokoroState"] {
             assert!(cleanup.contains(step), "the cleanup lost {step}");
         }
+        // B3: first of all, so nothing is ended while the take that records it is closing.
+        let take = cleanup.find("record::Recorder").expect("the exit waits for a take");
+        assert!(cleanup[take..].contains("wait_for_take("));
+        assert!(take < cleanup.find("gateway::Gateway").unwrap());
+    }
+
+    /*
+     * B1. If the setup does not start after the hook ran, the window and the tray are gone and the sessions ended: an
+     * error for the page reaches nobody. The user is told in a native dialog, and ADE restarts and resumes them.
+     */
+    #[test]
+    fn a_setup_that_does_not_start_is_said_and_ade_comes_back() {
+        let source = include_str!("update.rs");
+        let code = &source[..source.find("#[cfg(test)]").unwrap()];
+        let install = &code[code.find("fn install_downloaded(").expect("the install")..];
+        let install = &install[..install.find("\n}\n").unwrap()];
+        let dialog = install.find(".blocking_show()").expect("a dialog that needs no window");
+        let restart = install.find("app.restart()").expect("the restart");
+        assert!(dialog < restart);
+        assert!(install.contains("tauri_plugin_single_instance::destroy(&app)"));
+        assert!(install.contains("sessions_ended.load("), "only when the hook ran: otherwise the page is still there");
+        assert!(!code.contains("say_ended"), "panes told about an exit in a window nobody can see");
+    }
+
+    /*
+     * The mail stops only for the install (`updateInSteps` in the page), so the download and the install are two
+     * commands, and the first must not install. Both are granted to the window, or the first is refused.
+     */
+    #[test]
+    fn the_download_is_a_step_of_its_own() {
+        let source = include_str!("update.rs");
+        let code = &source[..source.find("#[cfg(test)]").unwrap()];
+        assert!(!code.contains(".download_and_install("));
+        let download = &code[code.find("pub async fn ade_update_download(").expect("the download")..];
+        let download = &download[..download.find("\n}\n").unwrap()];
+        assert!(download.contains("update.download("));
+        assert!(!download.contains("restart()") && !download.contains(".install("));
+
+        assert!(include_str!("lib.rs").contains("update::ade_update_download,"));
+        assert!(include_str!("../capabilities/default.json").contains("\"allow-ade-update-download\""));
     }
 }

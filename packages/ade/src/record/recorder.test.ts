@@ -334,3 +334,46 @@ describe("record/recorder tracks", () => {
     expect(bytes).toEqual([])
   })
 })
+
+describe("settled: a take is finished before ADE goes (review of the 2026-11-02 audit, B3)", () => {
+  const stalledStop = () => {
+    let finish: (value: { path: string | null }) => void = () => {}
+    return { stop: () => new Promise<{ path: string | null }>((resolve) => (finish = resolve)), finish: (path: string) => finish({ path }) }
+  }
+  const isSettled = async (settled: Promise<unknown>) => {
+    let done = false
+    void settled.then(() => (done = true))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    return done
+  }
+
+  test("with nothing closing it answers at once", async () => {
+    const { recorder } = setup()
+    expect(await isSettled(recorder.settled())).toBe(true)
+    await recorder.start({ kind: "window" })
+    expect(await isSettled(recorder.settled())).toBe(true)
+  })
+
+  test("while a take closes it waits, also for the tracks written beside the video", async () => {
+    const stalled = stalledStop()
+    const { recorder, written, advance } = setup({ stop: stalled.stop })
+    await recorder.start({ kind: "window" })
+    advance(10)
+    recorder.note({ kind: "click", at: T0 + 10, x: 1, y: 2, button: "left" })
+    const stopping = recorder.stop()
+    expect(recorder.state().status).toBe("stopping")
+    expect(await isSettled(recorder.settled())).toBe(false)
+    stalled.finish("C:/video/ADE.mp4")
+    await recorder.settled()
+    expect(written).toHaveLength(1)
+    await stopping
+    expect(await isSettled(recorder.settled())).toBe(true)
+  })
+
+  test("a close that fails settles too: nothing stays waiting for it", async () => {
+    const { recorder } = setup({ stop: () => Promise.reject(new Error("encoder")) })
+    await recorder.start({ kind: "window" })
+    expect(await recorder.stop()).toBe("encoder")
+    expect(await isSettled(recorder.settled())).toBe(true)
+  })
+})

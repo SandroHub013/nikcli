@@ -377,6 +377,7 @@ export const en: Messages = {
   "record.active.mic": (path) => `Recording with the microphone — ${path}`,
   "record.active.noMic": (path) => `Recording without the microphone — ${path}`,
   "record.closing": "Finishing the file",
+  "record.closingFirst": "Finishing the recording: ADE closes right after.",
   "picker.video": "Choose a video",
   "picker.video.filter": "Videos",
   "picker.model": "Choose a 3D model",

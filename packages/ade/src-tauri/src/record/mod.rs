@@ -127,6 +127,18 @@ impl Recorder {
             .map_err(|_| "La registrazione si sta ancora aprendo o chiudendo: riprova tra poco.".to_string())
     }
 
+    /// Waits for a take being opened or closed, up to `limit`. False if it was still going when the limit passed.
+    pub fn wait_for_take(&self, limit: std::time::Duration) -> bool {
+        let deadline = std::time::Instant::now() + limit;
+        while self.changing.load(std::sync::atomic::Ordering::SeqCst) {
+            if std::time::Instant::now() >= deadline {
+                return false;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        true
+    }
+
     /// Every file of the recent takes that exists, for the media scheme.
     pub fn playable(&self) -> Vec<PathBuf> {
         let Ok(takes) = self.takes.lock() else { return Vec::new() };
@@ -382,6 +394,45 @@ mod tests {
         let source = include_str!("mod.rs");
         assert!(source.contains("pub async fn record_start("));
         assert!(source.contains("pub async fn record_stop("));
+    }
+
+    // B3: the process ending kills the thread inside `encoder.finish()`, and the MP4 is lost. The exit waits for it.
+    #[test]
+    fn the_exit_waits_for_a_take_that_is_closing() {
+        use std::sync::mpsc::channel;
+        use std::time::{Duration, Instant};
+        let recorder = std::sync::Arc::new(Recorder::default());
+        let (holding, held) = channel();
+        let (release, released) = channel::<()>();
+        let closing = {
+            let recorder = recorder.clone();
+            std::thread::spawn(move || {
+                let _changing = recorder.begin_change().expect("nothing is changing");
+                holding.send(()).unwrap();
+                let _ = released.recv();
+            })
+        };
+        held.recv().unwrap();
+
+        // Still closing when the limit passes: the wait ends all the same, because it runs on the main thread.
+        let start = Instant::now();
+        assert!(!recorder.wait_for_take(Duration::from_millis(150)), "the wait said the take had closed");
+        assert!(start.elapsed() >= Duration::from_millis(150));
+
+        let waiter = {
+            let recorder = recorder.clone();
+            std::thread::spawn(move || recorder.wait_for_take(Duration::from_secs(10)))
+        };
+        std::thread::sleep(Duration::from_millis(100));
+        assert!(!waiter.is_finished(), "the wait did not wait");
+        release.send(()).unwrap();
+        closing.join().unwrap();
+        assert!(waiter.join().unwrap());
+
+        // With nothing closing it is no wait at all.
+        let start = Instant::now();
+        assert!(recorder.wait_for_take(Duration::from_secs(10)));
+        assert!(start.elapsed() < Duration::from_secs(5));
     }
 
     // Full review 2026-10-06, rust 13: the file arrives as the raw body, the path in a header.

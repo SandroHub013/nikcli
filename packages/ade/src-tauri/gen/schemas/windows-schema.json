@@ -477,6 +477,12 @@
           "markdownDescription": "Enables the ade_tray_take command without any pre-configured scope."
         },
         {
+          "description": "Enables the ade_update_download command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-ade-update-download",
+          "markdownDescription": "Enables the ade_update_download command without any pre-configured scope."
+        },
+        {
           "description": "Enables the ade_update_install command without any pre-configured scope.",
           "type": "string",
           "const": "allow-ade-update-install",
@@ -1345,6 +1351,12 @@
           "type": "string",
           "const": "deny-ade-tray-take",
           "markdownDescription": "Denies the ade_tray_take command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the ade_update_download command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-ade-update-download",
+          "markdownDescription": "Denies the ade_update_download command without any pre-configured scope."
         },
         {
           "description": "Denies the ade_update_install command without any pre-configured scope.",

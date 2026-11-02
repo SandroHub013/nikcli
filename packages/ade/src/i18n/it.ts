@@ -386,6 +386,7 @@ export const it = {
   "record.active.mic": (path: string) => `Registrazione in corso con il microfono — ${path}`,
   "record.active.noMic": (path: string) => `Registrazione in corso, senza microfono — ${path}`,
   "record.closing": "Chiusura del file",
+  "record.closingFirst": "Sto finendo di salvare la registrazione: ADE si chiude subito dopo.",
   "picker.video": "Scegli un video",
   "picker.video.filter": "Video",
   "picker.model": "Scegli un modello 3D",
