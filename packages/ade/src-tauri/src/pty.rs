@@ -1765,9 +1765,32 @@ fn kill_tree_keeping(pid: u32, include_root: bool) {
         .collect();
     for member in victims(pid, &rows, include_root) {
         if let Some(process) = sys.process(Pid::from_u32(member)) {
+            #[cfg(windows)]
+            {
+                // Not `process.kill()`: sysinfo runs `taskkill.exe /PID n /F` for each one, a process of its own per
+                // victim, and a pane's tree is many (review, kv stall). The same kill without the detour.
+                let _ = process;
+                terminate(member);
+            }
+            #[cfg(not(windows))]
             process.kill();
         }
     }
+}
+
+/// Ends one process at once, as `taskkill /F` does, with no process started to do it. False when it could not be
+/// opened or ended (already gone, or not ours to end).
+#[cfg(windows)]
+fn terminate(pid: u32) -> bool {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
+
+    let Ok(handle) = (unsafe { OpenProcess(PROCESS_TERMINATE, false, pid) }) else {
+        return false;
+    };
+    let ended = unsafe { TerminateProcess(handle, 1) }.is_ok();
+    let _ = unsafe { CloseHandle(handle) };
+    ended
 }
 
 /// Ends the session. Safe to call on one that already ended.
@@ -2488,6 +2511,23 @@ mod tests {
         let mut sys = System::new();
         sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
         sys.process(Pid::from_u32(pid)).is_some()
+    }
+
+    /// The kill that replaced `taskkill`: a real process, ended at once, and one that is not there is not an error.
+    #[cfg(windows)]
+    #[test]
+    fn terminate_ends_a_process_without_starting_another() {
+        let mut child = std::process::Command::new("cmd")
+            .args(["/c", "ping -n 60 127.0.0.1 >NUL"])
+            .stdout(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let pid = child.id();
+        assert!(terminate(pid));
+        let status = child.wait().unwrap();
+        assert_eq!(status.code(), Some(1));
+        // Gone and reaped: nothing to open.
+        assert!(!terminate(pid));
     }
 
     /// A job's handle closing, which is what the kernel does when ADE dies: a pane's real ConPTY tree goes with it.
