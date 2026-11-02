@@ -2672,6 +2672,10 @@ export const it = {
 
   // F7a: Record
   "record.export.cancelled": "Esportazione annullata.",
+  "record.export.tooLong": (size: number, limit: number) =>
+    `Questa registrazione darebbe un video di circa ${size} MB, e ADE ne esporta al massimo ${limit} MB senza rischiare la finestra. Abbassa la qualità in Impostazioni › Registrazione, o registra più breve.`,
+  "settings.record.export.progress": (percent: number) => `Esporto… ${percent}%`,
+  "settings.record.export.cancel": "Annulla l'esportazione",
 
   // F7a: 3D Model state
   "model.state.noModel": "nessun modello aperto",

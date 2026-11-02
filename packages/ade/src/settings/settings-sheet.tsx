@@ -128,6 +128,12 @@ export interface SettingsSheetProps {
     onPickFolder: () => void
     /** The export behind `record.export`. */
     onExport: () => void
+    /** Whether an export is running. */
+    exporting?: () => boolean
+    /** How far it is, 0 to 1. */
+    exportProgress?: () => number
+    /** Stops it. */
+    onCancelExport?: () => void
   }
   /** Sistema: the check and the dialog the bell and the palette already use. */
   updates: {

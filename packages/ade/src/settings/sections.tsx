@@ -420,6 +420,12 @@ export interface RecordVideoSectionProps {
   onPickFolder: () => void
   /** The same export `record.export` runs. */
   onExport: () => void
+  /** Whether an export is running; while it is, the button gives way to its progress and «Annulla». */
+  exporting?: () => boolean
+  /** How far the running export is, 0 to 1. */
+  exportProgress?: () => number
+  /** Stops the running export. */
+  onCancelExport?: () => void
 }
 
 /**
@@ -488,9 +494,26 @@ export function RecordVideoSection(props: RecordVideoSectionProps) {
       </ul>
 
       <div data-slot="settings-choices">
-        <button type="button" data-slot="settings-choice" data-action="record.export" onClick={() => props.onExport()}>
-          {t("settings.record.export")}
-        </button>
+        <Show
+          when={props.exporting?.()}
+          fallback={
+            <button type="button" data-slot="settings-choice" data-action="record.export" onClick={() => props.onExport()}>
+              {t("settings.record.export")}
+            </button>
+          }
+        >
+          <span data-slot="settings-meta" data-export="progress" role="status">
+            {t("settings.record.export.progress", Math.round((props.exportProgress?.() ?? 0) * 100))}
+          </span>
+          <button
+            type="button"
+            data-slot="settings-choice"
+            data-action="record.export.cancel"
+            onClick={() => props.onCancelExport?.()}
+          >
+            {t("settings.record.export.cancel")}
+          </button>
+        </Show>
       </div>
       <p data-slot="settings-meta">{t("settings.record.export.desc")}</p>
     </>

@@ -1444,6 +1444,11 @@ export function Workbench() {
   })
 
   const [exporting, setExporting] = createSignal(false)
+  /** How far the running export is, 0 to 1; the settings panel shows it next to «Annulla». */
+  const [exportProgress, setExportProgress] = createSignal(0)
+  let exportAbort: AbortController | undefined
+  /** Stops the running export (MOD-4: it ran for as long as the take, with no way out). */
+  const cancelExport = () => exportAbort?.abort()
   /** Writes `<nome>.promo.mp4` beside the take: zoom, click rings, pointer, both tracks. */
   const exportLastTake = async () => {
     const video = lastTake()
@@ -1452,6 +1457,8 @@ export function Workbench() {
     const host = await getHost()
     if (!host?.readTextFile || !host.recordWrite) return report(t("record.export.desktopOnly"))
     setExporting(true)
+    setExportProgress(0)
+    exportAbort = new AbortController()
     report(t("record.exporting"), "info")
     try {
       const events = await host
@@ -1469,6 +1476,8 @@ export function Workbench() {
         ...(mic ? { mic } : {}),
         fps: level.fps,
         bitrate: level.bitrate,
+        signal: exportAbort.signal,
+        onProgress: setExportProgress,
       })
       const out = `${video.replace(/\.mp4$/i, "")}.promo.${result.extension}`
       await host.recordWrite(out, result.bytes)
@@ -1476,6 +1485,7 @@ export function Workbench() {
     } catch (failure) {
       report(t("record.export.failed", failure instanceof Error ? failure.message : String(failure)))
     } finally {
+      exportAbort = undefined
       setExporting(false)
     }
   }
@@ -10908,6 +10918,9 @@ export function Workbench() {
               dir: recordDir,
               onPickFolder: () => void pickRecordDir(),
               onExport: () => void exportLastTake(),
+              exporting,
+              exportProgress,
+              onCancelExport: cancelExport,
             }}
             updates={{
               checking: checkingUpdate,
