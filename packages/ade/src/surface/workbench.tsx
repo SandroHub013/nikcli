@@ -4342,7 +4342,7 @@ export function Workbench() {
     }
 
     if (message.kind === "whoowns") {
-      const owner = message.from ? await projectOfPane(host, message.from) : project()
+      const owner = await projectOfPane(host, message.from)
       if (!owner || owner.remote || !host.readTextFile) {
         await answer("errore: la bacheca del team si legge solo nei progetti locali")
         return true
@@ -4361,7 +4361,7 @@ export function Workbench() {
     }
 
     if (message.kind === "memory") {
-      const owner = message.from ? await projectOfPane(host, message.from) : project()
+      const owner = await projectOfPane(host, message.from)
       if (!owner || owner.remote) {
         await answer("errore: la memoria condivisa esiste solo per i progetti locali")
         return true
@@ -4404,7 +4404,7 @@ export function Workbench() {
      * the file and the host's I/O.
      */
     if (message.kind === "registro") {
-      const owner = message.from ? await projectOfPane(host, message.from) : project()
+      const owner = await projectOfPane(host, message.from)
       if (!owner || owner.remote || !host.readTextFile) {
         await answer("errore: i registri esistono solo per i progetti locali")
         return true

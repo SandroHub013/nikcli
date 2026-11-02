@@ -347,6 +347,12 @@ const UNVERIFIED_ACTING: ReadonlySet<Message["kind"]> = new Set([
   "design",
   "design-proponi",
   "design-attendi",
+  // These read and write a project's data, and with no sender the only project left is the one the window shows:
+  // `ADE_PANE_TOKEN= ade-msg kv get x` from another project would read it.
+  "kv",
+  "memory",
+  "registro",
+  "whoowns",
 ])
 
 export function unverifiedSenderRefusal(message: Message): string | undefined {

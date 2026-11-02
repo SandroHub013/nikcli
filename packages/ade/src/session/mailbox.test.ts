@@ -199,6 +199,32 @@ test("an unverified interrupt or close is refused centrally, as a send is", () =
   expect(unverifiedSenderRefusal(parseMessage('{"kind":"relaunch","from":"","to":"n2-1"}')!)).toBeUndefined()
 })
 
+test("a message with no proven sender cannot reach the project the window has open", () => {
+  const refusal = "Rifiutato: il mittente non è verificato. Lancia ade-msg dal terminale di un pannello di ADE."
+  const tokenOf = (id: string) => (id === "n1-0" ? "segreto" : undefined)
+  const asks = [
+    '"kind":"kv","op":"get","key":"chiave"',
+    '"kind":"kv","op":"get","key":"pc:sweep"',
+    '"kind":"kv","op":"set","key":"chiave","text":"valore"',
+    '"kind":"kv","op":"del","key":"chiave"',
+    '"kind":"kv","op":"list","key":""',
+    '"kind":"kv","op":"lock","key":"chiave"',
+    '"kind":"memory","op":"show"',
+    '"kind":"memory","op":"add","type":"fatto","text":"x"',
+    '"kind":"registro","register":"decisioni","op":"risposta","text":"{}"',
+    '"kind":"registro","register":"design","op":"aperta","text":"{}"',
+    '"kind":"whoowns","text":"a.ts"',
+  ]
+  for (const ask of asks) {
+    for (const sender of ['"from":""', '"from":"n1-0","token":"falso"']) {
+      const message = verifySender(parseMessage(`{${sender},${ask}}`)!, tokenOf)
+      expect(unverifiedSenderRefusal(message)).toBe(refusal)
+    }
+    const proven = verifySender(parseMessage(`{"from":"n1-0","token":"segreto",${ask}}`)!, tokenOf)
+    expect(unverifiedSenderRefusal(proven)).toBeUndefined()
+  }
+})
+
 test("an unverified design is refused: a page opens beside a session only for that session", () => {
   const refusal = "Rifiutato: il mittente non è verificato. Lancia ade-msg dal terminale di un pannello di ADE."
   const tokenOf = (id: string) => (id === "n1-0" ? "segreto" : undefined)
