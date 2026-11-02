@@ -63,6 +63,34 @@ describe("the screenshot viewer's width", () => {
   })
 })
 
+describe("forced colours and the dismiss's focus (UX-19)", () => {
+  test("the cross mask is drawn in the button text colour when colours are forced", () => {
+    // A mask filled with `currentColor` takes the forced background (Canvas) and goes blank on the Canvas behind it.
+    const controls = read("./ui/controls.css")
+    const forced = controls.slice(controls.indexOf("@media (forced-colors: active)"))
+    expect(controls).toContain("@media (forced-colors: active)")
+    expect(forced).toContain('[data-ui="icon-cross"]')
+    expect(forced).toMatch(/forced-color-adjust: none;/)
+    expect(forced).toMatch(/background: ButtonText;/)
+  })
+
+  test("the highlight outline of the tile's open control is drawn inside the tile, which clips what is outside", () => {
+    const tray = read("./shots/tray.css")
+    const forced = tray.slice(tray.indexOf("@media (forced-colors: active)"))
+    expect(tray).toContain("@media (forced-colors: active)")
+    expect(forced).toContain('[data-slot="shot-open"]:focus-visible')
+    expect(forced).toMatch(/outline-offset: -\d+px;/)
+  })
+
+  test("the dismiss shows when the picture has the focus, but draws its ring only when it has it itself", () => {
+    const tray = read("./shots/tray.css")
+    const shown = rule(tray, '[data-slot="shot"]:hover [data-slot="shot-dismiss"],\n[data-slot="shot"]:focus-within [data-slot="shot-dismiss"]')
+    expect(shown).toContain("opacity: 1")
+    expect(shown).not.toContain("box-shadow")
+    expect(rule(tray, '[data-slot="shot-dismiss"]:focus-visible')).toContain("box-shadow: var(--ade-focus-ring)")
+  })
+})
+
 describe("the pane header and composer (UX-18, UX-19)", () => {
   const pane = read("./grid/pane.css")
 

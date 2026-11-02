@@ -393,12 +393,23 @@
   box-shadow: var(--ade-focus-ring);
 }
 
+/* Shown when the tile is pointed at or holds the focus; the ring is only for the dismiss itself having it. */
 [data-slot="shot"]:hover [data-slot="shot-dismiss"],
-[data-slot="shot"]:focus-within [data-slot="shot-dismiss"],
+[data-slot="shot"]:focus-within [data-slot="shot-dismiss"] {
+  opacity: 1;
+}
+
 [data-slot="shot-dismiss"]:focus-visible {
   opacity: 1;
   outline: none;
   box-shadow: var(--ade-focus-ring);
+}
+
+/* Colours forced: the tile clips what is outside it, so the Highlight outline is drawn inside (index.css offsets it out). */
+@media (forced-colors: active) {
+  [data-slot="shot-open"]:focus-visible {
+    outline-offset: -2px;
+  }
 }
 
 /* ── the opened screenshot ─────────────────────────────────────────────────── */

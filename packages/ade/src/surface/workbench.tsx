@@ -10640,6 +10640,7 @@ export function Workbench() {
                               size="sm"
                               data-slot="ade-notice-dismiss"
                               label={t("bell.dismiss.named", notice.text)}
+                              title={t("bar.dismissNotice")}
                               onClick={() => setNotices((list) => dismissNotice(list, notice.id))}
                             >
                               <span data-ui="icon-cross" aria-hidden="true" />

@@ -44,6 +44,11 @@ describe("the bell", () => {
     expect(source.slice(at, at + 160)).toContain('role={noticeKind() === "error" ? "alert" : "status"}')
   })
 
+  test("the tooltip of a dismiss is the short word, not the whole notice again", () => {
+    // `IconButton` copies its label to `title`; a long notice would show up as a tooltip as long as the row itself.
+    expect(panel).toContain('title={t("bar.dismissNotice")}')
+  })
+
   test("each dismiss says which notice it discards", () => {
     expect(panel).toContain('label={t("bell.dismiss.named", notice.text)}')
     expect(translate("it", "bell.dismiss.named", "Aggiornamento pronto")).toBe("Togli: Aggiornamento pronto")

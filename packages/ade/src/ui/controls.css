@@ -191,6 +191,14 @@
   mask: var(--ade-icon-cross) center / contain no-repeat;
 }
 
+/* Colours forced: the mask's `currentColor` ground is forced to Canvas, and the cross vanishes on the Canvas behind it. */
+@media (forced-colors: active) {
+  :where([data-ui="icon-cross"]) {
+    forced-color-adjust: none;
+    background: ButtonText;
+  }
+}
+
 /* ── Field ────────────────────────────────────────────────────────────────── */
 
 :where([data-ui="field"]) {
