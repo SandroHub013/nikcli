@@ -296,6 +296,12 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
       keywords: ["impostazioni", "configurazione", "preferenze", "settings", "preferences", "config"],
     },
     {
+      id: "shortcuts.open",
+      title: t("palette.shortcuts.open"),
+      group: t("palette.group.view"),
+      keywords: ["scorciatoie", "tasti", "tastiera", "comandi", "shortcuts", "keys", "keyboard", "hotkeys"],
+    },
+    {
       id: "voice.settings",
       title: t("palette.voice.settings"),
       group: t("palette.group.view"),

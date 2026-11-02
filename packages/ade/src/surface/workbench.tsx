@@ -703,6 +703,7 @@ const HANDLED_COMMANDS = new Set([
   "process.kill",
   "voice.toggle",
   "voice.settings",
+  "shortcuts.open",
   "panes.closeGone",
   "recents.forgetGone",
 ])
@@ -7489,6 +7490,8 @@ export function Workbench() {
       openVoiceSettings("voice-sec-mode")
     } else if (id === "settings.open") {
       openVoiceSettings()
+    } else if (id === "shortcuts.open") {
+      openVoiceSettings("general/shortcuts")
     } else if (id === "panes.closeGone") {
       await closer.closeAll(
         wb()

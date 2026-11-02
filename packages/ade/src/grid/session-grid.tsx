@@ -3,6 +3,7 @@ import {
   type Direction,
   type DropZone,
   type Span,
+  DEFAULT_SPAN,
   cellsWanted,
   spanInGrid,
   dropZone,
@@ -10,6 +11,7 @@ import {
   moveTile,
   neighbour,
   packTiles,
+  resizeByKey,
   swapTiles,
 } from "./arrange"
 import { isDragHandle } from "./drag-handle"
@@ -313,6 +315,32 @@ export function SessionGrid(props: SessionGridProps) {
     window.addEventListener("pointercancel", up, true)
   }
 
+  /** The size a tile is drawn at, for the handle to say it. */
+  const spanOf = (id: string): Span => {
+    const index = indexOf().get(id)
+    return (index === undefined ? undefined : spans()[index]) ?? DEFAULT_SPAN
+  }
+
+  /*
+   * The handle by keyboard: an arrow adds or takes away one cell, Home gives the default size back (the
+   * double-click). Only these keys: Tab leaves the handle and the rest is not the grid's.
+   */
+  const resizeFromKey = (id: string, event: KeyboardEvent) => {
+    if (!props.onResize || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+    if (event.key === "Home") {
+      event.preventDefault()
+      event.stopPropagation()
+      props.onResize(id, undefined)
+      return
+    }
+    if (!(event.key in ARROWS)) return
+    // Swallowed even at the limit: an arrow on a handle must not scroll the grid under it.
+    event.preventDefault()
+    event.stopPropagation()
+    const next = resizeByKey(spanOf(id), event.key, columns())
+    if (next) props.onResize(id, next)
+  }
+
   return (
     <div
       ref={container}
@@ -366,8 +394,11 @@ export function SessionGrid(props: SessionGridProps) {
                 <div
                   data-slot="tile-resize"
                   role="separator"
+                  tabindex={0}
                   aria-label={t("grid.resize")}
+                  aria-valuetext={t("grid.resize.size", spanOf(pane.id).columns, spanOf(pane.id).rows)}
                   title={t("grid.resize.tip")}
+                  onKeyDown={(event) => resizeFromKey(pane.id, event)}
                   onPointerDown={(event) => startResize(pane.id, event)}
                   onDblClick={(event) => {
                     event.stopPropagation()

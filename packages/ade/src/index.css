@@ -833,8 +833,15 @@ body,
 
 [data-slot="grid-cell"]:hover > [data-slot="tile-resize"],
 [data-slot="grid-cell"][data-focused] > [data-slot="tile-resize"],
-[data-component="session-grid"][data-arranging] [data-slot="tile-resize"] {
+[data-component="session-grid"][data-arranging] [data-slot="tile-resize"],
+[data-slot="tile-resize"]:focus-visible {
   opacity: 1;
+}
+
+/* Reached by Tab, the grip takes the focus ring the other controls take; the arrows then resize. */
+[data-slot="tile-resize"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
 }
 
 /*
