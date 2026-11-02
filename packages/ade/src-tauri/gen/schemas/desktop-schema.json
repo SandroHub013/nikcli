@@ -879,6 +879,12 @@
           "markdownDescription": "Enables the path_exists command without any pre-configured scope."
         },
         {
+          "description": "Enables the pty_ack command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-pty-ack",
+          "markdownDescription": "Enables the pty_ack command without any pre-configured scope."
+        },
+        {
           "description": "Enables the pty_kill command without any pre-configured scope.",
           "type": "string",
           "const": "allow-pty-kill",
@@ -1759,6 +1765,12 @@
           "type": "string",
           "const": "deny-path-exists",
           "markdownDescription": "Denies the path_exists command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the pty_ack command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-pty-ack",
+          "markdownDescription": "Denies the pty_ack command without any pre-configured scope."
         },
         {
           "description": "Denies the pty_kill command without any pre-configured scope.",

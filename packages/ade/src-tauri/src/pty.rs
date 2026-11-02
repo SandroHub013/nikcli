@@ -2339,7 +2339,8 @@ mod tests {
         let waited = started.elapsed();
         assert!(waited >= Duration::from_millis(40), "did not wait at all: {waited:?}");
         assert!(waited < Duration::from_secs(2), "waited far past the stall: {waited:?}");
-        // The debt was forgotten: the next one goes straight through.
+        // The old debt was forgotten, only the frame just let through is owed: its acknowledgement clears everything.
+        flow.acknowledge(100);
         let started = Instant::now();
         flow.admit(1, 100, Duration::from_secs(5));
         assert!(started.elapsed() < Duration::from_secs(1));
