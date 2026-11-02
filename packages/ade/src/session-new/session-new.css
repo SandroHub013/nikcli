@@ -561,7 +561,7 @@
 
 [data-slot="new-count"][data-active] {
   position: relative;
-  z-index: 1;
+  z-index: var(--ade-z-base);
   /* The badge is accent because it is a filled chip, not an outline. */
   border-color: var(--ade-accent-soft);
   background: var(--ade-accent);
@@ -572,7 +572,7 @@
 [data-slot="new-count"]:focus-visible {
   outline: none;
   position: relative;
-  z-index: 2;
+  z-index: var(--ade-z-above);
   box-shadow: var(--ade-focus-ring);
 }
 

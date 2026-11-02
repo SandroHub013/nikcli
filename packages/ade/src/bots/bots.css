@@ -54,7 +54,7 @@
   content: "";
   position: absolute;
   top: 38%;
-  z-index: 1;
+  z-index: var(--ade-z-base);
   width: calc(var(--bot-size) * 0.095);
   height: calc(var(--bot-size) * 0.28);
   border-radius: var(--ade-radius-full);

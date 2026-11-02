@@ -280,7 +280,7 @@
   position: absolute;
   top: calc(100% + var(--ade-space-2));
   right: 0;
-  z-index: 30;
+  z-index: var(--ade-z-popover);
   display: flex;
   flex-direction: column;
   min-width: 200px;
@@ -446,7 +446,7 @@
 
 [data-slot="browser-viewport-scaler"] {
   position: relative;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--ade-shadow-lg);
   background: #ffffff;
   flex: 0 0 auto;
 }
@@ -481,7 +481,7 @@
      space-6 steps of air around the message, not part of the pane rhythm. */
   padding: 24px;
   text-align: center;
-  z-index: 10;
+  z-index: var(--ade-z-hover);
 }
 
 /* The overlay reports a page that failed to load, not a failure of ADE
@@ -544,16 +544,12 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  z-index: 20;
-  /* We shouldn't use hardcoded rgba for shadow, but if we need shadow, maybe it's handled by --ade-overlay or another token. Let's use border to be safe and an outline. */
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4); /* wait, rule says no # hex. rgba is not hex. But if not allowed, I'll remove it in next step. "Nessun colore ... scritti a mano" -> I'll stick to tokens */
+  z-index: var(--ade-z-sticky);
+  box-shadow: var(--ade-shadow-lg);
 }
 
-/* Let's remove the rgba above, use --ade-shadow or just drop it. Let's just drop the rgba shadow and rely on border/overlay background. */
 [data-slot="browser-prompt-popover"] {
-  box-shadow: var(
-    --ade-focus-ring
-  ); /* better to use something tokenized if shadow doesn't exist, or just leave it without shadow if we are strictly token-only. Actually, let's just use background: var(--ade-overlay) which might have its own shadow in the host, or border is enough. Let's just remove the box-shadow property here to be strictly safe. */
+  box-shadow: var(--ade-focus-ring);
 }
 
 [data-slot="browser-prompt-popover"] {
@@ -569,7 +565,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  z-index: 20;
+  z-index: var(--ade-z-sticky);
 }
 
 [data-slot="browser-selection-list"] {
@@ -917,7 +913,7 @@
   position: fixed;
   right: var(--ade-space-6);
   bottom: var(--ade-space-6);
-  z-index: 40;
+  z-index: var(--ade-z-dropdown);
   display: flex;
   flex-direction: column;
   gap: var(--ade-space-3);

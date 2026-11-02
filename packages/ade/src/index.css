@@ -434,6 +434,39 @@ body[data-theme="glass"] #root,
   --ade-shadow-sm: light-dark(0 1px 2px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.25));
   --ade-shadow-md: light-dark(0 2px 6px rgba(0, 0, 0, 0.1), 0 2px 6px rgba(0, 0, 0, 0.3));
   --ade-shadow-lg: light-dark(0 4px 16px rgba(0, 0, 0, 0.14), 0 4px 16px rgba(0, 0, 0, 0.4));
+  /* The two shells the window is made of: the sidebar and a pane. One shadow, so they sit at one height. */
+  --ade-shadow-shell: light-dark(0 3px 10px rgba(0, 0, 0, 0.08), 0 3px 10px rgba(0, 0, 0, 0.45));
+  --ade-shadow-shell-focus:
+    0 0 0 1.5px var(--ade-border-strong), 0 8px 24px light-dark(rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.55));
+
+  /* ── shell geometry ─────────────────────────────────────────────────────── */
+  /* The sidebar and every pane are the same kind of shape on the same ground: one corner, one gutter. */
+  --ade-shell-radius: 18px;
+  --ade-shell-gutter: 10px;
+
+  /* ── layers ─────────────────────────────────────────────────────────────── */
+  /*
+   * The values the app already stacks by, named. The small steps order things
+   * inside one component (a halo over its dot, a handle over its track); from
+   * `sticky` up they are layers of the window: a sticky strip, a popover, a
+   * dropdown, the bar over the grid, a sheet, a toast over it, the screenshot
+   * viewer over that, and the launch screen over everything. A sheet writes
+   * the name, never the number.
+   */
+  --ade-z-base: 1;
+  --ade-z-above: 2;
+  --ade-z-over: 3;
+  --ade-z-raised: 5;
+  --ade-z-lifted: 6;
+  --ade-z-hover: 10;
+  --ade-z-sticky: 20;
+  --ade-z-popover: 30;
+  --ade-z-dropdown: 40;
+  --ade-z-bar: 60;
+  --ade-z-overlay: 100;
+  --ade-z-toast: 110;
+  --ade-z-viewer: 120;
+  --ade-z-splash: 1000;
 
   /* ── motion ─────────────────────────────────────────────────────────────── */
   --ade-dur-fast: 120ms;
@@ -674,8 +707,8 @@ body,
  */
 [data-component="session-grid"] {
   display: grid;
-  gap: 10px;
-  padding: 10px;
+  gap: var(--ade-shell-gutter);
+  padding: var(--ade-shell-gutter);
   width: 100%;
   height: 100%;
   overflow-y: auto;
@@ -714,9 +747,9 @@ body,
   min-height: 0;
   background: var(--ade-pane-ground, var(--ade-surface));
   overflow: hidden;
-  border-radius: 18px;
+  border-radius: var(--ade-shell-radius);
   /* A pane that draws its focus as a shadow (the session's ring) sets the variable: see `--ade-pane-focus`. */
-  box-shadow: var(--ade-pane-shadow, 0 3px 10px light-dark(rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.45)));
+  box-shadow: var(--ade-pane-shadow, var(--ade-shadow-shell));
 }
 
 /* The focused pane is told apart by a neutral grey a shade above the resting
@@ -771,7 +804,7 @@ body,
 
 [data-slot="drop-zone"] {
   position: absolute;
-  z-index: 5;
+  z-index: var(--ade-z-raised);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -780,7 +813,7 @@ body,
      here would be the one green the user asked to be rid of, and it is a border
      drawn over a pane, not a fill. */
   border: 2px dashed var(--ade-text-weak);
-  border-radius: 18px;
+  border-radius: var(--ade-shell-radius);
   background: color-mix(in srgb, var(--ade-text-weak) 18%, transparent);
 }
 
@@ -842,7 +875,7 @@ body,
   position: absolute;
   right: 2px;
   bottom: 2px;
-  z-index: 6;
+  z-index: var(--ade-z-lifted);
   width: 14px;
   height: 14px;
   cursor: nwse-resize;
@@ -961,7 +994,7 @@ body,
   width: 6px;
   height: 100%;
   cursor: col-resize;
-  z-index: 20;
+  z-index: var(--ade-z-sticky);
   transition: background var(--ade-dur) var(--ade-ease);
 }
 
@@ -1253,7 +1286,7 @@ body,
    tutta la finestra. */
 [data-slot="ade-rec"] {
   position: relative;
-  z-index: 60;
+  z-index: var(--ade-z-bar);
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -1803,7 +1836,7 @@ html[data-ade-recording] [data-slot="browser-record-veil"] {
   display: flex;
   position: absolute;
   inset: 0;
-  z-index: 20;
+  z-index: var(--ade-z-sticky);
   background: var(--ade-bg);
   flex-direction: column;
   align-items: center;

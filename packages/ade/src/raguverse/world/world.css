@@ -234,7 +234,7 @@ html[data-city="failed"] #stage {
 html[data-city="1"] #world {
   position: fixed;
   inset: 0;
-  z-index: 1;
+  z-index: var(--ade-z-base);
   min-height: 0;
   padding: 0.75rem 1rem;
   pointer-events: none;

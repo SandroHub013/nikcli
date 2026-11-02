@@ -20,7 +20,7 @@
 [data-slot="raguverse-learn"] {
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: var(--ade-z-above);
   display: flex;
   flex-direction: column;
   background: var(--ade-bg, canvas);
@@ -81,7 +81,7 @@
   position: absolute;
   right: 8px;
   bottom: 8px;
-  z-index: 1;
+  z-index: var(--ade-z-base);
   padding: var(--ade-space-2, 4px) var(--ade-space-5, 10px);
   border-radius: var(--ade-radius-sm, 5px);
   font-size: var(--ade-font-xs);

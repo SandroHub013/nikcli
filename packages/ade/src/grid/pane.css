@@ -196,13 +196,13 @@
   position: absolute;
   right: 12px;
   bottom: 12px;
-  z-index: 5;
+  z-index: var(--ade-z-raised);
   padding: 3px 8px;
   border-radius: var(--ade-radius-sm);
   background: var(--ade-raised);
   color: var(--ade-text);
   font-size: var(--ade-font-sm);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--ade-shadow-md);
   pointer-events: none;
 }
 
@@ -799,8 +799,7 @@
  */
 [data-component="session-pane"][data-focused] {
   --ade-pane-focus: none;
-  --ade-pane-shadow:
-    0 0 0 1.5px var(--ade-border-strong), 0 8px 24px light-dark(rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.55));
+  --ade-pane-shadow: var(--ade-shadow-shell-focus);
 }
 
 /* ── the header: a pill of glass over the first lines ── */
@@ -809,7 +808,7 @@
   top: 6px;
   left: 6px;
   right: 6px;
-  z-index: 3;
+  z-index: var(--ade-z-over);
   min-height: 30px;
   padding: 0 var(--ade-space-3);
   gap: var(--ade-space-4);
@@ -1288,7 +1287,7 @@
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  z-index: 5;
+  z-index: var(--ade-z-raised);
   min-width: 200px;
   /* The card is anchored at the trigger's right edge and must not leave the pane's left edge: 120px is the room the
      pill's other parts take at the right of it. */

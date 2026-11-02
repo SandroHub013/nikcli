@@ -257,7 +257,7 @@
 [data-slot="settings-body"] > [data-part="status"] {
   position: sticky;
   top: calc(-1 * var(--space-5, 20px));
-  z-index: 1;
+  z-index: var(--ade-z-base);
   padding-top: var(--space-5, 20px);
   margin-top: calc(-1 * var(--space-5, 20px));
   /*

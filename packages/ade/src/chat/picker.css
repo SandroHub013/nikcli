@@ -67,7 +67,7 @@
 
 [data-slot="chip-popover"] {
   position: absolute;
-  z-index: 40;
+  z-index: var(--ade-z-dropdown);
   left: 0;
   bottom: calc(100% + var(--ade-space-2));
   display: flex;

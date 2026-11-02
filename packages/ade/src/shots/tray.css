@@ -385,7 +385,7 @@
 [data-component="shot-viewer"] {
   position: fixed;
   inset: 0;
-  z-index: 120;
+  z-index: var(--ade-z-viewer);
   display: grid;
   place-items: center;
   padding: var(--ade-space-6);

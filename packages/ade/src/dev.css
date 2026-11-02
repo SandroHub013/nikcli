@@ -147,7 +147,7 @@
   position: absolute;
   top: calc(100% + var(--ade-space-2));
   right: 0;
-  z-index: 40;
+  z-index: var(--ade-z-dropdown);
   display: flex;
   flex-direction: column;
   min-width: 220px;
@@ -1162,7 +1162,7 @@
   left: 50%;
   bottom: var(--ade-space-6);
   transform: translateX(-50%);
-  z-index: 110;
+  z-index: var(--ade-z-toast);
   max-width: min(90vw, 560px);
   padding: var(--ade-space-2) var(--ade-space-3);
   border: 1px solid var(--ade-border);

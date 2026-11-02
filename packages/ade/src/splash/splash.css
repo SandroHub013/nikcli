@@ -13,7 +13,7 @@
   inset: 0;
   width: 100vw;
   height: 100vh;
-  z-index: 9999;
+  z-index: var(--ade-z-splash);
   overflow: hidden;
   color-scheme: dark;
   background: #211410;
@@ -41,7 +41,7 @@
   gap: 10px;
   width: min(94vw, calc((100vh - 48px) * 1672 / 941));
   max-width: 94vw;
-  z-index: 1;
+  z-index: var(--ade-z-base);
 }
 
 /* Stage: holds the reference image and overlay fx canvas with exact 1672/941 aspect ratio */
