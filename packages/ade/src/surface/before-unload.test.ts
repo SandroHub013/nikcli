@@ -29,12 +29,12 @@ describe("closing the window (D81, d81-chiusura - option B)", () => {
 
   test("1 session working: asks confirmation with singular phrasing", () => {
     expect(shouldConfirmWindowClose({ working: 1 })).toBe(true)
-    expect(closeConfirmationMessage(1)).toBe("1 sessione sta lavorando. Chiudere lo stesso?")
+    expect(closeConfirmationMessage(1)).toBe("1 sessione sta lavorando. Chiudere comunque?")
   })
 
   test("multiple sessions working: asks confirmation with plural phrasing", () => {
     expect(shouldConfirmWindowClose({ working: 3 })).toBe(true)
-    expect(closeConfirmationMessage(3)).toBe("3 sessioni stanno lavorando. Chiudere lo stesso?")
+    expect(closeConfirmationMessage(3)).toBe("3 sessioni stanno lavorando. Chiudere comunque?")
   })
 
   test("Point 7: active gateway asks confirmation on exit with warning «I bot smettono di rispondere finché non riapri ADE.»", () => {
@@ -47,7 +47,7 @@ describe("closing the window (D81, d81-chiusura - option B)", () => {
   test("Point 7: active gateway combined with working sessions includes both warnings", () => {
     expect(shouldConfirmWindowClose({ working: 2, gatewayOn: true })).toBe(true)
     const msg = closeConfirmationMessage({ working: 2, gatewayOn: true })
-    expect(msg).toContain("2 sessioni stanno lavorando. Chiudere lo stesso?")
+    expect(msg).toContain("2 sessioni stanno lavorando. Chiudere comunque?")
     expect(msg).toContain("I bot smettono di rispondere finché non riapri ADE.")
   })
 })
@@ -87,7 +87,7 @@ describe("counting active working sessions for window close (D81)", () => {
     const working = countWorkingSessions(panes, running)
     expect(working).toBe(1)
     expect(shouldConfirmWindowClose({ working })).toBe(true)
-    expect(closeConfirmationMessage(working)).toBe("1 sessione sta lavorando. Chiudere lo stesso?")
+    expect(closeConfirmationMessage(working)).toBe("1 sessione sta lavorando. Chiudere comunque?")
   })
 
   test("una sessione con status waiting (permesso aperto a meta' turno) chiede conferma", () => {
@@ -96,7 +96,7 @@ describe("counting active working sessions for window close (D81)", () => {
     const working = countWorkingSessions(panes, running)
     expect(working).toBe(1)
     expect(shouldConfirmWindowClose({ working })).toBe(true)
-    expect(closeConfirmationMessage(working)).toBe("1 sessione sta lavorando. Chiudere lo stesso?")
+    expect(closeConfirmationMessage(working)).toBe("1 sessione sta lavorando. Chiudere comunque?")
   })
 
   test("un processo morto o non presente in running non conta come al lavoro", () => {

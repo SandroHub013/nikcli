@@ -12,5 +12,6 @@ import type { LaunchEntry } from "../session-new/launch"
 export function defaultPaneTitle(role: LaunchEntry["role"], index: number, agent: string): string {
   const label =
     role === "reviewer" ? t("paneTitle.reviewer") : role === "shell" ? t("paneTitle.shell") : t("paneTitle.agent")
-  return `${label} ${index} — ${agent}`
+  // A terminal is named «Terminale 3», not «Terminale 3 — Terminale».
+  return agent === label ? `${label} ${index}` : `${label} ${index} — ${agent}`
 }

@@ -10,22 +10,18 @@
  * errors (agents read Italian as well as English), and the voice grammar,
  * which follows the speech-recognition language rather than the interface.
  */
+import { plural } from "./locale"
 import { voiceIt } from "./voice-it"
 
 export const it = {
   ...voiceIt,
-  "settings.language.label": "Lingua",
-  "settings.language.title": "Lingua",
   "settings.language.desc":
     "La lingua dei menu, dei pannelli e degli avvisi di ADE. «Sistema» segue la lingua del computer. L'assistente vocale continua a usare la lingua del riconoscimento, che si sceglie nelle impostazioni della voce.",
   "settings.language.group": "Lingua dell'interfaccia",
-  "settings.language.system": "Sistema",
   "settings.language.systemNow": (language: string) => `Sistema (${language})`,
   "settings.language.it": "Italiano",
   "settings.language.en": "English",
 
-  "settings.theme.label": "Tema",
-  "settings.theme.title": "Tema",
   "settings.theme.desc":
     "Scegli l'aspetto dell'interfaccia di ADE: chiaro, scuro, oppure vetro trasparente con effetto nativo sul desktop.",
   "settings.theme.group": "Tema dell'interfaccia",
@@ -39,7 +35,6 @@ export const it = {
   "settings.theme.opacityLow": (min: number) =>
     `Sotto il ${min}% il vetro è più spinto e il testo perde contrasto sulle scrivanie chiare.`,
   "settings.theme.unsupported": "Il tema Vetro non è supportato su questo sistema o compositore grafico.",
-  "settings.theme.desktopOnly": "La trasparenza nativa della finestra è disponibile solo nell'applicazione desktop.",
   "settings.theme.toLight": "Passa al tema chiaro",
   "settings.theme.toDark": "Passa al tema scuro",
   "settings.theme.toGlass": "Passa al tema vetro",
@@ -59,10 +54,12 @@ export const it = {
   "palette.recents.forgetGone": (n: number) => `Togli dai recenti le cartelle sparite (${n})`,
   "palette.design.variant": (k: string, title: string, variant: number, name: string) =>
     `Design: apri la variante — ${title ? `${k} · ${title}` : k} · Variante ${variant}${name ? ` «${name}»` : ""}`,
+  "confirm.forgetGone.ok": "Togli",
+  "confirm.forgetGone.cancel": "Annulla",
   "confirm.forgetGone": (n: number) =>
     n === 1
-      ? "Togliere dai recenti e dagli Spaces 1 cartella sparita?"
-      : `Togliere dai recenti e dagli Spaces ${n} cartelle sparite?`,
+      ? "Togliere dai recenti e dai progetti 1 cartella sparita?"
+      : `Togliere dai recenti e dai progetti ${n} cartelle sparite?`,
   "palette.pane.shrink": "Riduci pannello",
   "palette.pane.expand": "Espandi pannello",
   "palette.pane.rename": "Rinomina sessione",
@@ -96,9 +93,9 @@ export const it = {
   "palette.decisions.pane": "Apri pannello Decisioni",
   "palette.design.open": "Proposte di design per te",
   "palette.design.pane": "Apri pannello Design",
-  "palette.raguverse.pane": "Apri pannello RaguVerse",
+  "palette.raguverse.pane": "Apri pannello RagùVerse",
   "palette.update.check": "Controlla aggiornamenti",
-  "palette.process.kill": "Uccidi processo",
+  "palette.process.kill": "Termina il processo",
   "palette.process.none": "Il pannello a fuoco non ha un processo vivo",
 
   // Updates, presence, pane states, presets, new-pane menu, restore
@@ -110,7 +107,8 @@ export const it = {
   "update.current": (version: string) => `Nessun aggiornamento: ADE ${version} è l'ultima versione.`,
   "update.none": "Nessun aggiornamento disponibile.",
   "update.dev": "Questa è una build di sviluppo: non c'è una versione installata da aggiornare.",
-  "update.failed": (problem: string) => `Non sono riuscito a controllare gli aggiornamenti: ${problem}`,
+  "update.failed": (problem: string) =>
+    `Non sono riuscita a controllare gli aggiornamenti (${problem}). Riprova più tardi da Notifiche → Controlla aggiornamenti.`,
   "presence.off": "Microfono spento",
   "presence.asleep": "In attesa della parola di richiamo",
   "presence.idle": "Pronto",
@@ -140,7 +138,7 @@ export const it = {
   "preset.workbench": "Banco di lavoro",
   "preset.workbench.desc": "Un agente più una shell per git e test.",
   "preset.swarm": "Sciame",
-  "preset.swarm.desc": "Quattro agenti si distribuiscono su task paralleli.",
+  "preset.swarm.desc": "Quattro agenti si distribuiscono su compiti in parallelo.",
   "hooks.unavailable": "non disponibile in questa build",
   "stats.who": (processes: number) => `ADE e i suoi ${processes} processi (webview e agenti)`,
   "stats.cpu": (who: string, percent: string) => `CPU usata da ${who}: ${percent}%`,
@@ -163,7 +161,7 @@ export const it = {
   "newPane.decisions.hint": "tutto il registro: aperte, risposte, rimandate, chiuse",
   "newPane.design": "Design",
   "newPane.design.hint": "proposte grafiche, varianti e anteprime",
-  "newPane.raguverse": "RaguVerse",
+  "newPane.raguverse": "RagùVerse",
   "newPane.raguverse.hint": "la città delle tue sessioni, in tempo reale",
   "learn.title": "Impara",
   "learn.back": "Torna al mondo",
@@ -177,11 +175,11 @@ export const it = {
   "learn.progressUnreadable": "I progressi non sono un documento che ADE sa leggere.",
   "learn.noHost": "Senza ADE non ci sono progressi da salvare.",
   "raguverse.unloaded": "Mondo scaricato per risparmiare memoria: torna su questo pannello per riaprirlo.",
-  "raguverse.assets.fetching": (megabytes: number) => `Scarico il mondo di RaguVerse (${megabytes} MB), solo la prima volta…`,
+  "raguverse.assets.fetching": (megabytes: number) => `Scarico il mondo di RagùVerse (${megabytes} MB), solo la prima volta…`,
   "raguverse.assets.failed": (reason: string) =>
-    `Non sono riuscita a scaricare il mondo di RaguVerse: ${reason} Per ora vedi i segnaposto.`,
+    `Non sono riuscita a scaricare il mondo di RagùVerse: ${reason} Per ora vedi i segnaposto.`,
   "raguverse.assets.retry": "Riprova",
-  "raguverse.ask": (what: string) => `RaguVerse chiede di: ${what}`,
+  "raguverse.ask": (what: string) => `RagùVerse chiede di: ${what}`,
   "raguverse.allow": "Consenti",
   "raguverse.deny": "Nega",
   "raguverse.late": "Il mondo non si è aperto: riprova, oppure apri la lista.",
@@ -196,11 +194,11 @@ export const it = {
   // Sidebar
   "sidebar.project": "progetto",
   "sidebar.elapsed": "Tempo trascorso",
-  "sidebar.spaces": "Spaces",
+  "sidebar.spaces": "Progetti",
   "sidebar.openProjectSessions": "Apri le sessioni del progetto",
-  "sidebar.addSpace": "Aggiungi space",
+  "sidebar.addSpace": "Aggiungi progetto",
   "sidebar.addRemote": "Aggiungi ambiente remoto (ssh)",
-  "sidebar.noSpaces": "Nessuno space aperto.",
+  "sidebar.noSpaces": "Nessun progetto aperto.",
   /** The status icon's name: `status` is the state's word in this language (`paneState.*`), from the one list in `grid/pane-state.ts`. */
   "sidebar.agentStatus": (status: string) => `Stato: ${status}`,
   "sidebar.agents": "Agenti attivi",
@@ -224,7 +222,7 @@ export const it = {
   "sidebar.stats": "Risorse usate da ADE",
   "sidebar.resize": "Ridimensiona barra laterale",
   "sidebar.menu.session": "Azioni sulla sessione",
-  "sidebar.menu.workspace": "Azioni sullo space",
+  "sidebar.menu.workspace": "Azioni sul progetto",
   "sidebar.menu.rename": "Rinomina",
   "sidebar.menu.restart": "Riavvia",
   "sidebar.menu.resume": "Riprendi",
@@ -241,10 +239,11 @@ export const it = {
   "pane.tree.full": "Albero isolato che contiene il lavoro corrente",
   "pane.tree.stale": "Albero isolato dall'ultimo commit: le modifiche non salvate non ci sono",
   "pane.tree.noDeps": "Albero isolato senza dipendenze collegate: l'agente può modificare ma non eseguire",
-  "pane.tree.project": "Nessun albero isolato: l'agente lavora direttamente nel progetto",
-  "pane.tree.preparing": "Preparazione albero…",
-  "pane.tree.preparing.short": "preparazione albero…",
+  "pane.tree.project": "Nessuna copia di lavoro: l'agente lavora direttamente nel progetto",
+  "pane.tree.preparing": "Preparazione della copia di lavoro…",
+  "pane.tree.preparing.short": "preparazione…",
   "pane.session": "Sessione",
+  "pane.tree.branch": (branch: string) => `Branch ${branch}`,
   "pane.renameTip": "Doppio clic per rinominare",
   "pane.name": "Nome della sessione",
   "pane.quota": "quota",
@@ -255,8 +254,30 @@ export const it = {
   "pane.input": "Scrivi all'agente…",
   "pane.input.none": "nessun processo in ascolto",
   "pane.notDelivered": (text: string) => `Nessun processo in ascolto: ${text} non è stato consegnato.`,
-  "pane.startFailed": (error: string) => `La sessione non è partita: ${error}`,
-  "pane.connectFailed": (error: string) => `La connessione non è riuscita: ${error}`,
+  "pane.startFailed": (error: string) =>
+    `La sessione non è partita: ${error}. Premi Riprova; se succede di nuovo, controlla l'accesso in Impostazioni → Agenti e account.`,
+  "pane.startFailed.notFound": (agent: string, command: string) =>
+    `${agent} non è partito: il comando «${command}» non è installato su questo computer. Installalo dalla sua scheda in Nuova sessione, poi premi Riprova.`,
+  "pane.connectFailed.notFound": (reason: string) => `La connessione non è riuscita: ${reason}. Installalo, poi riprova.`,
+  "pane.connectFailed": (error: string) => `La connessione non è riuscita: ${error}. Controlla l'indirizzo e la rete, poi riprova.`,
+  "pane.reason.cantRun": (command: string, why: string) => `${command} non si avvia (${why})`,
+  "pane.reason.notFound": (command: string) => `il comando «${command}» non è installato su questo computer`,
+  "pane.reason.sshPortMissing": "manca la porta dopo -p",
+  "pane.reason.sshValueMissing": "manca il valore dell'opzione ssh",
+  "pane.reason.noPty": (why: string) => `il terminale non si è aperto (${why})`,
+  "pane.reason.optionRefused": (command: string, flag: string) => `ADE non avvia ${command} con l'opzione ${flag}`,
+  "pane.reason.commandRefused": (command: string) => `ADE non può avviare «${command}»`,
+  "pane.reason.needsTerminal": (command: string) => `${command} si avvia solo in un terminale`,
+  "pane.reason.keyMissing": "è scelta la modalità a chiave, ma manca la chiave",
+  "pane.reason.keyAnthropic": "la modalità a chiave vuole la variabile ANTHROPIC_API_KEY",
+  "pane.reason.keyOpenAi": "la modalità a chiave vuole la variabile CODEX_API_KEY o OPENAI_API_KEY",
+  "pane.reason.subscriptionNoKey": "un abbonamento non usa chiavi: scegli la modalità a chiave o togli la chiave",
+  "pane.reason.sshArgument": (argument: string) => `ADE non accetta l'argomento ssh ${argument}`,
+  "pane.reason.sshPort": (port: string) => `la porta ssh ${port} non è valida`,
+  "pane.reason.sshValue": (value: string) => `il valore ssh ${value} non è valido`,
+  "pane.reason.sshNoDestination": "manca la destinazione ssh",
+  "pane.reason.shellArgument": (argument: string) => `ADE non accetta l'argomento ${argument} per la shell`,
+  "pane.reason.unsafeArgument": (name: string, shown: string) => `l'argomento per ${name} contiene ${shown}, che cmd.exe interpreta`,
   "pane.pluginGone": "Il plugin non è più caricato.",
   "grid.resize": "Ridimensiona il pannello",
   "grid.resize.tip": "Trascina per ridimensionare · doppio clic per la dimensione predefinita",
@@ -266,7 +287,7 @@ export const it = {
   "shortcuts.desc": "I tasti di ADE, quelli che funzionano davvero. Dentro il terminale di una sessione sono pochi, perché lì i tasti sono del programma.",
   "shortcuts.group.anywhere": "Ovunque, anche dentro una sessione",
   "shortcuts.group.outside": "Fuori dal terminale di una sessione",
-  "shortcuts.group.outside.note": "Dentro il terminale questi tasti restano al programma: scorrono la cronologia, cancellano una parola, incollano. Dal terminale usa la palette.",
+  "shortcuts.group.outside.note": "Dentro il terminale questi tasti restano al programma: scorrono la cronologia, cancellano una parola, incollano. Dal terminale usa Cerca comandi.",
   "shortcuts.group.grid": "Griglia delle sessioni",
   "shortcuts.group.terminal": "Dentro un terminale",
   "shortcuts.group.other": "Altrove",
@@ -275,7 +296,7 @@ export const it = {
   "shortcuts.view.toggle": "Passa alla sezione successiva",
   "shortcuts.grid.focus": "Porta il fuoco sul pannello accanto",
   "shortcuts.grid.move": "Sposta il pannello nella griglia",
-  "shortcuts.grid.resize": "Ridimensiona il pannello, una cella a ogni pressione: prima il comando «Ridimensiona il pannello con la tastiera» della palette, poi Esc per tornare alla sessione",
+  "shortcuts.grid.resize": "Ridimensiona il pannello, una cella a ogni pressione: prima il comando «Ridimensiona il pannello con la tastiera» di Cerca comandi, poi Esc per tornare alla sessione",
   "shortcuts.grid.resetSize": "Con il fuoco sull'angolo del pannello: dimensione predefinita",
   "shortcuts.terminal.select": "Seleziona il testo anche quando il programma usa il mouse",
   "shortcuts.terminal.link": "Apri un link: il clic lo apre in ADE, con Ctrl (⌘ su Mac) fuori da ADE",
@@ -287,34 +308,35 @@ export const it = {
   "shortcuts.key.drag": "trascina",
   "shortcuts.key.click": "clic",
   "shortcuts.voice": "I tasti della voce si scelgono in Voce › Scorciatoie.",
-  "palette.label": "Palette dei comandi",
+  "palette.label": "Cerca comandi",
   "palette.search": "Cerca un comando…",
   "palette.empty": "Nessun comando trovato.",
   "preview.binary": "File binario o codifica non supportata.",
-  "preview.loading": "Caricamento in corso...",
+  "preview.loading": "Caricamento in corso…",
   "empty.title": "Nessun progetto aperto",
   "empty.browser":
     "Nel browser ADE non può leggere il disco né avviare processi: gli alberi di lavoro e le sessioni reali esistono solo nell'app desktop.",
   "empty.desktop":
-    "Scegli una cartella per iniziare. Se è un repository git, ogni sessione riceve una copia di lavoro isolata; altrimenti gli agenti scrivono direttamente nella cartella.",
+    "Scegli una cartella per iniziare. Se è un repository git, ogni sessione riceve una copia di lavoro (worktree git); altrimenti gli agenti scrivono direttamente nella cartella.",
   "empty.open": "Apri progetto",
   "projectBar.noGit": "Non è un repository git: gli agenti modificano direttamente i file del progetto.",
   "projectBar.noGit.short": "senza isolamento",
 
   // New session, session resume hooks, Agent console
   "new.title": "Nuova sessione",
+  "new.unnamedProject": "progetto",
   "new.cancel": "Annulla",
   "new.close": "Chiudi",
   "new.launch": (count: number) => (count === 1 ? "Avvia 1 sessione" : `Avvia ${count} sessioni`),
   "new.agent": "Agente",
-  "new.missing": "assente",
+  "new.missing": "Da installare",
   "new.looking": "Cerco gli agenti installati…",
   "new.noneInstalled":
     "Nessun agente installato su questo computer. Scegline uno qui sotto per vedere come installarlo.",
   "new.noAgentChosen": "nessun agente scelto",
   "pane.noAgent":
     "Questa sessione non può partire: non è stato scelto nessun agente. Chiudila e scegline uno in Nuova sessione.",
-  "install.cardHint": "non installato: clicca per installarlo",
+  "install.cardHint": "Non installato. Apri per vedere come installarlo.",
   "install.title": (agent: string) => `Installa ${agent}`,
   "install.command": "Comando ufficiale",
   "install.copy": "Copia",
@@ -344,13 +366,12 @@ export const it = {
   "install.caveat.goose-temp":
     "Sono i due passi del progetto, con lo script salvato in %TEMP% e non nella cartella del progetto.",
   "install.paneTitle": (agent: string) => `Installa ${agent}`,
-  "new.count": "Quante",
+  "new.count": "Quante sessioni",
   "new.count.label": "sessioni parallele",
-  "new.preview": "Partirà",
+  "new.preview": "Cosa parte",
   "new.role.reviewer": "revisiona",
   "new.summary": (count: number, agent: string, workspace: string) =>
     `${count} ${count === 1 ? "sessione" : "sessioni"} con ${agent} in ${workspace}`,
-  "hooks.title": "Ripresa delle sessioni",
   "hooks.desc":
     "Al riavvio ADE riapre le sessioni dov'erano. Per farlo deve sapere quale conversazione aveva ogni pannello: alcune CLI accettano un identificativo scelto da ADE, altre — codex fra queste — no, e possono solo dirlo loro. Qui ADE aggiunge una voce alla configurazione di quella CLI perché all'avvio di ogni sessione lo comunichi.",
   "hooks.files":
@@ -368,7 +389,7 @@ export const it = {
   "hooks.broken":
     "C'è una voce di ADE nella configurazione, ma non corrisponde allo script sul disco: la CLI sta eseguendo un hook che non fa nulla. Reinstalla per sistemarla.",
   "hooks.plugin":
-    "Un plugin del TUI di Ragu Code, non una voce di configurazione: dice ad ADE quale conversazione mostra il pannello, anche dopo /new, /sessions o un cambio di scheda. Non fa nulla in un Ragu Code che ADE non ha avviato.",
+    "Un plugin del TUI di Ragù Code, non una voce di configurazione: dice ad ADE quale conversazione mostra il pannello, anche dopo /new, /sessions o un cambio di scheda. Non fa nulla in un Ragù Code che ADE non ha avviato.",
   "hooks.install": "Installa",
   "hooks.reinstall": "Reinstalla",
   "hooks.update": "Aggiorna",
@@ -380,7 +401,7 @@ export const it = {
   "hooks.removeOnly":
     "Gli hook PowerShell non funzionano su questo sistema, e questo fallisce a ogni evento di ogni sessione di Claude Code o Codex. Si può solo rimuovere.",
   "hooks.windowsOnly":
-    "Gli hook di Claude Code e Codex sono script PowerShell, quindi ADE li installa solo su Windows. Su questo sistema si offre solo il plugin di Ragu Code.",
+    "Gli hook di Claude Code e Codex sono script PowerShell, quindi ADE li installa solo su Windows. Su questo sistema si offre solo il plugin di Ragù Code.",
   "agent.mic.start": "Avvia il microfono",
   "agent.mic.stop": "Ferma il microfono",
   "agent.settings": "Impostazioni",
@@ -443,7 +464,6 @@ export const it = {
   "decisions.reopened.delivered": (key: string) => `Riapertura di ${key} consegnata`,
   "design.reopened.delivered": (key: string) => `Riapertura di ${key} consegnata`,
   "design.waiter.taken": (key: string) => `Scelta su ${key} consegnata al comando ade-msg che la aspettava`,
-  "decisions.waiting": "Decisioni che aspettano te",
   "workspace.unreadable":
     "Non sono riuscita a leggere le sessioni salvate (forse sono di una versione più nuova di ADE). Ne ho tenuto una copia: aggiorna ADE per riaverle.",
   "workspace.unreadableNoCopy":
@@ -495,19 +515,28 @@ export const it = {
   "boot.host": "avvio di ADE",
   "boot.restore": "ripristino le sessioni",
   "boot.project": "apro il progetto",
-  "pane.closeRunning": (agent: string) =>
-    `${agent}\n\nL'agente è ancora in esecuzione. Chiudendo il pannello, si ferma.\n\nChiudere comunque?`,
+  "pane.closeRunning": (session: string) => `Chiudere «${session}»? L'agente è ancora al lavoro e si ferma.`,
+  "pane.closeRunning.saved": "La conversazione resta salvata e si può riprendere.",
+  "pane.closeRunning.ok": "Chiudi e ferma",
+  "pane.closeRunning.cancel": "Lascia aperta",
   "pane.closeWorktree": (reason: string) =>
     `${reason}\n\nChiudendo, la cartella resta su disco con il suo branch.\n\nChiudere comunque?`,
-  "pane.worktreeKept": (reason: string) => `La worktree resta su disco: ${reason}`,
-  "editor.closeDirty": (path: string) =>
-    `${path}\n\nCi sono modifiche non salvate. Chiudendo, vengono perse.\n\nChiudere comunque?`,
+  "pane.closeWorktree.ok": "Chiudi comunque",
+  "pane.closeWorktree.cancel": "Lascia aperta",
+  "pane.worktreeKept": (reason: string) => `La copia di lavoro resta su disco: ${reason}`,
+  "editor.closeDirty": (file: string) => `Chiudere ${file} senza salvare? Le modifiche non salvate vanno perse.`,
+  "editor.closeDirty.ok": "Chiudi senza salvare",
+  "editor.closeDirty.cancel": "Torna al file",
   "editor.saveUnreadable": (path: string, problem: string) =>
     `${path}\n\nNon riesco a rileggere il file per controllare se è cambiato (${problem}).\n\nSalvare comunque, sostituendo quello che c'è sul disco?`,
+  "editor.saveUnreadable.ok": "Salva comunque",
+  "editor.saveUnreadable.cancel": "Annulla",
   "editor.saveCancelled.unreadable": (problem: string) =>
     `Salvataggio annullato: non ho potuto rileggere il file (${problem}).`,
-  "editor.saveChanged": (path: string) =>
-    `${path}\n\nIl file è cambiato su disco da quando l'hai aperto. Salvando, quelle modifiche vengono sostituite dalle tue.\n\nProcedere?`,
+  "editor.saveChanged": (file: string) =>
+    `${file} è cambiato su disco dopo che l'hai aperto. Salvando, le tue modifiche sostituiscono quella versione.`,
+  "editor.saveChanged.ok": "Sostituisci",
+  "editor.saveChanged.cancel": "Annulla",
   "editor.saveCancelled.changed": "Salvataggio annullato: il file è cambiato su disco.",
   "keys.unread": (problem: string) => `Chiavi API non lette, la sessione parte senza: ${problem}`,
   "task.notSent":
@@ -519,13 +548,12 @@ export const it = {
     `ADE non ha scritto «${text}»: la connessione non si è stabilizzata. Scrivilo tu.`,
   "task.agentMissing": (command: string) =>
     `«${command}» non è installato sul server: ADE non ha scritto il compito, la shell remota lo avrebbe eseguito come comando.`,
-  "task.none": "Nessun task iniziale",
+  "task.none": "Nessun compito iniziale",
   "bar.newPane": "Nuovo pannello",
   "bar.windowControls": "Controlli finestra",
-  "bar.dismissNotice": "Chiudi avviso",
+  "bar.dismissNotice": "Togli l'avviso",
   "bell.empty": "Nessuna notifica.",
   "settings.title": "Impostazioni",
-  "settings.subtitle": "Voce, routine, codice, MCP, plugin e competenze",
   "settings.done": "Fatto",
   "settings.category.general": "Generale",
   "settings.category.general.desc": "Aspetto, lingua e disposizione delle finestre",
@@ -560,7 +588,10 @@ export const it = {
   "settings.tab.recordVideo": "Registrazione video",
   "settings.tab.updates": "Aggiornamenti",
   "settings.tab.space": "Spazio su disco",
-  "settings.group.voice": "Voce",
+  "settings.tab.about": "Informazioni",
+  "settings.about.version": "Versione",
+  "settings.about.folder": "Cartella dei dati",
+  "settings.about.unknown": "non disponibile",
   "settings.record.quality": "Qualità del video",
   "settings.record.mic": "Microfono nelle registrazioni",
   "settings.record.mic.on": "Attivo",
@@ -573,16 +604,13 @@ export const it = {
   "settings.updates.desc":
     "ADE si aggiorna dalle release ufficiali: lo stesso controllo parte dal menu delle notifiche.",
   "settings.updates.installed": "Versione installata:",
-  "settings.code": "Codice",
   "settings.keys": "Chiavi API",
-  "settings.extensions": "Estensioni",
-  "settings.space": "Spazio su disco",
   "space.title": "Spazio su disco",
   "space.desc": "Quello che ADE tiene sul tuo computer e si può togliere. Prima di cancellare dice quanto libera; il lavoro non integrato, i segreti, le decisioni e la memoria dei progetti non si toccano mai.",
   "space.empty": "Non c'è niente da togliere.",
   "space.group.voices": "Voci locali",
-  "space.group.assets": "Asset di RaguVerse",
-  "space.group.worktrees": "Worktree delle sessioni finite",
+  "space.group.assets": "Asset di RagùVerse",
+  "space.group.worktrees": "Copie di lavoro delle sessioni finite",
   "space.group.branches": "Branch di ADE già integrati",
   "space.group.project": "Catture e risultati vecchi",
   "space.refresh": "Ricontrolla",
@@ -592,15 +620,15 @@ export const it = {
   "space.piper.runtime": "Con l'ultima voce se ne va anche il programma di Piper",
   "space.piper.leftover": "Piper · programma senza voci",
   "space.kokoro": "Kokoro · voce locale",
-  "space.raguverse": "Asset di RaguVerse",
+  "space.raguverse": "Asset di RagùVerse",
   "space.raguverse.again": "Si riscaricano alla prossima apertura del mondo",
   "space.worktree.remove": "Togli",
   "space.worktree.unknown": "Non riesco a controllare se il lavoro è integrato",
-  "space.worktree.locked": "La worktree è bloccata",
+  "space.worktree.locked": "La copia di lavoro è bloccata",
   "space.branches": (a: string) => `${a} branch`,
   "space.prune": (a: string) => `${a}: file di .ade/`,
   "space.prune.detail": (a: string) => `${a} file: le catture oltre le ultime 50 e i risultati e le note oltre i 30 giorni`,
-  "space.prune.action": "Pota",
+  "space.prune.action": "Pulisci",
   "space.confirm.frees": (a: string) => `Libera circa ${a}.`,
   "space.confirm.frees.none": "Libera pochissimo spazio: toglie solo il nome.",
   "space.confirm.ask": "Procedere?",
@@ -608,10 +636,8 @@ export const it = {
   "space.failed": (a: string) => `Non fatto: ${a}`,
   "space.kept": (a: string) => `Resta: ${a}`,
   "space.busy": "Un attimo…",
-  "settings.tools": "Strumenti",
   "settings.noPlugins": "Nessun plugin caricato.",
   "settings.notBuilt": "Non c'è ancora niente da configurare qui: la sezione esiste, la funzione no.",
-  "settings.grid.title": "Griglia",
   "settings.grid.desc":
     "Su quante colonne stanno i pannelli nella vista Codice. In automatico ADE le sceglie dalla larghezza della finestra e da quanti pannelli sono aperti, in modo che nessuno scenda sotto la larghezza minima leggibile.",
   "settings.grid.columns": "Colonne della griglia",
@@ -620,16 +646,16 @@ export const it = {
   "settings.mcp.instead":
     "Le CLI agente che ADE avvia usano intanto la propria configurazione MCP, quella che userebbero da un terminale.",
   "settings.bots.title": "Bot",
-  "settings.bots.desc": "I bot di Ragu Code che questa macchina conosce: con quale modello girano, e se appartengono al progetto o a tutti. Si creano e si modificano nella vista Bot.",
-  "settings.bots.empty": "Nessun bot Ragu Code. Se ne crea uno dalla vista Bot.",
-  "settings.bots.reading": "Lettura delle cartelle di Ragu Code…",
-  "settings.bots.defaultModel": "modello di Ragu Code",
+  "settings.bots.desc": "I bot di Ragù Code che questa macchina conosce: con quale modello girano, e se appartengono al progetto o a tutti. Si creano e si modificano nella vista Bot.",
+  "settings.bots.empty": "Nessun bot Ragù Code. Se ne crea uno dalla vista Bot.",
+  "settings.bots.reading": "Lettura delle cartelle di Ragù Code…",
+  "settings.bots.defaultModel": "modello di Ragù Code",
   "settings.bots.scopeProject": "progetto",
   "settings.bots.scopeGlobal": "globale",
   "settings.skills.title": "Strumenti",
   "settings.skills.desc":
-    "Quali strumenti sono stati tolti a un bot. Chi non compare qui li ha tutti: Ragu Code registra nel file solo le rinunce.",
-  "settings.skills.empty": "Nessun bot ha limitazioni: tutti possono usare ogni strumento di Ragu Code.",
+    "Quali strumenti sono stati tolti a un bot. Chi non compare qui li ha tutti: Ragù Code registra nel file solo le rinunce.",
+  "settings.skills.empty": "Nessun bot ha limitazioni: tutti possono usare ogni strumento di Ragù Code.",
   "settings.skills.none": "Nessuno strumento",
   "settings.skills.addHint": "Aggiungi o rimuovi limitazioni configurando il bot nella vista Bot.",
   "settings.skills.without": (tools: string) => `senza ${tools}`,
@@ -637,7 +663,7 @@ export const it = {
   "settings.account.intro":
     "I programmi su cui possono girare i bot, ognuno con l'account della propria CLI.",
   "settings.providers.desc1":
-    "I programmi su cui può girare un bot, ognuno con l'account della propria CLI: l'abbonamento Anthropic passa da Claude Code, quello ChatGPT da Codex, le chiavi e gli altri abbonamenti da Ragu Code. Il motore, il modello e lo sforzo si scelgono nella scheda di ogni bot.",
+    "I programmi su cui può girare un bot, ognuno con l'account della propria CLI: l'abbonamento Anthropic passa da Claude Code, quello ChatGPT da Codex, le chiavi e gli altri abbonamenti da Ragù Code. Il motore, il modello e lo sforzo si scelgono nella scheda di ogni bot.",
   "settings.providers.desc2Before": (max: number) =>
     `ADE non chiede né legge le credenziali: l'accesso si fa nel flusso ufficiale di ogni CLI. Gli abbonamenti sono per uso personale e ADE tiene al massimo ${max} turni insieme per ognuno; per automazioni intensive o non presidiate accedi alla CLI con una chiave API (Claude Code accetta la chiave della Console Anthropic, Codex la chiave OpenAI con `,
   "settings.providers.desc2After": ").",
@@ -651,12 +677,10 @@ export const it = {
   "settings.providers.switchContinue": "Continua",
   "settings.providers.switchCancel": "Annulla",
   "settings.providers.login": "Accedi",
-  "settings.providers.checkAgain": "Controlla di nuovo",
+  "settings.providers.checkAgain": "Ricontrolla",
 
   // Splash & logo
-  "splash.aria": "Presentazione di ADE — tipografia ASCII 3D",
-  "logo.title": "ADE — mercurio cromato liquido con fisica (clicca per lo spruzzo)",
-  "logo.aria": "Logo ADE — mercurio cromato",
+  "splash.aria": "Ragù Code si sta avviando",
 
   // Voice shortcut & permission
   "voice.shortcut.feature.agent": "assistente vocale",
@@ -687,7 +711,7 @@ export const it = {
   "pane.expand": "Ingrandisci",
   "pane.restore": "Riduci",
   "pane.copied": "Copiato",
-  "pane.noticeDismiss": "Chiudi la nota",
+  "pane.noticeDismiss": "Togli la nota",
   "pane.copyBlocked": "Non copiato: durante la ripresa la selezione tocca una riga coperta",
   "file.preview": "Anteprima",
   "file.text": "Testo",
@@ -741,7 +765,7 @@ export const it = {
   "pane.close": "Chiudi",
   "hooks.foreign":
     "Di un'altra build di ADE, non di questa: questa non lo aggiorna e non lo rimuove, perché con quel file ci lavorano le sessioni dell'ADE ufficiale",
-  "bar.raguVersion": (v: string) => `Ragu Code ${v}: è il programma con cui partono le sessioni, non ADE`,
+  "bar.raguVersion": (v: string) => `Ragù Code ${v}: è il programma con cui partono le sessioni, non ADE`,
   "bar.sessions": (count: number) => `${count} ${count === 1 ? "sessione" : "sessioni"}`,
   "bar.meta.ade": (version: string) => `ADE ${version}`,
   "bar.info": (facts: string) => `Dettagli del progetto: ${facts}`,
@@ -761,32 +785,33 @@ export const it = {
   "choices.age.hours": (count: number) => `${count} h fa`,
   "choices.age.days": (count: number) => `${count} ${count === 1 ? "giorno" : "giorni"} fa`,
   "bar.sections": "Sezioni",
-  "bar.palette": "Cerca o esegui",
+  "bar.palette": "Cerca comandi",
   "window.minimize": "Riduci a icona",
   "window.maximize": "Ingrandisci o ripristina",
   "window.close": "Chiudi",
   "window.closeConfirm.message": (count: number) =>
-    `${count} ${count === 1 ? "sessione sta lavorando" : "sessioni stanno lavorando"}. Chiudere lo stesso?`,
+    `${count} ${count === 1 ? "sessione sta lavorando" : "sessioni stanno lavorando"}. Chiudere comunque?`,
   "window.closeConfirm.ok": "Chiudi",
   "window.closeConfirm.cancel": "Annulla",
   "window.closeConfirm.gatewayOn": "I bot smettono di rispondere finché non riapri ADE.",
   "ask.yes": "Sì",
   "ask.no": "No",
   "tray.hide.working": (count: number) =>
-    `Un gateway è acceso: ADE va nella tray e resta aperta. ${count} ${count === 1 ? "sessione sta lavorando e continuerà" : "sessioni stanno lavorando e continueranno"} anche con la finestra nascosta. Per chiudere ADE del tutto: Esci, nel menu della sua icona.`,
+    `Un collegamento chat è acceso: ADE va nell'area di notifica e resta aperta. ${count} ${count === 1 ? "sessione sta lavorando e continuerà" : "sessioni stanno lavorando e continueranno"} anche con la finestra nascosta. Per chiudere ADE del tutto: Esci, nel menu della sua icona.`,
   "tray.hide.keepSessions": "Nascondi, le sessioni continuano",
   "tray.hide.closeSessions": "Chiudi le sessioni e nascondi",
   "tray.hide.cancel": "Annulla",
   "tray.hide.notice":
-    "ADE resta nella tray finché un gateway è acceso, così le chat continuano a raggiungere i bot. Il microfono si chiude finché la finestra è nascosta. Per riaprirla: clic sull'icona; per chiudere ADE: Esci, nel menu dell'icona.",
+    "ADE resta nell'area di notifica finché un collegamento chat è acceso, così le chat continuano a raggiungere i bot. Il microfono si chiude finché la finestra è nascosta. Per riaprirla: clic sull'icona; per chiudere ADE: Esci, nel menu dell'icona.",
   "bell.title": "Notifiche",
-  "bell.dismiss": "Scarta",
+  "bell.dismiss": "Togli",
 
   // Export, stuck note
   "record.export.busy": "Un'esportazione è già in corso.",
   "record.export.desktopOnly": "L'esportazione funziona solo nell'app desktop.",
   "record.export.done": (path: string) => `Video pronto: ${path}`,
-  "record.export.failed": (problem: string) => `Esportazione non riuscita: ${problem}`,
+  "record.export.failed": (problem: string) =>
+    `Esportazione non riuscita: ${problem}. La registrazione originale non è stata toccata: riprova da Impostazioni → Registrazione.`,
   "pane.maybeStuck": (request: string) =>
     `Forse bloccata: al lavoro da oltre un'ora senza output né modifiche (richiesta ${request})`,
 
@@ -807,7 +832,7 @@ export const it = {
   "activity.sshConnecting": "Connessione ssh",
   "activity.connected": "Connesso",
   "activity.connectFailed": "Connessione fallita",
-  "pane.killed": "Processo ucciso",
+  "pane.killed": "Processo terminato",
   "pane.suspend": "Sospendi",
   "pane.suspend.tip": "Chiude i processi della sessione e ne tiene la conversazione: si riprende da qui",
   "pane.suspend.no": (why: string) => `Sospendi non disponibile: ${why}`,
@@ -840,10 +865,10 @@ export const it = {
 
   // Browser panel
   "browser.unreachable": "Server non raggiungibile",
-  "browser.fidelity.native": "Nativo (Bridge attivo)",
-  "browser.fidelity.mirror": "Mirror (Copia isolata)",
+  "browser.fidelity.native": "Collegato alla pagina",
+  "browser.fidelity.mirror": "Copia separata della pagina",
   "browser.fidelity.none": "Sola lettura",
-  "browser.fidelity.pending": "Connessione...",
+  "browser.fidelity.pending": "Connessione…",
   "browser.fluid": "Fluido",
   "browser.grip": "Trascina per spostare il pannello",
   "browser.back": "Indietro",
@@ -852,7 +877,7 @@ export const it = {
   "browser.mode.browse": "Naviga",
   "browser.mode.browse.tip": "Modalità Navigazione",
   "browser.mode.edit": "Ispeziona",
-  "browser.mode.edit.tip": "Modalità Ispezione ed Editing",
+  "browser.mode.edit.tip": "Modalità ispezione e modifica",
   "browser.rotate": "Ruota orientamento",
   "browser.preview": "Anteprima del browser",
   "browser.recordVeil.title": "Pagina nascosta durante la ripresa",
@@ -880,22 +905,22 @@ export const it = {
     "Non potrà eseguire comandi né toccare .git e le impostazioni degli strumenti (.claude, .ragu, .codex, .vscode, .husky, .github/workflows), ma potrà modificare gli altri file del progetto.",
   "bots.trust.can.claudeReadOnly": "Non potrà eseguire comandi né modificare file: potrà solo leggere il progetto.",
   "bots.trust.can.ragu":
-    "Potrà fare quello che la tua configurazione di Ragu Code concede: il file del bot non può concedersi altro.",
+    "Potrà fare quello che la tua configurazione di Ragù Code concede: il file del bot non può concedersi altro.",
   "bots.trust.selfApproves": (name: string, what: string, line: string) =>
-    `Il bot «${name}» di questo progetto si concede da solo «${what}» nel suo file, con la riga «${line}», e Ragu Code lo eseguirebbe senza chiedere: non lo avvio. Togli quella riga dal file, oppure copia il bot tra i tuoi.`,
+    `Il bot «${name}» di questo progetto si concede da solo «${what}» nel suo file, con la riga «${line}», e Ragù Code lo eseguirebbe senza chiedere: non lo avvio. Togli quella riga dal file, oppure copia il bot tra i tuoi.`,
   "bots.projectTrust.new": (root: string, files: string) =>
-    `La cartella ${root} ha una configurazione di Ragu Code sua (${files}): plugin, strumenti e impostazioni che Ragu Code carica ed esegue a ogni turno, con il tuo account, scritti da chi ha scritto il progetto. Li carichi? Se dici di no, qui i bot su Ragu Code non partono; quelli su Claude Code e Codex sì, perché non la leggono.`,
+    `La cartella ${root} ha una configurazione di Ragù Code sua (${files}): plugin, strumenti e impostazioni che Ragù Code carica ed esegue a ogni turno, con il tuo account, scritti da chi ha scritto il progetto. Li carichi? Se dici di no, qui i bot su Ragù Code non partono; quelli su Claude Code e Codex sì, perché non la leggono.`,
   "bots.projectTrust.changed": (root: string, files: string) =>
-    `La configurazione di Ragu Code della cartella ${root} è cambiata da quando l'hai accettata (${files}): Ragu Code la carica ed esegue a ogni turno. La carichi così com'è ora?`,
+    `La configurazione di Ragù Code della cartella ${root} è cambiata da quando l'hai accettata (${files}): Ragù Code la carica ed esegue a ogni turno. La carichi così com'è ora?`,
   "bots.projectTrust.listMore": (list: string, count: number) => `${list} e altri ${count}`,
   "bots.projectTrust.refused": (root: string) =>
-    `I bot su Ragu Code non partono in ${root} finché non accetti la configurazione di Ragu Code del progetto. I bot su Claude Code e Codex non la leggono.`,
+    `I bot su Ragù Code non partono in ${root} finché non accetti la configurazione di Ragù Code del progetto. I bot su Claude Code e Codex non la leggono.`,
   "bots.ask.yes": "Sì",
   "bots.ask.no": "No",
   "bots.ask.failed": (name: string) =>
     `ADE non è riuscita a farti la domanda sul bot «${name}» di questo progetto: non lo avvio.`,
   "bots.projectTrust.failed": (root: string) =>
-    `ADE non è riuscita a farti la domanda sulla configurazione di Ragu Code di ${root}: i bot su Ragu Code qui non partono.`,
+    `ADE non è riuscita a farti la domanda sulla configurazione di Ragù Code di ${root}: i bot su Ragù Code qui non partono.`,
   "bots.trust.unreadable": (name: string) => `Non riesco a leggere il file del bot «${name}»: non lo avvio.`,
   // A bot's gateway, in the chat it answers (G4): what the bot says there on its own.
   "gateway.recoveredNotice":
@@ -908,7 +933,7 @@ export const it = {
   "gateway.status.idle": "Libero: scrivimi pure.",
   "gateway.status.working": (queued: number) => `Sto lavorando a un turno; messaggi in coda: ${queued}.`,
   "gateway.status.connectedSince": (time: string, day?: string) =>
-    day ? `Gateway collegato ${day} alle ${time}.` : `Gateway collegato dalle ${time}.`,
+    day ? `Collegamento chat attivo ${day} alle ${time}.` : `Collegamento chat attivo dalle ${time}.`,
   "gateway.retry.none": "Non c'è ancora una domanda da rifare: scrivimene una.",
   "gateway.retry.busy": "Sto ancora lavorando alla domanda di prima: aspetta che finisca, oppure scrivi /ferma.",
   "gateway.retry.again": "Rifaccio l'ultima domanda.",
@@ -973,7 +998,7 @@ export const it = {
   "gateway.chat.configUnreadable": (name: string) =>
     `Non riesco a leggere la configurazione di questo progetto, che potrebbe concedere la shell al bot «${name}»: da qui non lo avvio. Il file è indicato nel pannello del bot, in ADE.`,
   "gateway.chat.notAdmitted":
-    "Questo progetto non è ancora ammesso per Ragu Code, o è cambiato: apri il bot nel pannello di ADE, rispondi alla domanda e riprova.",
+    "Questo progetto non è ancora ammesso per Ragù Code, o è cambiato: apri il bot nel pannello di ADE, rispondi alla domanda e riprova.",
   "gateway.approve.question": (permission: string, what: string) =>
     `Il bot chiede il permesso «${permission}» per:\n${what}\n\nLo permetto questa volta? Senza risposta entro 5 minuti vale no.`,
   "gateway.approve.once": "Sì, questa volta",
@@ -1073,15 +1098,15 @@ export const it = {
   "gateway.panel.reconnecting": "Acceso · riconnessione in corso",
   "gateway.panel.attentionTimeout": "Impossibile connettersi da oltre 10 minuti",
   "gateway.panel.attentionQueueFull":
-    "I messaggi della chat si accumulano più in fretta di quanto ADE li gestisca, e i nuovi vengono scartati. Ricarica la finestra di ADE; se ricapita, spegni e riaccendi il gateway.",
+    "I messaggi della chat si accumulano più in fretta di quanto ADE li gestisca, e i nuovi vengono scartati. Ricarica la finestra di ADE; se ricapita, spegni e riaccendi il collegamento chat.",
   "gateway.panel.retry": "Riprova",
   "gateway.panel.changeCode": "Cambia il codice",
   "gateway.panel.openPlatforms": "Apri piattaforme",
   "gateway.panel.attentionNotice": (name: string, platform: string) =>
-    `Il gateway di ${name} su ${platform} richiede attenzione.`,
-  "gateway.bar.connected": "Gateway: collegato",
-  "gateway.bar.reconnecting": "Gateway: riconnessione in corso",
-  "gateway.bar.needsAttention": "Gateway: richiede attenzione",
+    `Il collegamento chat di ${name} su ${platform} richiede attenzione.`,
+  "gateway.bar.connected": "Collegamento chat: attivo",
+  "gateway.bar.reconnecting": "Collegamento chat: riconnessione in corso",
+  "gateway.bar.needsAttention": "Collegamento chat: richiede attenzione",
   "gateway.panel.lastMessage": (time: string) => `ultimo messaggio alle ${time}`,
   "gateway.panel.redacted": (time: string) =>
     `Nel messaggio delle ${time} c'era una chiave: l'ho nascosta, il bot non l'ha vista e non è stata salvata.`,
@@ -1151,11 +1176,11 @@ export const it = {
     "La Chat non è ancora collegata a questo progetto: si collega quando scegli un modello o invii un messaggio.",
   "chat.connect": "Collega adesso",
   "chat.status.admitting": "Controllo la fiducia nel progetto…",
-  "chat.status.connecting": "Collegamento al server di Ragu Code…",
+  "chat.status.connecting": "Collegamento al server di Ragù Code…",
   "chat.status.retrying": "Collegamento perso: riprovo…",
   "chat.status.refused": "La Chat non può lavorare in questo progetto.",
   "chat.rules.always":
-    "La Chat chiede prima di ogni comando e di ogni modifica, ma un «sempre» dato nel terminale di Ragu Code resta salvato (per questo progetto, o per questa cartella se non è un repository git) e vale anche qui dopo il prossimo avvio di ADE: quella richiesta non comparirà. Per toglierlo: chiudi ADE e Ragu Code ed esegui «ragu permissions reset» in questa cartella.",
+    "La Chat chiede prima di ogni comando e di ogni modifica, ma un «sempre» dato nel terminale di Ragù Code resta salvato (per questo progetto, o per questa cartella se non è un repository git) e vale anche qui dopo il prossimo avvio di ADE: quella richiesta non comparirà. Per toglierlo: chiudi ADE e Ragù Code ed esegui «ragu permissions reset» in questa cartella.",
   "chat.question.label": "Domanda del modello",
   "chat.question.typed": "Oppure scrivi la tua risposta",
   "chat.question.send": "Rispondi",
@@ -1230,8 +1255,8 @@ export const it = {
   "browser.noCopy.back": "Torna a Naviga",
   "browser.context": "Contesto catturato:",
   "browser.clearSelection": "Deseleziona tutto",
-  "browser.prompt.selected": "Descrivi cosa modificare...",
-  "browser.prompt.empty": "Punta un elemento nella pagina o scrivi un'istruzione...",
+  "browser.prompt.selected": "Descrivi cosa modificare…",
+  "browser.prompt.empty": "Punta un elemento nella pagina o scrivi un'istruzione…",
   "browser.selection.none": "Nessun elemento selezionato",
   "browser.selection.count": (count: number) =>
     count === 1 ? "1 elemento selezionato" : `${count} elementi selezionati`,
@@ -1287,9 +1312,9 @@ export const it = {
   "date.today": "oggi",
   "date.tomorrow": "domani",
   "date.monday": "lunedì",
-  "date.inDays": (days: number) => `fra ${days} giorni`,
+  "date.inDays": (days: number) => `fra ${days} ${plural(days, { one: "giorno", other: "giorni" }, "it")}`,
   "decisions.title": "Decisioni",
-  "decisions.shortTitle": "Dec",
+  "decisions.shortTitle": "Decisioni",
   "decisions.notice.toTake": (title: string) => `Decisione da prendere: ${title}`,
   "decisions.openCount": (count: number) => `${count} ${count === 1 ? "aperta" : "aperte"}`,
   "decisions.count": (count: number) => (count === 1 ? "1 decisione" : `${count} decisioni`),
@@ -1310,7 +1335,8 @@ export const it = {
   "decisions.submitNext": "Registra e avanti",
   "decisions.noProject": "Nessun progetto aperto.",
   "decisions.noProject.hint": "Il registro delle decisioni sta in .ade/decisions.jsonl del progetto.",
-  "decisions.unreadable": (problem: string) => `Registro non leggibile: ${problem}`,
+  "decisions.unreadable": (problem: string) =>
+    `Non riesco a leggere le decisioni del progetto (${problem}). Controlla il file .ade/decisions.jsonl e riapri il pannello.`,
   "decisions.ignored": (count: number) => `${count === 1 ? "1 riga ignorata" : `${count} righe ignorate`} nel registro`,
   "decisions.section.open": "Da decidere, in ordine",
   "decisions.section.answered": "Risposte, in attesa di esecuzione",
@@ -1344,7 +1370,7 @@ export const it = {
   "decisions.recipient.idle": (title: string) => `«${title}» non è in esecuzione: le risposte restano in coda.`,
   "decisions.recipient.waiting": (count: number) => `${count} in attesa.`,
   "decisions.sheet.position": (index: number, total: number) => `${index} di ${total}`,
-  "decisions.sheet.empty": "Quando una sessione ne apre una, il badge in alto la mostra.",
+  "decisions.sheet.empty": "Quando una sessione ti chiede una scelta, il numero accanto a Decisioni in alto si accende.",
   "decisions.sheet.needChoice": "Nessuna scelta: premi 1–9 o clicca un'opzione, poi Invio",
   "decisions.sheet.needRecipient": "Nessuno riceve la risposta: scegli chi riceve, poi Invio",
   "decisions.sheet.needText": "Scrivi la risposta nella nota, poi Ctrl+Invio",
@@ -1376,7 +1402,6 @@ export const it = {
   "design.notice.toChoose": (title: string) => `Design da scegliere: ${title}`,
   "design.openCount": (count: number) => `${count} ${count === 1 ? "aperta" : "aperte"}`,
   "design.count": (count: number) => (count === 1 ? "1 proposta design" : `${count} proposte design`),
-  "design.waiting": "Proposte di design in attesa",
   "design.needChoice": "scegli una variante o scrivi una nota",
   "design.variants": "Varianti",
   "design.keeps": "Resta invariato",
@@ -1429,10 +1454,9 @@ export const it = {
     `Consegnare ${queued === 1 ? "la scelta in coda" : `le ${queued} scelte in coda`} a «${title}»?`,
   "design.recipient.deliver": "Consegna",
   "design.sheet.position": (index: number, total: number) => `${index} di ${total}`,
-  "design.sheet.empty": "Quando una sessione ne apre una, il badge in alto la mostra.",
+  "design.sheet.empty": "Quando una sessione ti propone un design, il numero accanto a Design in alto si accende.",
   "design.sheet.needChoice": "Nessuna variante scelta: premi 1–9 o clicca una variante, poi Invio",
   "design.sheet.needRecipient": "Nessuno riceve la risposta: scegli chi riceve, poi Invio",
-  "design.sheet.needText": "Scrivi la risposta nella nota, poi Ctrl+Invio",
   "design.sheet.keys": "1–9 sceglie · Invio registra la scelta · ← → scorre · Esc chiude",
   "design.sheet.queued.none": (count: number) =>
     `${count === 1 ? "1 risposta" : `${count} risposte`} in coda: nessuna sessione le riceve`,
@@ -1462,7 +1486,7 @@ export const it = {
   "editor.truncatedSave": "Il file è troncato in lettura: il salvataggio distruggerebbe i dati non caricati.",
   "editor.nothingToSave": "Nessuna modifica da salvare.",
   "editor.noFile": "Nessun file aperto.",
-  "editor.loading": "Caricamento file in corso...",
+  "editor.loading": "Caricamento file in corso…",
   "editor.truncatedBanner":
     "Il file è troppo grande ed è stato troncato in lettura. Il salvataggio è disabilitato per proteggere il file su disco.",
   "editor.modified": "Modificato",
@@ -1482,7 +1506,7 @@ export const it = {
   "mods.title": "Mod",
   "mods.pane": "Mod del progetto",
   "mods.command": "Mostra i mod del progetto",
-  "mods.explain": "I mod sono plugin che girano nel server Ragu Code e disegnano qui, nel terminale e sul telefono.",
+  "mods.explain": "I mod sono plugin che girano nel server Ragù Code e disegnano qui, nel terminale e sul telefono.",
   "mods.connect": "Collega i mod del progetto",
   "mods.connecting": "Collego i mod…",
   "mods.failed": "Non riesco a collegare i mod di questo progetto.",
@@ -1494,7 +1518,7 @@ export const it = {
   "plugins.commands": (count: number) => `${count} ${count === 1 ? "comando" : "comandi"}`,
   "plugins.panes": (count: number) => `${count} ${count === 1 ? "pannello" : "pannelli"}`,
   "plugins.sections": (count: number) => `${count} ${count === 1 ? "sezione" : "sezioni"}`,
-  "review.loading": "Caricamento modifiche in corso...",
+  "review.loading": "Caricamento modifiche in corso…",
   "review.empty": "Nessuna modifica da mostrare.",
   "review.header": (added: number, removed: number) => `Modifiche (${added} aggiunte, ${removed} rimozioni)`,
   "review.truncated": "Il diff è troppo grande ed è stato troncato. Stai visualizzando solo l'elenco dei file.",
@@ -1507,7 +1531,7 @@ export const it = {
   "review.error.status": "Impossibile leggere lo stato del repository.",
   "review.error.stats": "Impossibile calcolare le statistiche delle modifiche.",
   "review.error.files": "Impossibile calcolare l'elenco dei file modificati.",
-  "shots.dismiss": "Togli dal vassoio",
+  "shots.dismiss": "Togli dalle Schermate",
   "shots.dismiss.named": (name: string) => `Togli ${name}`,
   "shots.hint": "trascinala su una sessione per darla all'agente",
   "shots.delete": "Elimina",
@@ -1516,6 +1540,8 @@ export const it = {
   "shots.delete.keep": "Tieni",
   "shots.delete.failed":
     "Non ho eliminato la schermata: il file è in uso o protetto. Chiudi il programma che la tiene aperta e riprova.",
+  "shots.tray.aria": (count: number) => `Schermate recenti (${count})`,
+  "shots.open.named": (name: string) => `Apri ${name}`,
   "shots.more.left": "Schermate precedenti",
   "shots.more.right": "Altre schermate",
   "shots.close": "Chiudi",
@@ -1538,9 +1564,6 @@ export const it = {
   "extensions.added": (name: string, file: string, hint: string) =>
     `${name} aggiunto a ${file}. ${hint} Vale per le sessioni avviate da ora.`,
   "extensions.removed": (name: string, file: string) => `${name} tolto da ${file}.`,
-  "extensions.tab.installed": (count: number) => `Installati · ${count}`,
-  "extensions.tab.catalog": (count: number) => `Catalogo MCP · ${count}`,
-  "extensions.tab.plugins": (count: number) => `Plugin · ${count}`,
   "extensions.desc": (file: string) =>
     `Server MCP e plugin. «Aggiungi al progetto» scrive solo il ${file} del progetto aperto, che le CLI agente leggono all'avvio della sessione; le credenziali restano fuori dal file.`,
   "extensions.noProject": (file: string) =>
@@ -1592,7 +1615,7 @@ export const it = {
   "keys.billing.chatgpt": "dell'accesso ChatGPT",
   "keys.added.today": "aggiunta oggi",
   "keys.added.yesterday": "aggiunta ieri",
-  "keys.added.days": (days: number) => `aggiunta ${days} giorni fa`,
+  "keys.added.days": (days: number) => `aggiunta ${days} ${plural(days, { one: "giorno", other: "giorni" }, "it")} fa`,
   "keys.desc":
     "Le chiavi segrete che le sessioni possono usare. Il valore resta nel portachiavi del sistema (Gestione credenziali di Windows, Portachiavi di macOS): ADE non lo scrive in file né lo mostra, e lo passa come variabile d'ambiente solo agli agenti scelti per ciascuna chiave, all'avvio della sessione.",
   "keys.noKeychain": "Questa versione di ADE non ha accesso al portachiavi.",
@@ -1707,7 +1730,7 @@ export const it = {
   "remote.error.port": "porta non valida",
   "quota.na.tooltip": (vendor: string, why: string) => `Quota ${vendor}: n/d\n${why}`,
   "quota.na.noSource": "Nessuna fonte di quota per questo agente.",
-  "quota.na.noReport": "Rapporto di quota-axi non trovato (~/.cache/quota-axi/quotas.json).",
+  "quota.na.noReport": "Nessun rapporto sulle quote su questo computer.",
   "quota.na.noWindows": "quota-axi non riporta finestre per questo provider.",
   "quota.na.noTime": "Il rapporto di quota-axi non dice quando è stato scritto.",
   "quota.na.future": (time: string) => `Il rapporto è datato ${time}, dopo l'ora attuale: non è affidabile.`,
@@ -1746,7 +1769,7 @@ export const it = {
   "resume.noneHere": (agent: string) =>
     `Nessuna conversazione di ${agent} di questa cartella da riaprire: ne parte una nuova`,
   "resume.otherFolder": (dir: string) =>
-    `Questa conversazione è di un'altra cartella (${dir}): le schede di Ragu Code sono comuni a tutti i progetti. Il pannello ora la segue, anche al riavvio`,
+    `Questa conversazione è di un'altra cartella (${dir}): le schede di Ragù Code sono comuni a tutti i progetti. Il pannello ora la segue, anche al riavvio`,
   "resume.shared": (pane: string) =>
     `La conversazione è già aperta nel pannello «${pane}»: qui non la riapro, per non scrivere in due nella stessa`,
   "resume.alsoOpen": (pane: string) =>
@@ -1939,10 +1962,6 @@ export const it = {
   "design.rule.open": (key: string) => `${key} è già aperta`,
   "design.rule.close": (key: string) => `${key} si chiude solo dopo una risposta o con un'evidenza`,
   "design.log.again": "un altro giro dice cosa cambiare, senza scelta",
-  "design.status.giro": "altro giro",
-  "design.status.aperta": "aperta",
-  "design.status.risposta": "scelta",
-  "design.status.chiusa": "chiusa",
   "design.problem.line": (line: number, reason: string) => `riga ${line}: ${reason}`,
   "design.noProject.short": "nessun progetto aperto",
 
@@ -1979,15 +1998,14 @@ export const it = {
   "effort.high": "alto",
   "effort.xhigh": "molto alto",
   "effort.max": "massimo",
-  "bots.models.noHost": "ADE non può eseguire Ragu Code qui",
-  "bots.models.notFound": "Ragu Code non si avvia (ragu è nel PATH?)",
+  "bots.models.noHost": "ADE non può eseguire Ragù Code qui",
+  "bots.models.notFound": "Ragù Code non si avvia (ragu è nel PATH?)",
   "bots.models.exit": (code: string, detail: string) =>
     `ragu models è uscito con ${code}${detail ? `: ${detail}` : ""}`,
-  "bots.models.empty": "Ragu Code non ha elencato nessun modello",
+  "bots.models.empty": "Ragù Code non ha elencato nessun modello",
   "chat.model.choose": "Scegli un modello",
-  "chat.model.none": "Nessun modello disponibile",
   "chat.model.missing": (model: string) =>
-    `Il modello ${model} non è nel catalogo del server di Ragu Code: è stato tolto, o il suo provider non è collegato. Non è partito niente: scegline un altro.`,
+    `Il modello ${model} non è nel catalogo del server di Ragù Code: è stato tolto, o il suo provider non è collegato. Non è partito niente: scegline un altro.`,
   "chat.agent.label": "Agente",
   "chat.agent.none": "Nessun agente disponibile",
   "chat.agent.name.build": "Assistente",
@@ -1997,7 +2015,7 @@ export const it = {
   "chat.new": "Nuova conversazione",
   "chat.empty.title": "Chiedi qualcosa.",
   "chat.empty.body":
-    "Una conversazione con Ragu Code in questo progetto: legge i file da sé, e prima di ogni comando o modifica ti chiede.",
+    "Una conversazione con Ragù Code in questo progetto: legge i file da sé, e prima di ogni comando o modifica ti chiede.",
   "chat.input.placeholder": "Scrivi un messaggio…",
   "chat.send": "Invia",
   "chat.stop": "Ferma",
@@ -2005,7 +2023,7 @@ export const it = {
   "chat.error.aborted": "Risposta fermata.",
   "chat.error.outputLength": "La risposta ha superato la lunghezza massima del modello ed è stata tagliata.",
   "chat.error.contextOverflow": "La conversazione non entra più nella finestra del modello: aprine una nuova.",
-  "chat.error.auth": "Il fornitore ha rifiutato le credenziali: controllale in Ragu Code.",
+  "chat.error.auth": "Il fornitore ha rifiutato le credenziali: controllale in Ragù Code.",
   "chat.error.credit": "Il credito presso il fornitore è finito.",
   "chat.error.modelMissing": "Il fornitore non trova questo modello: scegline un altro.",
   "chat.error.rateLimit":
@@ -2016,12 +2034,12 @@ export const it = {
   "chat.error.api": "Il fornitore ha risposto con un errore.",
   "chat.error.apiStatus": (status: number) => `Il fornitore ha risposto con un errore (${status}).`,
   "chat.error.unknown": "Qualcosa è andato storto.",
-  "chat.error.server": "Il server di Ragu Code non risponde.",
+  "chat.error.server": "Il server di Ragù Code non risponde.",
   "chat.error.notOpen": "La Chat non è aperta su una cartella.",
   "chat.error.otherFolder": (open: string, other: string) =>
     `La Chat è aperta su ${open}: una richiesta per ${other} non parte.`,
   "chat.error.otherOrigin": (origin: string) =>
-    `Il trasporto della Chat parla solo con il server di Ragu Code, non con ${origin}.`,
+    `Il trasporto della Chat parla solo con il server di Ragù Code, non con ${origin}.`,
   "chat.error.requestAborted": "La richiesta è stata interrotta.",
   "chat.retry": (attempt: number) => `Il fornitore ha dato un errore: nuovo tentativo, il ${attempt}°…`,
   "chat.attach.outside": (path: string) =>
@@ -2029,7 +2047,6 @@ export const it = {
   "chat.attach.notFile": (path: string) => `${path} non è un file: la Chat allega solo file.`,
   "chat.attach.env": (path: string) =>
     `${path} non si allega: i file .env contengono di solito chiavi e password, e un allegato arriva al fornitore del modello.`,
-  "chat.attach.add": "Allega",
   "chat.attach.addHint": "Allega un file del progetto",
   "chat.attach.remove": (name: string) => `Togli ${name}`,
   "chat.attach.list": "File allegati",
@@ -2089,7 +2106,7 @@ export const it = {
   "bots.face.problem.unreadable": "Non riesco a leggere questa immagine: forse il file è rovinato.",
   "bots.face.problem.heavy":
     "Anche ridotta, l'immagine resta troppo pesante per il file del bot: provane una più semplice.",
-  "bots.subagent.note": "È un sottoagente: non risponde da solo, lo chiama un altro bot. Puoi comunque scrivergli, ma Ragu Code userà l'agente predefinito al suo posto.",
+  "bots.subagent.note": "È un sottoagente: non risponde da solo, lo chiama un altro bot. Puoi comunque scrivergli, ma Ragù Code userà l'agente predefinito al suo posto.",
   "bots.thread.label": (name: string) => `Conversazione con ${name}`,
   "bots.room.threadLabel": (name: string) => `Conversazione della stanza ${name}`,
   "bots.composer.label": (name: string) => `Scrivi a ${name}`,
@@ -2122,10 +2139,10 @@ export const it = {
     "fa girare comandi dentro un'altra shell, che la lista non sempre legge per intero",
   "bots.approval.reason.outside": "lavora fuori dalla cartella del progetto",
   "bots.approval.reason.tool": (tool: string) =>
-    `usa ${tool}, che Ragu Code chiede di confermare`,
+    `usa ${tool}, che Ragù Code chiede di confermare`,
   "bots.approval.why": (reason: string) => `Si ferma perché ${reason}.`,
   "bots.approval.always": "Sempre per questo bot",
-  "bots.approval.timeout": (minutes: number) => `Senza risposta entro ${minutes} minuti vale come Nega.`,
+  "bots.approval.timeout": (minutes: number) => `Senza risposta entro ${minutes} ${plural(minutes, { one: "minuto", other: "minuti" }, "it")} vale come Nega.`,
   "bots.approval.blocked": (command: string, reason: string) =>
     `Bloccato: «${command}» ${reason}. Questo comando non parte mai, qualunque cosa si scelga.`,
   "bots.approval.refused": (command: string, reason: string) =>
@@ -2149,7 +2166,7 @@ export const it = {
   "bots.routine.spend.perDay": "Tetto al giorno ($)",
   "bots.routine.cap": (text: string) => `Tetto di questo modo: ${text}.`,
   "bots.routine.cap.perDay": (runs: number) => `${runs} esecuzioni al giorno per tutte le routine insieme`,
-  "bots.routine.cap.gap": (minutes: number) => `almeno ${minutes} minuti tra due esecuzioni della stessa routine`,
+  "bots.routine.cap.gap": (minutes: number) => `almeno ${minutes} ${plural(minutes, { one: "minuto", other: "minuti" }, "it")} tra due esecuzioni della stessa routine`,
   "bots.routine.cap.money": (run: string, day: string) => `al massimo ${run} per esecuzione e ${day} al giorno`,
   "bots.routine.consent": (runner: string, mode: string, model: string) =>
     `Acconsento: questa routine gira da sola con ${runner} (${mode}, ${model}), senza shell, solo mentre ADE è aperta ed entro il tetto qui sopra.`,
@@ -2219,7 +2236,7 @@ export const it = {
   "bots.routine.problem.notAllowed": "questo programma non può eseguire routine",
   "bots.routine.problem.prompt": "Scrivi che cosa deve fare la routine.",
   "bots.routine.problem.every": "Scegli ogni quante ore (da 1 a 168) o un orario.",
-  "bots.routine.problem.gap": (minutes: number) => `Tra due esecuzioni servono almeno ${minutes} minuti.`,
+  "bots.routine.problem.gap": (minutes: number) => `Tra due esecuzioni servono almeno ${minutes} ${plural(minutes, { one: "minuto", other: "minuti" }, "it")}.`,
   "bots.routine.problem.spendRequired": "Con questo modo serve un tetto di spesa, per esecuzione e al giorno.",
   "bots.routine.problem.perRun": (max: string) => `Il tetto per esecuzione arriva al massimo a ${max}.`,
   "bots.routine.problem.perDay": (max: string) => `Il tetto al giorno arriva al massimo a ${max}.`,
@@ -2377,19 +2394,19 @@ export const it = {
   "bots.turn.cannotRefuse": (label: string) => `${label} non può rifiutare gli strumenti che questo turno esclude.`,
   "bots.turn.didNotStart": (label: string, why: string) => `${label} non si avvia: ${why}`,
   "bots.turn.raguOnServer":
-    "Un turno di Ragu Code gira sul server di Ragu Code di ADE, con le regole della sua sessione: qui non parte.",
-  "bots.serve.noFolder": "Un bot Ragu Code risponde da un progetto: apri una cartella per parlargli.",
+    "Un turno di Ragù Code gira sul server di Ragù Code di ADE, con le regole della sua sessione: qui non parte.",
+  "bots.serve.noFolder": "Un bot Ragù Code risponde da un progetto: apri una cartella per parlargli.",
   "bots.serve.notAdmitted": (root: string) =>
-    `Il progetto ${root} non è ancora ammesso per Ragu Code, o è cambiato: apri il bot nel pannello, rispondi alla domanda e riprova.`,
-  "bots.serve.noAgent": (name: string) => `Il server di Ragu Code non vede il bot «${name}» in questa cartella.`,
+    `Il progetto ${root} non è ancora ammesso per Ragù Code, o è cambiato: apri il bot nel pannello, rispondi alla domanda e riprova.`,
+  "bots.serve.noAgent": (name: string) => `Il server di Ragù Code non vede il bot «${name}» in questa cartella.`,
   "bots.serve.noModel": (model: string) =>
-    `Il modello ${model} non è nel catalogo del server di Ragu Code: è stato tolto, o il suo provider non è collegato. Il turno non è partito: cambia il modello del bot.`,
+    `Il modello ${model} non è nel catalogo del server di Ragù Code: è stato tolto, o il suo provider non è collegato. Il turno non è partito: cambia il modello del bot.`,
   "bots.serve.toolInPlanner": (tool: string) =>
     `Un turno senza strumenti ha provato a usare «${tool}»: il turno è stato fermato.`,
   "bots.serve.noFreeModel":
-    "Nel catalogo del server di Ragu Code non c'è nessun modello gratuito tra quelli previsti per questo turno: il turno non è partito.",
+    "Nel catalogo del server di Ragù Code non c'è nessun modello gratuito tra quelli previsti per questo turno: il turno non è partito.",
   "bots.serve.effortNoModel": (effort: string) =>
-    `Il ragionamento «${effort}» vale per un modello scelto: questo bot usa il modello predefinito di Ragu Code, e questo turno usa il ragionamento predefinito. Scegli un modello nelle impostazioni del bot.`,
+    `Il ragionamento «${effort}» vale per un modello scelto: questo bot usa il modello predefinito di Ragù Code, e questo turno usa il ragionamento predefinito. Scegli un modello nelle impostazioni del bot.`,
   "bots.serve.effortDropped": (effort: string, model: string, variants: string) =>
     `Il ragionamento «${effort}» non esiste per ${model}: questo turno usa quello predefinito. ${variants ? `Livelli di questo modello: ${variants}.` : "Questo modello non ha livelli di ragionamento."} Cambialo nelle impostazioni del bot.`,
   "bots.serve.agentTaken": (name: string) =>
@@ -2397,10 +2414,10 @@ export const it = {
   "bots.serve.newSession":
     "Conversazione nuova: la precedente era di «ragu run», o aveva altre regole, e sul server di ADE ogni conversazione di un bot nasce con le sue. Il bot non ricorda quello che c'era prima.",
   "bots.serve.refused": (permission: string, patterns: string) =>
-    `Rifiutato: Ragu Code ha chiesto «${permission}» (${patterns}) e qui nessuno può rispondere.`,
+    `Rifiutato: Ragù Code ha chiesto «${permission}» (${patterns}) e qui nessuno può rispondere.`,
   "bots.serve.rulesNote":
-    "Il bot chiede prima di ogni comando, e un «sempre» dato per questo progetto (per esempio nel terminale di Ragu Code) non lo raggiunge: la Chat ce l'ha, un bot no. Conta solo il «Sempre» che dai a questo bot qui, e mai per ciò che è bloccato.",
-  "bots.serve.lost": "Il server di Ragu Code ha chiuso il flusso degli eventi prima della fine del turno.",
+    "Il bot chiede prima di ogni comando, e un «sempre» dato per questo progetto (per esempio nel terminale di Ragù Code) non lo raggiunge: la Chat ce l'ha, un bot no. Conta solo il «Sempre» che dai a questo bot qui, e mai per ciò che è bloccato.",
+  "bots.serve.lost": "Il server di Ragù Code ha chiuso il flusso degli eventi prima della fine del turno.",
   "bots.runner.protectedPath": (paths: string) =>
     `Claude Code non ha potuto scrivere in un percorso protetto per i bot di progetto (${paths}): lì una scrittura diventa codice che parte dopo, quindi è negata di proposito.`,
   "bots.runner.permissionDenied": (names: string) =>
@@ -2420,15 +2437,15 @@ export const it = {
   "bots.login.noProvider": "Nessun provider collegato",
   "bots.store.noHost": "Nessun host: i bot si creano solo nell'app desktop.",
   "bots.store.noProject": "Nessun progetto aperto: scegli «globale» o apri un progetto.",
-  "bots.store.noGlobal": "Cartella di configurazione di Ragu Code non trovata.",
-  "bots.store.noRagu": "Questo host non può eseguire Ragu Code.",
+  "bots.store.noGlobal": "Cartella di configurazione di Ragù Code non trovata.",
+  "bots.store.noRagu": "Questo host non può eseguire Ragù Code.",
   "bots.store.noWrite": "Questo host non può scrivere file.",
   "bots.store.noRead": "Questo host non può leggere file.",
   "bots.store.noDir": "Questo host non può leggere cartelle.",
   "bots.store.hostMissing": "Nessun host.",
   "bots.store.gatewayKept": (error: string) =>
     `Non ho tolto i codici e i collegamenti alle app di messaggi di questo bot (${error}): il bot non è cancellato. Riprova: toglie quello che è rimasto.`,
-  "bots.store.raguExited": (code: string) => `Ragu Code è uscito con codice ${code}.`,
+  "bots.store.raguExited": (code: string) => `Ragù Code è uscito con codice ${code}.`,
   "bots.store.unknownCode": "sconosciuto",
   "bots.spend.plan": "abbonamento",
   "bots.spend.api": "chiave API",
@@ -2442,7 +2459,7 @@ export const it = {
   "bots.codex.tooOld": (since: string, found: string) =>
     `Il turno non è partito. Da chat e nelle routine Codex parte solo dalla versione ${since}, la prima che sa leggere soltanto il progetto; qui c'è la ${found}. Aggiorna Codex, per esempio con «npm install -g @openai/codex».`,
   "bots.codex.versionUnknown":
-    "Il turno non è partito: ADE non è riuscito a leggere la versione di Codex («codex --version»). Da chat e nelle routine Codex parte solo con una versione che sa leggere soltanto il progetto.",
+    "Il turno non è partito: ADE non è riuscita a leggere la versione di Codex («codex --version»). Da chat e nelle routine Codex parte solo con una versione che sa leggere soltanto il progetto.",
   "bots.codex.projectConfig":
     "Il progetto ha un .codex/config.toml, che Codex legge nei progetti fidati con i suoi server MCP. Per tenerli spenti questo turno è partito senza la tua configurazione di Codex: anche senza il provider e i profili del tuo ~/.codex/config.toml.",
   "bots.codex.withoutUserConfig":
@@ -2484,11 +2501,11 @@ export const it = {
   "bots.lastTurn.label": "ultimo turno:",
   "bots.lastTurn.unknownModel": "modello non riportato",
   "bots.conversation.total": "in questa conversazione:",
-  "bots.form.generateCostDefault": "Ragu Code scrive le istruzioni con il suo modello predefinito. Se quel modello è a pagamento, questa chiamata consuma credito.",
-  "bots.form.generateCostPaid": (model: string) => `Ragu Code scrive le istruzioni con ${model}. Questa chiamata consuma credito.`,
-  "bots.form.generateCostFree": (model: string) => `Ragu Code scrive le istruzioni con ${model}, un modello gratuito. Questa chiamata non consuma credito.`,
+  "bots.form.generateCostDefault": "Ragù Code scrive le istruzioni con il suo modello predefinito. Se quel modello è a pagamento, questa chiamata consuma credito.",
+  "bots.form.generateCostPaid": (model: string) => `Ragù Code scrive le istruzioni con ${model}. Questa chiamata consuma credito.`,
+  "bots.form.generateCostFree": (model: string) => `Ragù Code scrive le istruzioni con ${model}, un modello gratuito. Questa chiamata non consuma credito.`,
   "bots.terminal.subagentTip": "Un sottoagente non si avvia da solo: lo chiama un altro bot",
-  "bots.terminal.launchTip": "Apre la TUI di Ragu Code con questo bot in un pannello",
+  "bots.terminal.launchTip": "Apre la TUI di Ragù Code con questo bot in un pannello",
   "bots.terminal.button": "Terminale",
   "bots.tab.list": "Sezioni del bot",
   "bots.tab.talk": "Conversazione",
@@ -2554,7 +2571,7 @@ export const it = {
   "bots.card.file": "File",
   "bots.delete.button": "Elimina il bot",
   "bots.delete.confirmBtn": "Elimina",
-  "bots.form.problemDesc": "Serve una descrizione: è quello che Ragu Code usa per decidere quando chiamarlo.",
+  "bots.form.problemDesc": "Serve una descrizione: è quello che Ragù Code usa per decidere quando chiamarlo.",
   "bots.form.problemName": "Serve un nome: diventa l'identificativo del file.",
   "bots.form.title": "Nuovo bot",
   "bots.form.name": "Nome",
@@ -2570,12 +2587,12 @@ export const it = {
   "bots.form.objectivesPlaceholder": "Uno per riga. Restano veri in ogni conversazione.",
   "bots.form.persona": "Istruzioni (persona)",
   "bots.form.personaPlaceholder":
-    "Lascia vuoto e la scrive Ragu Code dalla descrizione. Oppure scrivila tu: come deve comportarsi, e cosa non deve fare.",
+    "Lascia vuoto e la scrive Ragù Code dalla descrizione. Oppure scrivila tu: come deve comportarsi, e cosa non deve fare.",
   "bots.form.cancel": "Annulla",
   "bots.form.creating": "Creazione…",
-  "bots.form.generateWithRagu": "Genera con Ragu Code",
+  "bots.form.generateWithRagu": "Genera con Ragù Code",
   "bots.form.create": "Crea",
-  "bots.form.generatingHint": "Ragu Code sta scrivendo il bot. Ci vuole qualche secondo.",
+  "bots.form.generatingHint": "Ragù Code sta scrivendo il bot. Ci vuole qualche secondo.",
   "bots.form.advanced": "Avanzate",
   "bots.form.summaryTip": "Apri «Avanzate»: programma, modello, ragionamento, dove, obiettivi e istruzioni",
   "bots.form.summaryCap": (cap: string) => `tetto ${cap} al giorno`,
@@ -2583,7 +2600,7 @@ export const it = {
   "bots.form.summaryProject": "nel progetto",
   "bots.form.summaryGlobal": "in tutti i progetti",
   "bots.engine.label": "Programma (runner)",
-  "bots.runner.account.ragu": "I provider collegati a Ragu Code (ragu auth).",
+  "bots.runner.account.ragu": "I provider collegati a Ragù Code (ragu auth).",
   "bots.runner.account.claude": "L'abbonamento Anthropic o la chiave API di Claude Code.",
   "bots.runner.account.codex": "L'abbonamento ChatGPT o la chiave API di Codex.",
   "bots.engine.accountHint": "Gli accessi si controllano in Impostazioni › Agenti e account › Account.",
@@ -2591,7 +2608,7 @@ export const it = {
     "ADE avvia la CLI ufficiale installata sul tuo computer, con l'account con cui vi hai fatto l'accesso, e non vede le tue credenziali. L'abbonamento è per uso personale e consuma i limiti del tuo piano: per automazioni intensive o non presidiate usa una chiave API nella CLI.",
   "bots.engine.model": "Modello",
   "bots.engine.modelDefaultOf": (label: string) => `predefinito di ${label}`,
-  "bots.engine.raguDefault": "Predefinito di Ragu Code",
+  "bots.engine.raguDefault": "Predefinito di Ragù Code",
   "bots.engine.effortField": "Ragionamento (effort)",
   "bots.engine.effort": "Ragionamento",
   "bots.engine.effortNotSupported": "non previsto",
@@ -2599,7 +2616,7 @@ export const it = {
     `Il ragionamento «${effort}» non esiste per questo modello: il bot usa quello predefinito. Scegline uno tra quelli del modello.`,
   "bots.engine.effortPickModel": "Scegli un modello per vedere i suoi livelli di ragionamento.",
   "bots.settings.whenToUse": "A cosa serve",
-  "bots.settings.whenToUseHint": "È il campo description del file: Ragu Code lo legge per decidere quando chiamare questo bot come sottoagente.",
+  "bots.settings.whenToUseHint": "È il campo description del file: Ragù Code lo legge per decidere quando chiamare questo bot come sottoagente.",
   "bots.settings.objectivesPlaceholder": "Uno per riga.\nEs. Segnala i rischi prima delle opinioni",
   "bots.settings.objectivesHint": (heading: string) => `Uno per riga. Finiscono nelle istruzioni, sotto «${heading}».`,
   "bots.settings.saved": "Salvato.",
@@ -2615,8 +2632,8 @@ export const it = {
   "worktree.close.mergedCheckError": (title: string, branch: string) => `"${title}": git non riesce a dire se il branch ${branch} è integrato`,
   "worktree.close.unmerged": (title: string, branch: string) => `"${title}" ha commit sul branch ${branch} non ancora integrati`,
   "worktree.close.noRescue": "questo host non può mettere al sicuro i rapporti della sessione",
-  "worktree.close.noRoot": (title: string, worktree: string) => `"${title}": non trovo il progetto da cui è nata la worktree ${worktree}`,
-  "worktree.close.rescueFailed": (title: string, worktree: string, error: string) => `"${title}": non riesco a mettere al sicuro i rapporti della sessione, la worktree resta in ${worktree} (${error})`,
+  "worktree.close.noRoot": (title: string, worktree: string) => `"${title}": non trovo il progetto da cui è nata la copia di lavoro ${worktree}`,
+  "worktree.close.rescueFailed": (title: string, worktree: string, error: string) => `"${title}": non riesco a mettere al sicuro i rapporti della sessione, la copia di lavoro resta in ${worktree} (${error})`,
   "worktree.close.gitRefused": "git ha rifiutato",
   "worktree.close.removeFailed": (title: string, worktree: string, error: string) => `"${title}": git non toglie ${worktree} (${error})`,
 
@@ -2626,7 +2643,7 @@ export const it = {
   "pane.simulator.title": "Simulatore",
   "pane.mcpGuide.title": "Guida MCP",
   "pane.tree.workingIn": (cwd: string) => `Lavora in ${cwd}`,
-  "pane.tree.worktree": (path: string) => `Worktree ${path}`,
+  "pane.tree.worktree": (path: string) => `Copia di lavoro ${path}`,
   "bell.unread": (n: number) => `Notifiche, ${n} da leggere`,
 
   // F7a: Grid and pane details
@@ -2680,7 +2697,7 @@ export const it = {
   "model.state.meshes": (count: string) => `${count} mesh`,
   "model.state.triangles": (count: string) => `${count} ${count === "1" ? "triangolo" : "triangoli"}`,
   "model.state.dimensions": (x: string, y: string, z: string) => `ingombro ${x} × ${y} × ${z}`,
-  "model.state.animations": (count: number) => `${count} animazioni`,
+  "model.state.animations": (count: number) => `${count} ${plural(count, { one: "animazione", other: "animazioni" }, "it")}`,
   "pane.runnerLogin": (label: string) => `${label} · accesso`,
 
   // F7a2: Simulator
@@ -2699,7 +2716,7 @@ export const it = {
   "keys.error.noKeyring": "questa versione di ADE non ha il portachiavi",
   "workbench.error.noOpenProject": "nessun progetto aperto in cui salvare",
   "session.cannotClose": (reasons: string) =>
-    `non chiudo: ${reasons}. Integra o committa prima, oppure usa --force (la worktree resta su disco)`,
+    `non chiudo: ${reasons}. Integra o committa prima, oppure usa --force (la copia di lavoro resta su disco)`,
   "plugins.error.noDesktopHost": "nessun host desktop",
   "host.error.cannotReadBinary": "questo host non può leggere file binari",
   "host.error.cannotReveal": "questo host non può mostrare i file nella loro cartella",

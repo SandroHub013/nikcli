@@ -23,7 +23,7 @@ import {
 } from "./model"
 import type { ModelViewer } from "./viewer"
 import "./model-pane.css"
-import { locale, t } from "../i18n"
+import { locale, t, bcp47 } from "../i18n"
 
 /**
  * A 3D model, in the grid, with the same chrome as every other pane.
@@ -390,7 +390,7 @@ export function ModelPane(props: ModelPaneProps) {
           </For>
           <span data-slot="model-stats" title={describeModelState(state())}>
             {stats()
-              ? t("model.triangles", stats()!.triangles.toLocaleString(locale() === "en" ? "en-US" : "it-IT"))
+              ? t("model.triangles", stats()!.triangles.toLocaleString(bcp47()))
               : ""}
           </span>
           <button

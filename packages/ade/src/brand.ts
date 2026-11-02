@@ -16,6 +16,8 @@ import brandJson from "../brand.json"
 
 export interface Brand {
   readonly name: string
+  /** What people read: the window title, the About page, the dialogs. `name` is productName and stays «ADE». */
+  readonly title: string
   readonly publisher: string
   readonly since: number
   readonly until: number
@@ -26,7 +28,7 @@ export interface Brand {
 
 export function asBrand(raw: unknown): Brand {
   const value = (raw ?? {}) as Partial<Brand>
-  for (const key of ["name", "publisher", "since", "until", "tagline", "description", "homepage"] as const) {
+  for (const key of ["name", "title", "publisher", "since", "until", "tagline", "description", "homepage"] as const) {
     if (value[key] === undefined || value[key] === "") throw new Error(`brand.json: missing "${key}"`)
   }
   if (value.until! < value.since!) throw new Error("brand.json: until is before since")

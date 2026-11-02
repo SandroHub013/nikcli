@@ -145,7 +145,7 @@ describe("wording", () => {
       stats: { meshes: 3, triangles: 12500, size: [2, 0.5, 12.25], animations: 1 },
     }
     expect(describeModelState(state)).toBe(
-      "ship.glb — 3 mesh, 12.500 triangoli, ingombro 2,00 × 0,500 × 12,3, 1 animazioni",
+      "ship.glb — 3 mesh, 12.500 triangoli, ingombro 2,00 × 0,500 × 12,3, 1 animazione",
     )
   })
 

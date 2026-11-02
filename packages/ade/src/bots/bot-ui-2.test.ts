@@ -388,12 +388,12 @@ describe("1. a short form to make a bot", () => {
   test("the summary line says program, model, cap and place, in that order, and leaves out what is not there", () => {
     expect(
       newBotSummary({
-        runner: "Ragu Code",
+        runner: "Ragù Code",
         model: "modello predefinito",
         cap: "tetto 1 $ al giorno",
         where: "nel progetto",
       }),
-    ).toBe("Ragu Code · modello predefinito · tetto 1 $ al giorno · nel progetto")
+    ).toBe("Ragù Code · modello predefinito · tetto 1 $ al giorno · nel progetto")
     expect(newBotSummary({ runner: "Claude Code", model: "Sonnet", where: "in tutti i progetti" })).toBe(
       "Claude Code · Sonnet · in tutti i progetti",
     )

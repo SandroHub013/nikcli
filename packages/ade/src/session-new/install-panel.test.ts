@@ -235,7 +235,8 @@ describe("the panel", () => {
     await settle()
     const text = root.querySelector('[data-slot="install-source"]')?.textContent ?? ""
     expect(text).toContain("github.com/MoonshotAI/kimi-cli")
-    expect(text).toContain(installFor("kimi")!.checked)
+    expect(text).toContain("22 ottobre 2026")
+    expect(text).not.toContain(installFor("kimi")!.checked)
   })
 
   test("without anywhere to run it, «Installa» is not offered but the command and the page are", async () => {

@@ -518,6 +518,19 @@ describe("quotaForAgent: a real reading or n/d, never a made-up figure", () => {
     expect(kept.stale).toBe(true)
   })
 
+  test("with no report or file at all the chip has nothing to say; with a source that cannot be used it keeps its n/d (UX-13)", () => {
+    const nothing = quotaForAgent("codex", undefined, soon)
+    if (!isQuotaUnavailable(nothing)) throw new Error("expected n/d")
+    expect(nothing.sourceless).toBe(true)
+    expect(nothing.tooltip).not.toContain("quota-axi")
+    expect(nothing.tooltip).not.toContain(".cache")
+
+    const undated = readQuotaAxiSnapshot({ providers: report.providers })
+    const broken = quotaForAgent("claude-code", undated, soon)
+    if (!isQuotaUnavailable(broken)) throw new Error("expected n/d")
+    expect(broken.sourceless).toBeUndefined()
+  })
+
   test("a provider with no windows is n/d, not 100%", () => {
     const empty = readQuotaAxiSnapshot({
       generatedAt: report.generatedAt,
@@ -579,7 +592,7 @@ describe("agy's quota from its status line (S30)", () => {
   test("quota-axi missing still leaves Claude n/d when only agy's file is there", () => {
     const claude = quotaForAgent("claude-code", snapshot, captured + 60_000)
     expect(isQuotaUnavailable(claude)).toBe(true)
-    if (isQuotaUnavailable(claude)) expect(claude.tooltip).toContain("quota-axi")
+    if (isQuotaUnavailable(claude)) expect(claude.tooltip).toContain("Nessun rapporto sulle quote")
   })
 
   test("a file older than an hour stays, marked; undated, empty or missing is n/d", () => {

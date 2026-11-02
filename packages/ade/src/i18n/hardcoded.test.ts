@@ -26,6 +26,8 @@ const BASELINE = join(import.meta.dir, "hardcoded-baseline.json")
 
 const UI_ATTRIBUTES = new Set([
   "title",
+  // The tooltip a pane draws itself (pane.tsx), the same words as its title.
+  "data-tip",
   "aria-label",
   "placeholder",
   "alt",
@@ -56,7 +58,7 @@ const SINKS = new Set([
 ])
 
 /** Names and symbols that read the same in any language. */
-const NEUTRAL = /^(?:ADE|nik|ragu|ragù|RaguVerse|ssh|MCP|git|GitHub|OpenRouter|Codex|Claude Code|&lt;|&gt;|bun run|[A-Z][A-Z0-9_]+)$/
+const NEUTRAL = /^(?:ADE|nik|ragu|ragù|RaguVerse|RagùVerse|ssh|MCP|git|GitHub|OpenRouter|Codex|Claude Code|&lt;|&gt;|bun run|[A-Z][A-Z0-9_]+)$/
 
 function sources(dir: string, into: string[] = []): string[] {
   for (const name of readdirSync(dir)) {

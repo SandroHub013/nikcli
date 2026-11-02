@@ -181,7 +181,7 @@ export async function dispatch(
 
       case "palette.open": {
         await host.runCommand("palette.open")
-        return { success: true, spoken: lang === "en" ? "Command palette opened." : "Tavolozza dei comandi aperta." }
+        return { success: true, spoken: lang === "en" ? "Search commands opened." : "Cerca comandi aperto." }
       }
 
       case "project.open": {

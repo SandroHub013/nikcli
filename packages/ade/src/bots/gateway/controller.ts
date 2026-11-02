@@ -33,7 +33,7 @@
  * once the listener is in place, and Rust holds every gateway until then.
  */
 
-import { locale, t } from "../../i18n"
+import { locale, t, bcp47 } from "../../i18n"
 import { formatClock, formatConnectedDay } from "../format"
 import { visibleText } from "../visible-text"
 import type { AgentFile } from "../ragu"
@@ -429,7 +429,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
   const describeSession = (past: ChatSession) => {
     const title = past.title || t("gateway.sessions.untitled")
     if (past.at === undefined) return `«${title}»`
-    const when = new Intl.DateTimeFormat(locale() === "it" ? "it-IT" : "en-US", {
+    const when = new Intl.DateTimeFormat(bcp47(), {
       day: "numeric",
       month: "short",
       hour: "2-digit",
