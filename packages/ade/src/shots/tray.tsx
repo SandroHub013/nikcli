@@ -157,10 +157,21 @@ export function ShotTray(props: ShotTrayProps) {
   // The viewer's delete: asked first («Elimina» only opens the question), and said when it failed.
   const [asking, setAsking] = createSignal(false)
   const [deleteFailed, setDeleteFailed] = createSignal(false)
-  const closeViewer = () => {
-    setOpened(undefined)
+  // The delete is running: the buttons wait, so a second click cannot ask the host twice.
+  const [deleting, setDeleting] = createSignal(false)
+  const resetViewer = () => {
     setAsking(false)
     setDeleteFailed(false)
+    setDeleting(false)
+  }
+  const closeViewer = () => {
+    setOpened(undefined)
+    resetViewer()
+  }
+  // A viewer opens clean: the last one's question or alert is not about this picture.
+  const openViewer = (shot: Shot) => {
+    resetViewer()
+    setOpened(shot)
   }
   const [strip, setStrip] = createSignal<HTMLDivElement>()
   /** Whether there are screenshots past each end of what you can see. */
@@ -275,11 +286,11 @@ export function ShotTray(props: ShotTrayProps) {
                     role="button"
                     tabindex={0}
                     aria-label={`Apri ${shot.name}`}
-                    onClick={() => setOpened(shot)}
+                    onClick={() => openViewer(shot)}
                     onKeyDown={(event) => {
                       if (event.key !== "Enter" && event.key !== " ") return
                       event.preventDefault()
-                      setOpened(shot)
+                      openViewer(shot)
                     }}
                     onDragStart={(event) => {
                       /*
@@ -394,12 +405,28 @@ export function ShotTray(props: ShotTrayProps) {
                 </Show>
                 <Show when={asking()}>
                   <span data-slot="shot-viewer-ask">{t("shots.delete.ask", shot().name)}</span>
+                  {/* «Tieni» takes the place «Elimina» had, under the cursor: a double click keeps the file. */}
+                  <button
+                    type="button"
+                    data-slot="shot-viewer-close"
+                    disabled={deleting()}
+                    ref={(button) => queueMicrotask(() => button.focus())}
+                    onClick={() => setAsking(false)}
+                  >
+                    {t("shots.delete.keep")}
+                  </button>
                   <button
                     type="button"
                     data-slot="shot-viewer-close"
                     data-tone="danger"
+                    disabled={deleting()}
                     onClick={async () => {
-                      const done = (await props.onDelete?.(shot().path)) ?? false
+                      const path = shot().path
+                      setDeleting(true)
+                      const done = (await props.onDelete?.(path)) ?? false
+                      // The viewer may have been closed or moved on meanwhile: its state is not this one's.
+                      if (opened()?.path !== path) return
+                      setDeleting(false)
                       if (done) closeViewer()
                       else {
                         setAsking(false)
@@ -408,9 +435,6 @@ export function ShotTray(props: ShotTrayProps) {
                     }}
                   >
                     {t("shots.delete.confirm")}
-                  </button>
-                  <button type="button" data-slot="shot-viewer-close" onClick={() => setAsking(false)}>
-                    {t("shots.delete.keep")}
                   </button>
                 </Show>
                 <Show when={deleteFailed()}>
