@@ -4921,10 +4921,14 @@ export function Workbench() {
        */
       const outcome = await spawnOutcome(created.started, () => startRefusals.get(created.id))
       if (outcome.kind === "failed") {
-        // Nobody will answer it: closed, so no waiter is left on it. The pane stays with its «Riprova».
-        openRequests.delete(id)
-        saveRequests()
-        await answer(formatSpawnFailed(created.title, created.id, outcome.reason))
+        /*
+         * Nobody will answer it, so it is settled with the truth: a waiter that has gone past its 10 s hears the refusal
+         * as the result, and the receipt carries the same text (review B5: a bare delete left that waiter with nothing).
+         * The pane stays with its «Riprova».
+         */
+        const failed = formatSpawnFailed(created.title, created.id, outcome.reason)
+        await settle(host, id, `[ade-msg] ${failed}`)
+        await answer(failed)
         return true
       }
       await answer(

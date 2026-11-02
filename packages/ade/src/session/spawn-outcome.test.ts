@@ -59,8 +59,11 @@ describe("the workbench's spawn", () => {
     const branch = source.slice(source.indexOf(codeOf("const outcome = await spawnOutcome(")))
     const failure = branch.slice(0, branch.indexOf(codeOf("ok: avviata la sessione")))
     expect(failure).toContain(codeOf('if (outcome.kind === "failed") {'))
-    expect(failure).toContain(codeOf("await answer(formatSpawnFailed(created.title, created.id, outcome.reason))"))
-    expect(failure).toContain(codeOf("openRequests.delete(id)"))
+    expect(failure).toContain(codeOf("const failed = formatSpawnFailed(created.title, created.id, outcome.reason)"))
+    expect(failure).toContain(codeOf("await answer(failed)"))
+    // Review B5: the request is settled with the refusal as its result, so a waiter past 10 s hears it; a bare delete left it silent.
+    expect(failure).toContain(codeOf("await settle(host, id, `[ade-msg] ${failed}`)"))
+    expect(failure).not.toContain(codeOf("openRequests.delete(id)"))
   })
 
   test("both starts, local and ssh, and a folder gone, record why they did not start", () => {
