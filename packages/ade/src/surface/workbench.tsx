@@ -42,7 +42,7 @@ import {
   type RemoteTarget,
 } from "../remote/ssh"
 import { RemoteSpaceDialog } from "../remote/remote-dialog"
-import { discoverProject, grantedRoots, openProject, rootMissing, type Project } from "../host/project"
+import { discoverProject, grantedRoots, openProject, rootMissing, startFolder, type Project } from "../host/project"
 import {
   addRecent,
   isMissingRecent,
@@ -6914,15 +6914,24 @@ export function Workbench() {
       const saved = restored?.projectPath
       // The last project's folder gone: ADE opens where it was started, and says why.
       const gone = saved ? await refuseMissingRoot(host, saved) : false
-      const path = (!gone && saved) || here
-      const p = await discoverProject(host, path)
-      setProject(p)
+      // The first run opens no folder: the empty project screen offers «Apri una cartella» (UX-5).
+      const path = startFolder({
+        saved,
+        gone,
+        hasRecents: recents().length > 0,
+        hasWorkspace: restored !== undefined,
+        here,
+      })
+      const p = path ? await discoverProject(host, path) : undefined
+      if (p) {
+        setProject(p)
 
-      const newRecents = addRecent(recents(), { root: p.root, name: p.name })
-      setRecents(newRecents)
-      localStorage.setItem("ade.recents", serializeRecents(newRecents))
+        const newRecents = addRecent(recents(), { root: p.root, name: p.name })
+        setRecents(newRecents)
+        localStorage.setItem("ade.recents", serializeRecents(newRecents))
 
-      setWb((w) => ({ ...w, projectPath: p.root, focusedId: focusInProject(w, p) }))
+        setWb((w) => ({ ...w, projectPath: p.root, focusedId: focusInProject(w, p) }))
+      }
 
       /*
        * Restarting what was running when the app went away.
@@ -6938,7 +6947,7 @@ export function Workbench() {
        * carry a task: a finished one has nothing to resume, and a task-less
        * one would launch an agent with an empty prompt.
        */
-      if (restored) {
+      if (restored && p) {
         /*
          * Planned all at once, not one at a time.
          *

@@ -184,6 +184,13 @@ export function scheduleFrame(
   return () => {}
 }
 
+/** The part of `document` that says whether the window is hidden. */
+interface VisibilitySource {
+  readonly hidden: boolean
+  addEventListener(type: "visibilitychange", run: () => void): void
+  removeEventListener(type: "visibilitychange", run: () => void): void
+}
+
 interface Pausable {
   paused: boolean
   pause(): void
@@ -197,10 +204,7 @@ interface Pausable {
  * not drawing records a frozen picture over live audio. What had not started yet (a late track) stays unstarted.
  * Returns what takes the listener off.
  */
-export function pauseWhileHidden(
-  doc: Pick<Document, "hidden" | "addEventListener" | "removeEventListener">,
-  media: readonly Pausable[],
-): () => void {
+export function pauseWhileHidden(doc: VisibilitySource, media: readonly Pausable[]): () => void {
   if (typeof doc.addEventListener !== "function") return () => {}
   let held: Pausable[] = []
   const change = () => {
