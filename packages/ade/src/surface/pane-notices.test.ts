@@ -102,7 +102,7 @@ describe("ADE's own notes are not the agent's report", () => {
       workbench.indexOf("const appendLine = "),
       workbench.indexOf("const watchForPermission = "),
     )
-    expect(body.indexOf('if (from === "ade") return')).toBeLessThan(body.indexOf("watchForPermission(id, text)"))
+    expect(body.indexOf('if (from === "ade") return')).toBeLessThan(body.indexOf("paneLines.watch(id, text)"))
     expect(body.indexOf('if (from === "ade") return')).toBeLessThan(body.indexOf("readReportLine"))
   })
 
