@@ -138,3 +138,67 @@ describe("the empty screenshot tray", () => {
     expect(host.querySelector('[data-slot="shot-tray-folder"]')).toBeNull()
   })
 })
+
+/*
+ * «elimina» used to remove the file from the disk at once, with no question, and a failure closed the viewer as if it
+ * had worked. It asks first, sends the file to the Recycle Bin, and says when that did not happen.
+ */
+describe("deleting a screenshot from the viewer", () => {
+  const shot = { path: "C:/Pictures/Screenshots/a.png", name: "a.png", modified_ms: 1 }
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+  const open = (onDelete: (path: string) => Promise<boolean>) => {
+    const host = mount({ shots: [shot], onDelete })
+    host.querySelector<HTMLElement>('[data-slot="shot"]')!.click()
+    return host
+  }
+  const buttons = (host: HTMLElement) => [...host.querySelectorAll<HTMLElement>('[data-slot="shot-viewer-close"]')]
+  const byText = (host: HTMLElement, text: string) => buttons(host).find((button) => button.textContent === text)
+
+  test("the first click only asks, with the file's name", () => {
+    const deleted: string[] = []
+    const host = open(async (path) => (deleted.push(path), true))
+    byText(host, t("shots.delete"))!.click()
+
+    expect(deleted).toEqual([])
+    expect(host.querySelector('[data-slot="shot-viewer-ask"]')?.textContent).toBe(t("shots.delete.ask", "a.png"))
+    expect(byText(host, t("shots.delete.confirm"))).toBeDefined()
+    expect(byText(host, t("shots.delete.keep"))).toBeDefined()
+  })
+
+  test("«Tieni» goes back and deletes nothing", () => {
+    const deleted: string[] = []
+    const host = open(async (path) => (deleted.push(path), true))
+    byText(host, t("shots.delete"))!.click()
+    byText(host, t("shots.delete.keep"))!.click()
+
+    expect(deleted).toEqual([])
+    expect(host.querySelector('[data-slot="shot-viewer-ask"]')).toBeNull()
+    expect(host.querySelector('[data-component="shot-viewer"]')).not.toBeNull()
+  })
+
+  test("confirming deletes and closes the viewer", async () => {
+    const deleted: string[] = []
+    const host = open(async (path) => (deleted.push(path), true))
+    byText(host, t("shots.delete"))!.click()
+    byText(host, t("shots.delete.confirm"))!.click()
+    await settle()
+
+    expect(deleted).toEqual([shot.path])
+    expect(host.querySelector('[data-component="shot-viewer"]')).toBeNull()
+  })
+
+  test("a failure keeps the viewer open and says why", async () => {
+    const host = open(async () => false)
+    byText(host, t("shots.delete"))!.click()
+    byText(host, t("shots.delete.confirm"))!.click()
+    await settle()
+
+    expect(host.querySelector('[data-component="shot-viewer"]')).not.toBeNull()
+    expect(host.querySelector('[data-slot="shot-viewer-error"]')?.textContent).toBe(t("shots.delete.failed"))
+  })
+
+  test("the buttons are capitalised in both languages", () => {
+    expect(t("shots.delete")).toBe("Elimina")
+    expect(t("shots.close")).toBe("Chiudi")
+  })
+})

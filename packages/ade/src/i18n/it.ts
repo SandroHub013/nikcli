@@ -1438,10 +1438,15 @@ export const it = {
   "shots.dismiss": "Togli dal vassoio",
   "shots.dismiss.named": (name: string) => `Togli ${name}`,
   "shots.hint": "trascinala su una sessione per darla all'agente",
-  "shots.delete": "elimina",
+  "shots.delete": "Elimina",
+  "shots.delete.ask": (name: string) => `Eliminare «${name}»? Il file va nel Cestino.`,
+  "shots.delete.confirm": "Elimina file",
+  "shots.delete.keep": "Tieni",
+  "shots.delete.failed":
+    "Non ho eliminato la schermata: il file è in uso o protetto. Chiudi il programma che la tiene aperta e riprova.",
   "shots.more.left": "Schermate precedenti",
   "shots.more.right": "Altre schermate",
-  "shots.close": "chiudi",
+  "shots.close": "Chiudi",
 
   // Extensions
   "extensions.missingType": 'senza type "http": Claude Code non lo carica, altri client sì',

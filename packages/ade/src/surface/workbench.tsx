@@ -9819,7 +9819,7 @@ export function Workbench() {
               notice={shotSource.notice()}
               load={shotSource.load}
               onDismiss={shotSource.dismiss}
-              onDelete={(path) => void shotSource.remove(path)}
+              onDelete={shotSource.remove}
             />
           }
           /*

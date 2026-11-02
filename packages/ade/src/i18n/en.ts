@@ -1407,10 +1407,15 @@ export const en: Messages = {
   "shots.dismiss": "Remove from tray",
   "shots.dismiss.named": (name) => `Remove ${name}`,
   "shots.hint": "drag it onto a session to give it to the agent",
-  "shots.delete": "delete",
+  "shots.delete": "Delete",
+  "shots.delete.ask": (name) => `Delete “${name}”? The file goes to the Recycle Bin.`,
+  "shots.delete.confirm": "Delete file",
+  "shots.delete.keep": "Keep",
+  "shots.delete.failed":
+    "I did not delete the screenshot: the file is in use or protected. Close the program that has it open and try again.",
   "shots.more.left": "Earlier screenshots",
   "shots.more.right": "More screenshots",
-  "shots.close": "close",
+  "shots.close": "Close",
 
   // Extensions
   "extensions.missingType": 'no type "http": Claude Code won\'t load it, other clients will',

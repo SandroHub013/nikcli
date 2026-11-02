@@ -28,8 +28,8 @@ export interface ShotTrayProps {
   load?: (path: string) => Promise<Uint8Array | null>
   /** Takes a shot out of the tray without touching the file. */
   onDismiss: (path: string) => void
-  /** Removes the file from disk. */
-  onDelete?: (path: string) => void
+  /** Moves the file to the Recycle Bin; `false` when it could not be. */
+  onDelete?: (path: string) => Promise<boolean>
   /**
    * True when this machine has no screenshots folder, so none will ever
    * arrive. The strip then says so in one line instead of staying blank.
@@ -154,6 +154,14 @@ function Thumb(props: { shot: Shot; load?: ShotTrayProps["load"] }) {
 export function ShotTray(props: ShotTrayProps) {
   const [collapsed, setCollapsed] = createSignal(false)
   const [opened, setOpened] = createSignal<Shot>()
+  // The viewer's delete: asked first («Elimina» only opens the question), and said when it failed.
+  const [asking, setAsking] = createSignal(false)
+  const [deleteFailed, setDeleteFailed] = createSignal(false)
+  const closeViewer = () => {
+    setOpened(undefined)
+    setAsking(false)
+    setDeleteFailed(false)
+  }
   const [strip, setStrip] = createSignal<HTMLDivElement>()
   /** Whether there are screenshots past each end of what you can see. */
   const [edges, setEdges] = createSignal({ left: false, right: false })
@@ -361,32 +369,60 @@ export function ShotTray(props: ShotTrayProps) {
           is being looked at for a second, not worked in. */}
       <Show when={opened()}>
         {(shot) => (
-          <div data-component="shot-viewer" role="dialog" aria-label={shot().name} onClick={() => setOpened(undefined)}>
+          <div data-component="shot-viewer" role="dialog" aria-label={shot().name} onClick={closeViewer}>
             <figure data-slot="shot-viewer-frame" onClick={(event) => event.stopPropagation()}>
               <Thumb shot={shot()} load={props.load} />
               <figcaption data-slot="shot-viewer-caption">
                 <span data-slot="shot-viewer-name">{shot().name}</span>
                 <span data-slot="shot-viewer-hint">{t("shots.hint")}</span>
                 {/* Deleting is offered here and not on the thumbnail: the × in
-                    the tray puts a screenshot away, and a click that throws the
-                    file off the disk must not sit a few pixels from one that
-                    does not. */}
-                <Show when={props.onDelete}>
+                    the tray puts a screenshot away, and a click that sends the
+                    file to the Recycle Bin must not sit a few pixels from one
+                    that does not. It asks first, and says when it did not work. */}
+                <Show when={props.onDelete && !asking()}>
                   <button
                     type="button"
                     data-slot="shot-viewer-close"
                     data-tone="danger"
                     onClick={() => {
-                      props.onDelete?.(shot().path)
-                      setOpened(undefined)
+                      setDeleteFailed(false)
+                      setAsking(true)
                     }}
                   >
                     {t("shots.delete")}
                   </button>
                 </Show>
-                <button type="button" data-slot="shot-viewer-close" onClick={() => setOpened(undefined)}>
-                  {t("shots.close")}
-                </button>
+                <Show when={asking()}>
+                  <span data-slot="shot-viewer-ask">{t("shots.delete.ask", shot().name)}</span>
+                  <button
+                    type="button"
+                    data-slot="shot-viewer-close"
+                    data-tone="danger"
+                    onClick={async () => {
+                      const done = (await props.onDelete?.(shot().path)) ?? false
+                      if (done) closeViewer()
+                      else {
+                        setAsking(false)
+                        setDeleteFailed(true)
+                      }
+                    }}
+                  >
+                    {t("shots.delete.confirm")}
+                  </button>
+                  <button type="button" data-slot="shot-viewer-close" onClick={() => setAsking(false)}>
+                    {t("shots.delete.keep")}
+                  </button>
+                </Show>
+                <Show when={deleteFailed()}>
+                  <span data-slot="shot-viewer-error" role="alert">
+                    {t("shots.delete.failed")}
+                  </span>
+                </Show>
+                <Show when={!asking()}>
+                  <button type="button" data-slot="shot-viewer-close" onClick={closeViewer}>
+                    {t("shots.close")}
+                  </button>
+                </Show>
               </figcaption>
             </figure>
           </div>
