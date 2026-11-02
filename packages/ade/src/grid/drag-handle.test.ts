@@ -11,6 +11,7 @@ function header(): HTMLElement {
         <h2 data-slot="pane-title">Voice</h2>
         <span class="chip a-state" tabindex="0"><span class="lbl">Al lavoro</span><span class="a-det">Edit · pane.css</span></span>
         <span class="a-q"><b class="qv">57%</b></span>
+        <span class="info"><div class="card" data-slot="pane-card"><span class="a-br"><span class="a-brt">ade/stati-unici</span></span></div></span>
         <span class="acts"><button data-slot="pane-action" aria-label="Chiudi">x</button></span>
       </header>
       <div data-slot="pane-body"><textarea></textarea></div>
@@ -37,6 +38,12 @@ describe("isDragHandle", () => {
     expect(isDragHandle(pick(".a-state"))).toBe(true)
     expect(isDragHandle(pick(".a-det"))).toBe(true)
     expect(isDragHandle(pick(".a-q"))).toBe(true)
+  })
+
+  test("the details card is not: its text can be selected and a press there does not drag the pane", () => {
+    header()
+    expect(isDragHandle(pick('[data-slot="pane-card"]'))).toBe(false)
+    expect(isDragHandle(pick(".a-brt"))).toBe(false)
   })
 
   test("a control inside the header is not", () => {

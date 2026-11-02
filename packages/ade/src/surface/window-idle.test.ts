@@ -112,7 +112,9 @@ describe("the loops and the sheet", () => {
       }
     }
     expect(wrong).toEqual([])
-    expect(loops).toBeGreaterThan(20)
+    // A floor that says the scan sees the sheets. It was 20 until the pane's halo, spin and blink and the sidebar's
+    // ripple went (DS-5): fewer loops is the point of that work, not a scan that stopped looking.
+    expect(loops).toBeGreaterThan(15)
   })
 
   test("a one-time animation does not take it", () => {

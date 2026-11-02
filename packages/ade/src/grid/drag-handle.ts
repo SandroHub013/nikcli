@@ -24,7 +24,7 @@ export const HANDLE = '[data-slot="pane-header"], [data-slot="browser-header"], 
  * it did nothing when pressed and, by being a button, took the middle of the
  * header out of the handle. It is a `<span>` now — see `pane.tsx`.
  */
-export const NOT_A_HANDLE = "button, input, textarea, select, a, [contenteditable], [role='button']"
+export const NOT_A_HANDLE = "button, input, textarea, select, a, [contenteditable], [role='button'], [data-slot='pane-card']"
 
 /** Whether a press on `target` should start dragging the pane. */
 export function isDragHandle(target: Element | null | undefined): boolean {

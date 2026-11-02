@@ -1140,142 +1140,80 @@
   transition: color var(--ade-dur-fast) var(--ade-ease);
 }
 
-/* ── Status Dot Only ── */
+/* ── The state of a session: a shape and a colour, from the one list ──
+ *
+ * `grid/pane-state.ts` names the states, `state-icon.tsx` draws them, and the
+ * colours are `--ade-state-*` (index.css), the same ones the pane's chip wears.
+ * «Needs you» is blue everywhere; pomodoro stays for buttons. The slot keeps
+ * its old name, the dot is an icon now.
+ */
 
 [data-slot="agent-status-dot"] {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex: 0 0 7px;
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
   margin-left: auto;
-  transition:
-    transform var(--ade-dur-fast) var(--ade-ease),
-    background-color var(--ade-dur-fast) var(--ade-ease);
+  color: var(--ade-state-idle);
 }
 
-/* 1. Disponibile (basil / Idle) */
-[data-slot="agent-status-dot"][data-agent-status="disponibile"] {
-  background-color: var(--ade-done);
-  box-shadow: 0 0 5px color-mix(in srgb, var(--ade-done) 55%, transparent);
+[data-slot="agent-status-dot"] .ic {
+  width: 12px;
+  height: 12px;
 }
 
-/* 2. A lavoro (pasta / Working con pulse) */
-[data-slot="agent-status-dot"][data-agent-status="a lavoro"] {
-  background-color: var(--ade-working);
-  box-shadow: 0 0 5px color-mix(in srgb, var(--ade-working) 55%, transparent);
+[data-slot="agent-status-dot"][data-state="work"] {
+  color: var(--ade-state-work);
 }
-
-/* Sospesa (P1-C6): no process, so no colour and no glow. */
-[data-slot="agent-status-dot"][data-agent-status="sospesa"] {
-  background-color: var(--ade-text-weak);
-  box-shadow: none;
+[data-slot="agent-status-dot"][data-state="perm"] {
+  color: var(--ade-state-perm);
 }
-
-/* 3. In attesa di input (pomodoro / Blocked-Waiting con pulse): the accent, what asks for you */
-[data-slot="agent-status-dot"][data-agent-status="in attesa di input"] {
-  background-color: var(--ade-accent);
-  box-shadow: 0 0 5px color-mix(in srgb, var(--ade-accent) 55%, transparent);
+[data-slot="agent-status-dot"][data-state="ask"] {
+  color: var(--ade-state-ask);
+}
+[data-slot="agent-status-dot"][data-state="err"] {
+  color: var(--ade-state-err);
+}
+[data-slot="agent-status-dot"][data-state="limit"] {
+  color: var(--ade-state-limit);
+}
+[data-slot="agent-status-dot"][data-state="idle"] {
+  color: var(--ade-state-idle);
+}
+/* A suspended or a closed session has no process: its colour is quiet and it never moves. */
+[data-slot="agent-status-dot"][data-state="off"] {
+  color: var(--ade-state-off);
+}
+[data-slot="agent-status-dot"][data-state="closed"] {
+  color: var(--ade-state-closed);
 }
 
 /*
- * The pulse, for as long as a session works or waits — which is most of the
- * time a sidebar is on screen.
+ * The one motion of a session's state, and it lives here, in the sidebar: the
+ * pane's chip stays still (DS-5). Only «working» moves, with a slow breathe of
+ * opacity at the loop token's pace. Waiting, a question, an error and a limit
+ * are told by their shape and colour and do not blink: a loop that runs for as
+ * long as a decision waits, which can be hours, is not a signal, it is noise.
+ * It was a pulse and a ripple at 1.4s and 1.6s, plus the pane's own halo, the
+ * chip's spin and a hard blink at yet other rhythms.
  *
- * It used to grow a `box-shadow` ring out of the dot, and a shadow is paint:
- * each pulsing row repainted on every frame. The ring is a disc on ::after now,
- * the dot's own colour at the ring's starting strength, grown with `scale` and
- * faded with `opacity` — both of which the compositor animates without asking
- * for paint. Scaling a 7px disc to 2x is the old 3.5px spread exactly, and the
- * disc sits inside the dot's own transform, so it swells with the dot the way
- * the shadow did. At rest it covers the dot in the dot's own colour, which
- * changes nothing.
- *
- * The glow in the rules above is what the old animation replaced while it
- * ran, so it goes while this runs too. With reduced motion none of this
- * applies and the dot keeps its steady glow.
+ * Opacity is composited, so a working row costs no paint. With reduced motion
+ * the icon is steady.
  */
 @media (prefers-reduced-motion: no-preference) {
-  [data-slot="agent-status-dot"][data-agent-status="a lavoro"],
-  [data-slot="agent-status-dot"][data-agent-status="in attesa di input"] {
-    position: relative;
-    box-shadow: none;
-  }
-
-  [data-slot="agent-status-dot"][data-agent-status="a lavoro"] {
-    animation: ade-agent-pulse-yellow 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite var(--ade-loops, running);
-  }
-
-  [data-slot="agent-status-dot"][data-agent-status="in attesa di input"] {
-    animation: ade-agent-pulse-amber 1.4s ease-in-out infinite var(--ade-loops, running);
-  }
-
-  [data-slot="agent-status-dot"][data-agent-status="a lavoro"]::after,
-  [data-slot="agent-status-dot"][data-agent-status="in attesa di input"]::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: 50%;
-    pointer-events: none;
-  }
-
-  [data-slot="agent-status-dot"][data-agent-status="a lavoro"]::after {
-    background: color-mix(in srgb, var(--ade-working) 60%, transparent);
-    animation: ade-agent-ripple 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite var(--ade-loops, running);
-  }
-
-  [data-slot="agent-status-dot"][data-agent-status="in attesa di input"]::after {
-    background: color-mix(in srgb, var(--ade-accent) 60%, transparent);
-    animation: ade-agent-ripple 1.4s ease-in-out infinite var(--ade-loops, running);
+  [data-slot="agent-status-dot"][data-state="work"] .ic {
+    animation: ade-state-breathe var(--ade-loop) var(--ade-loop-ease) infinite var(--ade-loops, running);
   }
 }
 
-/* 4. Task completata (soft text / Done) */
-[data-slot="agent-status-dot"][data-agent-status="task completata"] {
-  background-color: var(--ade-text-soft);
-  box-shadow: none;
-}
-
-/* 5. Errore (raspberry / Error) */
-[data-slot="agent-status-dot"][data-agent-status="errore"] {
-  background-color: var(--ade-error);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--ade-error) 60%, transparent);
-}
-
-@keyframes ade-agent-pulse-yellow {
+@keyframes ade-state-breathe {
   0%,
   100% {
     opacity: 1;
-    transform: scale(1);
   }
   50% {
-    opacity: 0.75;
-    transform: scale(1.22);
-  }
-}
-
-@keyframes ade-agent-pulse-amber {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.7;
-    transform: scale(1.22);
-  }
-}
-
-/* The ring of the two pulses above; see the comment on the rules that use it. */
-@keyframes ade-agent-ripple {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0;
-    transform: scale(2);
+    opacity: 0.45;
   }
 }
 
@@ -1603,6 +1541,15 @@ aside[data-component="ade-sidebar"] {
   color: var(--ade-text);
 }
 
+/* On the selection's veil the meta line takes the soft text (DS-22): the weak
+   one measured 4.2:1 on the dark veil composited over `raised`, under AA, and
+   soft is about 5.5:1. The separator and the icon follow the line. */
+[data-slot="session-row"][data-selected] :is([data-slot="session-meta"], [data-slot="agent-card-branch"], [data-slot="agent-card-time"]),
+[data-slot="active-agent-card"][data-selected]
+  :is([data-slot="active-agent-meta"], [data-slot="agent-card-branch"], [data-slot="agent-card-time"]) {
+  color: var(--ade-text-soft);
+}
+
 /* Il segno dell'agente è tondo come tutto il resto, e senza contorno: il
    fondo basta a dire dov'è. */
 [data-slot="session-mark-wrap"],
@@ -1610,14 +1557,6 @@ aside[data-component="ade-sidebar"] {
   background: var(--ade-active);
   border-color: transparent;
   border-radius: var(--ade-radius-full);
-}
-
-/* Sul velo d'accento il pallino di stato e il suo alone si confonderebbero
-   col fondo: un filo del colore del pannello lo ritaglia. */
-[data-slot="session-row"][data-selected] [data-slot="agent-status-dot"],
-[data-slot="active-agent-card"][data-selected] [data-slot="agent-status-dot"] {
-  outline: 2px solid var(--ade-raised);
-  outline-offset: 1px;
 }
 
 /* ── il fondo, invariato ──────────────────────────────────────────────────
