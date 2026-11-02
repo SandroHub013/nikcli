@@ -664,6 +664,7 @@ export const en: Messages = {
 
   // Splash & logo
   "splash.aria": "Ragù Code is starting",
+  "splash.skip": "Press Enter to skip",
 
   // Voice shortcut & permission
   "voice.shortcut.feature.agent": "voice assistant",

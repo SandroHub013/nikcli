@@ -214,9 +214,9 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
       data-slot="ade-splash-root"
       data-leaving={!props.visible ? "" : undefined}
       onClick={dismiss}
-      role="dialog"
+      role="status"
       aria-label={t("splash.aria")}
-      aria-modal="true"
+      aria-busy={props.visible ? "true" : "false"}
     >
       <div data-slot="splash-scene-container">
         <div ref={stageRef} data-slot="splash-stage" data-loaded={imageLoaded() ? "" : undefined}>
@@ -233,6 +233,8 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
             {displayedStatus()}
           </div>
         </Show>
+        {/* Enter, Space, Esc or a click skip it, and nothing on screen said so (UX-28). */}
+        <div data-slot="splash-hint">{t("splash.skip")}</div>
       </div>
     </div>
   )

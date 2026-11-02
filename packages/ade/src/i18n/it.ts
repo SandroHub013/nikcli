@@ -682,6 +682,7 @@ export const it = {
 
   // Splash & logo
   "splash.aria": "Ragù Code si sta avviando",
+  "splash.skip": "Invio per saltare",
 
   // Voice shortcut & permission
   "voice.shortcut.feature.agent": "assistente vocale",

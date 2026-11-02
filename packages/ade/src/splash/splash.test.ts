@@ -7,6 +7,7 @@ compileSolidJsx()
 const { createComponent, createRoot, createSignal } = await import("solid-js")
 const { render } = await import("solid-js/web")
 const { Splash } = await import("./splash")
+const { t } = await import("../i18n")
 const { layoutSceneContainer } = await import("./scene")
 
 describe("splash component (step 3)", () => {
@@ -46,31 +47,22 @@ describe("splash component (step 3)", () => {
     expect(css).toMatch(/background:\s*#211410/)
   })
 
-  test("maintains scene background in glass theme over index.css dialog rule without removing dialog role (Passo 1)", () => {
-    // 1. Accessibility: role="dialog" remains on root
+  test("is a status, not a dialog, so the glass dialog ground never reaches the scene background (UX-28)", () => {
     const handle = mountSplash({ visible: true })
     try {
       const splash = container.querySelector('[data-component="ade-splash"]')
       expect(splash).not.toBeNull()
-      expect(splash?.getAttribute("role")).toBe("dialog")
+      expect(splash?.getAttribute("role")).toBe("status")
     } finally {
       handle.dispose()
     }
 
-    // 2. Specificity verification: splash.css glass rule has higher specificity than index.css dialog rule
+    // index.css paints every `[role="dialog"]` with the overlay ground in glass; the splash must stay the scene's.
     const splashCss = readFileSync(join(import.meta.dir, "splash.css"), "utf8")
     const indexCss = readFileSync(join(import.meta.dir, "../index.css"), "utf8")
-
-    // index.css matches: [data-component="ade-shell"][data-theme="glass"] [role="dialog"] (specificity 0,3,0)
     expect(indexCss).toMatch(/\[data-component="ade-shell"\]\[data-theme="glass"\]\s*\[role="dialog"\]/)
-
-    // splash.css overrides with higher specificity (0,4,0) binding scene background (#211410)
-    expect(splashCss).toMatch(
-      /\[data-component="ade-shell"\]\[data-theme="glass"\]\s*\[data-component="ade-splash"\]\[role="dialog"\]/,
-    )
-    expect(splashCss).toMatch(
-      /\[data-component="ade-shell"\]\[data-theme="glass"\]\s*\[data-component="ade-splash"\]\[role="dialog"\][\s\S]*?\{[^}]*background:\s*#211410/,
-    )
+    expect(splashCss.replace(/\/\*[\s\S]*?\*\//g, "")).not.toContain('[role="dialog"]')
+    expect(splashCss).toMatch(/\[data-component="ade-splash"\] \{[^}]*background:\s*#211410/)
   })
 
   test("status is placed inside scene container and stays within innerHeight across viewports (P1-2)", () => {
@@ -154,14 +146,17 @@ describe("splash component (step 3)", () => {
     }
   })
 
-  test("renders dialog with accessibility attributes and canvas", () => {
+  test("renders a busy status with a name, a way to skip, and the canvas", () => {
     const handle = mountSplash({ visible: true })
     try {
       const splash = container.querySelector('[data-component="ade-splash"]')
       expect(splash).not.toBeNull()
-      expect(splash?.getAttribute("role")).toBe("dialog")
-      expect(splash?.getAttribute("aria-modal")).toBe("true")
+      // It has nothing to focus, so it is not a modal dialog: a status that is busy until it leaves.
+      expect(splash?.getAttribute("role")).toBe("status")
+      expect(splash?.getAttribute("aria-modal")).toBeNull()
+      expect(splash?.getAttribute("aria-busy")).toBe("true")
       expect(splash?.getAttribute("aria-label")).toBeTruthy()
+      expect(container.querySelector('[data-slot="splash-hint"]')?.textContent).toBe(t("splash.skip"))
 
       const canvas = container.querySelector('[data-slot="splash-canvas"]')
       expect(canvas).not.toBeNull()
