@@ -454,6 +454,7 @@ import {
   type DeliveryResult,
   type LineOutcome,
 } from "../session/enter"
+import { formatSpawnFailed, spawnOutcome } from "../session/spawn-outcome"
 import { isTyping, submittedSince, typedAfter } from "../session/typed-line"
 import { parseQueue, queueToSave, waitsForRestore } from "../session/mail-queue"
 import {
@@ -2521,6 +2522,8 @@ export function Workbench() {
   onCleanup(() => running.endAll())
   // The panes being started back (`reopen`, the restore): recorded before their awaits, not after (ALTO 3).
   const reopening = oneAtATime()
+  /** Why the host refused each pane's last start (`onRefused`), so `ade-msg spawn` can tell its sender. Cleared when a start begins. */
+  const startRefusals = new Map<string, string>()
   const [runningTick, setRunningTick] = createSignal(0)
   const touchRunning = () => setRunningTick((n) => n + 1)
   const isRunning = (id: string) => {
@@ -4882,6 +4885,18 @@ export function Workbench() {
         saveSpawned()
       }
       if (sender) appendLine(sender.id, t("note.subagent", created.title), "note", "ade")
+      /*
+       * The receipt waits for the start (a few seconds at most): a program that is not there, a key the host refused or a
+       * folder gone is said to the sender, who would otherwise wait on a session that never began (live test, item 4).
+       */
+      const outcome = await spawnOutcome(created.started, () => startRefusals.get(created.id))
+      if (outcome.kind === "failed") {
+        // Nobody will answer it: closed, so no waiter is left on it. The pane stays with its «Riprova».
+        openRequests.delete(id)
+        saveRequests()
+        await answer(formatSpawnFailed(created.title, created.id, outcome.reason))
+        return true
+      }
       await answer(
         `ok: avviata la sessione "${created.title}" (${agent.id}, id ${created.id}, livello ${depth})` +
           (worktree ? ` nella worktree ${worktree.path} sul branch ${worktree.branch} (da ${worktreeBase})` : "") +
@@ -8869,6 +8884,7 @@ export function Workbench() {
   ) => {
     // First of all: closing the pane, or starting it again, takes it away (`RunningSessions.adopt`).
     const start = running.beginStart(paneId)
+    startRefusals.delete(paneId)
     const agent = agentById(agentId)
     // An app's pane is its server's console: a task typed there is a line the server does not read.
     if (agent?.kind === "app") task = ""
@@ -8889,6 +8905,7 @@ export function Workbench() {
     if (gone) {
       setWb((w) => updatePane(w, paneId, { status: "error", activity: "folderGone", gone }))
       appendLine(paneId, t("project.missing", gone), "note", "ade")
+      startRefusals.set(paneId, t("project.missing", gone))
       return
     }
     if (wb().panes.some((pane) => pane.id === paneId && pane.gone))
@@ -9200,6 +9217,7 @@ export function Workbench() {
         // Over the terminal: a pane started again keeps the old one live, and the transcript hidden.
         onRefused: (reason) => {
           refused = true
+          startRefusals.set(paneId, reason)
           tellPane(paneId, t("pane.startFailed", reason))
         },
         ...(nonce ? { link: { pane: paneId, nonce } } : {}),
@@ -9486,6 +9504,7 @@ export function Workbench() {
         },
         onRefused: (reason) => {
           refused = true
+          startRefusals.set(paneId, reason)
           tellPane(paneId, t("pane.connectFailed", reason))
         },
         pane: paneId,
@@ -9666,12 +9685,13 @@ export function Workbench() {
     )
     setStarting(false)
     // A fork opens as a resumed conversation, and the task is typed into it all the same.
-    if (input.fork)
-      void startProcess(id, entry.agentId, task, { kind: "resume", via: "id", args: input.fork.args }, undefined, true)
-    else void startProcess(id, entry.agentId, task)
+    const started = input.fork
+      ? startProcess(id, entry.agentId, task, { kind: "resume", via: "id", args: input.fork.args }, undefined, true)
+      : startProcess(id, entry.agentId, task)
+    void started.catch(() => {})
     // Handed back for the callers that need to keep talking to the pane they
-    // just made; `launchSessions` ignores it.
-    return { id, title }
+    // just made; `launchSessions` ignores it. `started` settles when the start is over, however it went.
+    return { id, title, started }
   }
 
   /**
