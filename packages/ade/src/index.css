@@ -517,13 +517,11 @@ body[data-theme="glass"] #root,
      an indicator, and one that sits 1.5:1 off its surface is not seen by the
      people who reach it with the keyboard alone. `--ade-text-weak` is 4.6:1 on
      the light surface and 5.5:1 on the dark one, and the test in
-     `grid/contorni.test.ts` computes it per theme and asks for 3:1. The softer
-     second layer is the same grey mixed with nothing, so the geometry is
-     unchanged and only the hue moved.
+     `grid/contorni.test.ts` computes it per theme and asks for 3:1.
 
      One 2 px line: it was that plus 4 px at 45 %, a double frame that the live
      test found heavy (V3). The line is what carries the 3:1, the halo carried
-     nothing the line did not. */
+     nothing the line did not, so there is no second layer. */
   --ade-focus-ring: 0 0 0 2px var(--ade-text-weak);
 
   --ade-scrollbar-thumb: light-dark(rgba(18, 13, 11, 0.2), rgba(244, 231, 205, 0.14));

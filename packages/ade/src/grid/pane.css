@@ -190,11 +190,13 @@
 /*
  * The gutter the approved mockup has (terminale-A, about 12 px): on the emulator's own element, because that is the
  * padding FitAddon takes off the width before it counts columns, so the columns that fit are whole and no cell is cut
- * by the pane's edge. The scrollbar is absolute and stays at the box's edge.
+ * by the pane's edge. Left only: the scrollbar is `right: 0` of `.xterm-scrollable-element`, which sits inside the content
+ * box, so it never goes into the gutter and a right padding would only cost two columns. (Which leaves the thumb cut by
+ * the round corner as in the base: two columns are worth more than that.)
  */
 [data-slot="pane-terminal"] .xterm {
   height: 100%;
-  padding: 0 var(--ade-space-6);
+  padding: 0 0 0 var(--ade-space-6);
 }
 
 /* Says a selection was copied; never in the way of the next one. */

@@ -23,7 +23,9 @@ describe("V1: the terminal's gutter", () => {
   const pane = read("grid/pane.css")
 
   test("is padding on the emulator's own element, which is what FitAddon takes off the width", () => {
-    expect(rule(pane, '[data-slot="pane-terminal"] .xterm')).toMatch(/padding:\s*0 var\(--ade-space-6\)/)
+    // Left only (review N1): the scrollbar sits at the right edge of the scrollable element inside the content box, so a
+    // right padding would only take two columns off the text without moving it.
+    expect(rule(pane, '[data-slot="pane-terminal"] .xterm')).toMatch(/padding:\s*0 0 0 var\(--ade-space-6\)/)
     // Not on the box, where the fit would count it as columns (and fit-rows.ts as rows).
     expect(rule(pane, '[data-slot="pane-terminal"]')).toMatch(/padding:\s*0;/)
   })
