@@ -1446,6 +1446,8 @@ export function Workbench() {
   const [exporting, setExporting] = createSignal(false)
   /** How far the running export is, 0 to 1; the settings panel shows it next to «Annulla». */
   const [exportProgress, setExportProgress] = createSignal(0)
+  /** The window is hidden, so the export is held until it is back: the recorder and the media stand still with it. */
+  const [exportWaiting, setExportWaiting] = createSignal(false)
   let exportAbort: AbortController | undefined
   /** Stops the running export (MOD-4: it ran for as long as the take, with no way out). */
   const cancelExport = () => exportAbort?.abort()
@@ -1478,6 +1480,7 @@ export function Workbench() {
         bitrate: level.bitrate,
         signal: exportAbort.signal,
         onProgress: setExportProgress,
+        onHidden: setExportWaiting,
       })
       const out = `${video.replace(/\.mp4$/i, "")}.promo.${result.extension}`
       await host.recordWrite(out, result.bytes)
@@ -1486,6 +1489,7 @@ export function Workbench() {
       report(t("record.export.failed", failure instanceof Error ? failure.message : String(failure)))
     } finally {
       exportAbort = undefined
+      setExportWaiting(false)
       setExporting(false)
     }
   }
@@ -10933,6 +10937,7 @@ export function Workbench() {
               onExport: () => void exportLastTake(),
               exporting,
               exportProgress,
+              exportWaiting,
               onCancelExport: cancelExport,
             }}
             updates={{

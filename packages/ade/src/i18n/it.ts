@@ -2675,6 +2675,7 @@ export const it = {
   "record.export.tooLong": (size: number, limit: number) =>
     `Questa registrazione darebbe un video di circa ${size} MB, e ADE ne esporta al massimo ${limit} MB senza rischiare la finestra. Abbassa la qualità in Impostazioni › Registrazione, o registra più breve.`,
   "settings.record.export.progress": (percent: number) => `Esporto… ${percent}%`,
+  "settings.record.export.waiting": "Esportazione in attesa: riprende quando la finestra torna in primo piano.",
   "settings.record.export.cancel": "Annulla l'esportazione",
 
   // F7a: 3D Model state

@@ -424,6 +424,8 @@ export interface RecordVideoSectionProps {
   exporting?: () => boolean
   /** How far the running export is, 0 to 1. */
   exportProgress?: () => number
+  /** The export is held because the window is hidden; it goes on when the window is back. */
+  exportWaiting?: () => boolean
   /** Stops the running export. */
   onCancelExport?: () => void
 }
@@ -502,8 +504,15 @@ export function RecordVideoSection(props: RecordVideoSectionProps) {
             </button>
           }
         >
-          <span data-slot="settings-meta" data-export="progress" role="status">
-            {t("settings.record.export.progress", Math.round((props.exportProgress?.() ?? 0) * 100))}
+          <span
+            data-slot="settings-meta"
+            data-export="progress"
+            data-waiting={props.exportWaiting?.() ? "true" : undefined}
+            role="status"
+          >
+            {props.exportWaiting?.()
+              ? t("settings.record.export.waiting")
+              : t("settings.record.export.progress", Math.round((props.exportProgress?.() ?? 0) * 100))}
           </span>
           <button
             type="button"

@@ -80,6 +80,8 @@ function renderSettingsSheet(
     voice?: Record<string, unknown>
     /** An export in progress, 0 to 1; absent when none is running. */
     exporting?: number
+    /** The export is waiting for the window to come back. */
+    exportWaiting?: boolean
   } = {},
 ) {
   const host = document.createElement("div")
@@ -138,6 +140,7 @@ function renderSettingsSheet(
           },
           exporting: () => options.exporting !== undefined,
           exportProgress: () => options.exporting ?? 0,
+          exportWaiting: () => options.exportWaiting === true,
           onCancelExport: () => {
             calls.cancelExport++
           },
@@ -518,6 +521,15 @@ describe("settings shell", () => {
     expect(cancel).not.toBeNull()
     cancel!.click()
     expect(calls.cancelExport).toBe(1)
+  })
+
+  // Review of ade/residui-gravi, B3: a hidden window holds the export, and the progress says so.
+  test("MOD-6: an export held because the window is hidden says it is waiting, and Annulla stays", () => {
+    renderSettingsSheet({ initialTarget: "record/video", exporting: 0.3, exportWaiting: true })
+
+    const line = document.body.querySelector('[data-export="progress"]')
+    expect(line?.getAttribute("data-waiting")).toBe("true")
+    expect(document.body.querySelector('[data-action="record.export.cancel"]')).not.toBeNull()
   })
 
   test("M2: Aggiornamenti mostra la versione e controlla lo stesso flusso del menu", () => {

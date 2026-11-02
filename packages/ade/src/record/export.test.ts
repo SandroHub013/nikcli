@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import {
   MAX_EXPORT_BYTES,
   checkExportSize,
@@ -8,9 +10,9 @@ import {
   micOffsetMs,
   pickExportMime,
   quietWav,
+  pausableRecorder,
   pauseWhileHidden,
   readEvents,
-  scheduleFrame,
   startDue,
   waitAtMost,
 } from "./export"
@@ -260,32 +262,52 @@ describe("record/export, the size a clip may reach", () => {
 
 /*
  * MOD-6: `requestAnimationFrame` stops in a minimised WebView2 window while the media keeps playing, so the canvas
- * repeated the last frame over running audio. The loop follows the video's own frames, and the media stands still
- * while the window is hidden.
+ * repeated the last frame over running audio. The media and the recorder stand still while the window is hidden.
+ *
+ * Review of ade/residui-gravi, B2: the loop stays on `requestAnimationFrame`. A take is variable frame rate (a frame
+ * only when the window changes), so a loop on the video's own frames draws nothing on a still window: the pointer
+ * teleports, the zoom and the click rings are skipped, and a late microphone track starts late.
  */
 describe("record/export, the frame loop", () => {
-  test("it follows the video's frames when the webview offers them, and falls back to the display's otherwise", () => {
-    const calls: string[] = []
-    const withVideo = {
-      requestVideoFrameCallback: (run: () => void) => {
-        calls.push("video")
-        run()
-        return 7
-      },
-      cancelVideoFrameCallback: (handle: number) => void calls.push(`cancel ${handle}`),
-    }
-    const stop = scheduleFrame(withVideo, () => calls.push("draw"), () => calls.push("display"))
-    expect(calls).toEqual(["video", "draw"])
-    stop()
-    expect(calls).toEqual(["video", "draw", "cancel 7"])
+  test("it draws on the display's frames, not on the video's", () => {
+    const source = readFileSync(join(import.meta.dir, "export.ts"), "utf-8")
+    expect(source).toContain("requestAnimationFrame(tick)")
+    expect(source).not.toContain("requestVideoFrameCallback(")
+  })
 
-    const plain: string[] = []
-    scheduleFrame({}, () => plain.push("draw"), (run) => {
-      plain.push("display")
-      run()
-      return 3
-    })
-    expect(plain).toEqual(["display", "draw"])
+  function fakeRecorder(state: "inactive" | "recording" | "paused") {
+    const log: string[] = []
+    return {
+      log,
+      state,
+      pause() {
+        this.state = "paused"
+        log.push("pause")
+      },
+      resume() {
+        this.state = "recording"
+        log.push("resume")
+      },
+    }
+  }
+
+  test("the recorder is paused and resumed with the media, so the clip has no frozen silent hole (B3)", () => {
+    const recorder = fakeRecorder("recording")
+    const pausable = pausableRecorder(recorder)
+    expect(pausable.paused).toBe(false)
+    pausable.pause()
+    expect(recorder.log).toEqual(["pause"])
+    expect(pausable.paused).toBe(true)
+    void pausable.play()
+    expect(recorder.log).toEqual(["pause", "resume"])
+  })
+
+  test("a recorder that was not recording is left alone", () => {
+    const idle = fakeRecorder("inactive")
+    const pausable = pausableRecorder(idle)
+    expect(pausable.paused).toBe(true)
+    void pausable.play()
+    expect(idle.log).toEqual([])
   })
 
   function fakeDocument() {
@@ -330,6 +352,17 @@ describe("record/export, the frame loop", () => {
     expect(late.log).toEqual([])
     stop()
     expect(doc.count()).toBe(0)
+  })
+
+  test("it says when the window goes away and comes back, so the progress can tell the user the export is waiting", () => {
+    const doc = fakeDocument()
+    const told: boolean[] = []
+    pauseWhileHidden(doc, [fakeMedia(false)], (hidden) => told.push(hidden))
+    doc.hidden = true
+    doc.fire("visibilitychange")
+    doc.hidden = false
+    doc.fire("visibilitychange")
+    expect(told).toEqual([true, false])
   })
 
   test("a document that cannot listen is left alone", () => {

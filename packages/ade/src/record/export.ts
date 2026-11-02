@@ -27,6 +27,8 @@ export interface ExportInput {
   readonly bitrate?: number
   readonly signal?: AbortSignal
   readonly onProgress?: (fraction: number) => void
+  /** The window went away (`true`): the export waits until it is back (`false`). */
+  readonly onHidden?: (hidden: boolean) => void
 }
 
 export interface ExportResult {
@@ -159,31 +161,6 @@ export function checkExportSize(durationMs: number, videoBitsPerSecond: number):
   }
 }
 
-/** The part of a `<video>` the frame loop uses; both calls are absent in a webview that does not have them. */
-export interface FrameSource {
-  requestVideoFrameCallback?: (run: () => void) => number
-  cancelVideoFrameCallback?: (handle: number) => void
-}
-
-/**
- * Runs `run` once, at the video's next frame, and returns what cancels it.
- *
- * `requestAnimationFrame` stops in a minimised or hidden window while the media keeps going, so a loop on it froze
- * the picture over running audio (MOD-6); the video's own frame callback follows the video. Without it, the display's.
- */
-export function scheduleFrame(
-  video: FrameSource,
-  run: () => void,
-  display: (run: () => void) => number = (frame) => requestAnimationFrame(frame),
-): () => void {
-  if (video.requestVideoFrameCallback) {
-    const handle = video.requestVideoFrameCallback(run)
-    return () => video.cancelVideoFrameCallback?.(handle)
-  }
-  display(run)
-  return () => {}
-}
-
 /** The part of `document` that says whether the window is hidden. */
 interface VisibilitySource {
   readonly hidden: boolean
@@ -197,6 +174,31 @@ interface Pausable {
   play(): Promise<void> | void
 }
 
+/** The part of a `MediaRecorder` that can be paused. */
+interface PausableRecorder {
+  readonly state: "inactive" | "recording" | "paused"
+  pause(): void
+  resume(): void
+}
+
+/**
+ * A recorder as something `pauseWhileHidden` can hold still with the media.
+ *
+ * Left running while the media stands still, it records a frozen picture over silence for as long as the window is
+ * hidden (review B3). First in the list, so it stops before the media and starts again with it.
+ */
+export function pausableRecorder(recorder: PausableRecorder): Pausable {
+  return {
+    get paused() {
+      return recorder.state !== "recording"
+    },
+    pause: () => recorder.pause(),
+    play: () => {
+      if (recorder.state === "paused") recorder.resume()
+    },
+  }
+}
+
 /**
  * Stops what is playing while the window is hidden and plays only that again when it is back.
  *
@@ -204,10 +206,16 @@ interface Pausable {
  * not drawing records a frozen picture over live audio. What had not started yet (a late track) stays unstarted.
  * Returns what takes the listener off.
  */
-export function pauseWhileHidden(doc: VisibilitySource, media: readonly Pausable[]): () => void {
+export function pauseWhileHidden(
+  doc: VisibilitySource,
+  media: readonly Pausable[],
+  /** Told when the window goes away (`true`) and when it is back (`false`). */
+  onChange?: (hidden: boolean) => void,
+): () => void {
   if (typeof doc.addEventListener !== "function") return () => {}
   let held: Pausable[] = []
   const change = () => {
+    onChange?.(doc.hidden)
     if (doc.hidden) {
       held = media.filter((item) => !item.paused)
       for (const item of held) item.pause()
@@ -388,9 +396,7 @@ async function render(input: ExportInput, cleanup: ReturnType<typeof createClean
   cleanup.add(() => {
     running = false
   })
-  let cancelFrame = () => {}
-  cleanup.add(() => cancelFrame())
-  cleanup.add(pauseWhileHidden(document, [video, ...players]))
+  cleanup.add(pauseWhileHidden(document, [pausableRecorder(recorder), video, ...players], input.onHidden))
   const done = new Promise<void>((resolve, reject) => {
     const tick = () => {
       if (!running) return
@@ -401,7 +407,7 @@ async function render(input: ExportInput, cleanup: ReturnType<typeof createClean
         )
       }
       draw()
-      if (!video.ended) cancelFrame = scheduleFrame(video, tick)
+      if (!video.ended) requestAnimationFrame(tick)
     }
     // A hidden window draws nothing (the media is stopped with it), so a cancel cannot wait for the next frame.
     input.signal?.addEventListener("abort", () => reject(new Error(t("record.export.cancelled"))), { once: true })
@@ -416,7 +422,7 @@ async function render(input: ExportInput, cleanup: ReturnType<typeof createClean
     video.addEventListener("error", () => reject(new Error(t("record.export.interrupted"))), {
       once: true,
     })
-    cancelFrame = scheduleFrame(video, tick)
+    requestAnimationFrame(tick)
   })
   // If something before `await done` throws, `done` may still reject later: nobody is left to hear it.
   done.catch(() => undefined)
