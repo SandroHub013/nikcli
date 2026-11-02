@@ -127,6 +127,18 @@ describe("the stylesheet", () => {
     expect(ghostBody).toContain("--ade-btn-border: transparent")
   })
 
+  test("the remote space's own primary, still off the shared Button, is disabled the same way (V5)", () => {
+    // Two rules that say one thing: the sunken ground, the weak text, the border token and the not-allowed cursor.
+    const remote = readFileSync(new URL("../remote/remote.css", import.meta.url), "utf8").replaceAll("\r\n", "\n")
+    const at = remote.indexOf('[data-component="remote-space"] [data-slot="primary"]:disabled {')
+    expect(at).toBeGreaterThan(-1)
+    const body = remote.slice(at, remote.indexOf("}", at))
+    expect(body).toContain("background: var(--ade-sunken)")
+    expect(body).toContain("color: var(--ade-text-weak)")
+    expect(body).toContain("border-color: var(--ade-border)")
+    expect(body).toContain("cursor: not-allowed")
+  })
+
   test("a disabled IconButton and Field are one opacity, from the token", () => {
     const disabled = rules
       .split("}")

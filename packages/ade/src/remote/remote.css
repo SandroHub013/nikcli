@@ -114,5 +114,5 @@
   background: var(--ade-sunken);
   border-color: var(--ade-border);
   color: var(--ade-text-weak);
-  cursor: default;
+  cursor: not-allowed;
 }
