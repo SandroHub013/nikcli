@@ -57,9 +57,31 @@ describe("createShotSource without a host", () => {
   test("removing without a host still empties the tray", async () => {
     await createRoot(async (dispose) => {
       const source = createShotSource(false)
-      await source.remove("C:/Pictures/Screenshots/a.png")
+      expect(await source.remove("C:/Pictures/Screenshots/a.png")).toBe(true)
       expect(source.shots()).toEqual([])
       dispose()
+    })
+  })
+
+  test("removing with a host that fails keeps the shot and says so", async () => {
+    await createRoot(async (dispose) => {
+      const asked: string[] = []
+      const failing = (async (command: string) => {
+        asked.push(command)
+        throw new Error("in uso")
+      }) as never
+      const source = createShotSource(true, failing)
+      dispose()
+      expect(await source.remove("C:/Pictures/Screenshots/a.png")).toBe(false)
+      expect(asked).toEqual(["shot_delete"])
+    })
+  })
+
+  test("removing with a host that succeeds empties the tray and says so", async () => {
+    await createRoot(async (dispose) => {
+      const source = createShotSource(true, (async () => undefined) as never)
+      dispose()
+      expect(await source.remove("C:/Pictures/Screenshots/a.png")).toBe(true)
     })
   })
 

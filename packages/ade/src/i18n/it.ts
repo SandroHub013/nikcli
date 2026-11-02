@@ -395,6 +395,21 @@ export const it = {
   "design.reopened.delivered": (key: string) => `Riapertura di ${key} consegnata`,
   "design.waiter.taken": (key: string) => `Scelta su ${key} consegnata al comando ade-msg che la aspettava`,
   "decisions.waiting": "Decisioni che aspettano te",
+  "workspace.unreadable":
+    "Non sono riuscita a leggere le sessioni salvate (forse sono di una versione più nuova di ADE). Ne ho tenuto una copia: aggiorna ADE per riaverle.",
+  "workspace.unreadableNoCopy":
+    "Non sono riuscita a leggere le sessioni salvate e non ho potuto tenerne una copia (manca spazio). Finché non se ne libera, le sessioni di questa volta non vengono salvate.",
+  "workspace.saveFailed":
+    "Non riesco a salvare le sessioni: manca spazio nell'archivio di ADE. Chiudi le sessioni che non servono.",
+  "workspace.restore.offer": "Ho una copia delle sessioni salvate che ora riesco a leggere.",
+  "workspace.restore.action": "Ripristina le sessioni",
+  "workspace.restore.confirm":
+    "Le sessioni attuali saranno sostituite da quelle salvate, gli agenti in corso si fermano e ADE si riapre.",
+  "workspace.restore.yes": "Ripristina",
+  "workspace.restore.no": "Annulla",
+  "workspace.restore.failed": "Non sono riuscita a ripristinare le sessioni: la copia non si legge più.",
+  "workspace.restore.ignore": "Ignora",
+  "workspace.restore.saveFirst": "Non ripristino le sessioni: c'è un file con modifiche non salvate. Salvalo o chiudilo, poi riprova.",
   "update.desktopOnly": "Gli aggiornamenti si controllano dall'app desktop.",
   "update.alreadyShown": (version: string) => `Già segnalato: ADE ${version} è disponibile.`,
   "update.openFailed": (problem: string) => `Impossibile aprire la pagina: ${problem}`,
@@ -1441,10 +1456,15 @@ export const it = {
   "shots.dismiss": "Togli dal vassoio",
   "shots.dismiss.named": (name: string) => `Togli ${name}`,
   "shots.hint": "trascinala su una sessione per darla all'agente",
-  "shots.delete": "elimina",
+  "shots.delete": "Elimina",
+  "shots.delete.ask": (name: string) => `Eliminare «${name}»? Il file va nel Cestino.`,
+  "shots.delete.confirm": "Elimina file",
+  "shots.delete.keep": "Tieni",
+  "shots.delete.failed":
+    "Non ho eliminato la schermata: il file è in uso o protetto. Chiudi il programma che la tiene aperta e riprova.",
   "shots.more.left": "Schermate precedenti",
   "shots.more.right": "Altre schermate",
-  "shots.close": "chiudi",
+  "shots.close": "Chiudi",
 
   // Extensions
   "extensions.missingType": 'senza type "http": Claude Code non lo carica, altri client sì',
@@ -1702,6 +1722,9 @@ export const it = {
   "note.replySentTo": (to: string, ref: string) => `Risposta inviata a ${to} (richiesta ${ref})`,
   "note.replyFrom": (from: string, text: string) => `Risposta ricevuta da ${from}: ${text}`,
   "note.keptOpen": (problem: string) => `Resta aperta: ${problem}`,
+  "mail.stuck": (kind: string, id: string) =>
+    `Posta tra le sessioni: ${kind} ${id} non ha dato esito. ADE è andata avanti; il mittente lo saprà, se è ancora aperto`,
+  "mail.stepStuck": "Posta tra le sessioni: un passo non finisce. ADE lo riprova; se la posta resta ferma, riavvia ADE",
   "note.closedAfterReply": (closed: string) => `Chiusa dopo la risposta: ${closed}`,
   "note.updateFrom": (from: string, state: string, text: string) => `Aggiornamento da ${from}: ${state} — ${text}`,
   "note.memory": (line: string) => `Memoria: ${line}`,

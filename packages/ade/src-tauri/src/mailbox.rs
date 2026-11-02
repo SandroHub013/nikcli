@@ -25,8 +25,9 @@
 //! looks like when it lands, is `src/session/mailbox.ts`, where it is tested.
 
 use std::fs;
-use std::path::PathBuf;
-use std::time::{Duration, SystemTime};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant, SystemTime};
 
 use serde::Serialize;
 use tauri::Manager;
@@ -116,6 +117,70 @@ pub fn install(app: &tauri::AppHandle) {
     }
 }
 
+/// What the page's mail round runs on, besides its own timer.
+const PENDING_EVENT: &str = "mailbox:pending";
+
+/// How often the outbox is looked at: a `read_dir` of a folder that is nearly always empty.
+const WATCH_EVERY: Duration = Duration::from_millis(200);
+
+/// The least time between two signals, unless new mail has just appeared.
+const SIGNAL_GAP: Duration = Duration::from_secs(1);
+
+/// Whether WebView2 was told the window is off screen (`follow_window_visibility`).
+static PAGE_HIDDEN: AtomicBool = AtomicBool::new(false);
+
+#[cfg(windows)]
+pub fn set_page_hidden(hidden: bool) {
+    PAGE_HIDDEN.store(hidden, Ordering::Relaxed);
+}
+
+fn outbox_has_mail(outbox: &Path) -> bool {
+    fs::read_dir(outbox).is_ok_and(|mut entries| {
+        entries.any(|entry| entry.is_ok_and(|entry| entry.path().extension().is_some_and(|ext| ext == "json")))
+    })
+}
+
+/// Whether to signal the page now, and with what: `true` for mail in the outbox, `false` for a hidden page's pulse.
+fn pending_signal(mail: bool, mail_before: bool, hidden: bool, since_last: Duration) -> Option<bool> {
+    if mail && (!mail_before || since_last >= SIGNAL_GAP) {
+        return Some(true);
+    }
+    if hidden && since_last >= SIGNAL_GAP {
+        return Some(false);
+    }
+    None
+}
+
+/// Tells the page when to run its mail round, from a thread no page throttling can reach.
+///
+/// The round was only a page timer. A minimised window has been `hidden` since
+/// P1-C1, and Chromium wakes a hidden page's chained timers once a minute after 5
+/// minutes, so every `ade-msg kv` hit its 10 s and printed «ADE non ha risposto»
+/// (2026-10-30). An event is script the host runs, and it runs at once in a hidden
+/// page. So the throttling stays on, with everything it saves in CPU and memory
+/// while hidden, and only the mail stops depending on it.
+pub fn watch_outbox(app: tauri::AppHandle) {
+    let Some(dir) = mailbox_path(&app) else { return };
+    let outbox = dir.join("outbox");
+    let started = std::thread::Builder::new().name("ade-mailbox-watch".into()).spawn(move || {
+        use tauri::Emitter;
+        let mut mail_before = false;
+        let mut last = Instant::now();
+        loop {
+            std::thread::sleep(WATCH_EVERY);
+            let mail = outbox_has_mail(&outbox);
+            if let Some(waiting) = pending_signal(mail, mail_before, PAGE_HIDDEN.load(Ordering::Relaxed), last.elapsed()) {
+                let _ = app.emit(PENDING_EVENT, waiting);
+                last = Instant::now();
+            }
+            mail_before = mail;
+        }
+    });
+    if let Err(error) = started {
+        eprintln!("ADE: la posta non ha il suo segnale nativo, resta il timer della pagina: {error}");
+    }
+}
+
 /// A message id names a file, so it is held to a shape that cannot be a path.
 fn valid_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 80 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
@@ -138,8 +203,9 @@ pub struct Outgoing {
 /// Takes every complete message out of the outbox.
 ///
 /// Only `*.json`: the scripts write `*.part` and rename, so a file with the
-/// final name is always whole. Each one is removed as it is read, which is
-/// what makes a message delivered at most once.
+/// final name is always whole. Each one is claimed by a rename before it is
+/// read, and removed once read, which is what makes a message delivered at
+/// most once; a read that failed for a passing reason leaves it for the next pass.
 #[tauri::command]
 pub async fn mailbox_take(app: tauri::AppHandle) -> Result<Vec<Outgoing>, String> {
     let dir = mailbox_path(&app).ok_or("casella non disponibile")?;
@@ -150,44 +216,110 @@ pub async fn mailbox_take(app: tauri::AppHandle) -> Result<Vec<Outgoing>, String
 ///
 /// A refused message used to vanish: the sender waited for a receipt that
 /// never came and printed "ADE non ha ancora confermato", as if it would.
-/// The receipt for a message not read because of its size. A size that could
-/// not be read is said as such, not as "0 KiB".
-fn too_big_receipt(size: Option<u64>) -> String {
+/// The receipt for a message not read because of its size.
+fn too_big_receipt(len: u64) -> String {
     let max = MAX_MESSAGE_BYTES / 1024;
-    let why = match size {
-        Some(len) => format!("messaggio troppo grande ({} KiB, massimo {max} KiB)", len / 1024),
-        None => format!("dimensione del messaggio non leggibile (massimo {max} KiB)"),
-    };
-    format!("errore: {why}: mandalo come file con --file o scrivilo in un file e manda il percorso")
+    format!(
+        "errore: messaggio troppo grande ({} KiB, massimo {max} KiB): mandalo come file con --file o scrivilo in un file e manda il percorso",
+        len / 1024
+    )
 }
 
+/// The ids this process read (or answered with a receipt) whose `.taking` could not be deleted.
+///
+/// Only these claims are deleted when found again. Any other `.taking` is a message that was claimed and never read
+/// (the process died, or the read and the give-back both failed): it goes back to `.json`, so it is delivered and
+/// not lost without a word. The cost is a duplicate if a delete failed and the process then died, which is rare.
+fn undeleted() -> std::sync::MutexGuard<'static, std::collections::HashSet<String>> {
+    static SET: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
+    SET.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Deletes a claim that has been dealt with; if that fails, remembers it so it is never delivered again.
+fn finish_claim(claim: &std::path::Path, id: &str) {
+    if fs::remove_file(claim).is_err() {
+        undeleted().insert(id.to_string());
+    }
+}
+
+/// Takes the files of the outbox, one claimed at a time.
+///
+/// A file is claimed by renaming `<id>.json` to `<id>.taking`: the rename either
+/// happens or it does not, and a file that is not `.json` is never taken again.
+/// That is what lets a failed delete leave a harmless file instead of a message
+/// delivered twice, and a transient read error leave the message for the next
+/// pass instead of being answered as if it were damaged (RS-10).
 fn take_outbox(outbox: &std::path::Path, receipts: &std::path::Path) -> Result<Vec<Outgoing>, String> {
     let mut out = Vec::new();
+    // What this call claimed itself: a claim given back must not be taken twice in the same pass.
+    let mut claimed_here = std::collections::HashSet::new();
     let entries = fs::read_dir(outbox).map_err(|e| format!("casella non leggibile: {e}"))?;
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some("json") {
-            continue;
+        match path.extension().and_then(|e| e.to_str()) {
+            Some("json") => {}
+            // A claim found again: cleared if this process already read it, otherwise it was never read and goes back.
+            Some("taking") => {
+                let Some(id) = path.file_stem().and_then(|s| s.to_str()).map(str::to_string) else {
+                    continue;
+                };
+                if claimed_here.contains(&id) {
+                    continue;
+                }
+                if !valid_id(&id) || undeleted().contains(&id) {
+                    if fs::remove_file(&path).is_ok() {
+                        undeleted().remove(&id);
+                    }
+                } else {
+                    let _ = fs::rename(&path, path.with_extension("json"));
+                }
+                continue;
+            }
+            _ => continue,
         }
         let Some(id) = path.file_stem().and_then(|s| s.to_str()).map(str::to_string) else {
             continue;
         };
-        let size = entry.metadata().map(|m| m.len()).ok();
-        let too_big = size.map_or(true, |len| len > MAX_MESSAGE_BYTES);
-        let body = if too_big { None } else { fs::read_to_string(&path).ok() };
-        let _ = fs::remove_file(&path);
         if !valid_id(&id) {
+            let _ = fs::remove_file(&path);
             continue;
         }
-        match body {
-            Some(body) => out.push(Outgoing { id, body }),
-            None if too_big => {
-                let said = too_big_receipt(size);
-                let _ = write_whole(receipts.to_path_buf(), &format!("{id}.txt"), &said);
+        // Given back a moment ago in this very pass: the next pass tries it again, this one does not loop on it.
+        if claimed_here.contains(&id) {
+            continue;
+        }
+        // Held open by a scanner or the indexer: it is still there, so the next pass takes it.
+        let claim = path.with_extension("taking");
+        if fs::rename(&path, &claim).is_err() {
+            continue;
+        }
+        claimed_here.insert(id.clone());
+        // Nothing below deletes the message unless it has been read, or can never be.
+        let give_back = || {
+            let _ = fs::rename(&claim, &path);
+        };
+        let Ok(meta) = fs::metadata(&claim) else {
+            give_back();
+            continue;
+        };
+        if meta.len() > MAX_MESSAGE_BYTES {
+            let said = too_big_receipt(meta.len());
+            let _ = write_whole(receipts.to_path_buf(), &format!("{id}.txt"), &said);
+            finish_claim(&claim, &id);
+            continue;
+        }
+        match fs::read_to_string(&claim) {
+            Ok(body) => {
+                // If the delete fails the claim stays, and is not a `.json`: the message is not delivered again.
+                finish_claim(&claim, &id);
+                out.push(Outgoing { id, body });
             }
-            None => {
+            // Bytes that are not UTF-8 will never be: the sender is told. Any other error may pass.
+            Err(e) if e.kind() == std::io::ErrorKind::InvalidData => {
                 let _ = write_whole(receipts.to_path_buf(), &format!("{id}.txt"), "errore: messaggio non leggibile (non è UTF-8)");
+                finish_claim(&claim, &id);
             }
+            Err(_) => give_back(),
         }
     }
     Ok(out)
@@ -527,7 +659,11 @@ function PostAndConfirm($fields) {
 function PostAndPrint($fields) {
   $id = Post $fields
   $r = Receipt $id
-  if ($null -eq $r) { Fail 'ADE non ha risposto: riprova tra poco' }
+  # Said as failed, so taken back if nobody took it yet: ADE must not carry it out later.
+  if ($null -eq $r) {
+    Remove-Item -LiteralPath (Join-Path (Join-Path $box 'outbox') "$id.json") -ErrorAction SilentlyContinue
+    Fail 'ADE non ha risposto: riprova tra poco'
+  }
   if (-not $r.StartsWith('ok')) { Write-Output $r; exit 1 }
   $nl = $r.IndexOf("`n")
   if ($nl -ge 0) { Write-Output $r.Substring($nl + 1) } else { Write-Output $r }
@@ -911,7 +1047,8 @@ confirm() {
 # Prints what ADE answered after its first line: the value, not the receipt.
 show() {
   post "$1"
-  receipt || fail "ADE non ha risposto: riprova tra poco"
+  # Said as failed, so taken back if nobody took it yet: ADE must not carry it out later.
+  receipt || { rm -f "$box/outbox/$id.json"; fail "ADE non ha risposto: riprova tra poco"; }
   case "$r" in
     ok*) case "$r" in *"
 "*) printf '%s\n' "${r#*
@@ -1169,6 +1306,75 @@ mod tests {
     }
 
     #[test]
+    fn new_mail_is_signalled_at_once_and_a_stuck_outbox_only_once_a_second() {
+        let soon = Duration::from_millis(200);
+        let later = SIGNAL_GAP;
+        assert_eq!(pending_signal(true, false, false, soon), Some(true));
+        assert_eq!(pending_signal(true, true, false, soon), None);
+        assert_eq!(pending_signal(true, true, false, later), Some(true));
+    }
+
+    #[test]
+    fn a_hidden_page_gets_a_pulse_and_a_visible_one_keeps_its_own_timer() {
+        let soon = Duration::from_millis(200);
+        let later = SIGNAL_GAP;
+        assert_eq!(pending_signal(false, false, true, later), Some(false));
+        assert_eq!(pending_signal(false, false, true, soon), None);
+        assert_eq!(pending_signal(false, false, false, later), None);
+        // Mail says so even in a pulse's place.
+        assert_eq!(pending_signal(true, true, true, later), Some(true));
+    }
+
+    #[test]
+    fn only_a_whole_message_counts_as_mail() {
+        let base = std::env::current_dir().unwrap().join("target").join("mailbox-watch-test");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        assert!(!outbox_has_mail(&base));
+        fs::write(base.join("1757860000000-aaaa.part"), "half").unwrap();
+        assert!(!outbox_has_mail(&base));
+        fs::write(base.join("1757860000000-aaaa.json"), "{}").unwrap();
+        assert!(outbox_has_mail(&base));
+        let _ = fs::remove_dir_all(&base);
+        // A folder that is not there is not mail, and not a panic in the watcher.
+        assert!(!outbox_has_mail(&base));
+    }
+
+    #[test]
+    fn both_scripts_take_back_what_they_say_has_failed() {
+        assert!(PS1.contains(r#"(Join-Path (Join-Path $box 'outbox') "$id.json") -ErrorAction SilentlyContinue"#));
+        assert!(SH.contains(r#"receipt || { rm -f "$box/outbox/$id.json"; fail"#));
+    }
+
+    /// The whole of it on the real script: 10 s of nobody answering, then the message is gone with the failure.
+    #[cfg(windows)]
+    #[test]
+    fn a_kv_nobody_answered_is_withdrawn_from_the_outbox() {
+        use std::process::{Command, Stdio};
+        let scratch = Scratch::new("withdraw");
+        let base = scratch.0.clone();
+        for dir in ["outbox", "receipts", "results", "bin"] {
+            fs::create_dir_all(base.join(dir)).unwrap();
+        }
+        let script = base.join("bin").join("ade-msg.ps1");
+        fs::write(&script, PS1).unwrap();
+        let status = Command::new("powershell.exe")
+            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+            .arg(&script)
+            .args(["kv", "lock", "pc:prova"])
+            .current_dir(&base)
+            .env("ADE_MAILBOX", &base)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .unwrap();
+        assert_eq!(status.code(), Some(1));
+        let left: Vec<_> = fs::read_dir(base.join("outbox")).unwrap().flatten().map(|e| e.path()).collect();
+        assert!(left.is_empty(), "still in the outbox: {left:?}");
+    }
+
+    #[test]
     fn who_owns_takes_the_whole_path_in_both_scripts() {
         // A path with a space, unquoted, arrives as two words: both must reach the lookup.
         assert!(SH.contains("who-owns) [ -n \"$head\" ] || usage; text=\"$head${text:+ $text}\""));
@@ -1199,11 +1405,70 @@ mod tests {
     }
 
     #[test]
-    fn a_size_that_cannot_be_read_is_not_said_as_zero() {
-        assert!(too_big_receipt(Some(300 * 1024)).contains("(300 KiB, massimo 256 KiB)"));
-        let unknown = too_big_receipt(None);
-        assert!(unknown.starts_with("errore: dimensione del messaggio non leggibile"));
-        assert!(!unknown.contains("0 KiB,"));
+    fn a_read_that_fails_for_a_passing_reason_leaves_the_message_and_answers_nothing() {
+        let base = std::env::current_dir().unwrap().join("target").join("mailbox-take-transient");
+        let _ = fs::remove_dir_all(&base);
+        let (outbox, receipts) = (base.join("outbox"), base.join("receipts"));
+        fs::create_dir_all(&outbox).unwrap();
+        fs::create_dir_all(&receipts).unwrap();
+        // A folder with the name of a message cannot be read as text, and is not invalid UTF-8: a read error of the other kind.
+        fs::create_dir_all(outbox.join("1757860000000-cccc.json")).unwrap();
+
+        assert!(take_outbox(&outbox, &receipts).unwrap().is_empty());
+        assert!(outbox.join("1757860000000-cccc.json").exists(), "given back for the next pass");
+        assert!(!outbox.join("1757860000000-cccc.taking").exists());
+        assert!(!receipts.join("1757860000000-cccc.txt").exists(), "no error receipt over a message that may pass");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn bytes_that_are_not_utf8_are_answered_once_and_a_claim_is_never_delivered() {
+        let base = std::env::current_dir().unwrap().join("target").join("mailbox-take-claim");
+        let _ = fs::remove_dir_all(&base);
+        let (outbox, receipts) = (base.join("outbox"), base.join("receipts"));
+        fs::create_dir_all(&outbox).unwrap();
+        fs::create_dir_all(&receipts).unwrap();
+        fs::write(outbox.join("1757860000000-dddd.json"), [0xff, 0xfe, 0xfd]).unwrap();
+        // What a failed delete leaves behind: this process read it, so it must not come out a second time.
+        fs::write(outbox.join("1757860000000-eeee.taking"), "{\"kind\":\"send\"}").unwrap();
+        undeleted().insert("1757860000000-eeee".to_string());
+
+        assert!(take_outbox(&outbox, &receipts).unwrap().is_empty());
+        let receipt = fs::read_to_string(receipts.join("1757860000000-dddd.txt")).unwrap();
+        assert!(receipt.contains("non è UTF-8"));
+        assert!(!outbox.join("1757860000000-dddd.json").exists());
+        assert!(!outbox.join("1757860000000-dddd.taking").exists());
+        assert!(take_outbox(&outbox, &receipts).unwrap().is_empty(), "the leftover claim is not delivered on a later pass");
+        assert!(!outbox.join("1757860000000-eeee.taking").exists(), "and it is cleared away");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_claim_that_was_never_read_goes_back_and_is_delivered_once() {
+        let base = std::env::current_dir().unwrap().join("target").join("mailbox-take-stale");
+        let _ = fs::remove_dir_all(&base);
+        let (outbox, receipts) = (base.join("outbox"), base.join("receipts"));
+        fs::create_dir_all(&outbox).unwrap();
+        fs::create_dir_all(&receipts).unwrap();
+        // What a crash between the rename and the read leaves, an hour after the client wrote it (the rename keeps that time).
+        let claim = outbox.join("1757860000000-ffff.taking");
+        fs::write(&claim, "{\"kind\":\"send\",\"to\":\"1\",\"text\":\"ciao\"}").unwrap();
+        let old = SystemTime::now() - Duration::from_secs(3600);
+        fs::File::options().write(true).open(&claim).unwrap().set_modified(old).unwrap();
+
+        let mut delivered = Vec::new();
+        for _ in 0..2 {
+            delivered.extend(take_outbox(&outbox, &receipts).unwrap());
+        }
+        assert_eq!(delivered.len(), 1, "delivered, and once");
+        assert_eq!(delivered[0].id, "1757860000000-ffff");
+        assert!(!claim.exists() && !outbox.join("1757860000000-ffff.json").exists());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn the_size_is_said_in_kib() {
+        assert!(too_big_receipt(300 * 1024).contains("(300 KiB, massimo 256 KiB)"));
     }
 
     #[test]

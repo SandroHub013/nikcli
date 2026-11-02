@@ -105,6 +105,12 @@ futures-util = { version = "0.3", default-features = false, features = ["sink"] 
 zip = { version = "4", default-features = false }
 flate2 = "1"
 
+# The Trash on a Mac: NSFileManager's own trashItemAtURL, which sends no Apple event and so needs no permission (an
+# `osascript` call to Finder is denied in a bundled app without NSAppleEventsUsageDescription). Already in the lock
+# (0.3.2, which Tauri's AppKit backend builds on); only the features this one call needs are named.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSError", "NSFileManager", "NSString", "NSURL"] }
+
 [target.'cfg(windows)'.dependencies]
 windows-version = "0.1"
 # The clipboard plugin's own backend (already in the tree, same version as its lock), used directly to copy a key
