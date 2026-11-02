@@ -277,7 +277,7 @@ import { scrubSecrets } from "../bots/terms"
 import type { AgentFile } from "../bots/ragu"
 import type { Runner } from "../bots/runners"
 import { senderToken } from "../session/senders"
-import { firstTime, sealedBy, splitSealed, useMailKeys } from "../session/mail-seal"
+import { firstTime, resealUnread, sealedBy, splitSealed, useMailKeys } from "../session/mail-seal"
 import { createActivityReads, type ActivityReads } from "../session/activity-reads"
 import { boardCandidates, parseOwners, whoOwns } from "../session/owners"
 import { mayReroute, pickProvider, setProviderPicker } from "../session/provider-pick"
@@ -3391,13 +3391,36 @@ export function Workbench() {
    * only when the token that came with it is this pane's.
    */
   const paneTokens = new Map<string, string>()
+  /** A pane's tokens of its earlier processes, newest first: they open what was sealed then, and prove nothing now. */
+  const retiredTokens = new Map<string, string[]>()
+  const MAX_RETIRED_TOKENS = 8
   const mintPaneToken = (paneId: string) => {
+    const old = paneTokens.get(paneId)
+    if (old) retiredTokens.set(paneId, [old, ...(retiredTokens.get(paneId) ?? [])].slice(0, MAX_RETIRED_TOKENS))
     const token = newNonce()
     paneTokens.set(paneId, token)
     return token
   }
-  /** A pane's token, or a background turn's (voice agent, bot) registered for its length. */
+  /**
+   * The token for a pane's new process. Its unread long messages were sealed for the process before: sealed again here,
+   * before it starts, or it would take them for false and ADE would close its requests as lost.
+   */
+  const freshPaneToken = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, paneId: string) => {
+    const token = mintPaneToken(paneId)
+    const names = inboxPending.filter((entry) => entry.paneId === paneId).map((entry) => entry.name)
+    const { mailboxInboxText: read, mailboxInboxPut: put } = host
+    if (names.length > 0 && read && put) {
+      await resealUnread(names, retiredTokens.get(paneId) ?? [], {
+        read: (name) => read(paneId, name),
+        write: (name, body) => put(paneId, name, body),
+      })
+    }
+    return token
+  }
+  /** A pane's token, or a background turn's (voice agent, bot) registered for its length. What proves a sender. */
   const tokenOfSender = (paneId: string) => (running.has(paneId) ? paneTokens.get(paneId) : senderToken(paneId))
+  /** What seals for a pane: its last token even while it is not running, since it may start again and read this. */
+  const sealingToken = (paneId: string) => paneTokens.get(paneId) ?? senderToken(paneId)
   /** Who sent each message taken: what ADE writes for a message's id is sealed with that sender's key (`mail-seal.ts`). */
   const mailSenders = new Map<string, string>()
   const rememberMailSender = (id: string, from: string) => {
@@ -3407,13 +3430,20 @@ export function Workbench() {
   }
   /** The ids of the messages taken lately: a copy of one posted again is not carried out twice (`firstTime`). */
   const mailSeen = new Map<string, number>()
+  // The asker first: a message's id is the sender's to choose, and one posted with the id of an open request must not get its answer.
+  const paneOfMail = (id: string) =>
+    openRequests.get(id)?.from || mailSenders.get(id) || designWaiters().find((waiter) => waiter.id === id)?.from
   useMailKeys({
     forRequest: (id) => {
-      const pane =
-        mailSenders.get(id) ?? openRequests.get(id)?.from ?? designWaiters().find((waiter) => waiter.id === id)?.from
-      return pane ? tokenOfSender(pane) : undefined
+      const pane = paneOfMail(id)
+      return pane ? sealingToken(pane) : undefined
     },
-    forPane: tokenOfSender,
+    everyForRequest: (id) => {
+      const pane = paneOfMail(id)
+      const current = pane && sealingToken(pane)
+      return pane ? [...(current ? [current] : []), ...(retiredTokens.get(pane) ?? [])] : []
+    },
+    forPane: sealingToken,
   })
 
   /** How long a reply may sit unclaimed before it is typed into the caller instead. */
@@ -3637,6 +3667,9 @@ export function Workbench() {
     result?: string,
   ): Promise<boolean> =>
     settleOnce(id, async () => {
+      // Its file outlives the request, and is sealed and checked for the same pane after it (after a restart nothing else says whose).
+      const asker = openRequests.get(id)?.from
+      if (asker) rememberMailSender(id, asker)
       /*
        * The answer first, the closing after. Closing first meant a result that
        * failed to be written left a closed request and, since a closed request
@@ -3838,13 +3871,19 @@ export function Workbench() {
         void host.mailboxReceipt?.(id, UNSEALED_MAIL).catch(() => {})
         continue
       }
-      if (!firstTime(mailSeen, id, Date.now())) {
-        console.error(`ADE: posta ${id}: già presa o troppo vecchia, non la eseguo di nuovo`)
-        continue
-      }
       const claimed = claimedSender(sealed.body)
       const proven = await sealedBy(claimed ? tokenOfSender(claimed) : undefined, "outbox", id, sealed).catch(() => false)
+      // After the proof: a copy forged with an id anybody can read must not burn that id for the real message.
+      const age = proven ? firstTime(mailSeen, id, Date.now()) : "new"
+      if (age === "seen") {
+        console.error(`ADE: posta ${id}: già presa, non la eseguo di nuovo`)
+        continue
+      }
       if (proven) rememberMailSender(id, claimed)
+      if (age === "old") {
+        void host.mailboxReceipt?.(id, "errore: messaggio di più di un'ora fa: non eseguito").catch(() => {})
+        continue
+      }
       const parsed = parseMessage(sealed.body)
       const message = parsed && verifySender(parsed, proven)
       if (message) mailQueue.push({ id, message, at: Date.now() })
@@ -3863,7 +3902,7 @@ export function Workbench() {
       } else if (await freeNow(host, item.callerId)) {
         if (!dropFrom(lateReplies, item)) continue
         const text = await host.mailboxResultReclaim?.(item.ref).catch(() => null)
-        if (text != null) {
+        if (text) {
           heldLines.push({
             paneId: item.callerId,
             text: formatLateReply(item.ref, text, item.sender),
@@ -4251,7 +4290,7 @@ export function Workbench() {
       setTimeout(() => {
         void host.mailboxResultReclaim?.(message.ref).then((text) => {
           // Held until the caller's turn ends, like every other message.
-          if (text != null && caller && running.has(caller.id)) {
+          if (text && caller && running.has(caller.id)) {
             heldLines.push({
               paneId: caller.id,
               text: formatLateReply(message.ref, text, sender),
@@ -4307,7 +4346,7 @@ export function Workbench() {
       // Nobody woke on it: typed into the caller, which is not waiting any more.
       setTimeout(() => {
         void host.mailboxResultReclaim?.(request.id, "update").then((text) => {
-          if (text != null && caller && running.has(caller.id)) {
+          if (text && caller && running.has(caller.id)) {
             heldLines.push({ paneId: caller.id, text, inbox: { id: request.id, kind: "update", from: message.from } })
           }
         })
@@ -7878,6 +7917,7 @@ export function Workbench() {
     claims.forget(id)
     usageOf.delete(id)
     paneTokens.delete(id)
+    retiredTokens.delete(id)
     paneNonces.delete(id)
     formerNonces.delete(id)
     activityOf.delete(id)
@@ -9050,6 +9090,7 @@ export function Workbench() {
       )
       // Born at the pane's size, not the host's 120x30 (S77); undefined for a pane not yet fitted.
       const bornAt = ptySize(paneId)
+      const paneToken = await freshPaneToken(host, paneId)
       const session = await host.spawn({
         ...bornAt,
         command: agent.command,
@@ -9103,7 +9144,7 @@ export function Workbench() {
         },
         ...(nonce ? { link: { pane: paneId, nonce } } : {}),
         pane: paneId,
-        paneToken: mintPaneToken(paneId),
+        paneToken,
         ...(secretNames.length > 0 ? { secrets: secretNames } : {}),
       })
 
@@ -9363,6 +9404,7 @@ export function Workbench() {
       startOnCleanScreen(paneId)
       // Born at the pane's size, not the host's 120x30 (S77); undefined for a pane not yet fitted.
       const bornAt = ptySize(paneId)
+      const paneToken = await freshPaneToken(host, paneId)
       const session = await host.spawn({
         ...bornAt,
         command: "ssh",
@@ -9387,7 +9429,7 @@ export function Workbench() {
           tellPane(paneId, t("pane.connectFailed", reason))
         },
         pane: paneId,
-        paneToken: mintPaneToken(paneId),
+        paneToken,
       })
       // As for a local session: closed or started again meanwhile, the connection is ended (SES-2).
       if (!wb().panes.some((pane) => pane.id === paneId)) running.cancelStart(paneId)

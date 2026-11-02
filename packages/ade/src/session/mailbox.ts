@@ -1594,7 +1594,7 @@ export function requestsTable(
   ])
   const widths = [0, 1, 2, 3].map((col) => Math.max(...rows.map((row) => row[col]!.length)))
   const lines = rows.map((row) => row.map((cell, col) => (col < 4 ? cell.padEnd(widths[col]!) : cell)).join("  "))
-  return `${lines.join("\n")}\n\nattendi: ade-msg wait <id> [<id>...] [--any]   annulla: ade-msg cancel <id>\n${pending}`
+  return `${lines.join("\n")}\n\nattendi: ade-msg wait <id> [<id>...] [--any] (solo chi l'ha chiesta)   annulla: ade-msg cancel <id>\n${pending}`
 }
 
 /** Requests as saved across a restart; anything malformed is dropped. */

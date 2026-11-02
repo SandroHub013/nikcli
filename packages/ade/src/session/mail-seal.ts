@@ -66,27 +66,30 @@ export const REPLAY_WINDOW_MS = 60 * 60 * 1000
 /**
  * Whether message `id` may be taken now. A signature is good for ever, so a
  * session that read a message before ADE took it could post the same file again
- * and have it carried out twice. Ids start with the time they were made.
+ * and have it carried out twice. Ids start with the time they were made. Asked
+ * only of a proven message, or anybody could burn an id they have read.
  */
-export function firstTime(seen: Map<string, number>, id: string, now: number): boolean {
+export function firstTime(seen: Map<string, number>, id: string, now: number): "new" | "seen" | "old" {
   for (const [known, at] of seen) {
     if (now - at <= REPLAY_WINDOW_MS) break
     seen.delete(known)
   }
-  if (seen.has(id)) return false
+  if (seen.has(id)) return "seen"
   const made = Number(/^(\d{10,})-/.exec(id)?.[1])
-  if (Number.isFinite(made) && now - made > REPLAY_WINDOW_MS) return false
+  if (Number.isFinite(made) && now - made > REPLAY_WINDOW_MS) return "old"
   seen.set(id, now)
-  return true
+  return "new"
 }
 
 /** Whose token signs what: the waiter on a request or message id, and a pane's inbox. */
 export interface MailKeys {
   readonly forRequest: (id: string) => string | undefined
+  /** Every token a file of `id` may have been sealed with: the current one, then those of the waiter's earlier processes. */
+  readonly everyForRequest: (id: string) => readonly string[]
   readonly forPane: (pane: string) => string | undefined
 }
 
-let keys: MailKeys = { forRequest: () => undefined, forPane: () => undefined }
+let keys: MailKeys = { forRequest: () => undefined, everyForRequest: () => [], forPane: () => undefined }
 
 export function useMailKeys(next: MailKeys): void {
   keys = next
@@ -107,15 +110,52 @@ export async function sealForPane(pane: string, name: string, text: string): Pro
 }
 
 /**
- * The text of an answer ADE took back to type it, or `null` if ADE did not write it: what is typed into a session is
- * taken for the answer, so a file another session dropped there must not get through this way either.
+ * The text of an answer ADE took back to type it, or `""` if ADE did not write it: what is typed into a session is
+ * taken for the answer, so a file another session dropped there must not get through this way either. Empty and not
+ * `null`, which says there was no file: this one was there, so nobody has taken the answer.
+ *
+ * The waiter's old tokens count: an answer written before it was started again is real, and only now it is read.
  */
-export async function openReclaimed(kind: "result" | "update", id: string, text: string): Promise<string | null> {
+export async function openReclaimed(kind: "result" | "update", id: string, text: string): Promise<string> {
   const sealed = splitSealed(text)
-  const token = keys.forRequest(id)
-  // Its waiter is gone: nothing will be typed, and there is no key to ask.
-  if (!token) return sealed?.body ?? text
-  if (sealed && (await sealedBy(token, kind, id, sealed))) return sealed.body
-  console.error(`ADE: posta ${id}: un file non scritto da ADE è stato scartato`)
-  return null
+  if (sealed) {
+    for (const token of keys.everyForRequest(id)) {
+      if (await sealedBy(token, kind, id, sealed)) return sealed.body
+    }
+  }
+  console.error(`ADE: posta ${id}: un file non scritto da ADE è stato ignorato`)
+  return ""
+}
+
+/** The text of an inbox file to seal again, `undefined` to leave it: with `retired` tokens, only what one of them sealed. */
+async function bodyToReseal(retired: readonly string[], name: string, text: string): Promise<string | undefined> {
+  const sealed = splitSealed(text)
+  // ADE has just started, and the tokens of before are gone with it: what its own list names is taken as it is.
+  if (retired.length === 0) return sealed?.body ?? text
+  if (!sealed) return undefined
+  for (const token of retired) {
+    if (await sealedBy(token, "inbox", name, sealed)) return sealed.body
+  }
+  return undefined
+}
+
+/**
+ * Called when a pane gets a new token, before its process starts: what it has not read yet was sealed for the process
+ * before, and the new one would take it for false. `names` are the messages ADE knows it left there; `write` seals.
+ * A file that fails is left as it is and does not stop the others, nor the start.
+ */
+export async function resealUnread(
+  names: readonly string[],
+  retired: readonly string[],
+  io: { read: (name: string) => Promise<string | null>; write: (name: string, body: string) => Promise<void> },
+): Promise<void> {
+  for (const name of names) {
+    try {
+      const text = await io.read(name)
+      const body = text === null ? undefined : await bodyToReseal(retired, name, text)
+      if (body !== undefined) await io.write(name, body)
+    } catch (error) {
+      console.error(`ADE: posta ${name}: non ho potuto sigillarla di nuovo`, error)
+    }
+  }
 }

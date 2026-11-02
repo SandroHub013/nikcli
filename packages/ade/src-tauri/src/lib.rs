@@ -2765,6 +2765,7 @@ pub fn run() {
             mailbox::mailbox_inbox_put,
             mailbox::mailbox_dir,
             mailbox::mailbox_inbox_read,
+            mailbox::mailbox_inbox_text,
             agent_link::agent_activity_read,
             agent_link::agent_activity_read_many,
             agent_link::agent_interrupt,

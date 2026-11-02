@@ -831,6 +831,12 @@
           "markdownDescription": "Enables the mailbox_inbox_read command without any pre-configured scope."
         },
         {
+          "description": "Enables the mailbox_inbox_text command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-mailbox-inbox-text",
+          "markdownDescription": "Enables the mailbox_inbox_text command without any pre-configured scope."
+        },
+        {
           "description": "Enables the mailbox_publish command without any pre-configured scope.",
           "type": "string",
           "const": "allow-mailbox-publish",
@@ -1705,6 +1711,12 @@
           "type": "string",
           "const": "deny-mailbox-inbox-read",
           "markdownDescription": "Denies the mailbox_inbox_read command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the mailbox_inbox_text command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-mailbox-inbox-text",
+          "markdownDescription": "Denies the mailbox_inbox_text command without any pre-configured scope."
         },
         {
           "description": "Denies the mailbox_publish command without any pre-configured scope.",

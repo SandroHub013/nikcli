@@ -220,6 +220,8 @@ export interface Host {
   /** Whether pane `pane` has read message `name` (the file left its inbox). */
   /** Where a long message is: still in the inbox, moved to `handled/` by `ade-msg inbox`, or in neither. */
   mailboxInboxRead?: (pane: string, name: string) => Promise<InboxFileState>
+  /** The text of a message still in the inbox as it is on disk, `null` once it has gone. */
+  mailboxInboxText?: (pane: string, name: string) => Promise<string | null>
   /** The answer to request `id`, for the `ade-msg ask|spawn|wait` blocked on it. */
   mailboxResult?: (id: string, text: string) => Promise<void>
   /** Takes back an answer no waiter claimed; its text, or null if one did. */
@@ -1084,6 +1086,11 @@ export async function getHost(): Promise<Host | undefined> {
     async mailboxInboxPut(pane, name, text) {
       const { invoke } = await import("@tauri-apps/api/core")
       await invoke("mailbox_inbox_put", { pane, name, text: await sealForPane(pane, name, text) })
+    },
+
+    async mailboxInboxText(pane, name) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<string | null>("mailbox_inbox_text", { pane, name })
     },
 
     async mailboxInboxRead(pane, name) {
