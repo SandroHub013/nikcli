@@ -58,6 +58,25 @@ describe("orderedWrites", () => {
     expect(calls.map((call) => call.data)).toEqual(["a", "b"])
   })
 
+  test("each write answers whether the pane took it", async () => {
+    const { calls, send } = held()
+    const write = orderedWrites(send)
+    const first = write("a")
+    const second = write("b")
+    calls[0]!.answer(new Error("il terminale non sta leggendo"))
+    expect(await first).toBe(false)
+    await settled()
+    calls[1]!.answer()
+    expect(await second).toBe(true)
+  })
+
+  test("a session that has ended answers false, without an invoke", () => {
+    const shell = readFileSync(join(import.meta.dir, "shell.ts"), "utf8")
+    const write = shell.slice(shell.indexOf("write: (data) => {"))
+    expect(write.slice(0, 120)).toContain("if (dead) return Promise.resolve(false)")
+    expect(write.slice(0, 120)).toContain("return sendToPane(data)")
+  })
+
   test("a pane's writes go through it, not straight to invoke", () => {
     const shell = readFileSync(join(import.meta.dir, "shell.ts"), "utf8")
     expect(shell).toContain('orderedWrites((data) => invoke("pty_write", { id, data }))')

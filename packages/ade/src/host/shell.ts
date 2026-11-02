@@ -23,8 +23,11 @@ export interface SpawnedSession {
    * an arrow key and the "y" that answers a permission prompt are all
    * keystrokes: deciding where a line ends belongs to whoever is typing, so
    * callers send their own "\r".
+   *
+   * The desktop shell answers whether the pane took the bytes, false when it
+   * refused them (its queue is full, its pipe broke, the session has ended).
    */
-  write: (data: string) => void
+  write: (data: string) => void | Promise<boolean>
   /**
    * Tells the CLI how big its terminal is.
    *
@@ -714,8 +717,8 @@ export async function getHost(): Promise<Host | undefined> {
           )
         },
         write: (data) => {
-          if (dead) return
-          sendToPane(data)
+          if (dead) return Promise.resolve(false)
+          return sendToPane(data)
         },
         resize: (nextCols, nextRows) => {
           if (dead) return

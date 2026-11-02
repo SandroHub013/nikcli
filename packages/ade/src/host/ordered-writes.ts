@@ -6,23 +6,32 @@
  * order, and costs little, because the command only queues the bytes and answers at once. Writes stay separate rather
  * than joined: text and its Enter sent apart are what makes an agent's input box read them as a line and not a paste.
  *
- * A write that fails is dropped and the next one still goes: nothing here can tell the pane about it, and a stuck
- * queue would lose every key after it.
+ * Each write answers whether the pane took it. A write that fails is dropped and the next one still goes: a stuck queue
+ * would lose every key after it. Whoever cannot afford to lose it, as a mail delivery cannot, looks at the answer.
  */
-export function orderedWrites(send: (data: string) => Promise<unknown>): (data: string) => void {
-  const waiting: string[] = []
+export function orderedWrites(send: (data: string) => Promise<unknown>): (data: string) => Promise<boolean> {
+  const waiting: { data: string; answer: (taken: boolean) => void }[] = []
   let sending = false
   const next = () => {
-    const data = waiting.shift()
-    if (data === undefined) {
+    const write = waiting.shift()
+    if (write === undefined) {
       sending = false
       return
     }
     sending = true
-    void send(data).catch(() => undefined).then(next)
+    void send(write.data)
+      .then(
+        () => true,
+        () => false,
+      )
+      .then((taken) => {
+        write.answer(taken)
+        next()
+      })
   }
-  return (data) => {
-    waiting.push(data)
-    if (!sending) next()
-  }
+  return (data) =>
+    new Promise((answer) => {
+      waiting.push({ data, answer })
+      if (!sending) next()
+    })
 }

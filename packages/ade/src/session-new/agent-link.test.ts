@@ -308,6 +308,11 @@ describe("followReports slows down when nothing comes (P1-C2b)", () => {
     expect(await reads(40_000, [30_000])).toEqual([2_000, 6_000, 14_000, 29_000, 31_000, 35_000])
   })
 
+  test("countingLines hands back the pane's answer: a refused write is not lost on the way (B2)", async () => {
+    const session = { write: (_data: string) => Promise.resolve(false) as void | Promise<boolean> }
+    expect(await countingLines(session, () => {}).write("ciao\r")).toBe(false)
+  })
+
   test("countingLines counts the lines a session submits, and keeps the session itself", () => {
     const written: string[] = []
     let lines = 0
