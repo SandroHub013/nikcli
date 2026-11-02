@@ -4,13 +4,12 @@
  * whatever the language, and the hour in the system's.
  */
 
-import { locale, type Locale } from "../i18n/locale"
+import { bcp47, locale, type Locale } from "../i18n/locale"
 import { translate } from "../i18n"
 
-const BCP47: Record<Locale, string> = { it: "it-IT", en: "en-US" }
 
 function decimal(value: number, digits: number, loc: Locale, minimum = 0): string {
-  return new Intl.NumberFormat(BCP47[loc], { minimumFractionDigits: minimum, maximumFractionDigits: digits }).format(value)
+  return new Intl.NumberFormat(bcp47(loc), { minimumFractionDigits: minimum, maximumFractionDigits: digits }).format(value)
 }
 
 /** Tokens and the like: 950, 1,2k, 12k, 3,4M. */
@@ -35,7 +34,7 @@ export function formatCap(usd: number, loc: Locale = locale()): string {
 
 /** The hour of a moment, as the language writes it: 14:05 in Italian, 2:05 PM in English. */
 export function formatClock(ms: number, loc: Locale = locale()): string {
-  return new Date(ms).toLocaleTimeString(BCP47[loc], { hour: "2-digit", minute: "2-digit" })
+  return new Date(ms).toLocaleTimeString(bcp47(loc), { hour: "2-digit", minute: "2-digit" })
 }
 
 /**
@@ -62,7 +61,7 @@ export function formatConnectedDay(ms: number, now: number = Date.now(), loc: Lo
   }
 
   const day = date.getDate()
-  const month = date.toLocaleDateString(BCP47[loc], { month: "short" })
+  const month = date.toLocaleDateString(bcp47(loc), { month: "short" })
   return translate(loc, "bots.format.date", day, month)
 }
 

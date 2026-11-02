@@ -1,3 +1,4 @@
+import { bcp47 } from "../i18n/locale"
 /**
  * A file that is not text, as the host describes it.
  *
@@ -151,7 +152,7 @@ export function formatSize(bytes: number, language: "it" | "en"): string {
     value /= 1024
     unit++
   }
-  const number = new Intl.NumberFormat(language === "it" ? "it-IT" : "en-US", { maximumFractionDigits: 1 }).format(
+  const number = new Intl.NumberFormat(bcp47(language), { maximumFractionDigits: 1 }).format(
     value,
   )
   return `${number} ${UNITS[unit]}`

@@ -1,4 +1,5 @@
 import type { Messages } from "./it"
+import { plural } from "./locale"
 import { voiceEn } from "./voice-en"
 
 /**
@@ -290,13 +291,13 @@ export const en: Messages = {
   "new.close": "Close",
   "new.launch": (count) => (count === 1 ? "Start 1 session" : `Start ${count} sessions`),
   "new.agent": "Agent",
-  "new.missing": "missing",
+  "new.missing": "To install",
   "new.looking": "Looking for the installed agents…",
   "new.noneInstalled": "No agent is installed on this computer. Pick one below to see how to install it.",
   "new.noAgentChosen": "no agent chosen",
   "pane.noAgent":
     "This session can't start: no agent was chosen. Close it and pick one in New session.",
-  "install.cardHint": "not installed: click to install it",
+  "install.cardHint": "Not installed. Open to see how to install it.",
   "install.title": (agent) => `Install ${agent}`,
   "install.command": "Official command",
   "install.copy": "Copy",
@@ -326,13 +327,12 @@ export const en: Messages = {
   "install.caveat.goose-temp":
     "These are the project's two steps, with the script saved in %TEMP% and not in the project folder.",
   "install.paneTitle": (agent) => `Install ${agent}`,
-  "new.count": "How many",
+  "new.count": "How many sessions",
   "new.count.label": "parallel sessions",
-  "new.preview": "Will start",
+  "new.preview": "What will start",
   "new.role.reviewer": "reviews",
   "new.summary": (count, agent, workspace) =>
     `${count} ${count === 1 ? "session" : "sessions"} with ${agent} in ${workspace}`,
-  "hooks.title": "Session resume",
   "hooks.desc":
     "When ADE restarts, it reopens your sessions where they left off. To do that it needs to know which conversation each panel had. Some CLIs accept an ID chosen by ADE; others, like codex, don't, and only they can report it. Here ADE adds an entry to that CLI's configuration so it reports the ID whenever a session starts.",
   "hooks.files":
@@ -422,7 +422,6 @@ export const en: Messages = {
   "decisions.reopened.delivered": (key) => `Reopening of ${key} delivered`,
   "design.reopened.delivered": (key) => `Reopening of ${key} delivered`,
   "design.waiter.taken": (key) => `Choice on ${key} delivered to the ade-msg command waiting for it`,
-  "decisions.waiting": "Decisions waiting for you",
   "workspace.unreadable":
     "I could not read the saved sessions (they may come from a newer version of ADE). I kept a copy: update ADE to get them back.",
   "workspace.unreadableNoCopy":
@@ -640,9 +639,7 @@ export const en: Messages = {
   "settings.providers.checkAgain": "Check again",
 
   // Splash & logo
-  "splash.aria": "ADE onboarding — 3D ASCII typography",
-  "logo.title": "ADE — liquid chrome mercury with physics (click to splash)",
-  "logo.aria": "ADE Logo — molten chrome",
+  "splash.aria": "Ragù Code is starting",
 
   // Voice shortcut & permission
   "voice.shortcut.feature.agent": "voice assistant",
@@ -759,12 +756,12 @@ export const en: Messages = {
   "ask.yes": "Yes",
   "ask.no": "No",
   "tray.hide.working": (count) =>
-    `A gateway is on: ADE goes to the tray and stays open. ${count} ${count === 1 ? "session is working and will go on" : "sessions are working and will go on"} with the window hidden. To close ADE altogether: Exit, in its icon's menu.`,
+    `A chat connection is on: ADE goes to the notification area and stays open. ${count} ${count === 1 ? "session is working and will go on" : "sessions are working and will go on"} with the window hidden. To close ADE altogether: Exit, in its icon's menu.`,
   "tray.hide.keepSessions": "Hide, sessions go on",
   "tray.hide.closeSessions": "Close the sessions and hide",
   "tray.hide.cancel": "Cancel",
   "tray.hide.notice":
-    "ADE stays in the tray while a gateway is on, so the chats still reach their bots. The microphone closes while the window is hidden. To bring it back: click the icon; to close ADE: Exit, in the icon's menu.",
+    "ADE stays in the notification area while a chat connection is on, so the chats still reach their bots. The microphone closes while the window is hidden. To bring it back: click the icon; to close ADE: Exit, in the icon's menu.",
   "bell.title": "Notifications",
   "bell.dismiss": "Dismiss",
 
@@ -827,8 +824,8 @@ export const en: Messages = {
 
   // Browser panel
   "browser.unreachable": "Can't reach the server",
-  "browser.fidelity.native": "Native (bridge on)",
-  "browser.fidelity.mirror": "Mirror (isolated copy)",
+  "browser.fidelity.native": "Connected to the page",
+  "browser.fidelity.mirror": "Separate copy of the page",
   "browser.fidelity.none": "Read-only",
   "browser.fidelity.pending": "Connecting…",
   "browser.fluid": "Fluid",
@@ -891,7 +888,7 @@ export const en: Messages = {
   "gateway.status.idle": "Free: go ahead.",
   "gateway.status.working": (queued: number) => `Working on a turn; messages queued: ${queued}.`,
   "gateway.status.connectedSince": (time: string, day?: string) =>
-    day ? `Gateway connected since ${day} at ${time}.` : `Gateway connected since ${time}.`,
+    day ? `Chat connection on since ${day} at ${time}.` : `Chat connection on since ${time}.`,
   "gateway.retry.none": "There is no question to ask again yet: write me one.",
   "gateway.retry.busy": "I'm still working on the last question: wait for it to finish, or write /stop.",
   "gateway.retry.again": "Asking the last question again.",
@@ -1263,7 +1260,7 @@ export const en: Messages = {
   "date.today": "today",
   "date.tomorrow": "tomorrow",
   "date.monday": "Monday",
-  "date.inDays": (days) => `in ${days} days`,
+  "date.inDays": (days) => `in ${days} ${plural(days, { one: "day", other: "days" }, "en")}`,
   "decisions.title": "Decisions",
   "decisions.shortTitle": "Decisions",
   "decisions.notice.toTake": (title) => `Decision to make: ${title}`,
@@ -1321,7 +1318,7 @@ export const en: Messages = {
   "decisions.recipient.idle": (title) => `“${title}” isn't running, so answers stay queued.`,
   "decisions.recipient.waiting": (count) => `${count} waiting.`,
   "decisions.sheet.position": (index, total) => `${index} of ${total}`,
-  "decisions.sheet.empty": "When a session opens one, the badge at the top shows it.",
+  "decisions.sheet.empty": "When a session asks you to choose, the number next to Decisions at the top lights up.",
   "decisions.sheet.needChoice": "Nothing chosen: press 1–9 or click an option, then Enter",
   "decisions.sheet.needRecipient": "Nobody receives the answer: choose who does, then Enter",
   "decisions.sheet.needText": "Write your answer in the note, then press Ctrl+Enter",
@@ -1350,7 +1347,6 @@ export const en: Messages = {
   "design.notice.toChoose": (title) => `Design to choose: ${title}`,
   "design.openCount": (count) => `${count} open`,
   "design.count": (count) => (count === 1 ? "1 design proposal" : `${count} design proposals`),
-  "design.waiting": "Design proposals waiting",
   "design.needChoice": "choose a variant or write a note",
   "design.variants": "Variants",
   "design.keeps": "Stays as it is",
@@ -1402,10 +1398,9 @@ export const en: Messages = {
     `Deliver ${queued === 1 ? "the queued choice" : `the ${queued} queued choices`} to “${title}”?`,
   "design.recipient.deliver": "Deliver",
   "design.sheet.position": (index, total) => `${index} of ${total}`,
-  "design.sheet.empty": "When a session opens one, the badge at the top shows it.",
+  "design.sheet.empty": "When a session asks you to choose, the number next to Decisions at the top lights up.",
   "design.sheet.needChoice": "Nothing chosen: press 1–9 or click an option, then Enter",
   "design.sheet.needRecipient": "Nobody receives the answer: choose who does, then Enter",
-  "design.sheet.needText": "Write your answer in the note, then press Ctrl+Enter",
   "design.sheet.keys": "1–9 choose · Enter records · ← → browse · Esc closes",
   "design.sheet.queued.none": (count) =>
     `${count === 1 ? "1 answer" : `${count} answers`} queued: no session receives them`,
@@ -1511,9 +1506,6 @@ export const en: Messages = {
   "extensions.added": (name, file, hint) =>
     `Added ${name} to ${file}. ${hint} It applies to sessions started from now on.`,
   "extensions.removed": (name, file) => `Removed ${name} from ${file}.`,
-  "extensions.tab.installed": (count) => `Installed · ${count}`,
-  "extensions.tab.catalog": (count) => `MCP catalog · ${count}`,
-  "extensions.tab.plugins": (count) => `Plugins · ${count}`,
   "extensions.desc": (file) =>
     `MCP servers and plugins. Add to project only writes the open project's ${file}, which agent CLIs read when a session starts. Credentials never go in that file.`,
   "extensions.noProject": (file) => `Open a project to add MCP servers. They're installed in its ${file}.`,
@@ -1562,7 +1554,7 @@ export const en: Messages = {
   "keys.billing.chatgpt": "your ChatGPT sign-in",
   "keys.added.today": "added today",
   "keys.added.yesterday": "added yesterday",
-  "keys.added.days": (days) => `added ${days} days ago`,
+  "keys.added.days": (days) => `added ${days} ${plural(days, { one: "day", other: "days" }, "en")} ago`,
   "keys.desc":
     "Secret keys your sessions can use. The value stays in the system keychain (Windows Credential Manager, macOS Keychain). ADE never writes it to a file or shows it, and only passes it as an environment variable to the agents you choose for each key, when a session starts.",
   "keys.noKeychain": "This version of ADE can't access the keychain.",
@@ -1676,7 +1668,7 @@ export const en: Messages = {
   "remote.error.port": "invalid port",
   "quota.na.tooltip": (vendor, why) => `${vendor} quota: n/a\n${why}`,
   "quota.na.noSource": "No quota source for this agent.",
-  "quota.na.noReport": "No quota-axi report found (~/.cache/quota-axi/quotas.json).",
+  "quota.na.noReport": "No quota report on this computer.",
   "quota.na.noWindows": "quota-axi reports no windows for this provider.",
   "quota.na.noTime": "The quota-axi report doesn't say when it was written.",
   "quota.na.future": (time) => `The report is dated ${time}, later than now: it can't be trusted.`,
@@ -1893,10 +1885,6 @@ export const en: Messages = {
   "design.rule.open": (key) => `${key} is already open`,
   "design.rule.close": (key) => `${key} can only be closed after an answer or with evidence`,
   "design.log.again": "another round says what to change, without a choice",
-  "design.status.giro": "another round",
-  "design.status.aperta": "open",
-  "design.status.risposta": "chosen",
-  "design.status.chiusa": "closed",
   "design.problem.line": (line, reason) => `line ${line}: ${reason}`,
   "design.noProject.short": "no project open",
 
@@ -1938,7 +1926,6 @@ export const en: Messages = {
   "bots.models.exit": (code, detail) => `ragu models exited with ${code}${detail ? `: ${detail}` : ""}`,
   "bots.models.empty": "Ragù Code listed no models",
   "chat.model.choose": "Choose a model",
-  "chat.model.none": "No models available",
   "chat.model.missing": (model) =>
     `The model ${model} is not in the Ragù Code server's catalog: it was removed, or its provider is not connected. Nothing was sent: choose another one.`,
   "chat.agent.label": "Agent",
@@ -1980,7 +1967,6 @@ export const en: Messages = {
   "chat.attach.notFile": (path: string) => `${path} is not a file: the chat only attaches files.`,
   "chat.attach.env": (path: string) =>
     `${path} is not attached: .env files usually hold keys and passwords, and an attachment reaches the model's provider.`,
-  "chat.attach.add": "Attach",
   "chat.attach.addHint": "Attach a project file",
   "chat.attach.remove": (name: string) => `Remove ${name}`,
   "chat.attach.list": "Attached files",
@@ -2072,7 +2058,7 @@ export const en: Messages = {
   "bots.approval.reason.tool": (tool: string) => `uses ${tool}, which Ragù Code asks to confirm`,
   "bots.approval.why": (reason: string) => `It stops because it ${reason}.`,
   "bots.approval.always": "Always for this bot",
-  "bots.approval.timeout": (minutes: number) => `No answer within ${minutes} minutes counts as Deny.`,
+  "bots.approval.timeout": (minutes: number) => `No answer within ${minutes} ${plural(minutes, { one: "minute", other: "minutes" }, "en")} counts as Deny.`,
   "bots.approval.blocked": (command: string, reason: string) =>
     `Blocked: “${command}” ${reason}. This command never runs, whatever is chosen.`,
   "bots.approval.refused": (command: string, reason: string) =>
@@ -2096,7 +2082,7 @@ export const en: Messages = {
   "bots.routine.spend.perDay": "Cap per day ($)",
   "bots.routine.cap": (text: string) => `This mode's cap: ${text}.`,
   "bots.routine.cap.perDay": (runs: number) => `${runs} runs a day for all routines together`,
-  "bots.routine.cap.gap": (minutes: number) => `at least ${minutes} minutes between two runs of the same routine`,
+  "bots.routine.cap.gap": (minutes: number) => `at least ${minutes} ${plural(minutes, { one: "minute", other: "minutes" }, "en")} between two runs of the same routine`,
   "bots.routine.cap.money": (run: string, day: string) => `at most ${run} per run and ${day} a day`,
   "bots.routine.consent": (runner: string, mode: string, model: string) =>
     `I agree: this routine runs on its own with ${runner} (${mode}, ${model}), without a shell, only while ADE is open and within the cap above.`,
@@ -2165,7 +2151,7 @@ export const en: Messages = {
   "bots.routine.problem.notAllowed": "this program cannot run routines",
   "bots.routine.problem.prompt": "Write what the routine should do.",
   "bots.routine.problem.every": "Choose every how many hours (1 to 168) or a time.",
-  "bots.routine.problem.gap": (minutes: number) => `Two runs need at least ${minutes} minutes between them.`,
+  "bots.routine.problem.gap": (minutes: number) => `Two runs need at least ${minutes} ${plural(minutes, { one: "minute", other: "minutes" }, "en")} between them.`,
   "bots.routine.problem.spendRequired": "This mode needs a spending cap, per run and per day.",
   "bots.routine.problem.perRun": (max: string) => `The cap per run goes up to ${max}.`,
   "bots.routine.problem.perDay": (max: string) => `The cap per day goes up to ${max}.`,
@@ -2620,7 +2606,7 @@ export const en: Messages = {
   "model.state.meshes": (count) => `${count} ${count === "1" ? "mesh" : "meshes"}`,
   "model.state.triangles": (count) => `${count} ${count === "1" ? "triangle" : "triangles"}`,
   "model.state.dimensions": (x, y, z) => `size ${x} × ${y} × ${z}`,
-  "model.state.animations": (count) => `${count} ${count === 1 ? "animation" : "animations"}`,
+  "model.state.animations": (count) => `${count} ${plural(count, { one: "animation", other: "animations" }, "en")}`,
   "pane.runnerLogin": (label: string) => `${label} · sign-in`,
 
   // F7a2: Simulator

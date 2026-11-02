@@ -445,7 +445,8 @@ export function SessionPane(props: SessionPaneProps) {
 
   const missing = () => {
     const q = quota()
-    return isQuotaUnavailable(q) ? q : undefined
+    // With no report or file on this machine there is nothing to say: no chip, rather than a permanent «n/d».
+    return isQuotaUnavailable(q) && !q.sourceless ? q : undefined
   }
 
   const state = createMemo<PaneState>(() =>

@@ -2170,7 +2170,7 @@ describe("the failure shown in the panel goes away when the bot works again (N7)
     b.emit("/stato")
     await until("stato ricevuto", () => b.sent.length === 1)
     const replyText = b.sent[0]!.text
-    expect(replyText).toMatch(/collegato dal 13 (ott|ottobre) alle 14:05/)
+    expect(replyText).toMatch(/collegamento chat attivo dal 13 (ott|ottobre) alle 14:05/i)
   })
 })
 

@@ -21,7 +21,7 @@ import { groupIntoTurns, type AgentEntry, type AgentTurn } from "@ragu/voice"
 import { presenceLabel, presenceOf } from "./status"
 import { isVoiceReady, voicePrerequisitesList } from "./onboarding"
 import "./agent-console.css"
-import { locale, t } from "../i18n"
+import { locale, t, bcp47 } from "../i18n"
 
 export interface AgentConsoleProps {
   history: AgentEntry[]
@@ -48,7 +48,7 @@ export interface AgentConsoleProps {
 
 function timeOf(at: number): string {
   if (!Number.isFinite(at) || at <= 0) return ""
-  const loc = locale() === "it" ? "it-IT" : "en-US"
+  const loc = bcp47()
   return new Date(at).toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" })
 }
 

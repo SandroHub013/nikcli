@@ -150,7 +150,7 @@ import {
   type HookStatus,
 } from "../session-new/agent-hooks"
 import { applyNativeGlass, checkNativeGlassStatus, type GlassStatus } from "./glass-window"
-import { locale, refreshSystemLocale, syncDocumentLanguage, t, translate } from "../i18n"
+import { locale, refreshSystemLocale, syncDocumentLanguage, t, translate, bcp47 } from "../i18n"
 import {
   formatMb,
   parseUpdateProgress,
@@ -5896,7 +5896,7 @@ export function Workbench() {
   const playbackMeter = createPlaybackMeter()
   const webSpeaker =
     typeof window !== "undefined" && "speechSynthesis" in window
-      ? createWebSpeechSpeaker({ lang: () => (locale() === "en" ? "en-US" : "it-IT") })
+      ? createWebSpeechSpeaker({ lang: () => (bcp47()) })
       : createFakeSpeaker()
   const systemSpeaker = {
     ...webSpeaker,
@@ -7901,10 +7901,11 @@ export function Workbench() {
    * pane went now, and it goes only on the yes (`editor/closer.ts`).
    */
   /** The two buttons of a close question, named for what each does (UX-10). */
-  const closeLabels = (dialog: "pane.closeRunning" | "pane.closeWorktree" | "editor.closeDirty") => ({
-    ok: t(`${dialog}.ok`),
-    cancel: t(`${dialog}.cancel`),
-  })
+  const closeLabels = {
+    running: () => ({ ok: t("pane.closeRunning.ok"), cancel: t("pane.closeRunning.cancel") }),
+    worktree: () => ({ ok: t("pane.closeWorktree.ok"), cancel: t("pane.closeWorktree.cancel") }),
+    dirty: () => ({ ok: t("editor.closeDirty.ok"), cancel: t("editor.closeDirty.cancel") }),
+  }
   /** The question for a running agent; only one that can be resumed may promise its conversation is kept. */
   const closeRunningMessage = (title: string, id: string): string => {
     const pane = wb().panes.find((candidate) => candidate.id === id)
@@ -7916,20 +7917,20 @@ export function Workbench() {
       const buffer = buffers()[id]
       return buffer?.dirty ? buffer.path : undefined
     },
-    ask: (path) => askYesNo(t("editor.closeDirty", path), closeLabels("editor.closeDirty")),
+    ask: (path) => askYesNo(t("editor.closeDirty", path), closeLabels.dirty()),
     closeNow: (id) => closeNow(id),
     exists: (id) => wb().panes.some((pane) => pane.id === id),
     running: (id) => {
       const pane = wb().panes.find((candidate) => candidate.id === id)
       return pane && running.has(id) ? pane.title || agentLabel(pane.agent ?? pane.model) : undefined
     },
-    askRunning: (agent, id) => askYesNo(closeRunningMessage(agent, id), closeLabels("pane.closeRunning")),
+    askRunning: (agent, id) => askYesNo(closeRunningMessage(agent, id), closeLabels.running()),
     hasWorktree: (id) => Boolean(wb().panes.find((candidate) => candidate.id === id)?.worktree),
     worktreeWork: async (id) => {
       const host = await getHost()
       return host ? unintegrated(host, id) : undefined
     },
-    askWorktree: (reason) => askYesNo(t("pane.closeWorktree", reason), closeLabels("pane.closeWorktree")),
+    askWorktree: (reason) => askYesNo(t("pane.closeWorktree", reason), closeLabels.worktree()),
     // A second ✕ while the question is open brings it back, even from the icon.
     remind: () => void remindQuestion(),
   })

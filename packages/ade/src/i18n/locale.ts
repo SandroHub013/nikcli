@@ -99,3 +99,22 @@ export function resetLocaleForTests(next: LocalePreference = "system", system: L
   setPreferenceSignal(next)
   setSystemLocale(system)
 }
+
+const BCP47: Record<Locale, string> = { it: "it-IT", en: "en-US" }
+
+/**
+ * The language tag `Intl` wants for a language of ADE: one table, where it was
+ * written out as `locale() === "it" ? "it-IT" : "en-US"` in a dozen files.
+ */
+export function bcp47(language: Locale = locale()): string {
+  return BCP47[language]
+}
+
+/**
+ * The form of a text that agrees with a number, by the language's own plural
+ * rules: «1 minuto», «2 minuti»; "1 minute", "2 minutes". A catalog passes its
+ * own language, because it is read through `translate` for any language.
+ */
+export function plural<T>(count: number, forms: { readonly one: T; readonly other: T }, language: Locale = locale()): T {
+  return new Intl.PluralRules(bcp47(language)).select(count) === "one" ? forms.one : forms.other
+}

@@ -24,7 +24,7 @@
  * are what CAD, printing and quick generators write; FBX because game assets
  * still arrive in it, with the caveat that only its embedded textures load.
  */
-import { locale, t } from "../i18n"
+import { locale, t, bcp47 } from "../i18n"
 
 export const MODEL_EXTENSIONS = ["glb", "gltf", "obj", "stl", "fbx"] as const
 
@@ -308,14 +308,14 @@ export function formatMeasure(value: number): string {
   if (!Number.isFinite(value)) return "?"
   const abs = Math.abs(value)
   const digits = abs >= 100 ? 0 : abs >= 10 ? 1 : abs >= 1 ? 2 : 3
-  return new Intl.NumberFormat(locale() === "it" ? "it-IT" : "en-US", {
+  return new Intl.NumberFormat(bcp47(), {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   }).format(value)
 }
 
 export function formatCount(value: number): string {
-  return Math.round(value).toLocaleString(locale() === "it" ? "it-IT" : "en-US")
+  return Math.round(value).toLocaleString(bcp47())
 }
 
 export function describeModelState(state: ModelState): string {

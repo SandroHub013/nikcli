@@ -7,7 +7,7 @@
 import { Show, createSignal, type JSX } from "solid-js"
 import { binaryType, formatSize, isArchive, type ArchiveListing, type BinaryFile, type BinaryType } from "./binary-file"
 import { ArchiveList } from "./archive-list"
-import { locale, t } from "../i18n"
+import { locale, t, bcp47 } from "../i18n"
 
 type Family = "package" | "program" | "document" | "data"
 
@@ -79,7 +79,7 @@ export function BinaryCard(props: BinaryCardProps) {
   const modified = () =>
     props.binary.modified === undefined
       ? undefined
-      : new Date(props.binary.modified).toLocaleString(locale() === "it" ? "it-IT" : "en-US", {
+      : new Date(props.binary.modified).toLocaleString(bcp47(), {
           dateStyle: "medium",
           timeStyle: "short",
         })

@@ -102,8 +102,8 @@ describe("the gone folders, all at once (the Architect, BASSO)", () => {
   })
 
   test("the confirmation says how many, and the removal leaves the others", () => {
-    expect(t("confirm.forgetGone", 68)).toBe("Togliere dai recenti e dagli Spaces 68 cartelle sparite?")
-    expect(t("confirm.forgetGone", 1)).toBe("Togliere dai recenti e dagli Spaces 1 cartella sparita?")
+    expect(t("confirm.forgetGone", 68)).toBe("Togliere dai recenti e dai progetti 68 cartelle sparite?")
+    expect(t("confirm.forgetGone", 1)).toBe("Togliere dai recenti e dai progetti 1 cartella sparita?")
     const gone = withMissing(withMissing(new Set(), "C:/x/ragu-ade-a", true), "C:\\x\\ragu-ade-b", true)
     expect(withoutMissing(base.recents, gone).map((entry) => entry.name)).toEqual(["ragu"])
   })

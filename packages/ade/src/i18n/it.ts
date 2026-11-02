@@ -10,6 +10,7 @@
  * errors (agents read Italian as well as English), and the voice grammar,
  * which follows the speech-recognition language rather than the interface.
  */
+import { plural } from "./locale"
 import { voiceIt } from "./voice-it"
 
 export const it = {
@@ -298,14 +299,14 @@ export const it = {
   "new.close": "Chiudi",
   "new.launch": (count: number) => (count === 1 ? "Avvia 1 sessione" : `Avvia ${count} sessioni`),
   "new.agent": "Agente",
-  "new.missing": "assente",
+  "new.missing": "Da installare",
   "new.looking": "Cerco gli agenti installati…",
   "new.noneInstalled":
     "Nessun agente installato su questo computer. Scegline uno qui sotto per vedere come installarlo.",
   "new.noAgentChosen": "nessun agente scelto",
   "pane.noAgent":
     "Questa sessione non può partire: non è stato scelto nessun agente. Chiudila e scegline uno in Nuova sessione.",
-  "install.cardHint": "non installato: clicca per installarlo",
+  "install.cardHint": "Non installato. Apri per vedere come installarlo.",
   "install.title": (agent: string) => `Installa ${agent}`,
   "install.command": "Comando ufficiale",
   "install.copy": "Copia",
@@ -335,13 +336,12 @@ export const it = {
   "install.caveat.goose-temp":
     "Sono i due passi del progetto, con lo script salvato in %TEMP% e non nella cartella del progetto.",
   "install.paneTitle": (agent: string) => `Installa ${agent}`,
-  "new.count": "Quante",
+  "new.count": "Quante sessioni",
   "new.count.label": "sessioni parallele",
-  "new.preview": "Partirà",
+  "new.preview": "Cosa parte",
   "new.role.reviewer": "revisiona",
   "new.summary": (count: number, agent: string, workspace: string) =>
     `${count} ${count === 1 ? "sessione" : "sessioni"} con ${agent} in ${workspace}`,
-  "hooks.title": "Ripresa delle sessioni",
   "hooks.desc":
     "Al riavvio ADE riapre le sessioni dov'erano. Per farlo deve sapere quale conversazione aveva ogni pannello: alcune CLI accettano un identificativo scelto da ADE, altre — codex fra queste — no, e possono solo dirlo loro. Qui ADE aggiunge una voce alla configurazione di quella CLI perché all'avvio di ogni sessione lo comunichi.",
   "hooks.files":
@@ -434,7 +434,6 @@ export const it = {
   "decisions.reopened.delivered": (key: string) => `Riapertura di ${key} consegnata`,
   "design.reopened.delivered": (key: string) => `Riapertura di ${key} consegnata`,
   "design.waiter.taken": (key: string) => `Scelta su ${key} consegnata al comando ade-msg che la aspettava`,
-  "decisions.waiting": "Decisioni che aspettano te",
   "workspace.unreadable":
     "Non sono riuscita a leggere le sessioni salvate (forse sono di una versione più nuova di ADE). Ne ho tenuto una copia: aggiorna ADE per riaverle.",
   "workspace.unreadableNoCopy":
@@ -658,9 +657,7 @@ export const it = {
   "settings.providers.checkAgain": "Ricontrolla",
 
   // Splash & logo
-  "splash.aria": "Presentazione di ADE — tipografia ASCII 3D",
-  "logo.title": "ADE — mercurio cromato liquido con fisica (clicca per lo spruzzo)",
-  "logo.aria": "Logo ADE — mercurio cromato",
+  "splash.aria": "Ragù Code si sta avviando",
 
   // Voice shortcut & permission
   "voice.shortcut.feature.agent": "assistente vocale",
@@ -777,12 +774,12 @@ export const it = {
   "ask.yes": "Sì",
   "ask.no": "No",
   "tray.hide.working": (count: number) =>
-    `Un gateway è acceso: ADE va nella tray e resta aperta. ${count} ${count === 1 ? "sessione sta lavorando e continuerà" : "sessioni stanno lavorando e continueranno"} anche con la finestra nascosta. Per chiudere ADE del tutto: Esci, nel menu della sua icona.`,
+    `Un collegamento chat è acceso: ADE va nell'area di notifica e resta aperta. ${count} ${count === 1 ? "sessione sta lavorando e continuerà" : "sessioni stanno lavorando e continueranno"} anche con la finestra nascosta. Per chiudere ADE del tutto: Esci, nel menu della sua icona.`,
   "tray.hide.keepSessions": "Nascondi, le sessioni continuano",
   "tray.hide.closeSessions": "Chiudi le sessioni e nascondi",
   "tray.hide.cancel": "Annulla",
   "tray.hide.notice":
-    "ADE resta nella tray finché un gateway è acceso, così le chat continuano a raggiungere i bot. Il microfono si chiude finché la finestra è nascosta. Per riaprirla: clic sull'icona; per chiudere ADE: Esci, nel menu dell'icona.",
+    "ADE resta nell'area di notifica finché un collegamento chat è acceso, così le chat continuano a raggiungere i bot. Il microfono si chiude finché la finestra è nascosta. Per riaprirla: clic sull'icona; per chiudere ADE: Esci, nel menu dell'icona.",
   "bell.title": "Notifiche",
   "bell.dismiss": "Togli",
 
@@ -845,8 +842,8 @@ export const it = {
 
   // Browser panel
   "browser.unreachable": "Server non raggiungibile",
-  "browser.fidelity.native": "Nativo (Bridge attivo)",
-  "browser.fidelity.mirror": "Mirror (Copia isolata)",
+  "browser.fidelity.native": "Collegato alla pagina",
+  "browser.fidelity.mirror": "Copia separata della pagina",
   "browser.fidelity.none": "Sola lettura",
   "browser.fidelity.pending": "Connessione…",
   "browser.fluid": "Fluido",
@@ -857,7 +854,7 @@ export const it = {
   "browser.mode.browse": "Naviga",
   "browser.mode.browse.tip": "Modalità Navigazione",
   "browser.mode.edit": "Ispeziona",
-  "browser.mode.edit.tip": "Modalità Ispezione ed Editing",
+  "browser.mode.edit.tip": "Modalità ispezione e modifica",
   "browser.rotate": "Ruota orientamento",
   "browser.preview": "Anteprima del browser",
   "browser.recordVeil.title": "Pagina nascosta durante la ripresa",
@@ -912,7 +909,7 @@ export const it = {
   "gateway.status.idle": "Libero: scrivimi pure.",
   "gateway.status.working": (queued: number) => `Sto lavorando a un turno; messaggi in coda: ${queued}.`,
   "gateway.status.connectedSince": (time: string, day?: string) =>
-    day ? `Gateway collegato ${day} alle ${time}.` : `Gateway collegato dalle ${time}.`,
+    day ? `Collegamento chat attivo ${day} alle ${time}.` : `Collegamento chat attivo dalle ${time}.`,
   "gateway.retry.none": "Non c'è ancora una domanda da rifare: scrivimene una.",
   "gateway.retry.busy": "Sto ancora lavorando alla domanda di prima: aspetta che finisca, oppure scrivi /ferma.",
   "gateway.retry.again": "Rifaccio l'ultima domanda.",
@@ -1077,12 +1074,12 @@ export const it = {
   "gateway.panel.reconnecting": "Acceso · riconnessione in corso",
   "gateway.panel.attentionTimeout": "Impossibile connettersi da oltre 10 minuti",
   "gateway.panel.attentionQueueFull":
-    "I messaggi della chat si accumulano più in fretta di quanto ADE li gestisca, e i nuovi vengono scartati. Ricarica la finestra di ADE; se ricapita, spegni e riaccendi il gateway.",
+    "I messaggi della chat si accumulano più in fretta di quanto ADE li gestisca, e i nuovi vengono scartati. Ricarica la finestra di ADE; se ricapita, spegni e riaccendi il collegamento chat.",
   "gateway.panel.retry": "Riprova",
   "gateway.panel.changeCode": "Cambia il codice",
   "gateway.panel.openPlatforms": "Apri piattaforme",
   "gateway.panel.attentionNotice": (name: string, platform: string) =>
-    `Il gateway di ${name} su ${platform} richiede attenzione.`,
+    `Il collegamento chat di ${name} su ${platform} richiede attenzione.`,
   "gateway.bar.connected": "Gateway: collegato",
   "gateway.bar.reconnecting": "Gateway: riconnessione in corso",
   "gateway.bar.needsAttention": "Gateway: richiede attenzione",
@@ -1291,7 +1288,7 @@ export const it = {
   "date.today": "oggi",
   "date.tomorrow": "domani",
   "date.monday": "lunedì",
-  "date.inDays": (days: number) => `fra ${days} giorni`,
+  "date.inDays": (days: number) => `fra ${days} ${plural(days, { one: "giorno", other: "giorni" }, "it")}`,
   "decisions.title": "Decisioni",
   "decisions.shortTitle": "Decisioni",
   "decisions.notice.toTake": (title: string) => `Decisione da prendere: ${title}`,
@@ -1349,7 +1346,7 @@ export const it = {
   "decisions.recipient.idle": (title: string) => `«${title}» non è in esecuzione: le risposte restano in coda.`,
   "decisions.recipient.waiting": (count: number) => `${count} in attesa.`,
   "decisions.sheet.position": (index: number, total: number) => `${index} di ${total}`,
-  "decisions.sheet.empty": "Quando una sessione ne apre una, il badge in alto la mostra.",
+  "decisions.sheet.empty": "Quando una sessione ti chiede una scelta, il numero accanto a Decisioni in alto si accende.",
   "decisions.sheet.needChoice": "Nessuna scelta: premi 1–9 o clicca un'opzione, poi Invio",
   "decisions.sheet.needRecipient": "Nessuno riceve la risposta: scegli chi riceve, poi Invio",
   "decisions.sheet.needText": "Scrivi la risposta nella nota, poi Ctrl+Invio",
@@ -1381,7 +1378,6 @@ export const it = {
   "design.notice.toChoose": (title: string) => `Design da scegliere: ${title}`,
   "design.openCount": (count: number) => `${count} ${count === 1 ? "aperta" : "aperte"}`,
   "design.count": (count: number) => (count === 1 ? "1 proposta design" : `${count} proposte design`),
-  "design.waiting": "Proposte di design in attesa",
   "design.needChoice": "scegli una variante o scrivi una nota",
   "design.variants": "Varianti",
   "design.keeps": "Resta invariato",
@@ -1434,10 +1430,9 @@ export const it = {
     `Consegnare ${queued === 1 ? "la scelta in coda" : `le ${queued} scelte in coda`} a «${title}»?`,
   "design.recipient.deliver": "Consegna",
   "design.sheet.position": (index: number, total: number) => `${index} di ${total}`,
-  "design.sheet.empty": "Quando una sessione ne apre una, il badge in alto la mostra.",
+  "design.sheet.empty": "Quando una sessione ti chiede una scelta, il numero accanto a Decisioni in alto si accende.",
   "design.sheet.needChoice": "Nessuna variante scelta: premi 1–9 o clicca una variante, poi Invio",
   "design.sheet.needRecipient": "Nessuno riceve la risposta: scegli chi riceve, poi Invio",
-  "design.sheet.needText": "Scrivi la risposta nella nota, poi Ctrl+Invio",
   "design.sheet.keys": "1–9 sceglie · Invio registra la scelta · ← → scorre · Esc chiude",
   "design.sheet.queued.none": (count: number) =>
     `${count === 1 ? "1 risposta" : `${count} risposte`} in coda: nessuna sessione le riceve`,
@@ -1545,9 +1540,6 @@ export const it = {
   "extensions.added": (name: string, file: string, hint: string) =>
     `${name} aggiunto a ${file}. ${hint} Vale per le sessioni avviate da ora.`,
   "extensions.removed": (name: string, file: string) => `${name} tolto da ${file}.`,
-  "extensions.tab.installed": (count: number) => `Installati · ${count}`,
-  "extensions.tab.catalog": (count: number) => `Catalogo MCP · ${count}`,
-  "extensions.tab.plugins": (count: number) => `Plugin · ${count}`,
   "extensions.desc": (file: string) =>
     `Server MCP e plugin. «Aggiungi al progetto» scrive solo il ${file} del progetto aperto, che le CLI agente leggono all'avvio della sessione; le credenziali restano fuori dal file.`,
   "extensions.noProject": (file: string) =>
@@ -1599,7 +1591,7 @@ export const it = {
   "keys.billing.chatgpt": "dell'accesso ChatGPT",
   "keys.added.today": "aggiunta oggi",
   "keys.added.yesterday": "aggiunta ieri",
-  "keys.added.days": (days: number) => `aggiunta ${days} giorni fa`,
+  "keys.added.days": (days: number) => `aggiunta ${days} ${plural(days, { one: "giorno", other: "giorni" }, "it")} fa`,
   "keys.desc":
     "Le chiavi segrete che le sessioni possono usare. Il valore resta nel portachiavi del sistema (Gestione credenziali di Windows, Portachiavi di macOS): ADE non lo scrive in file né lo mostra, e lo passa come variabile d'ambiente solo agli agenti scelti per ciascuna chiave, all'avvio della sessione.",
   "keys.noKeychain": "Questa versione di ADE non ha accesso al portachiavi.",
@@ -1714,7 +1706,7 @@ export const it = {
   "remote.error.port": "porta non valida",
   "quota.na.tooltip": (vendor: string, why: string) => `Quota ${vendor}: n/d\n${why}`,
   "quota.na.noSource": "Nessuna fonte di quota per questo agente.",
-  "quota.na.noReport": "Rapporto di quota-axi non trovato (~/.cache/quota-axi/quotas.json).",
+  "quota.na.noReport": "Nessun rapporto sulle quote su questo computer.",
   "quota.na.noWindows": "quota-axi non riporta finestre per questo provider.",
   "quota.na.noTime": "Il rapporto di quota-axi non dice quando è stato scritto.",
   "quota.na.future": (time: string) => `Il rapporto è datato ${time}, dopo l'ora attuale: non è affidabile.`,
@@ -1946,10 +1938,6 @@ export const it = {
   "design.rule.open": (key: string) => `${key} è già aperta`,
   "design.rule.close": (key: string) => `${key} si chiude solo dopo una risposta o con un'evidenza`,
   "design.log.again": "un altro giro dice cosa cambiare, senza scelta",
-  "design.status.giro": "altro giro",
-  "design.status.aperta": "aperta",
-  "design.status.risposta": "scelta",
-  "design.status.chiusa": "chiusa",
   "design.problem.line": (line: number, reason: string) => `riga ${line}: ${reason}`,
   "design.noProject.short": "nessun progetto aperto",
 
@@ -1992,7 +1980,6 @@ export const it = {
     `ragu models è uscito con ${code}${detail ? `: ${detail}` : ""}`,
   "bots.models.empty": "Ragù Code non ha elencato nessun modello",
   "chat.model.choose": "Scegli un modello",
-  "chat.model.none": "Nessun modello disponibile",
   "chat.model.missing": (model: string) =>
     `Il modello ${model} non è nel catalogo del server di Ragù Code: è stato tolto, o il suo provider non è collegato. Non è partito niente: scegline un altro.`,
   "chat.agent.label": "Agente",
@@ -2036,7 +2023,6 @@ export const it = {
   "chat.attach.notFile": (path: string) => `${path} non è un file: la Chat allega solo file.`,
   "chat.attach.env": (path: string) =>
     `${path} non si allega: i file .env contengono di solito chiavi e password, e un allegato arriva al fornitore del modello.`,
-  "chat.attach.add": "Allega",
   "chat.attach.addHint": "Allega un file del progetto",
   "chat.attach.remove": (name: string) => `Togli ${name}`,
   "chat.attach.list": "File allegati",
@@ -2132,7 +2118,7 @@ export const it = {
     `usa ${tool}, che Ragù Code chiede di confermare`,
   "bots.approval.why": (reason: string) => `Si ferma perché ${reason}.`,
   "bots.approval.always": "Sempre per questo bot",
-  "bots.approval.timeout": (minutes: number) => `Senza risposta entro ${minutes} minuti vale come Nega.`,
+  "bots.approval.timeout": (minutes: number) => `Senza risposta entro ${minutes} ${plural(minutes, { one: "minuto", other: "minuti" }, "it")} vale come Nega.`,
   "bots.approval.blocked": (command: string, reason: string) =>
     `Bloccato: «${command}» ${reason}. Questo comando non parte mai, qualunque cosa si scelga.`,
   "bots.approval.refused": (command: string, reason: string) =>
@@ -2156,7 +2142,7 @@ export const it = {
   "bots.routine.spend.perDay": "Tetto al giorno ($)",
   "bots.routine.cap": (text: string) => `Tetto di questo modo: ${text}.`,
   "bots.routine.cap.perDay": (runs: number) => `${runs} esecuzioni al giorno per tutte le routine insieme`,
-  "bots.routine.cap.gap": (minutes: number) => `almeno ${minutes} minuti tra due esecuzioni della stessa routine`,
+  "bots.routine.cap.gap": (minutes: number) => `almeno ${minutes} ${plural(minutes, { one: "minuto", other: "minuti" }, "it")} tra due esecuzioni della stessa routine`,
   "bots.routine.cap.money": (run: string, day: string) => `al massimo ${run} per esecuzione e ${day} al giorno`,
   "bots.routine.consent": (runner: string, mode: string, model: string) =>
     `Acconsento: questa routine gira da sola con ${runner} (${mode}, ${model}), senza shell, solo mentre ADE è aperta ed entro il tetto qui sopra.`,
@@ -2226,7 +2212,7 @@ export const it = {
   "bots.routine.problem.notAllowed": "questo programma non può eseguire routine",
   "bots.routine.problem.prompt": "Scrivi che cosa deve fare la routine.",
   "bots.routine.problem.every": "Scegli ogni quante ore (da 1 a 168) o un orario.",
-  "bots.routine.problem.gap": (minutes: number) => `Tra due esecuzioni servono almeno ${minutes} minuti.`,
+  "bots.routine.problem.gap": (minutes: number) => `Tra due esecuzioni servono almeno ${minutes} ${plural(minutes, { one: "minuto", other: "minuti" }, "it")}.`,
   "bots.routine.problem.spendRequired": "Con questo modo serve un tetto di spesa, per esecuzione e al giorno.",
   "bots.routine.problem.perRun": (max: string) => `Il tetto per esecuzione arriva al massimo a ${max}.`,
   "bots.routine.problem.perDay": (max: string) => `Il tetto al giorno arriva al massimo a ${max}.`,
@@ -2687,7 +2673,7 @@ export const it = {
   "model.state.meshes": (count: string) => `${count} mesh`,
   "model.state.triangles": (count: string) => `${count} ${count === "1" ? "triangolo" : "triangoli"}`,
   "model.state.dimensions": (x: string, y: string, z: string) => `ingombro ${x} × ${y} × ${z}`,
-  "model.state.animations": (count: number) => `${count} animazioni`,
+  "model.state.animations": (count: number) => `${count} ${plural(count, { one: "animazione", other: "animazioni" }, "it")}`,
   "pane.runnerLogin": (label: string) => `${label} · accesso`,
 
   // F7a2: Simulator
