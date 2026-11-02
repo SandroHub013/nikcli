@@ -3384,6 +3384,18 @@ export function Workbench() {
    * never sees whole: read off the pane's screen whenever typing is weighed (`session/screen-question.ts`, SES-3). It
    * holds the Enter; it is not offered to the voice to answer, its keys are arrows.
    */
+  /*
+   * Whether a key typed now is the answer to a menu: for `typedAfter`, which then does not count the first key as a draft.
+   * Narrower than `questionOpen`, which holds mail: the hook's `permission` stays in the file until the turn ends (the
+   * hook writes nothing at the answer), so it counts only while the pane is still `waiting`, which the first key
+   * (`promptAnswered`) turns off. The screen reading and the dialog window are live, and stand as they are (review B1).
+   */
+  const menuOnScreen = (paneId: string) => {
+    const waiting = wb().panes.find((candidate) => candidate.id === paneId)?.status === "waiting"
+    const byHook = waiting && isQuestionOpen(permissions()[paneId], activityOf.get(paneId))
+    return byHook || modeTracker.heldOpen(paneId) || screenAsks(paneId)
+  }
+
   const screenAsks = (paneId: string) => {
     if (!running.has(paneId) || !hasTerminal(paneId)) return false
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
@@ -9936,7 +9948,7 @@ export function Workbench() {
     saveFile: (id) => void saveFile(id),
     turnSubmitted,
     promptAnswered,
-    questionOpen,
+    menuOpen: menuOnScreen,
     interrupted,
     restart: (pane, line) => void reopen(pane, line),
     suspendCheck: suspendCheckFor,

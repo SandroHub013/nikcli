@@ -12,7 +12,7 @@ import { PluginPane } from "../plugin/pane"
 import type { AdePluginRuntime } from "../plugin/runtime"
 import { AgentMark } from "../session-new/agent-mark"
 import { formatCost, formatTokens } from "../session/metrics"
-import { typedAfter } from "../session/typed-line"
+import { isAnswerKey, typedAfter } from "../session/typed-line"
 import { answersPrompt, isInterruptInput } from "../session/mailbox"
 import { showsSuspendButton, SUSPEND_REASON, type SuspendCheck } from "../session/suspend"
 import { formatDroppedPaths } from "../sidebar/file-drag"
@@ -98,8 +98,8 @@ export interface PaneRendererDeps {
   turnSubmitted: (id: string) => void
   /** A key typed in the pane that answers a prompt standing there (`answersPrompt`). */
   promptAnswered: (id: string) => void
-  /** Whether a question or a menu is open in the pane now, from the hook or the screen. */
-  questionOpen: (id: string) => boolean
+  /** Whether a menu stands in the pane now, as far as a key typed into it would be its answer (`menuOnScreen`). */
+  menuOpen: (id: string) => boolean
   /** An Esc or a Ctrl-C typed in the pane, which Claude Code reports to no hook. */
   interrupted: (id: string) => void
   /** "Riprova" on a session that failed. */
@@ -507,7 +507,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
            * never asks what is running: see `session/typing.ts`.
            */
           // Asked before the key is written: a key that answers a menu on screen is not a line begun (F2).
-          const menuOpen = deps.questionOpen(current().id)
+          const menuOpen = isAnswerKey(data) && deps.menuOpen(current().id)
           deps.records.typed.update(current().id, (line) => typedAfter(line, data, Date.now(), menuOpen))
           // Enter typed straight into the terminal submits a turn, exactly as
           // the composer does; the quiet timer brings the pane back to idle.

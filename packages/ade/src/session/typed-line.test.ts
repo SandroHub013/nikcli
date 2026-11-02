@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 
-import { isTyping, submittedSince, typedAfter, type TypedLine } from "./typed-line"
+import { isAnswerKey, isTyping, submittedSince, typedAfter, type TypedLine } from "./typed-line"
 
 const typeAll = (chunks: string[], from: TypedLine | undefined = undefined): TypedLine | undefined =>
   chunks.reduce((line, chunk, index) => typedAfter(line, chunk, 1_000 + index), from)
@@ -157,11 +157,38 @@ describe("a key typed into a menu on screen", () => {
     expect(isTyping(typedAfter(undefined, "q", 1_000))).toBe(true)
   })
 
-  test("never uncounts a real half-typed line: a draft begun before the menu stays, and keeps holding the mail", () => {
+  /*
+   * Review B1: xterm delivers typing one key at a time, so «every single key» was «every key»: the instruction typed
+   * ahead during a long tool run, with the hook still saying `permission`, was all uncounted and the mail landed in it.
+   */
+  test("only the first key before an Enter is an answer: the second is a draft", () => {
+    const first = typedAfter(undefined, "1", 1_000, true)
+    expect(isTyping(first)).toBe(false)
+    const typedAhead = ["c", "o", "n", "t"].reduce((line, key, index) => typedAfter(line, key, 2_000 + index, true), first)
+    expect(isTyping(typedAhead)).toBe(true)
+    expect(typedAhead?.pending).toBe(4)
+  })
+
+  test("a key on top of a draft begun before the menu counts, and the mail stays held", () => {
     const draft = typedAfter(undefined, "ciao come", 1_000)
     const after = typedAfter(draft, "y", 2_000, true)
-    expect(after).toEqual(draft)
     expect(isTyping(after)).toBe(true)
+    expect(after?.pending).toBe(10)
+  })
+
+  test("an Enter after the answer clears it, and the next key is an answer again", () => {
+    const answered = typedAfter(undefined, "y", 1_000, true)
+    const sent = typedAfter(answered, String.fromCharCode(13), 2_000, true)
+    expect(isTyping(typedAfter(sent, "n", 3_000, true))).toBe(false)
+  })
+
+  test("what counts as a key to read the screen for is one printable character", () => {
+    for (const key of ["1", "y", " ", "é"]) expect([key, isAnswerKey(key)]).toEqual([key, true])
+    const esc = String.fromCharCode(27)
+    const cr = String.fromCharCode(13)
+    const lf = String.fromCharCode(10)
+    for (const data of ["", cr, lf, "ab", esc, `${esc}[A`, `${esc}[<0;10;5M`, String.fromCharCode(127), String.fromCharCode(3)])
+      expect([data, isAnswerKey(data)]).toEqual([data, false])
   })
 
   test("only a single key is an answer: a paste or several characters into the menu count as typed", () => {
@@ -177,8 +204,8 @@ describe("a key typed into a menu on screen", () => {
 
 test("lint: the terminal asks whether a question is open before it counts a key", () => {
   const renderer = readFileSync(join(import.meta.dir, "../surface/pane-renderer.tsx"), "utf-8")
-  expect(renderer).toContain("const menuOpen = deps.questionOpen(current().id)")
+  expect(renderer).toContain("const menuOpen = isAnswerKey(data) && deps.menuOpen(current().id)")
   expect(renderer).toContain("typedAfter(line, data, Date.now(), menuOpen)")
   const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf-8")
-  expect(workbench).toMatch(/promptAnswered,\r?\n\s+questionOpen,/)
+  expect(workbench).toMatch(/promptAnswered,\r?\n\s+menuOpen: menuOnScreen,/)
 })
