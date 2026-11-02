@@ -151,26 +151,34 @@ describe("startFolder: where ADE opens", () => {
   const here = "C:\Program Files\ADE"
 
   it("the first run (nothing saved, no recent project) opens no folder, so the empty project screen shows", () => {
-    expect(startFolder({ saved: undefined, gone: false, hasRecents: false, hasWorkspace: false, here })).toBeUndefined()
+    expect(startFolder({ saved: undefined, gone: false, hasRecents: false, hasPanes: false, here })).toBeUndefined()
   })
 
   it("the last project, when it is still there, wins over everything", () => {
-    expect(startFolder({ saved: "C:\work\a", gone: false, hasRecents: false, hasWorkspace: true, here })).toBe("C:\work\a")
+    expect(startFolder({ saved: "C:\work\a", gone: false, hasRecents: false, hasPanes: true, here })).toBe("C:\work\a")
   })
 
   it("a last project that is gone opens where ADE was started, as it always did", () => {
-    expect(startFolder({ saved: "C:\work\a", gone: true, hasRecents: true, hasWorkspace: true, here })).toBe(here)
+    expect(startFolder({ saved: "C:\work\a", gone: true, hasRecents: true, hasPanes: true, here })).toBe(here)
   })
 
   it("a user with recent projects but no saved workspace keeps the folder ADE was started from", () => {
-    expect(startFolder({ saved: undefined, gone: false, hasRecents: true, hasWorkspace: false, here })).toBe(here)
+    expect(startFolder({ saved: undefined, gone: false, hasRecents: true, hasPanes: false, here })).toBe(here)
   })
 
-  it("a saved workspace never opens on nothing, whatever else is missing", () => {
-    expect(startFolder({ saved: undefined, gone: false, hasRecents: false, hasWorkspace: true, here })).toBe(here)
+  it("a saved workspace with sessions in it never opens on nothing, whatever else is missing", () => {
+    expect(startFolder({ saved: undefined, gone: false, hasRecents: false, hasPanes: true, here })).toBe(here)
+  })
+
+  /*
+   * Review of ade/residui-gravi, B5: the autosave writes a workspace one second after every start, with no change
+   * needed, so «a workspace exists» is true from the second launch on. Only a workspace with panes counts.
+   */
+  it("a saved workspace with no panes, no project and no recents is still a first run", () => {
+    expect(startFolder({ saved: undefined, gone: false, hasRecents: false, hasPanes: false, here })).toBeUndefined()
   })
 
   it("an unknown start folder is no folder", () => {
-    expect(startFolder({ saved: undefined, gone: false, hasRecents: true, hasWorkspace: false, here: "" })).toBeUndefined()
+    expect(startFolder({ saved: undefined, gone: false, hasRecents: true, hasPanes: false, here: "" })).toBeUndefined()
   })
 })

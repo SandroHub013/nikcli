@@ -6919,7 +6919,7 @@ export function Workbench() {
         saved,
         gone,
         hasRecents: recents().length > 0,
-        hasWorkspace: restored !== undefined,
+        hasPanes: (restored?.panes.length ?? 0) > 0,
         here,
       })
       const p = path ? await discoverProject(host, path) : undefined

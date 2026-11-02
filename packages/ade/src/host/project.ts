@@ -32,7 +32,7 @@ export interface Project {
  * someone who started it from one: from the Start menu it is the shortcut's «Start in» (normally ADE's own install
  * folder) and from the Dock the home folder, where writes are refused. So on the very first run (no saved workspace,
  * no recent project) none is opened and the empty project screen shows «Apri una cartella» (audit 2026-11-02, UX-5).
- * A user with a history keeps the old fallback, and a saved workspace never opens on nothing.
+ * A user with a history keeps the old fallback, and a saved workspace with sessions never opens on nothing.
  */
 export function startFolder(input: {
   /** The project folder the saved workspace names. */
@@ -41,13 +41,16 @@ export function startFolder(input: {
   gone: boolean
   /** The recent-projects list is not empty. */
   hasRecents: boolean
-  /** A workspace was saved. */
-  hasWorkspace: boolean
+  /**
+   * The saved workspace holds sessions. Not «a workspace exists»: the autosave writes one a second after every start,
+   * so that is true from the second launch on (review B5).
+   */
+  hasPanes: boolean
   /** The folder ADE was started from; empty when the host cannot say. */
   here: string
 }): string | undefined {
   if (input.saved && !input.gone) return input.saved
-  if (!input.saved && !input.hasRecents && !input.hasWorkspace) return undefined
+  if (!input.saved && !input.hasRecents && !input.hasPanes) return undefined
   return input.here || undefined
 }
 
