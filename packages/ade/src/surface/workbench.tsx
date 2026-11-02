@@ -454,6 +454,7 @@ import {
   type DeliveryResult,
   type LineOutcome,
 } from "../session/enter"
+import { watchLongTasks } from "../session/long-task-log"
 import { formatSpawnFailed, spawnOutcome } from "../session/spawn-outcome"
 import { isTyping, submittedSince, typedAfter } from "../session/typed-line"
 import { parseQueue, queueToSave, waitsForRestore } from "../session/mail-queue"
@@ -2520,6 +2521,8 @@ export function Workbench() {
   // The surface going away without the page (a hot update of this file) ends them too: see `RunningSessions`.
   const running = new RunningSessions()
   onCleanup(() => running.endAll())
+  // A page held for seconds is what the mail waits behind, whoever held it: said in the log, with the time.
+  onCleanup(watchLongTasks((text) => console.error(text)))
   // The panes being started back (`reopen`, the restore): recorded before their awaits, not after (ALTO 3).
   const reopening = oneAtATime()
   /** Why the host refused each pane's last start (`onRefused`), so `ade-msg spawn` can tell its sender. Cleared when a start begins. */
