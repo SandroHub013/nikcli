@@ -413,6 +413,13 @@
   background: var(--ade-scrim);
 }
 
+/* The Sheet's dialog is a bare layout frame, and a frame is capped at --ade-surface-max (560px) by ui/layout.css:
+   a 1920px screenshot would open about 546px wide. The figure inside bounds the picture, so the frame takes none. */
+[data-component="shot-viewer"] [data-layout="frame"] {
+  width: auto;
+  max-width: none;
+}
+
 [data-slot="shot-viewer-frame"] {
   margin: 0;
   max-width: min(1200px, 92vw);

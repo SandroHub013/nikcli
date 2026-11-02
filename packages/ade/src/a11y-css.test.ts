@@ -47,6 +47,22 @@ describe("targets of at least 24px (UX-18)", () => {
   })
 })
 
+describe("the screenshot viewer's width", () => {
+  test("its Sheet frame takes the picture's width, not the 560px a bare frame is limited to", () => {
+    // `surface={false}` makes the dialog a `[data-layout="frame"]`, capped by `--ade-surface-max` (560px). Nothing sets
+    // that for the viewer, so a 1920px screenshot opened at about 546px. The frame must not be capped at all (the
+    // figure inside bounds the picture), and the shared cap is not raised: other dialogs rely on it.
+    const tray = read("./shots/tray.css")
+    const body = rule(tray, '[data-component="shot-viewer"] [data-layout="frame"]')
+    expect(body).toMatch(/\bwidth: auto;/)
+    expect(body).toMatch(/\bmax-width: none;/)
+    // The figure inside still bounds the picture.
+    expect(rule(tray, '[data-slot="shot-viewer-frame"]')).toContain("max-width: min(1200px, 92vw)")
+    // The frame the viewer sits in is the one with the cap.
+    expect(read("./ui/layout.css")).toContain("max-width: var(--ade-surface-max, 560px)")
+  })
+})
+
 describe("the pane header and composer (UX-18, UX-19)", () => {
   const pane = read("./grid/pane.css")
 
