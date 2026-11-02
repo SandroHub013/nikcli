@@ -1349,7 +1349,7 @@
  * (`sidebar-conchiglia-varianti.html`).
  *
  * La colonna smette di essere un muro attaccato al bordo della finestra e
- * diventa un pannello sospeso: raggio 20px, nessun bordo, nessun divisore —
+ * diventa un pannello sospeso: raggio --ade-shell-radius (18px), nessun bordo, nessun divisore —
  * solo respiro. Dentro, ogni cosa che si può premere è una pillola: le
  * intestazioni, il campo di ricerca, le righe dell'albero, le carte delle
  * sessioni. La selezione è un velo d'accento senza contorni, perché su un
@@ -1565,7 +1565,7 @@ aside[data-component="ade-sidebar"] {
  * vaschetta sporgerebbe dal pannello che la contiene.
  */
 [data-slot="sidebar-footer"] {
-  border-radius: 0 0 20px 20px;
+  border-radius: 0 0 var(--ade-shell-radius) var(--ade-shell-radius);
 }
 
 /* ── ricerca: filtro file/cartelle, conteggio, risultati con icona ── */
