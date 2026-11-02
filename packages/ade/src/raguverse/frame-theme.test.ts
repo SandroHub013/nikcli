@@ -90,6 +90,20 @@ describe("the frames wear the ragù palette (DS-25)", () => {
     }
   })
 
+  /*
+   * A frame is a document of its own and cannot read index.css, so `tokens-declared.test.ts` (which counts a
+   * declaration anywhere under src) cannot see a name missing from it. `--ade-z-base` was: used by world.css, never
+   * given a value there (the review of this branch, B2).
+   */
+  test("every --ade-* a frame sheet uses is declared in that same sheet", () => {
+    for (const [name, sheet] of [["learn.css", learn], ["world.css", world]] as const) {
+      const body = sheet.replace(/\/\*[\s\S]*?\*\//g, "")
+      const declared = new Set([...body.matchAll(/(--ade-[a-z0-9-]+)\s*:/g)].map((match) => match[1]))
+      const missing = [...body.matchAll(/var\(\s*(--ade-[a-z0-9-]+)/g)].map((match) => match[1]!).filter((used) => !declared.has(used))
+      expect([name, [...new Set(missing)]]).toEqual([name, []])
+    }
+  })
+
   test("the frame's own names read the palette", () => {
     for (const sheet of [learn, world]) {
       expect(sheet).toMatch(/--bg:\s*var\(--ade-bg\)/)

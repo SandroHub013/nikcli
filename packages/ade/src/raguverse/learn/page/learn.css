@@ -17,6 +17,7 @@
   --ade-done: #7fb850;
   --ade-error: #e87da9;
   --ade-ansi-magenta: #c79bdc;
+  --ade-z-base: 1;
   --ade-state-work: var(--ade-working);
   --ade-state-perm: var(--ade-waiting);
   --ade-state-ask: var(--ade-ansi-magenta);

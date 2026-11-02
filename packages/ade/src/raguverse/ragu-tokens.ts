@@ -38,6 +38,7 @@ export const SCHEME_TOKENS = [
 
 /** The tokens with one value in both schemes, copied as they are (some read the ones above). */
 export const PLAIN_TOKENS = [
+  "z-base",
   "state-work",
   "state-perm",
   "state-ask",
