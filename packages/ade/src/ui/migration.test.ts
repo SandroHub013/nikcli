@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { readFileSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
+import { join } from "node:path"
+import postcss, { type Rule } from "postcss"
 
 /**
  * Which buttons have moved onto the shared primitives, and which sheets no longer carry a copy of them.
@@ -12,13 +14,47 @@ const SRC = new URL("..", import.meta.url)
 const read = (path: string) => readFileSync(new URL(path, SRC), "utf8").replace(/\r\n/g, "\n")
 const withoutComments = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, "")
 
-/** The rule bodies for a selector, comments stripped. */
-function bodies(css: string, selector: string): string[] {
-  const text = withoutComments(css)
+/** Every file under `src` with the extension, tests excluded. */
+function files(dir: string, ext: string): string[] {
   const found: string[] = []
-  for (let at = text.indexOf(`${selector} {`); at >= 0; at = text.indexOf(`${selector} {`, at + 1)) {
-    found.push(text.slice(at, text.indexOf("}", at)))
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name)
+    if (entry.isDirectory()) found.push(...files(path, ext))
+    else if (entry.name.endsWith(ext) && !entry.name.endsWith(`.test${ext}`)) found.push(path)
   }
+  return found
+}
+
+const ROOT = decodeURIComponent(SRC.pathname).replace(/^\/([A-Za-z]:)/, "$1")
+
+/**
+ * The `<button ...>` opening tags of a TSX source, read with the braces counted: an attribute can hold `=>` or `>`
+ * inside `{...}`, and a pattern that stops at the first `>` never sees a slot written after an `onClick`.
+ */
+export function buttonTags(source: string): string[] {
+  const tags: string[] = []
+  for (let at = source.indexOf("<button"); at >= 0; at = source.indexOf("<button", at + 1)) {
+    if (!/[\s>]/.test(source[at + "<button".length] ?? "")) continue
+    let depth = 0
+    for (let i = at; i < source.length; i++) {
+      const c = source[i]
+      if (c === "{") depth++
+      else if (c === "}") depth--
+      else if (c === ">" && depth === 0 && source[i - 1] !== "=") {
+        tags.push(source.slice(at, i + 1))
+        break
+      }
+    }
+  }
+  return tags
+}
+
+/** The rules of a sheet that name a slot anywhere in their selector list, comments stripped. */
+function rulesFor(css: string, slot: string): Rule[] {
+  const found: Rule[] = []
+  postcss.parse(withoutComments(css)).walkRules((rule) => {
+    if (rule.selectors.some((selector) => selector.includes(`[data-slot="${slot}"]`))) found.push(rule)
+  })
   return found
 }
 
@@ -29,11 +65,7 @@ interface Surface {
   /** Slots that are a primitive now: no raw `<button>` may carry them. */
   slots: string[]
   css: string[]
-  /** Declarations a migrated slot's sheet must not spell: the primitive decides them. */
-  forbidden?: RegExp
 }
-
-const REDRAWN = /(^|\n)\s*(height|min-height|border-radius|background|border|font-size|font-weight|cursor):/
 
 const SURFACES: Surface[] = [
   {
@@ -41,7 +73,6 @@ const SURFACES: Surface[] = [
     tsx: ["session-new/session-new.tsx", "session-new/install-panel.tsx"],
     slots: ["new-cancel", "new-launch-btn", "new-close", "install-close", "install-copy", "install-run", "install-recheck", "install-page"],
     css: ["session-new/session-new.css"],
-    forbidden: REDRAWN,
   },
   {
     name: "the bots",
@@ -56,7 +87,6 @@ const SURFACES: Surface[] = [
     ],
     slots: ["bots-btn"],
     css: ["bots/bots.css"],
-    forbidden: REDRAWN,
   },
   {
     name: "decisions, design, the consent and update dialogs and the empty project screen",
@@ -71,42 +101,55 @@ const SURFACES: Surface[] = [
     ],
     slots: ["decision-submit", "decision-ghost", "design-submit", "empty-action"],
     css: ["decisions/decisions.css", "design/design.css", "dev.css"],
-    forbidden: REDRAWN,
   },
   {
     name: "the sidebar",
     tsx: ["sidebar/sidebar.tsx"],
     slots: ["workspace-open-project", "section-add", "empty-action-btn", "search-clear"],
     css: ["sidebar/sidebar.css"],
-    forbidden: REDRAWN,
   },
   {
     name: "settings",
     tsx: ["settings/shell.tsx", "settings/account.tsx", "settings/sections.tsx"],
     slots: ["settings-check-update", "settings-close", "settings-done", "switch-continue", "switch-cancel"],
     css: ["settings/shell.css", "settings/sections.css"],
-    forbidden: REDRAWN,
   },
 ]
 
+const MIGRATED = SURFACES.flatMap((surface) => surface.slots)
+
+describe("the shared Button and IconButton", () => {
+  test("the tag scanner reads past an arrow in an attribute", () => {
+    const tags = buttonTags(`<button type="button" onClick={() => go(a > b)} data-slot="late">x</button>`)
+    expect(tags).toHaveLength(1)
+    expect(tags[0]).toContain('data-slot="late"')
+    // A longer tag name is not a button.
+    expect(buttonTags("<buttons data-slot='x'>")).toEqual([])
+  })
+
+  test("no .tsx anywhere in src draws a migrated slot as a raw <button>", () => {
+    const raw: string[] = []
+    for (const file of files(ROOT, ".tsx")) {
+      const source = withoutComments(readFileSync(file, "utf8").replace(/\r\n/g, "\n"))
+      for (const tag of buttonTags(source)) {
+        for (const slot of MIGRATED) if (tag.includes(`data-slot="${slot}"`)) raw.push(`${file.slice(ROOT.length)} ${slot}`)
+      }
+    }
+    expect(raw).toEqual([])
+  })
+})
+
 for (const surface of SURFACES) {
   describe(`${surface.name} is on the shared Button`, () => {
-    test("no raw <button> carries a migrated slot", () => {
-      for (const file of surface.tsx) {
-        const source = withoutComments(read(file))
-        for (const slot of surface.slots) {
-          const raw = [...source.matchAll(/<button\b[^>]*>/g)].filter((match) => match[0].includes(`"${slot}"`))
-          expect({ file, slot, raw: raw.length }).toEqual({ file, slot, raw: 0 })
-        }
-      }
-    })
-
-    test("its sheet no longer redraws the button", () => {
+    test("its sheet no longer redraws the button, wherever the slot sits in a selector list", () => {
       for (const file of surface.css) {
         const css = read(file)
         for (const slot of surface.slots) {
-          for (const body of bodies(css, `[data-slot="${slot}"]`)) {
-            expect({ file, slot, body: surface.forbidden?.test(body) ? body : "" }).toEqual({ file, slot, body: "" })
+          for (const rule of rulesFor(css, slot)) {
+            const redrawn = rule.nodes.some(
+              (node) => node.type === "decl" && /^(height|min-height|border-radius|background|border|font-size|font-weight)$/.test(node.prop),
+            )
+            expect({ file, slot, selector: rule.selector, redrawn }).toEqual({ file, slot, selector: rule.selector, redrawn: false })
           }
         }
       }

@@ -24,6 +24,7 @@ import { PairLink } from "./pair-link"
 import { StateAsideNotice } from "./state-aside-notice"
 import { createGatewayPanel, type GatewayPanelDeps, type ProblemArea } from "./panel-state"
 import { CREATE_LINK, STEP_IDS, type PlatformId, type StepId, type TileState } from "./steps"
+import { Button } from "../../ui/controls"
 
 const time = (ms: number) => formatClock(ms)
 
@@ -133,9 +134,9 @@ export function GatewaySection(props: {
       >
         {(open) => (
           <div data-slot="gateway-row">
-            <button type="button" data-slot="bots-btn" onClick={() => open()(url())}>
+            <Button data-slot="bots-btn" onClick={() => open()(url())}>
               {link.label}
-            </button>
+            </Button>
           </div>
         )}
       </Show>
@@ -211,24 +212,22 @@ export function GatewaySection(props: {
             <div data-slot="gateway-attention-actions">
               {/* «Retry» wakes a connection that waits to try again; it does nothing for a full queue. */}
               <Show when={panel.link().attentionReason !== QUEUE_FULL_REASON}>
-                <button
-                  type="button"
+                <Button
                   data-slot="bots-btn"
-                  data-tone="primary"
+                  variant="primary"
                   disabled={panel.busy()}
                   onClick={() => void panel.retry()}
                 >
                   {t("gateway.panel.retry")}
-                </button>
+                </Button>
               </Show>
-              <button
-                type="button"
+              <Button
                 data-slot="bots-btn"
                 disabled={panel.busy()}
                 onClick={() => setPicked("paste")}
               >
                 {t("gateway.panel.changeCode")}
-              </button>
+              </Button>
             </div>
           </div>
         </Show>
@@ -304,14 +303,13 @@ export function GatewaySection(props: {
                           when={panel.manifest()}
                           fallback={
                             <div data-slot="gateway-row">
-                              <button
-                                type="button"
+                              <Button
                                 data-slot="bots-btn"
                                 disabled={panel.busy()}
                                 onClick={() => void panel.showManifest()}
                               >
                                 {t("gateway.panel.slackManifestShow")}
-                              </button>
+                              </Button>
                             </div>
                           }
                         >
@@ -338,9 +336,9 @@ export function GatewaySection(props: {
                         </p>
                       </Show>
                       <div data-slot="gateway-row">
-                        <button type="button" data-slot="bots-btn" data-tone="primary" onClick={() => setPicked("paste")}>
+                        <Button data-slot="bots-btn" variant="primary" onClick={() => setPicked("paste")}>
                           {t("gateway.step.next")}
-                        </button>
+                        </Button>
                       </div>
                     </Show>
 
@@ -387,13 +385,13 @@ export function GatewaySection(props: {
                           value={panel.draft()}
                           onInput={(event) => panel.setDraft(event.currentTarget.value)}
                         />
-                        <button
+                        <Button
                           type="submit"
                           data-slot="bots-btn"
                           disabled={panel.busy() || panel.draft().trim() === ""}
                         >
                           {t("gateway.panel.save")}
-                        </button>
+                        </Button>
                       </form>
 
                       {/* Slack's second code: the one that opens the socket, made by hand in the app. */}
@@ -428,13 +426,13 @@ export function GatewaySection(props: {
                             value={panel.appDraft()}
                             onInput={(event) => panel.setAppDraft(event.currentTarget.value)}
                           />
-                          <button
+                          <Button
                             type="submit"
                             data-slot="bots-btn"
                             disabled={panel.busy() || panel.appDraft().trim() === ""}
                           >
                             {t("gateway.panel.save")}
-                          </button>
+                          </Button>
                         </form>
                       </Show>
                       <Failure of="paste" />
@@ -461,14 +459,13 @@ export function GatewaySection(props: {
                         )}
                       </Show>
                       <div data-slot="gateway-row">
-                        <button
-                          type="button"
+                        <Button
                           data-slot="bots-btn"
                           disabled={panel.busy() || !panel.link().hasToken}
                           onClick={() => void panel.probe()}
                         >
                           {t("gateway.panel.probe")}
-                        </button>
+                        </Button>
                       </div>
                       <Show when={!panel.link().hasToken}>
                         <p data-slot="bots-hint">{t("gateway.panel.needToken")}</p>
@@ -500,25 +497,23 @@ export function GatewaySection(props: {
                         <Show
                           when={panel.link().enabled}
                           fallback={
-                            <button
-                              type="button"
+                            <Button
                               data-slot="bots-btn"
-                              data-tone="primary"
+                              variant="primary"
                               disabled={panel.busy() || !panel.tokensReady() || !panel.where()}
                               onClick={() => void panel.setEnabled(true)}
                             >
                               {t("gateway.panel.switchOn")}
-                            </button>
+                            </Button>
                           }
                         >
-                          <button
-                            type="button"
+                          <Button
                             data-slot="bots-btn"
                             disabled={panel.busy()}
                             onClick={() => void panel.setEnabled(false)}
                           >
                             {t("gateway.panel.switchOff")}
-                          </button>
+                          </Button>
                         </Show>
                       </div>
                       <Failure of="on" />
@@ -623,13 +618,13 @@ export function GatewaySection(props: {
                             value={code()}
                             onInput={(event) => setCode(event.currentTarget.value)}
                           />
-                          <button
+                          <Button
                             type="submit"
                             data-slot="bots-btn"
                             disabled={panel.busy() || code().trim() === ""}
                           >
                             {t("gateway.panel.approve")}
-                          </button>
+                          </Button>
                         </form>
                       </Show>
                       <Show when={panel.pairing().lockedUntilMs}>
@@ -685,19 +680,18 @@ export function GatewaySection(props: {
                 <Show
                   when={panel.remote().commands}
                   fallback={
-                    <button type="button" data-slot="bots-btn" disabled={panel.busy()} onClick={() => panel.askRemote()}>
+                    <Button data-slot="bots-btn" disabled={panel.busy()} onClick={() => panel.askRemote()}>
                       {t("gateway.panel.remoteAsk")}
-                    </button>
+                    </Button>
                   }
                 >
-                  <button
-                    type="button"
+                  <Button
                     data-slot="bots-btn"
                     disabled={panel.busy()}
                     onClick={() => void panel.remoteOff()}
                   >
                     {t("gateway.panel.remoteSwitchOff")}
-                  </button>
+                  </Button>
                 </Show>
               }
             >
@@ -710,18 +704,17 @@ export function GatewaySection(props: {
                   )}
                 </p>
                 <div data-slot="gateway-row">
-                  <button type="button" data-slot="bots-btn" onClick={() => panel.cancelRemote()}>
+                  <Button data-slot="bots-btn" onClick={() => panel.cancelRemote()}>
                     {t("gateway.panel.cancel")}
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
                     data-slot="bots-btn"
-                    data-tone="danger"
+                    variant="danger"
                     disabled={panel.busy()}
                     onClick={() => void panel.confirmRemote()}
                   >
                     {t("gateway.panel.remoteConfirm")}
-                  </button>
+                  </Button>
                 </div>
               </div>
             </Show>

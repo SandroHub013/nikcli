@@ -10,8 +10,8 @@ import { bucketDecisions, type Decision } from "./state"
 import "./decisions.css"
 import { t } from "../i18n"
 import { EmptyIcon } from "../ui/empty-icon"
-import { EmptyState } from "../ui/controls"
 import { errorMessage } from "../session-new/start-failure"
+import { Button, EmptyState } from "../ui/controls"
 
 /**
  * The open decisions, one at a time, in the order they matter.
@@ -236,9 +236,9 @@ export function DecisionsSheet(props: {
             )}
           </span>
         </Show>
-        <button type="button" data-slot="decision-ghost" onClick={() => props.onOpenPanel()}>
+        <Button data-slot="decision-ghost" onClick={() => props.onOpenPanel()}>
           {t("decisions.sheet.full")}
-        </button>
+        </Button>
       </footer>
     </Sheet>
   )
