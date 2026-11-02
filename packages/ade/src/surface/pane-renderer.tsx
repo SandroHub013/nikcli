@@ -1,6 +1,6 @@
-import { Show, createMemo } from "solid-js"
-import { BrowserPane } from "../browser"
-import { FilePane, editBuffer, revertBuffer, type ArchiveListing } from "../editor"
+import { Show, Suspense, createMemo, lazy } from "solid-js"
+import { editBuffer, revertBuffer } from "../editor/buffer"
+import type { ArchiveListing } from "../editor/binary-file"
 import { SessionPane } from "../grid/pane"
 import type { GridPane } from "../grid/session-grid"
 import type { LinkRequest } from "../terminal/links"
@@ -16,19 +16,14 @@ import { showsSuspendButton, SUSPEND_REASON, type SuspendCheck } from "../sessio
 import { formatDroppedPaths } from "../sidebar/file-drag"
 import { runVideoCommand } from "../video/commands"
 import { VIDEO_VERBS } from "../video/video"
-import { VideoPane } from "../video/video-pane"
 import { runModelCommand } from "../model3d/commands"
 import { MODEL_VERBS } from "../model3d/model"
-import { ModelPane } from "../model3d/model-pane"
 import type { DirEntry } from "../host/shell"
 import { runSimulatorCommand } from "../simulator/commands"
 import { SIMULATOR_VERBS, type DevServerGuess } from "../simulator/simulator"
-import { SimulatorPane } from "../simulator/simulator-pane"
 import { createPanelStack } from "../panels/stack"
 import { DecisionsPane } from "../decisions/decisions-pane"
 import type { DecisionsHub } from "../decisions/hub"
-import { DesignPane } from "../design/design-pane"
-import { RaguversePane } from "../raguverse/raguverse-pane"
 import type { LearnProgressHost } from "../raguverse/learn/learn-frame"
 import type { AssetsHost } from "../raguverse/assets"
 import type { Snapshot } from "../raguverse/protocol"
@@ -42,6 +37,25 @@ import { expandPane, isPanelPane, updatePane, type Pane, type Workbench as Workb
 import { bindChoices, ownerStatus, type BrowserController } from "../browser/binding"
 import type { BrowserRequest, Rect } from "../browser/request"
 import { t } from "../i18n"
+
+/*
+ * The panes that are not a session or a file are loaded when the first one is opened.
+ *
+ * Each is a screen of its own (a browser, a video player, a 3D viewer, an emulator, the design register, the world) with its
+ * styles and libraries, and a user who has not opened one has no use for it. A pane's chunk arrives in a few milliseconds from
+ * the app's own files; the grid draws nothing in its tile until it does.
+ */
+const FilePane = lazy(() => import("../editor/file-pane").then((module) => ({ default: module.FilePane })))
+const BrowserPane = lazy(() => import("../browser/browser-pane").then((module) => ({ default: module.BrowserPane })))
+const VideoPane = lazy(() => import("../video/video-pane").then((module) => ({ default: module.VideoPane })))
+const ModelPane = lazy(() => import("../model3d/model-pane").then((module) => ({ default: module.ModelPane })))
+const SimulatorPane = lazy(() =>
+  import("../simulator/simulator-pane").then((module) => ({ default: module.SimulatorPane })),
+)
+const DesignPane = lazy(() => import("../design/design-pane").then((module) => ({ default: module.DesignPane })))
+const RaguversePane = lazy(() =>
+  import("../raguverse/raguverse-pane").then((module) => ({ default: module.RaguversePane })),
+)
 
 /**
  * What each tile in the grid actually draws.
@@ -639,11 +653,11 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
                                         when={current().mode === "raguverse"}
                                         fallback={sessionPane()}
                                       >
-                                        {raguversePane()}
+                                        <Suspense>{raguversePane()}</Suspense>
                                       </Show>
                                     }
                                   >
-                                    {designPane()}
+                                    <Suspense>{designPane()}</Suspense>
                                   </Show>
                                 }
                               >
@@ -651,23 +665,23 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
                               </Show>
                             }
                           >
-                            {simulatorPane()}
+                            <Suspense>{simulatorPane()}</Suspense>
                           </Show>
                         }
                       >
-                        {modelPane()}
+                        <Suspense>{modelPane()}</Suspense>
                       </Show>
                     }
                   >
-                    {videoPane()}
+                    <Suspense>{videoPane()}</Suspense>
                   </Show>
                 }
               >
-                {browserPane()}
+                <Suspense>{browserPane()}</Suspense>
               </Show>
             }
           >
-            {filePane()}
+            <Suspense>{filePane()}</Suspense>
           </Show>
         }
       >
