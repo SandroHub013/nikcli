@@ -8,13 +8,8 @@
  * - Window blur releases push-to-talk immediately to avoid leaving mic open.
  */
 
-import {
-  findVoiceShortcutConflicts,
-  VOICE_COMMAND_AGENT,
-  VOICE_COMMAND_TRANSCRIPTION,
-  type VoiceMode,
-  type VoiceSettings,
-} from "@ragu/voice/core"
+import { findVoiceShortcutConflicts, VOICE_COMMAND_AGENT, VOICE_COMMAND_TRANSCRIPTION } from "@ragu/voice/light"
+import type { VoiceMode, VoiceSettings } from "@ragu/voice/core"
 import {
   matchesChord,
   normalizeKeyName,

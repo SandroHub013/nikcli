@@ -57,7 +57,7 @@ describe("lint: the sheets are Kobalte dialogs", () => {
     // Each sheet is rendered under its own <Show when={x()}>: every x() must be in sheetOpen.
     const shown = [
       ...workbench.matchAll(
-        /<Show when=\{(\w+)\(\)\}>\s*(?:\{\/\*[^*]*\*\/\}\s*)?<(?:DecisionsSheet|DesignSheet|SettingsSheet|Sheet)\b/g,
+        /<Show when=\{(\w+)\(\)\}>\s*(?:\{\/\*[^*]*\*\/\}\s*)?(?:<Suspense>\s*)?<(?:DecisionsSheet|DesignSheet|SettingsSheet|Sheet)\b/g,
       ),
     ].map((match) => match[1]!)
     expect(shown.length).toBe(3)

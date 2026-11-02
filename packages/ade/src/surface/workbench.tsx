@@ -1,4 +1,16 @@
-import { onMount, onCleanup, on, createSignal, createEffect, createMemo, createResource, Show, For, Suspense } from "solid-js"
+import {
+  onMount,
+  onCleanup,
+  on,
+  createSignal,
+  createEffect,
+  createMemo,
+  createResource,
+  lazy,
+  Show,
+  For,
+  Suspense,
+} from "solid-js"
 import { createStore, produce, reconcile, unwrap } from "solid-js/store"
 import { getHost, stripAnsi, type SpawnedSession } from "../host/shell"
 import {
@@ -317,7 +329,8 @@ import { parseCommandId } from "../plugin/trust"
 import { CONSENT_KEY, consentQuestion, hasConsent, withConsent } from "../plugin/consent"
 import { toPluginSession } from "../plugin/session"
 import type { DiscoveryIO } from "../plugin/discovery"
-import { binaryFromHost, markSaved, openBuffer, saveBlockedReason, toLf, withEol } from "../editor"
+import { binaryFromHost } from "../editor/binary-file"
+import { markSaved, openBuffer, saveBlockedReason, toLf, withEol } from "../editor/buffer"
 import {
   answerLabel,
   detectPermission,
@@ -550,8 +563,6 @@ import { createDecisionsRegister } from "../decisions/register"
 import { askerLedger } from "../session/asker-ledger"
 import { decisionsPath } from "../decisions/store"
 import { formatMoment as formatDesignMoment } from "../design/answer"
-import { DesignSheet } from "../design/design-sheet"
-import { SettingsSheet } from "../settings/settings-sheet"
 import { Sheet } from "../ui/sheet"
 import {
   OUTBOX_KEY as DESIGN_OUTBOX_KEY,
@@ -597,16 +608,12 @@ import { formatNotesFile, formatNotesLine, notesFilePath, notesFileRelative } fr
 import { registerWrite, withPlace } from "../session/register-write"
 import {
   AgentOrb,
-  createMicMeter,
   createPlaybackMeter,
-  createVoiceEngine,
   createWebSpeechSpeaker,
   createFakeSpeaker,
-  createNaturalSpeaker,
   activeReplyVoice,
   speakingReplyVoice,
   isKokoroVoice,
-  type ReplyVoice,
   interfaceLocale,
   replyLocale,
   g2pLocale,
@@ -626,23 +633,23 @@ import {
   shortcutActivationEnabled,
   describeShortcut,
   holdsToTalk,
-  type VoiceEngine,
-  type VoiceMode,
-  type VoiceSettings,
-  type InstallProgress,
-  type PackState,
   kokoroVoice,
   KOKORO_DOWNLOAD_BYTES,
-  createMaiSpeaker,
-  createSpendTally,
   isMaiVoice,
   localReplyVoice,
-  maiFallbackNotice,
   maiReplyVoice,
-  settleMai,
-  type MaiFailureKind,
-  type StreamState,
+} from "@ragu/voice/light"
+// Types only: the engine itself comes in with `import()` when the voice is first used (`buildVoiceRuntime`).
+import type {
+  InstallProgress,
+  MaiFailureKind,
+  PackState,
+  ReplyVoice,
+  StreamState,
+  VoiceMode,
+  VoiceSettings,
 } from "@ragu/voice"
+import { createLazyVoiceEngine } from "../voice/lazy-engine"
 import { createPackController, followInstall, installCancelled } from "./voice-pack-controller"
 import { ShotTray, createShotSource } from "../shots"
 import {
@@ -685,6 +692,14 @@ import {
 } from "../voice/global-shortcut"
 import { createListenGuard, pollListenGuard } from "../voice/listen-guard"
 import { createProactiveAlerts } from "../voice/proactive-alerts"
+
+/*
+ * The settings panel is loaded when it is first opened. It holds every settings page and, with the voice's, the voice package's
+ * components and Effect runtime: none of it is needed to draw the first screen.
+ */
+const SettingsSheet = lazy(() => import("../settings/settings-sheet").then((module) => ({ default: module.SettingsSheet })))
+/* The design register's sheet is loaded when it is first opened: the register itself (the hub) is not, it listens from the start. */
+const DesignSheet = lazy(() => import("../design/design-sheet").then((module) => ({ default: module.DesignSheet })))
 
 const DEFAULT_PREVIEW_URL = "http://localhost:3000"
 
@@ -5971,129 +5986,6 @@ export function Workbench() {
       return false
     }
   }
-  const naturalSpeaker = createNaturalSpeaker({
-    mayDownload: () => downloadConsented(),
-    /*
-     * Which voice speaks, and in which language — one answer, because the voice
-     * is chosen *for* the language and two of them could come apart. The
-     * language is the one of the reply as its text says it, and the setting is
-     * what answers when the text says nothing: a reply in Italian is read in
-     * Italian, which is what keeps a Kokoro voice from reading it with an
-     * English mouth. See `replyLocale`.
-     */
-    voiceFor: (detected) => {
-      const settings = voiceSettings()
-      // Under MAI this speaker reads what MAI does not, in the profile's local voice.
-      const local = localReplyVoice(settings)
-      // Not called `locale`: that is the language of the window, and it is asked
-      // for one line below.
-      const spoken = replyLocale(local, detected, interfaceLocale(locale(), settings.ttsLocale))
-      return { voice: speakingReplyVoice(local, spoken, locale()), locale: spoken }
-    },
-    status: async (voice) => {
-      const host = await getHost()
-      // Which backend reads the voice decides which command answers: Piper's
-      // voices are files of their own, Kokoro's four are one 219 MB download, and
-      // asking the wrong backend about a voice it does not have is a question
-      // with no answer.
-      if (isKokoroVoice(voice as ReplyVoice)) {
-        // The panel's shape: undefined means this build cannot run Kokoro at all,
-        // which is not the same as a pack that is not there yet.
-        const pack = host?.ttsLocalStatus ? await host.ttsLocalStatus("kokoro") : undefined
-        return { supported: pack !== undefined, installed: pack?.installed ?? false }
-      }
-      if (host?.ttsPiperStatus) return host.ttsPiperStatus(voice)
-      return { supported: false, installed: false }
-    },
-    install: async (voice) => {
-      const host = await getHost()
-      if (isKokoroVoice(voice as ReplyVoice)) {
-        if (host?.ttsLocalInstall) return host.ttsLocalInstall("kokoro")
-      } else if (host?.ttsPiperInstall) {
-        return host.ttsPiperInstall(voice)
-      }
-      throw new Error(t("voice.noHost.download"))
-    },
-    synthesize: async (voice, text, token, ttsLocale) => {
-      const host = await getHost()
-      // The locale goes across as what the G2P is asked for, not as the setting:
-      // `en-GB` is `en` for espeak, and K1 measured that asking for `en-gb` fails
-      // outright. This is the boundary where that becomes true.
-      const lang = g2pLocale(ttsLocale)
-      // A Kokoro voice is read by the other backend, and it takes the voice id
-      // too: its four voices are speaker numbers inside one model, not four files.
-      if (isKokoroVoice(voice as ReplyVoice)) {
-        if (host?.ttsLocalSpeak) return host.ttsLocalSpeak("kokoro", voice, text, token, lang)
-        throw new Error(t("voice.noHost"))
-      }
-      if (!host?.ttsPiperSpeak) throw new Error(t("voice.noHost"))
-      return host.ttsPiperSpeak(voice, text, token, lang)
-    },
-    cancel: async (tokens) => {
-      const host = await getHost()
-      // L'annullamento di Kokoro e' solo qui: l'host non ha un comando e una
-      // richiesta gia' mandata finisce. Il segno arriva lo stesso e la frase che
-      // non e' ancora partita non parte.
-      await host?.ttsPiperCancel?.(tokens)
-    },
-    stop: async () => {
-      const host = await getHost()
-      // I due figli sono uno per backend: fermare quello che stava parlando, e la
-      // catena si rimette sola al turno dopo.
-      await host?.ttsLocalStop?.()
-      return (await host?.ttsPiperStop?.()) ?? { busy: false }
-    },
-    stopOnCreate: true,
-    play: (wav, signal) => {
-      // A take keeps the assistant's voice as its own track (S36).
-      recorder.noteVoice(wav)
-      return playWav(wav, signal, voiceSettings().outputDeviceId, playbackMeter, () => {
-        // The device the user picked is not there: the answer comes out of the
-        // default speakers, and it says so once instead of never.
-        report(t("vui.device.missing"), "warning")
-      })
-    },
-    fallback: systemSpeaker,
-    fallbackNotice: () => t("vui.reply.fallbackNotice"),
-    // Said once for the profile, not at every start of ADE.
-    fallbackNoticeSeen: () => {
-      try {
-        return localStorage.getItem("ade.voice.fallback-notice") === "1"
-      } catch {
-        return false
-      }
-    },
-    onFallbackNotice: () => {
-      try {
-        localStorage.setItem("ade.voice.fallback-notice", "1")
-      } catch {
-        // Said again next time, which is harmless.
-      }
-    },
-    onInstall: (voice, state, problem) => {
-      if (voice !== speakingVoice()) return
-      if (state === "ready") {
-        setVoiceInstalled(true)
-        setVoiceDownloading(false)
-        clearVoiceFailure(voice)
-      } else if (state === "downloading") {
-        setVoiceDownloading(true)
-      } else if (state === "failed") {
-        setVoiceInstalled(false)
-        setVoiceDownloading(false)
-        // A download the user cancelled from the panel is not a failure (K6 review).
-        void getHost().then(async (host) => {
-          if (!(await installCancelled(host, "piper"))) failNaturalVoice(voice, problem)
-        })
-      }
-    },
-  })
-  /*
-   * What the voice spends in a day, made once: listening and the replies write
-   * the same day under the same key, and two tallies on one key would each
-   * write over the other's figure.
-   */
-  const voiceSpend = createSpendTally(typeof localStorage !== "undefined" ? localStorage : null, Date.now())
   const [maiBlocked, setMaiBlocked] = createSignal<MaiFailureKind | undefined>(undefined)
   /** Why the streaming transcription is or is not writing, as the open transcriber last said. */
   const [streamState, setStreamState] = createSignal<StreamState | undefined>(undefined)
@@ -6122,107 +6014,273 @@ export function Workbench() {
     fetchFn: (input: string, init: RequestInit) => fetch(input, init),
   }
   /*
-   * MAI in front of the local voices: an Italian reply on a MAI voice goes to
-   * MAI, everything else — and whatever MAI cannot read — to the speaker above,
-   * which falls from Piper to the system voice as before.
+   * The heavy half of the voice: the speakers, the microphone meter, what the voice spends, and the engine.
+   *
+   * Built the first time something asks for them (`voiceEngine` and `speaker` below), never at start: they are most of
+   * the voice package, with its Effect runtime, and a user who has not turned the voice on has no use for a byte of it.
+   * The package is taken with `import()` here, so the bundler keeps it out of the first load.
    */
-  const maiSpeaker = createMaiSpeaker({
-    voiceFor: (text) => {
-      const settings = voiceSettings()
-      const voice = maiReplyVoice({ text, ui: locale(), chosen: settings.replyVoice, local: localReplyVoice(settings) })
-      return { voice, locale: "it-IT" }
-    },
-    hasKey: () => Boolean(maiClient.apiKey()),
-    client: maiClient,
-    local: naturalSpeaker,
-    play: (wav, signal) => {
-      recorder.noteVoice(wav)
-      return playWav(wav, signal, voiceSettings().outputDeviceId, playbackMeter, () => {
-        report(t("vui.device.missing"), "warning")
-      })
-    },
-    notice: maiFallbackNotice,
-    spend: { tally: voiceSpend, settle: (id) => settleMai(id, maiClient) },
-    onState: setMaiBlocked,
-  })
-  /*
-   * The whole reply counts for the sphere, synthesis included: a long first
-   * sentence takes Piper longer than the sphere waits, and it flew home and
-   * back before the voice started.
-   */
-  const speaker = {
-    ...naturalSpeaker,
-    speak: async (text: string) => {
-      const stop = playbackMeter.reply()
-      try {
-        await maiSpeaker.speak(text)
-      } finally {
-        stop()
-      }
-    },
-    cancel: () => maiSpeaker.cancel(),
-    prefetch: (text: string) => maiSpeaker.prefetch?.(text),
-    // Opening the microphone warms the voice that will answer: under a MAI voice that can answer, none.
-    prepare: () => {
-      if (isMaiVoice(voiceSettings().replyVoice) && maiSpeaker.available()) return
-      naturalSpeaker.prepare()
-    },
+  const buildVoiceRuntime = async () => {
+    const voice = await import("@ragu/voice")
+    const naturalSpeaker = voice.createNaturalSpeaker({
+      mayDownload: () => downloadConsented(),
+      /*
+       * Which voice speaks, and in which language — one answer, because the voice
+       * is chosen *for* the language and two of them could come apart. The
+       * language is the one of the reply as its text says it, and the setting is
+       * what answers when the text says nothing: a reply in Italian is read in
+       * Italian, which is what keeps a Kokoro voice from reading it with an
+       * English mouth. See `replyLocale`.
+       */
+      voiceFor: (detected) => {
+        const settings = voiceSettings()
+        // Under MAI this speaker reads what MAI does not, in the profile's local voice.
+        const local = localReplyVoice(settings)
+        // Not called `locale`: that is the language of the window, and it is asked
+        // for one line below.
+        const spoken = replyLocale(local, detected, interfaceLocale(locale(), settings.ttsLocale))
+        return { voice: speakingReplyVoice(local, spoken, locale()), locale: spoken }
+      },
+      status: async (voice) => {
+        const host = await getHost()
+        // Which backend reads the voice decides which command answers: Piper's
+        // voices are files of their own, Kokoro's four are one 219 MB download, and
+        // asking the wrong backend about a voice it does not have is a question
+        // with no answer.
+        if (isKokoroVoice(voice as ReplyVoice)) {
+          // The panel's shape: undefined means this build cannot run Kokoro at all,
+          // which is not the same as a pack that is not there yet.
+          const pack = host?.ttsLocalStatus ? await host.ttsLocalStatus("kokoro") : undefined
+          return { supported: pack !== undefined, installed: pack?.installed ?? false }
+        }
+        if (host?.ttsPiperStatus) return host.ttsPiperStatus(voice)
+        return { supported: false, installed: false }
+      },
+      install: async (voice) => {
+        const host = await getHost()
+        if (isKokoroVoice(voice as ReplyVoice)) {
+          if (host?.ttsLocalInstall) return host.ttsLocalInstall("kokoro")
+        } else if (host?.ttsPiperInstall) {
+          return host.ttsPiperInstall(voice)
+        }
+        throw new Error(t("voice.noHost.download"))
+      },
+      synthesize: async (voice, text, token, ttsLocale) => {
+        const host = await getHost()
+        // The locale goes across as what the G2P is asked for, not as the setting:
+        // `en-GB` is `en` for espeak, and K1 measured that asking for `en-gb` fails
+        // outright. This is the boundary where that becomes true.
+        const lang = g2pLocale(ttsLocale)
+        // A Kokoro voice is read by the other backend, and it takes the voice id
+        // too: its four voices are speaker numbers inside one model, not four files.
+        if (isKokoroVoice(voice as ReplyVoice)) {
+          if (host?.ttsLocalSpeak) return host.ttsLocalSpeak("kokoro", voice, text, token, lang)
+          throw new Error(t("voice.noHost"))
+        }
+        if (!host?.ttsPiperSpeak) throw new Error(t("voice.noHost"))
+        return host.ttsPiperSpeak(voice, text, token, lang)
+      },
+      cancel: async (tokens) => {
+        const host = await getHost()
+        // L'annullamento di Kokoro e' solo qui: l'host non ha un comando e una
+        // richiesta gia' mandata finisce. Il segno arriva lo stesso e la frase che
+        // non e' ancora partita non parte.
+        await host?.ttsPiperCancel?.(tokens)
+      },
+      stop: async () => {
+        const host = await getHost()
+        // I due figli sono uno per backend: fermare quello che stava parlando, e la
+        // catena si rimette sola al turno dopo.
+        await host?.ttsLocalStop?.()
+        return (await host?.ttsPiperStop?.()) ?? { busy: false }
+      },
+      stopOnCreate: true,
+      play: (wav, signal) => {
+        // A take keeps the assistant's voice as its own track (S36).
+        recorder.noteVoice(wav)
+        return playWav(wav, signal, voiceSettings().outputDeviceId, playbackMeter, () => {
+          // The device the user picked is not there: the answer comes out of the
+          // default speakers, and it says so once instead of never.
+          report(t("vui.device.missing"), "warning")
+        })
+      },
+      fallback: systemSpeaker,
+      fallbackNotice: () => t("vui.reply.fallbackNotice"),
+      // Said once for the profile, not at every start of ADE.
+      fallbackNoticeSeen: () => {
+        try {
+          return localStorage.getItem("ade.voice.fallback-notice") === "1"
+        } catch {
+          return false
+        }
+      },
+      onFallbackNotice: () => {
+        try {
+          localStorage.setItem("ade.voice.fallback-notice", "1")
+        } catch {
+          // Said again next time, which is harmless.
+        }
+      },
+      onInstall: (voice, state, problem) => {
+        if (voice !== speakingVoice()) return
+        if (state === "ready") {
+          setVoiceInstalled(true)
+          setVoiceDownloading(false)
+          clearVoiceFailure(voice)
+        } else if (state === "downloading") {
+          setVoiceDownloading(true)
+        } else if (state === "failed") {
+          setVoiceInstalled(false)
+          setVoiceDownloading(false)
+          // A download the user cancelled from the panel is not a failure (K6 review).
+          void getHost().then(async (host) => {
+            if (!(await installCancelled(host, "piper"))) failNaturalVoice(voice, problem)
+          })
+        }
+      },
+    })
+    /*
+     * What the voice spends in a day, made once: listening and the replies write
+     * the same day under the same key, and two tallies on one key would each
+     * write over the other's figure.
+     */
+    const voiceSpend = voice.createSpendTally(typeof localStorage !== "undefined" ? localStorage : null, Date.now())
+    /*
+     * MAI in front of the local voices: an Italian reply on a MAI voice goes to
+     * MAI, everything else — and whatever MAI cannot read — to the speaker above,
+     * which falls from Piper to the system voice as before.
+     */
+    const maiSpeaker = voice.createMaiSpeaker({
+      voiceFor: (text) => {
+        const settings = voiceSettings()
+        const voice = maiReplyVoice({ text, ui: locale(), chosen: settings.replyVoice, local: localReplyVoice(settings) })
+        return { voice, locale: "it-IT" }
+      },
+      hasKey: () => Boolean(maiClient.apiKey()),
+      client: maiClient,
+      local: naturalSpeaker,
+      play: (wav, signal) => {
+        recorder.noteVoice(wav)
+        return playWav(wav, signal, voiceSettings().outputDeviceId, playbackMeter, () => {
+          report(t("vui.device.missing"), "warning")
+        })
+      },
+      notice: voice.maiFallbackNotice,
+      spend: { tally: voiceSpend, settle: (id) => voice.settleMai(id, maiClient) },
+      onState: setMaiBlocked,
+    })
+    /*
+     * The whole reply counts for the sphere, synthesis included: a long first
+     * sentence takes Piper longer than the sphere waits, and it flew home and
+     * back before the voice started.
+     */
+    const speaker = {
+      ...naturalSpeaker,
+      speak: async (text: string) => {
+        const stop = playbackMeter.reply()
+        try {
+          await maiSpeaker.speak(text)
+        } finally {
+          stop()
+        }
+      },
+      cancel: () => maiSpeaker.cancel(),
+      prefetch: (text: string) => maiSpeaker.prefetch?.(text),
+      // Opening the microphone warms the voice that will answer: under a MAI voice that can answer, none.
+      prepare: () => {
+        if (isMaiVoice(voiceSettings().replyVoice) && maiSpeaker.available()) return
+        naturalSpeaker.prepare()
+      },
+    }
+
+    /*
+     * The level meter drives the mic ring and the settings panel's waveform, and
+     * nothing else. A second getUserMedia stream is the one part of starting up
+     * that can fail on its own — a headless webview, a denied prompt — so its
+     * failure is swallowed here: losing the animation must never cost the user
+     * the ability to speak.
+     */
+    const rawMicMeter = voiceAvailable ? voice.createMicMeter() : undefined
+    const micMeter = rawMicMeter
+      ? {
+          start: async () => {
+            try {
+              await rawMicMeter.start()
+            } catch {
+              // level display only; recognition runs on its own stream
+            }
+          },
+          onLevel: (cb: (level: number) => void) => rawMicMeter.onLevel(cb),
+          // Passed through: the engine tells the meter which microphone to open
+          // so the ring animates off the same device recognition is reading.
+          setDevice: (deviceId: string | undefined) => rawMicMeter.setDevice(deviceId),
+          stop: () => rawMicMeter.stop(),
+          get isRunning() {
+            return rawMicMeter.isRunning
+          },
+        }
+      : undefined
+
+    const voiceEngine = voice.createVoiceEngine({
+      host: voiceHost,
+      spendTally: voiceSpend,
+      settings: voiceSettings(),
+      // The socket the streaming backend speaks over: built here, over the Rust
+      // host, and handed to whichever backend the settings chose.
+      backendOptions: { grokStreamOptions: { transport: sttTransport, onStreamState: setStreamState } },
+      // A tap on a dictation chord held to speak closed it unseen: said, so the press is not dead.
+      onDictationTap: () =>
+        report(t("vui.dictation.tapHint", describeShortcut(voiceSettings().transcriptionChord, platform)), "info"),
+      ...(voiceAvailable ? {} : { transcriber: noMicrophone }),
+      speaker,
+      micMeter,
+      now: () => Date.now(),
+      /*
+       * What the planning provider said, beside the sentence the user heard. It
+       * is the only way to tell a "riprova fra un momento" that keeps coming back
+       * because of a rate limit from one that will because the key is wrong, and
+       * a 401 quotes the key it refused — so it is scrubbed before it is shown,
+       * and the Italian sentence is the only thing said out loud.
+       */
+      onProviderError: (detail) => report(scrubSecrets(detail)),
+      getContext: () => ({
+        focusedPaneId: wb().focusedId,
+      }),
+    })
+    return { engine: voiceEngine, speaker, maiSpeaker, naturalSpeaker }
   }
 
-  /*
-   * The level meter drives the mic ring and the settings panel's waveform, and
-   * nothing else. A second getUserMedia stream is the one part of starting up
-   * that can fail on its own — a headless webview, a denied prompt — so its
-   * failure is swallowed here: losing the animation must never cost the user
-   * the ability to speak.
-   */
-  const rawMicMeter = voiceAvailable ? createMicMeter() : undefined
-  const micMeter = rawMicMeter
-    ? {
-        start: async () => {
-          try {
-            await rawMicMeter.start()
-          } catch {
-            // level display only; recognition runs on its own stream
-          }
-        },
-        onLevel: (cb: (level: number) => void) => rawMicMeter.onLevel(cb),
-        // Passed through: the engine tells the meter which microphone to open
-        // so the ring animates off the same device recognition is reading.
-        setDevice: (deviceId: string | undefined) => rawMicMeter.setDevice(deviceId),
-        stop: () => rawMicMeter.stop(),
-        get isRunning() {
-          return rawMicMeter.isRunning
-        },
-      }
-    : undefined
-
-  const voiceEngine = createVoiceEngine({
-    host: voiceHost,
-    spendTally: voiceSpend,
-    settings: voiceSettings(),
-    // The socket the streaming backend speaks over: built here, over the Rust
-    // host, and handed to whichever backend the settings chose.
-    backendOptions: { grokStreamOptions: { transport: sttTransport, onStreamState: setStreamState } },
-    // A tap on a dictation chord held to speak closed it unseen: said, so the press is not dead.
-    onDictationTap: () =>
-      report(t("vui.dictation.tapHint", describeShortcut(voiceSettings().transcriptionChord, platform)), "info"),
-    ...(voiceAvailable ? {} : { transcriber: noMicrophone }),
-    speaker,
-    micMeter,
-    now: () => Date.now(),
-    /*
-     * What the planning provider said, beside the sentence the user heard. It
-     * is the only way to tell a "riprova fra un momento" that keeps coming back
-     * because of a rate limit from one that will because the key is wrong, and
-     * a 401 quotes the key it refused — so it is scrubbed before it is shown,
-     * and the Italian sentence is the only thing said out loud.
-     */
-    onProviderError: (detail) => report(scrubSecrets(detail)),
-    getContext: () => ({
-      focusedPaneId: wb().focusedId,
-    }),
+  /** The runtime, built once; a build that failed is not kept, so the next request tries again. */
+  let voiceRuntimeBuild: Promise<Awaited<ReturnType<typeof buildVoiceRuntime>>> | undefined
+  const voiceRuntime = () => {
+    voiceRuntimeBuild ??= buildVoiceRuntime().catch((error) => {
+      voiceRuntimeBuild = undefined
+      throw error
+    })
+    return voiceRuntimeBuild
+  }
+  /** The engine as the bar, the agent view and the keys hold it: idle until it is asked to start (`voice/lazy-engine`). */
+  const voiceEngine = createLazyVoiceEngine({
+    settings: voiceSettings,
+    load: async () => (await voiceRuntime()).engine,
   })
+  /** The reply voice, for the places that speak or warm it up; the speakers themselves are built with the runtime. */
+  const speaker = {
+    speak: async (text: string) => (await voiceRuntime()).speaker.speak(text),
+    prepare: () => {
+      void voiceRuntime()
+        .then((runtime) => runtime.speaker.prepare())
+        .catch(() => {})
+    },
+  }
+  /** MAI's speaker, for the settings panel's «Riprova». */
+  const maiSpeaker = {
+    retry: () => {
+      void voiceRuntime()
+        .then((runtime) => runtime.maiSpeaker.retry())
+        .catch(() => {})
+    },
+  }
 
   const downloadNaturalVoice = async () => {
     if (voiceDownloading()) return
@@ -10680,19 +10738,21 @@ export function Workbench() {
       </Show>
 
       <Show when={designOpen()}>
-        <DesignSheet
-          hub={designHub}
-          start={choiceStart()}
-          onDone={(_next, said) => {
-            setDesignOpen(false)
-            if (said) toast.show(said)
-          }}
-          onClose={() => setDesignOpen(false)}
-          onOpenPanel={() => {
-            setDesignOpen(false)
-            openDesignPane()
-          }}
-        />
+        <Suspense>
+          <DesignSheet
+            hub={designHub}
+            start={choiceStart()}
+            onDone={(_next, said) => {
+              setDesignOpen(false)
+              if (said) toast.show(said)
+            }}
+            onClose={() => setDesignOpen(false)}
+            onOpenPanel={() => {
+              setDesignOpen(false)
+              openDesignPane()
+            }}
+          />
+        </Suspense>
       </Show>
 
       <Show when={keyRequest() && keysHost()}>
@@ -10724,82 +10784,84 @@ export function Workbench() {
         panel, one gear, one answer to "where are the settings".
       */}
       <Show when={voiceSettingsOpen()}>
-        <SettingsSheet
-          onClose={closeVoiceSettings}
-          initialTarget={voiceSettingsSection()}
-          version={installedVersion()}
-          onCheckUpdates={() => void checkForUpdates()}
-          voiceEngine={voiceEngine}
-          voiceSettings={voiceSettings()}
-          onVoiceSettingsChange={handleVoiceSettingsChange}
-          shortcutRefusals={shortcutRefusals()}
-          onOpenVoiceSource={(voice) => void getHost().then((host) => host?.ttsOpenVoiceSource?.(voice))}
-          naturalVoiceError={voiceError()}
-          naturalVoiceDownloading={voiceDownloading()}
-          naturalVoiceInstalled={voiceInstalled()}
-          onDownloadNaturalVoice={() => void downloadNaturalVoice()}
-          naturalVoiceProgress={piperProgress() ?? undefined}
-          onCancelInstall={(provider) =>
-            void (provider === "kokoro"
-              ? kokoro.cancel()
-              : getHost().then((host) => host?.ttsInstallCancel?.(provider)))
-          }
-          kokoroPack={kokoroPack()}
-          onInstallKokoro={() => void kokoro.install()}
-          onDeleteKokoro={() => void kokoro.remove()}
-          onTestVoice={testReplyVoice}
-          maiBlocked={maiBlocked()}
-          onRetryMai={() => maiSpeaker.retry()}
-          xaiKeyMasked={xaiKeyMasked()}
-          streamState={streamState()}
-          onRetryStream={() => {
-            voiceEngine.retryStream()
-            setStreamState({ kind: "ready" })
-          }}
-          testIdentity={testBuild}
-          bindings={bindings}
-          voiceSettingsNotice={voiceSettingsNotice()}
-          themeState={themeState}
-          glassStatus={glassStatus}
-          project={project}
-          wb={wb}
-          setWb={setWb}
-          hookHost={hookHost}
-          hookStates={hookStates}
-          refreshHooks={refreshHooks}
-          openLoginSession={(runner) => openLoginSession(runner)}
-          keysHost={keysHost}
-          voiceKeyConflict={voiceKeyConflict() ? answerVoiceKeyConflict : undefined}
-          onManageKeys={() => {
-            // Through undefined, so asking twice for the same tab still moves the sheet.
-            setVoiceSettingsSection(undefined)
-            setVoiceSettingsSection("agents/keys")
-          }}
-          extensionsIo={extensionsIo}
-          pluginRuntime={pluginRuntime}
-          openGuide={openGuide}
-          askYesNo={askYesNo}
-          record={{
-            quality: recordQuality,
-            onQuality: applyRecordQuality,
-            mic: recordMic,
-            onMic: applyRecordMic,
-            dir: recordDir,
-            onPickFolder: () => void pickRecordDir(),
-            onExport: () => void exportLastTake(),
-          }}
-          updates={{
-            checking: checkingUpdate,
-            available: latestUpdate,
-            onInstall: () => {
-              const update = latestUpdate()
-              if (!update) return
-              // The dialog takes the window over: the sheet steps aside so the two never stack.
-              closeVoiceSettings()
-              installUpdate(update.url)
-            },
-          }}
-        />
+        <Suspense>
+          <SettingsSheet
+            onClose={closeVoiceSettings}
+            initialTarget={voiceSettingsSection()}
+            version={installedVersion()}
+            onCheckUpdates={() => void checkForUpdates()}
+            voiceEngine={voiceEngine}
+            voiceSettings={voiceSettings()}
+            onVoiceSettingsChange={handleVoiceSettingsChange}
+            shortcutRefusals={shortcutRefusals()}
+            onOpenVoiceSource={(voice) => void getHost().then((host) => host?.ttsOpenVoiceSource?.(voice))}
+            naturalVoiceError={voiceError()}
+            naturalVoiceDownloading={voiceDownloading()}
+            naturalVoiceInstalled={voiceInstalled()}
+            onDownloadNaturalVoice={() => void downloadNaturalVoice()}
+            naturalVoiceProgress={piperProgress() ?? undefined}
+            onCancelInstall={(provider) =>
+              void (provider === "kokoro"
+                ? kokoro.cancel()
+                : getHost().then((host) => host?.ttsInstallCancel?.(provider)))
+            }
+            kokoroPack={kokoroPack()}
+            onInstallKokoro={() => void kokoro.install()}
+            onDeleteKokoro={() => void kokoro.remove()}
+            onTestVoice={testReplyVoice}
+            maiBlocked={maiBlocked()}
+            onRetryMai={() => maiSpeaker.retry()}
+            xaiKeyMasked={xaiKeyMasked()}
+            streamState={streamState()}
+            onRetryStream={() => {
+              voiceEngine.retryStream()
+              setStreamState({ kind: "ready" })
+            }}
+            testIdentity={testBuild}
+            bindings={bindings}
+            voiceSettingsNotice={voiceSettingsNotice()}
+            themeState={themeState}
+            glassStatus={glassStatus}
+            project={project}
+            wb={wb}
+            setWb={setWb}
+            hookHost={hookHost}
+            hookStates={hookStates}
+            refreshHooks={refreshHooks}
+            openLoginSession={(runner) => openLoginSession(runner)}
+            keysHost={keysHost}
+            voiceKeyConflict={voiceKeyConflict() ? answerVoiceKeyConflict : undefined}
+            onManageKeys={() => {
+              // Through undefined, so asking twice for the same tab still moves the sheet.
+              setVoiceSettingsSection(undefined)
+              setVoiceSettingsSection("agents/keys")
+            }}
+            extensionsIo={extensionsIo}
+            pluginRuntime={pluginRuntime}
+            openGuide={openGuide}
+            askYesNo={askYesNo}
+            record={{
+              quality: recordQuality,
+              onQuality: applyRecordQuality,
+              mic: recordMic,
+              onMic: applyRecordMic,
+              dir: recordDir,
+              onPickFolder: () => void pickRecordDir(),
+              onExport: () => void exportLastTake(),
+            }}
+            updates={{
+              checking: checkingUpdate,
+              available: latestUpdate,
+              onInstall: () => {
+                const update = latestUpdate()
+                if (!update) return
+                // The dialog takes the window over: the sheet steps aside so the two never stack.
+                closeVoiceSettings()
+                installUpdate(update.url)
+              },
+            }}
+          />
+        </Suspense>
       </Show>
 
       {/*
