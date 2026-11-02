@@ -962,6 +962,8 @@ export function Workbench() {
    * the notice is now the shell's own, rendered above the section.
    */
   const [notice, setNotice] = createSignal<string>()
+  // What the strip is showing: an error is announced as an alert, the rest are read in turn.
+  const [noticeKind, setNoticeKind] = createSignal<NoticeKind>("error")
   // Where the last answer of a sheet went, once the sheet is gone (`surface/toast.ts`).
   const toast = createToast()
 
@@ -986,6 +988,7 @@ export function Workbench() {
   /** Says it once, in both places: the strip now, the bell afterwards. */
   const report = (text: string, kind: NoticeKind = "error", paneId?: string) => {
     setNotice(text)
+    setNoticeKind(kind)
     setNotices((list) => addNotice(list, { kind, text, at: Date.now(), ...(paneId ? { paneId } : {}) }))
   }
   /** The kept copy of the saved sessions put back as the workspace, and the page reloaded to read it. After the user's yes only. */
@@ -10532,9 +10535,7 @@ export function Workbench() {
                       <For each={notices()}>
                         {(notice) => (
                           <div data-slot="ade-notice-row" data-kind={notice.kind} role="listitem">
-                            <span data-slot="ade-notice-text" role={notice.kind === "error" ? "alert" : undefined}>
-                              {notice.text}
-                            </span>
+                            <span data-slot="ade-notice-text">{notice.text}</span>
                             <Show when={notice.restore}>
                               {(copy) => (
                                 <Show
@@ -10685,7 +10686,7 @@ export function Workbench() {
               read. */}
           <Show when={notice()}>
             {(text) => (
-              <div data-slot="ade-notice" role="status">
+              <div data-slot="ade-notice" role={noticeKind() === "error" ? "alert" : "status"}>
                 <span data-slot="ade-notice-text">{text()}</span>
                 <Show when={noticeAction()?.text === text() ? noticeAction() : undefined}>
                   {(action) => (

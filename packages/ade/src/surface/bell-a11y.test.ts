@@ -29,8 +29,19 @@ describe("the bell", () => {
     expect(trigger).toContain("aria-expanded={noticesOpen()}")
   })
 
-  test("a failure is announced as an alert, the others are left to be read", () => {
-    expect(panel).toContain('role={notice.kind === "error" ? "alert" : undefined}')
+  test("a row in the panel is not an alert: opening the bell would announce every kept failure again", () => {
+    expect(panel).not.toContain('role="alert"')
+    expect(panel).not.toContain('"alert"')
+  })
+
+  test("the failure is announced once, where it appears: the strip, which is an alert only for an error", () => {
+    // `report()` fills the strip and the list together; the strip is what is new, the list is the history.
+    expect(source).toContain("const [noticeKind, setNoticeKind] = createSignal<NoticeKind>")
+    const report = source.slice(source.indexOf("const report = "), source.indexOf("const restoreSessions"))
+    expect(report).toContain("setNoticeKind(kind)")
+    const at = source.indexOf('<div data-slot="ade-notice"')
+    expect(at).toBeGreaterThan(-1)
+    expect(source.slice(at, at + 160)).toContain('role={noticeKind() === "error" ? "alert" : "status"}')
   })
 
   test("each dismiss says which notice it discards", () => {
