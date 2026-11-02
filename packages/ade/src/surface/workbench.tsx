@@ -6022,6 +6022,21 @@ export function Workbench() {
     },
     fallback: systemSpeaker,
     fallbackNotice: () => t("vui.reply.fallbackNotice"),
+    // Said once for the profile, not at every start of ADE.
+    fallbackNoticeSeen: () => {
+      try {
+        return localStorage.getItem("ade.voice.fallback-notice") === "1"
+      } catch {
+        return false
+      }
+    },
+    onFallbackNotice: () => {
+      try {
+        localStorage.setItem("ade.voice.fallback-notice", "1")
+      } catch {
+        // Said again next time, which is harmless.
+      }
+    },
     onInstall: (voice, state, problem) => {
       if (voice !== speakingVoice()) return
       if (state === "ready") {

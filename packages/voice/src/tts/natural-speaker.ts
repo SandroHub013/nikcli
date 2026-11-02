@@ -132,6 +132,10 @@ export interface NaturalSpeakerDeps {
   onInstall?: (voice: string, state: "downloading" | "ready" | "failed", problem?: string) => void
   /** Spoken notice when natural voice is chosen but unavailable before using system voice. */
   fallbackNotice?: () => string
+  /** The notice was already said once for this profile: it is not said again (Master's decision, 2026-11-02). */
+  fallbackNoticeSeen?: () => boolean
+  /** Told when the notice has been said, so the host can remember it. */
+  onFallbackNotice?: () => void
   /** Shuts down the resident process on the host after silence, freeing memory (P1-C4). */
   stop?: () => Promise<{ busy: boolean }> | { busy: boolean }
   /** How long silence lasts before Piper is shut down (default 120_000 ms = 2 min). */
@@ -493,8 +497,10 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
   async function announceFallbackOnce(voice: string): Promise<void> {
     if (voice === "system" || fallbackNotified || !deps.fallbackNotice) return
     fallbackNotified = true
+    if (deps.fallbackNoticeSeen?.() === true) return
     const notice = deps.fallbackNotice()
     if (notice && notice.trim().length > 0) {
+      deps.onFallbackNotice?.()
       await deps.fallback.speak(notice)
     }
   }
