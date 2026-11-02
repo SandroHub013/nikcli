@@ -88,11 +88,9 @@
   margin-left: auto;
 }
 
-/* An EmptyState laid out for a sheet: from the left, not centred in a page. */
+/* An EmptyState in a sheet: centred like every other empty view, with its own breathing room. */
 [data-slot="sheet-empty"] {
-  align-items: flex-start;
   padding: var(--ade-space-5) 0;
-  text-align: left;
 }
 
 /* The card. */

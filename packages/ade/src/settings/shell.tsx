@@ -266,7 +266,7 @@ export function SettingsShell(props: SettingsShellProps): JSX.Element {
           {/* Footer */}
           <footer data-slot="settings-footer">
             {props.footerExtra?.(activeCategory())}
-            <Button variant="primary" size="lg" data-slot="settings-done" onClick={props.onClose}>
+            <Button variant="secondary" size="lg" data-slot="settings-done" onClick={props.onClose}>
               {t("settings.done")}
             </Button>
           </footer>

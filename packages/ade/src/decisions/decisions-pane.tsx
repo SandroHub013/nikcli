@@ -234,7 +234,7 @@ export function DecisionsPane(props: {
                             {t("decisions.reopen")}
                           </Button>
                           <Button
-                            data-slot="decision-ghost" size="sm"
+                            data-slot="decision-ghost"
                             onClick={() => setConfirmingReopen(undefined)}
                           >
                             {t("new.cancel")}
@@ -373,7 +373,7 @@ function RecipientPicker(props: { hub: DecisionsHub; queued: number }) {
           >
             {t("decisions.recipient.deliver")}
           </Button>
-          <Button data-slot="decision-ghost" size="sm" onClick={() => setPending(undefined)}>
+          <Button data-slot="decision-ghost" onClick={() => setPending(undefined)}>
             {t("new.cancel")}
           </Button>
         </div>

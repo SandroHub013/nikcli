@@ -31,10 +31,10 @@ const ROOT = decodeURIComponent(SRC.pathname).replace(/^\/([A-Za-z]:)/, "$1")
  * The `<button ...>` opening tags of a TSX source, read with the braces counted: an attribute can hold `=>` or `>`
  * inside `{...}`, and a pattern that stops at the first `>` never sees a slot written after an `onClick`.
  */
-export function buttonTags(source: string): string[] {
+export function buttonTags(source: string, name = "button"): string[] {
   const tags: string[] = []
-  for (let at = source.indexOf("<button"); at >= 0; at = source.indexOf("<button", at + 1)) {
-    if (!/[\s>]/.test(source[at + "<button".length] ?? "")) continue
+  for (let at = source.indexOf(`<${name}`); at >= 0; at = source.indexOf(`<${name}`, at + 1)) {
+    if (!/[\s>]/.test(source[at + name.length + 1] ?? "")) continue
     let depth = 0
     for (let i = at; i < source.length; i++) {
       const c = source[i]
@@ -169,5 +169,41 @@ describe("the sheets' and panes' empty views are the shared EmptyState", () => {
       expect({ file, built: /<div data-slot="sheet-empty">/.test(source) }).toEqual({ file, built: false })
       expect({ file, uses: source.includes("<EmptyState data-slot=\"sheet-empty\"") }).toEqual({ file, uses: true })
     }
+  })
+})
+
+describe("choices Master made on the review (2026-11-02), kept so a later edit does not undo them silently", () => {
+  test("the settings Done is a secondary large button, not the screen's one primary", () => {
+    const [done] = buttonTags(read("settings/shell.tsx"), "Button").filter((tag) => tag.includes('data-slot="settings-done"'))
+    expect(done).toContain('variant="secondary"')
+    expect(done).toContain('size="lg"')
+    expect(done).not.toContain('variant="primary"')
+  })
+
+  test("a ghost beside a decision's submit is as tall as it: no size=\"sm\" there", () => {
+    const source = withoutComments(read("decisions/decisions-pane.tsx"))
+    const tags = buttonTags(source, "Button")
+    const beside = tags.filter((tag) => tag.includes('data-slot="decision-ghost"'))
+    expect(beside.length).toBeGreaterThan(0)
+    // The two ghosts that follow a submit (the reopen and the recipient confirmations) are full height; the two inside a
+    // decision row, with no submit beside them, stay small.
+    const full = beside.filter((tag) => !tag.includes('size="sm"'))
+    expect(full).toHaveLength(2)
+    for (const tag of full) {
+      const before = source.slice(0, source.indexOf(tag))
+      expect(before.lastIndexOf('data-slot="decision-submit"')).toBeGreaterThan(before.lastIndexOf('data-slot="decision-ghost"'))
+    }
+    expect(beside.filter((tag) => tag.includes('size="sm"'))).toHaveLength(beside.length - 2)
+  })
+
+  test("the decisions and design empty views are centred like every other empty view", () => {
+    const decisions = postcss.parse(withoutComments(read("decisions/decisions.css")))
+    decisions.walkRules((rule) => {
+      if (!rule.selectors.includes('[data-slot="sheet-empty"]')) return
+      for (const node of rule.nodes) {
+        if (node.type === "decl") expect({ selector: rule.selector, prop: node.prop }).not.toEqual({ selector: rule.selector, prop: expect.stringMatching(/^(align-items|text-align)$/) })
+      }
+    })
+    expect(withoutComments(read("ui/empty-icon.css"))).not.toMatch(/sheet-empty[^{]*empty-icon[^{]*\{[^}]*margin-inline/)
   })
 })
