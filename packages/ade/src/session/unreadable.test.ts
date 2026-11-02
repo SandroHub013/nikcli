@@ -6,6 +6,8 @@ import {
   keepUnreadable,
   readSavedWorkspace,
   restorableCopy,
+  ignoreRestore,
+  ignoredCopies,
   restoreCopy,
   retryUnreadableCopy,
   unreadableCopies,
@@ -192,5 +194,43 @@ describe("getting the sessions back", () => {
     store.setItem(`${WORKSPACE_KEY}.unreadable.1`, sessions(99))
     expect(restoreCopy(store, `${WORKSPACE_KEY}.unreadable.1`)).toBe(false)
     expect(store.getItem(WORKSPACE_KEY)).toBe(good)
+  })
+})
+
+describe("«Ignora» on the offer", () => {
+  const copyOf = (title: string) => serializeWorkspace(readable([{ id: "p", title, status: "idle" }]))
+
+  test("an ignored copy is not offered again, and it is still there", () => {
+    const store = new FakeStore()
+    store.setItem(`${WORKSPACE_KEY}.unreadable.1`, copyOf("one"))
+    expect(restorableCopy(store)?.key).toBe(`${WORKSPACE_KEY}.unreadable.1`)
+    ignoreRestore(store, `${WORKSPACE_KEY}.unreadable.1`)
+    expect(restorableCopy(store)).toBeUndefined()
+    expect(store.getItem(`${WORKSPACE_KEY}.unreadable.1`)).toBe(copyOf("one"))
+  })
+
+  test("the next older copy that reads is offered instead", () => {
+    const store = new FakeStore()
+    store.setItem(`${WORKSPACE_KEY}.unreadable.1`, copyOf("older"))
+    store.setItem(`${WORKSPACE_KEY}.unreadable.2`, copyOf("newer"))
+    ignoreRestore(store, `${WORKSPACE_KEY}.unreadable.2`)
+    expect(restorableCopy(store)?.key).toBe(`${WORKSPACE_KEY}.unreadable.1`)
+  })
+
+  test("a copy that the rotation dropped is forgotten, and a new one is offered", () => {
+    const store = new FakeStore()
+    store.setItem(`${WORKSPACE_KEY}.unreadable.1`, copyOf("one"))
+    ignoreRestore(store, `${WORKSPACE_KEY}.unreadable.1`)
+    store.removeItem(`${WORKSPACE_KEY}.unreadable.1`)
+    expect(ignoredCopies(store)).toEqual([])
+    store.setItem(`${WORKSPACE_KEY}.unreadable.2`, copyOf("two"))
+    expect(restorableCopy(store)?.key).toBe(`${WORKSPACE_KEY}.unreadable.2`)
+  })
+
+  test("the memory of what was ignored is not itself taken for a copy", () => {
+    const store = new FakeStore()
+    store.setItem(`${WORKSPACE_KEY}.unreadable.1`, copyOf("one"))
+    ignoreRestore(store, `${WORKSPACE_KEY}.unreadable.1`)
+    expect(unreadableCopies(store, WORKSPACE_KEY)).toEqual([`${WORKSPACE_KEY}.unreadable.1`])
   })
 })

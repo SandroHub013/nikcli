@@ -59,7 +59,7 @@ import {
 import { syncOpenRouterKey } from "../host/openrouter-key-sync"
 import { createSttStreamTransport } from "../host/stt-stream"
 import { serializeWorkspace, type WorkspaceState } from "../session/persist"
-import { readSavedWorkspace, restorableCopy, restoreCopy, retryUnreadableCopy } from "../session/unreadable"
+import { ignoreRestore, readSavedWorkspace, restorableCopy, restoreCopy, retryUnreadableCopy } from "../session/unreadable"
 import { intakeMail } from "../session/mail-intake"
 import { DEFAULT_BINDINGS, FROM_TERMINALS, NOT_FROM_TEXT_FIELDS, resolveDefaultBindings } from "../keyboard/bindings"
 import { formatChord, parseChord } from "../keyboard/keymap"
@@ -10039,9 +10039,22 @@ export function Workbench() {
                                 <Show
                                   when={restoreAsking() === copy()}
                                   fallback={
-                                    <button type="button" data-slot="ade-notice-link" onClick={() => setRestoreAsking(copy())}>
-                                      {t("workspace.restore.action")}
-                                    </button>
+                                    <>
+                                      <button type="button" data-slot="ade-notice-link" onClick={() => setRestoreAsking(copy())}>
+                                        {t("workspace.restore.action")}
+                                      </button>
+                                      {/* The offer is not made again for this copy; the copy itself stays. */}
+                                      <button
+                                        type="button"
+                                        data-slot="ade-notice-link"
+                                        onClick={() => {
+                                          ignoreRestore(localStorage, copy())
+                                          setNotices((list) => dismissNotice(list, notice.id))
+                                        }}
+                                      >
+                                        {t("workspace.restore.ignore")}
+                                      </button>
+                                    </>
                                   }
                                 >
                                   <span data-slot="ade-notice-text">{t("workspace.restore.confirm")}</span>

@@ -109,9 +109,34 @@ export function retryUnreadableCopy(store: UnreadableStore, now: number): boolea
   return keepUnreadable(store, WORKSPACE_KEY, text, now)
 }
 
+/** Where the copies whose offer the user turned down are remembered. Not a copy itself: the copies are not touched. */
+export const IGNORED_KEY = "ade.workspace.restore-ignored"
+
+/** The copies the user said «Ignora» to, still kept (an ignored copy that was rotated away is forgotten). */
+export function ignoredCopies(store: UnreadableStore): string[] {
+  try {
+    const raw: unknown = JSON.parse(store.getItem(IGNORED_KEY) ?? "[]")
+    const kept = new Set(unreadableCopies(store, WORKSPACE_KEY))
+    return Array.isArray(raw) ? raw.filter((key): key is string => typeof key === "string" && kept.has(key)) : []
+  } catch {
+    return []
+  }
+}
+
+/** Remembers that the offer for this copy is not wanted. The copy stays until the rotation drops it. */
+export function ignoreRestore(store: UnreadableStore, copyKey: string): void {
+  try {
+    store.setItem(IGNORED_KEY, JSON.stringify([...new Set([...ignoredCopies(store), copyKey])]))
+  } catch {
+    // Nowhere to remember it: the offer comes back next time, which is all that happens.
+  }
+}
+
 /** The newest kept copy that this version reads and that has sessions in it, so the bell can offer it back. */
 export function restorableCopy(store: UnreadableStore): { key: string; state: WorkspaceState } | undefined {
+  const ignored = new Set(ignoredCopies(store))
   for (const key of unreadableCopies(store, WORKSPACE_KEY).reverse()) {
+    if (ignored.has(key)) continue
     const text = store.getItem(key)
     const state = text ? parseWorkspace(text) : undefined
     if (state && state.panes.length > 0) return { key, state }

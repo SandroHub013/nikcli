@@ -397,6 +397,7 @@ export const en: Messages = {
   "workspace.restore.yes": "Restore",
   "workspace.restore.no": "Cancel",
   "workspace.restore.failed": "I could not restore the sessions: the copy can no longer be read.",
+  "workspace.restore.ignore": "Ignore",
   "update.desktopOnly": "Updates are checked from the desktop app.",
   "update.alreadyShown": (version) => `Already in your notifications: ADE ${version} is available.`,
   "update.openFailed": (problem) => `Couldn't open the page: ${problem}`,

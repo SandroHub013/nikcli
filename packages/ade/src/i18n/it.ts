@@ -407,6 +407,7 @@ export const it = {
   "workspace.restore.yes": "Ripristina",
   "workspace.restore.no": "Annulla",
   "workspace.restore.failed": "Non sono riuscita a ripristinare le sessioni: la copia non si legge più.",
+  "workspace.restore.ignore": "Ignora",
   "update.desktopOnly": "Gli aggiornamenti si controllano dall'app desktop.",
   "update.alreadyShown": (version: string) => `Già segnalato: ADE ${version} è disponibile.`,
   "update.openFailed": (problem: string) => `Impossibile aprire la pagina: ${problem}`,
