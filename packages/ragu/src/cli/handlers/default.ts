@@ -1,4 +1,5 @@
 import { Option } from "effect"
+import { Flag } from "@ragu/util/flag"
 import { Runtime } from "../framework/runtime"
 import { passthrough } from "../framework/args"
 import { Commands } from "../commands"
@@ -86,6 +87,9 @@ export function createWorkerEnv(overrides: Record<string, string> = {}) {
     [Process.RUN_ID_ENV]: Process.ensureRunID(),
     // One log per session: the worker appends to ours instead of truncating it.
     ...(Log.file() ? { [Log.FILE_ENV]: Log.file() } : {}),
+    // Flag took these out of the environment; the worker's server still has to ask for them.
+    ...(Flag.RAGU_SERVER_PASSWORD ? { RAGU_SERVER_PASSWORD: Flag.RAGU_SERVER_PASSWORD } : {}),
+    ...(Flag.RAGU_SERVER_USERNAME ? { RAGU_SERVER_USERNAME: Flag.RAGU_SERVER_USERNAME } : {}),
     ...overrides,
   })
 }

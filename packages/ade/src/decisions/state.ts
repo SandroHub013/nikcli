@@ -30,6 +30,8 @@ export interface DecisionAnswer {
   readonly words: string
   readonly at: string
   readonly by: string
+  /** The session that wrote it: an answer with one is not the user's own click (`isUsersOwnAnswer`). */
+  readonly fromPane?: string
 }
 
 export interface Decision {
@@ -183,6 +185,7 @@ export function foldDecisions(
           words: event.words,
           at: event.at,
           by: event.by,
+          ...(event.fromPane ? { fromPane: event.fromPane } : {}),
         }
         current.status = "risposta"
         current.deferredUntil = undefined

@@ -277,6 +277,8 @@ import { scrubSecrets } from "../bots/terms"
 import type { AgentFile } from "../bots/ragu"
 import type { Runner } from "../bots/runners"
 import { senderToken } from "../session/senders"
+import { followInboxRound, inboxNamesOf, rearmInbox } from "../session/mail-inbox"
+import { firstTime, resealUnread, sealedBy, splitSealed, useMailKeys } from "../session/mail-seal"
 import { createActivityReads, type ActivityReads } from "../session/activity-reads"
 import { boardCandidates, parseOwners, whoOwns } from "../session/owners"
 import { mayReroute, pickProvider, setProviderPicker } from "../session/provider-pick"
@@ -378,6 +380,8 @@ import {
   resolveAgent,
   resolveTarget,
   sessionsTable,
+  UNSEALED_MAIL,
+  claimedSender,
   verifySender,
   unverifiedSenderRefusal,
   voiceConfirmationFor,
@@ -399,7 +403,6 @@ import {
   openDecisions,
   type OpenDecision,
   goesToInbox,
-  inboxAction,
   inboxName,
   parseInbox,
   failedReceipt,
@@ -3081,9 +3084,11 @@ export function Workbench() {
       // Its sender was told «in coda» before the restart: the outcome is reported where it listens now (`deliverOne`).
       held.add(item.id)
       replayedMail.add(item.id)
+      rememberMailSender(item.id, item.message.from)
       mailQueue.push(item)
     }
     for (const { id, message } of expired) {
+      rememberMailSender(id, message.from)
       const to = message.kind === "send" || message.kind === "ask" ? message.to : ""
       const title = wb().panes.find((pane) => pane.id === to)?.title ?? to
       const text = `[ade-msg] errore: il messaggio ${id} per "${title}" era in coda da più di dodici ore, quando ADE è stato riavviato: non è stato consegnato`
@@ -3178,78 +3183,38 @@ export function Workbench() {
 
   /** Rings again for unread inbox messages, and tells the sender of one never read. */
   const followInbox = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, now: number) => {
-    if (!host.mailboxInboxRead || inboxPending.length === 0) return
-    let changed = false
-    for (const entry of [...inboxPending]) {
-      const session = running.get(entry.paneId)
-      const state = session
-        ? await host.mailboxInboxRead(entry.paneId, entry.name).catch(() => "unread" as const)
-        : "unread"
-      if (state === "lost") {
-        /*
-         * Gone before it was read: said as lost, to the sender and, for a
-         * request, to whoever waits on it, so nobody believes it arrived. A
-         * file the reader moved is "read"; only a file in neither place is this.
-         */
-        if (!dropFrom(inboxPending, entry)) continue
-        const reader = mailPanes().find((pane) => pane.id === entry.paneId)
-        appendLine(entry.paneId, t("note.inboxLost", entry.id), "note", "ade")
-        if (entry.kind === "ask" || entry.kind === "spawn") {
-          if (openRequests.has(entry.id)) await settle(host, entry.id, formatLost(entry, reader))
-        } else {
-          tellSender(entry.from, formatLost(entry, reader))
-        }
-        changed = true
-        continue
-      }
-      const read = state === "read"
-      const free = session && !read ? (await freeNow(host, entry.paneId)) && !linesInFlight.has(entry.paneId) : false
-      const action = inboxAction(
-        entry,
-        { running: Boolean(session), free, read, typing: isTyping(records.typed.get(entry.paneId)) },
-        now,
-      )
-      if (action === "wait") continue
-      const panes = mailPanes()
-      if (action === "tell") {
-        entry.told = true
-        tellSender(
-          entry.from,
-          formatHeld(
-            entry,
-            panes.find((pane) => pane.id === entry.paneId),
-          ),
-        )
-        changed = true
-        continue
-      }
-      if (action === "ring" && session) {
-        entry.rings += 1
-        entry.ringAt = now
-        void typeLine(
-          session,
-          formatBell(
-            entry,
-            panes.find((pane) => pane.id === entry.from),
-            entry.chars,
-          ),
-        )
-        appendLine(entry.paneId, t("note.rang", entry.rings), "note", "ade")
-      } else {
-        if (!dropFrom(inboxPending, entry)) continue
-        if (action === "warn") {
-          tellSender(
-            entry.from,
-            formatUnread(
-              entry,
-              panes.find((pane) => pane.id === entry.paneId),
-            ),
-          )
-        }
-      }
-      changed = true
-    }
-    if (changed) saveInbox()
+    const inboxRead = host.mailboxInboxRead
+    if (!inboxRead) return
+    const paneNamed = (paneId: string) => mailPanes().find((pane) => pane.id === paneId)
+    await followInboxRound(
+      inboxPending,
+      {
+        restored: () => mailRestored,
+        paneExists,
+        stillWanted: (entry) => (entry.kind !== "ask" && entry.kind !== "spawn") || openRequests.has(entry.id),
+        session: (paneId) => running.get(paneId),
+        readState: (entry) => inboxRead(entry.paneId, entry.name).catch(() => "unread" as const),
+        free: async (paneId) => (await freeNow(host, paneId)) && !linesInFlight.has(paneId),
+        typing: (paneId) => isTyping(records.typed.get(paneId)),
+        lost: async (entry) => {
+          const reader = paneNamed(entry.paneId)
+          appendLine(entry.paneId, t("note.inboxLost", entry.id), "note", "ade")
+          if (entry.kind === "ask" || entry.kind === "spawn") {
+            if (openRequests.has(entry.id)) await settle(host, entry.id, formatLost(entry, reader))
+          } else {
+            tellSender(entry.from, formatLost(entry, reader))
+          }
+        },
+        held: (entry) => tellSender(entry.from, formatHeld(entry, paneNamed(entry.paneId))),
+        ring: (entry, session) => {
+          void typeLine(session, formatBell(entry, paneNamed(entry.from), entry.chars))
+          appendLine(entry.paneId, t("note.rang", entry.rings), "note", "ade")
+        },
+        unread: (entry) => tellSender(entry.from, formatUnread(entry, paneNamed(entry.paneId))),
+        save: saveInbox,
+      },
+      now,
+    )
   }
   /*
    * Restored requests count their grace from now, not from when they were
@@ -3386,11 +3351,61 @@ export function Workbench() {
    * only when the token that came with it is this pane's.
    */
   const paneTokens = new Map<string, string>()
+  /** A pane's tokens of its earlier processes, newest first: they open what was sealed then, and prove nothing now. */
+  const retiredTokens = new Map<string, string[]>()
+  const MAX_RETIRED_TOKENS = 8
   const mintPaneToken = (paneId: string) => {
+    const old = paneTokens.get(paneId)
+    if (old) retiredTokens.set(paneId, [old, ...(retiredTokens.get(paneId) ?? [])].slice(0, MAX_RETIRED_TOKENS))
     const token = newNonce()
     paneTokens.set(paneId, token)
     return token
   }
+  /**
+   * The token for a pane's new process. Its unread long messages were sealed for the process before: sealed again here,
+   * before it starts, or it would take them for false and ADE would close its requests as lost.
+   */
+  const freshPaneToken = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, paneId: string) => {
+    const token = mintPaneToken(paneId)
+    if (rearmInbox(inboxPending, paneId)) saveInbox()
+    const names = inboxNamesOf(inboxPending, paneId)
+    const { mailboxInboxText: read, mailboxInboxPut: put } = host
+    if (names.length > 0 && read && put) {
+      await resealUnread(names, retiredTokens.get(paneId) ?? [], {
+        read: (name) => read(paneId, name),
+        write: (name, body) => put(paneId, name, body),
+      })
+    }
+    return token
+  }
+  /** A pane's token, or a background turn's (voice agent, bot) registered for its length. What proves a sender. */
+  const tokenOfSender = (paneId: string) => (running.has(paneId) ? paneTokens.get(paneId) : senderToken(paneId))
+  /** What seals for a pane: its last token even while it is not running, since it may start again and read this. */
+  const sealingToken = (paneId: string) => paneTokens.get(paneId) ?? senderToken(paneId)
+  /** Who sent each message taken: what ADE writes for a message's id is sealed with that sender's key (`mail-seal.ts`). */
+  const mailSenders = new Map<string, string>()
+  const rememberMailSender = (id: string, from: string) => {
+    if (!from) return
+    mailSenders.set(id, from)
+    if (mailSenders.size > 5000) mailSenders.delete(mailSenders.keys().next().value!)
+  }
+  /** The ids of the messages taken lately: a copy of one posted again is not carried out twice (`firstTime`). */
+  const mailSeen = new Map<string, number>()
+  // The asker first: a message's id is the sender's to choose, and one posted with the id of an open request must not get its answer.
+  const paneOfMail = (id: string) =>
+    openRequests.get(id)?.from || mailSenders.get(id) || designWaiters().find((waiter) => waiter.id === id)?.from
+  useMailKeys({
+    forRequest: (id) => {
+      const pane = paneOfMail(id)
+      return pane ? sealingToken(pane) : undefined
+    },
+    everyForRequest: (id) => {
+      const pane = paneOfMail(id)
+      const current = pane && sealingToken(pane)
+      return pane ? [...(current ? [current] : []), ...(retiredTokens.get(pane) ?? [])] : []
+    },
+    forPane: sealingToken,
+  })
 
   /** How long a reply may sit unclaimed before it is typed into the caller instead. */
   const CLAIM_WINDOW_MS = 3000
@@ -3613,6 +3628,9 @@ export function Workbench() {
     result?: string,
   ): Promise<boolean> =>
     settleOnce(id, async () => {
+      // Its file outlives the request, and is sealed and checked for the same pane after it (after a restart nothing else says whose).
+      const asker = openRequests.get(id)?.from
+      if (asker) rememberMailSender(id, asker)
       /*
        * The answer first, the closing after. Closing first meant a result that
        * failed to be written left a closed request and, since a closed request
@@ -3809,10 +3827,26 @@ export function Workbench() {
     const taken = (await host.mailboxTake?.().catch(() => [])) ?? []
     if (taken.length === 0) return
     for (const { id, body } of taken) {
-      const parsed = parseMessage(body)
-      // A pane's token, or a background turn's (voice agent, bot) registered for its length.
-      const message =
-        parsed && verifySender(parsed, (paneId) => (running.has(paneId) ? paneTokens.get(paneId) : senderToken(paneId)))
+      const sealed = splitSealed(body)
+      if (!sealed) {
+        void host.mailboxReceipt?.(id, UNSEALED_MAIL).catch(() => {})
+        continue
+      }
+      const claimed = claimedSender(sealed.body)
+      const proven = await sealedBy(claimed ? tokenOfSender(claimed) : undefined, "outbox", id, sealed).catch(() => false)
+      // After the proof: a copy forged with an id anybody can read must not burn that id for the real message.
+      const age = proven ? firstTime(mailSeen, id, Date.now()) : "new"
+      if (age === "seen") {
+        console.error(`ADE: posta ${id}: già presa, non la eseguo di nuovo`)
+        continue
+      }
+      if (proven) rememberMailSender(id, claimed)
+      if (age === "old") {
+        void host.mailboxReceipt?.(id, "errore: messaggio di più di un'ora fa: non eseguito").catch(() => {})
+        continue
+      }
+      const parsed = parseMessage(sealed.body)
+      const message = parsed && verifySender(parsed, proven)
       if (message) mailQueue.push({ id, message, at: Date.now() })
       else void host.mailboxReceipt?.(id, "errore: messaggio non valido").catch(() => {})
     }
@@ -3829,7 +3863,7 @@ export function Workbench() {
       } else if (await freeNow(host, item.callerId)) {
         if (!dropFrom(lateReplies, item)) continue
         const text = await host.mailboxResultReclaim?.(item.ref).catch(() => null)
-        if (text != null) {
+        if (text) {
           heldLines.push({
             paneId: item.callerId,
             text: formatLateReply(item.ref, text, item.sender),
@@ -4217,7 +4251,7 @@ export function Workbench() {
       setTimeout(() => {
         void host.mailboxResultReclaim?.(message.ref).then((text) => {
           // Held until the caller's turn ends, like every other message.
-          if (text != null && caller && running.has(caller.id)) {
+          if (text && caller && running.has(caller.id)) {
             heldLines.push({
               paneId: caller.id,
               text: formatLateReply(message.ref, text, sender),
@@ -4273,7 +4307,7 @@ export function Workbench() {
       // Nobody woke on it: typed into the caller, which is not waiting any more.
       setTimeout(() => {
         void host.mailboxResultReclaim?.(request.id, "update").then((text) => {
-          if (text != null && caller && running.has(caller.id)) {
+          if (text && caller && running.has(caller.id)) {
             heldLines.push({ paneId: caller.id, text, inbox: { id: request.id, kind: "update", from: message.from } })
           }
         })
@@ -4365,7 +4399,7 @@ export function Workbench() {
     }
 
     if (message.kind === "whoowns") {
-      const owner = message.from ? await projectOfPane(host, message.from) : project()
+      const owner = await projectOfPane(host, message.from)
       if (!owner || owner.remote || !host.readTextFile) {
         await answer("errore: la bacheca del team si legge solo nei progetti locali")
         return true
@@ -4384,7 +4418,7 @@ export function Workbench() {
     }
 
     if (message.kind === "memory") {
-      const owner = message.from ? await projectOfPane(host, message.from) : project()
+      const owner = await projectOfPane(host, message.from)
       if (!owner || owner.remote) {
         await answer("errore: la memoria condivisa esiste solo per i progetti locali")
         return true
@@ -4427,7 +4461,7 @@ export function Workbench() {
      * the file and the host's I/O.
      */
     if (message.kind === "registro") {
-      const owner = message.from ? await projectOfPane(host, message.from) : project()
+      const owner = await projectOfPane(host, message.from)
       if (!owner || owner.remote || !host.readTextFile) {
         await answer("errore: i registri esistono solo per i progetti locali")
         return true
@@ -7844,6 +7878,7 @@ export function Workbench() {
     claims.forget(id)
     usageOf.delete(id)
     paneTokens.delete(id)
+    retiredTokens.delete(id)
     paneNonces.delete(id)
     formerNonces.delete(id)
     activityOf.delete(id)
@@ -9016,6 +9051,7 @@ export function Workbench() {
       )
       // Born at the pane's size, not the host's 120x30 (S77); undefined for a pane not yet fitted.
       const bornAt = ptySize(paneId)
+      const paneToken = await freshPaneToken(host, paneId)
       const session = await host.spawn({
         ...bornAt,
         command: agent.command,
@@ -9069,7 +9105,7 @@ export function Workbench() {
         },
         ...(nonce ? { link: { pane: paneId, nonce } } : {}),
         pane: paneId,
-        paneToken: mintPaneToken(paneId),
+        paneToken,
         ...(secretNames.length > 0 ? { secrets: secretNames } : {}),
       })
 
@@ -9329,6 +9365,7 @@ export function Workbench() {
       startOnCleanScreen(paneId)
       // Born at the pane's size, not the host's 120x30 (S77); undefined for a pane not yet fitted.
       const bornAt = ptySize(paneId)
+      const paneToken = await freshPaneToken(host, paneId)
       const session = await host.spawn({
         ...bornAt,
         command: "ssh",
@@ -9353,7 +9390,7 @@ export function Workbench() {
           tellPane(paneId, t("pane.connectFailed", reason))
         },
         pane: paneId,
-        paneToken: mintPaneToken(paneId),
+        paneToken,
       })
       // As for a local session: closed or started again meanwhile, the connection is ended (SES-2).
       if (!wb().panes.some((pane) => pane.id === paneId)) running.cancelStart(paneId)

@@ -18,6 +18,7 @@
  * The request line typed into the recipient carries the reply command, so an
  * agent that has never heard of `ade-msg` can still answer.
  */
+import { isReservedName } from "./orchestra"
 
 export interface MailPane {
   id: string
@@ -28,8 +29,8 @@ export interface MailPane {
   project?: string
 }
 
-/** `token` is what proves `from`; see {@link verifySender}. */
-export type Message = { from: string; token?: string; text: string } &
+/** `from` counts only once its MAC is checked; see {@link verifySender}. */
+export type Message = { from: string; text: string } &
   /** `effort` on an ask is refused: a running session's effort is set at spawn or relaunch. */
   (| { kind: "send" | "ask"; to: string; effort?: string; via?: "typed"; budget?: number }
     /**
@@ -177,14 +178,13 @@ export function parseMessage(body: string): Message | undefined {
   const record = raw as Record<string, unknown>
   const str = (key: string) => (typeof record[key] === "string" ? (record[key] as string).trim() : "")
   const from = str("from")
-  const token = str("token") || undefined
   const text = typeof record.text === "string" ? record.text : ""
   const kind = str("kind") || "send"
 
   // The two that carry no text.
   if (kind === "close") {
     const to = str("to")
-    return to ? { kind, from, token, to, force: record.force === true, text: "" } : undefined
+    return to ? { kind, from, to, force: record.force === true, text: "" } : undefined
   }
   if (kind === "relaunch") {
     const to = str("to")
@@ -194,7 +194,6 @@ export function parseMessage(body: string): Message | undefined {
       ? {
           kind,
           from,
-          token,
           to,
           fresh: record.fresh === true,
           note: str("note"),
@@ -206,7 +205,7 @@ export function parseMessage(body: string): Message | undefined {
   }
   if (kind === "interrupt") {
     const to = str("to")
-    return to ? { kind, from, token, to, text: "" } : undefined
+    return to ? { kind, from, to, text: "" } : undefined
   }
   if (kind === "design" && str("op") === "proponi") {
     const folder = str("folder")
@@ -215,7 +214,6 @@ export function parseMessage(body: string): Message | undefined {
       ? {
           kind: "design-proponi",
           from,
-          token,
           folder,
           cwd: str("cwd"),
           wait: record.attendi === true,
@@ -227,21 +225,21 @@ export function parseMessage(body: string): Message | undefined {
   if (kind === "design" && str("op") === "attendi") {
     const key = str("key")
     return key
-      ? { kind: "design-attendi", from, token, key, timeout: designWaitOf(record.timeout), text: "" }
+      ? { kind: "design-attendi", from, key, timeout: designWaitOf(record.timeout), text: "" }
       : undefined
   }
   if (kind === "design") {
     const path = str("path")
     const title = str("title")
-    return path ? { kind, from, token, path, ...(title ? { title } : {}), text: "" } : undefined
+    return path ? { kind, from, path, ...(title ? { title } : {}), text: "" } : undefined
   }
   if (kind === "cancel") {
     const ref = str("ref")
-    return isRequestId(ref) ? { kind, from, token, ref, text: "" } : undefined
+    return isRequestId(ref) ? { kind, from, ref, text: "" } : undefined
   }
   if (kind === "delivered") {
     const ref = str("ref")
-    return isRequestId(ref) ? { kind, from, token, ref, ok: record.ok !== false, text } : undefined
+    return isRequestId(ref) ? { kind, from, ref, ok: record.ok !== false, text } : undefined
   }
   if (kind === "kv") {
     const op = KV_OPS.find((known) => known === str("op"))
@@ -249,19 +247,19 @@ export function parseMessage(body: string): Message | undefined {
     if (!op || (op !== "list" && !key)) return undefined
     const ttl = typeof record.ttl === "number" && Number.isFinite(record.ttl) ? Math.max(0, Math.floor(record.ttl)) : 0
     if (op === "set" && !text.trim()) return undefined
-    return { kind, from, token, op, key, ttl, force: record.force === true, text }
+    return { kind, from, op, key, ttl, force: record.force === true, text }
   }
-  if (kind === "whoowns") return text.trim() ? { kind, from, token, text: text.trim() } : undefined
+  if (kind === "whoowns") return text.trim() ? { kind, from, text: text.trim() } : undefined
   if (kind === "registro") {
     const register = REGISTERS.find((known) => known === str("register"))
     const op = str("op")
     if (!register || !REGISTER_OPS[register].includes(op) || !text.trim()) return undefined
-    return { kind, from, token, register, op, text }
+    return { kind, from, register, op, text }
   }
   if (kind === "memory") {
     const op = str("op")
-    if (op === "show") return { kind, from, token, op, type: "", text: "" }
-    if (op === "add" && text.trim()) return { kind, from, token, op, type: str("type"), text }
+    if (op === "show") return { kind, from, op, type: "", text: "" }
+    if (op === "add" && text.trim()) return { kind, from, op, type: str("type"), text }
     return undefined
   }
 
@@ -276,7 +274,6 @@ export function parseMessage(body: string): Message | undefined {
       ? {
           kind,
           from,
-          token,
           to,
           text,
           ...(effort ? { effort } : {}),
@@ -297,7 +294,6 @@ export function parseMessage(body: string): Message | undefined {
     return {
       kind,
       from,
-      token,
       agent,
       autoClose: record.close === true,
       worktree: record.worktree === true,
@@ -313,29 +309,40 @@ export function parseMessage(body: string): Message | undefined {
   }
   if (kind === "reply") {
     const ref = str("ref")
-    return isRequestId(ref) ? { kind, from, token, ref, text } : undefined
+    return isRequestId(ref) ? { kind, from, ref, text } : undefined
   }
   if (kind === "update") {
     const ref = str("ref")
     const state = UPDATE_STATES.find((known) => known === str("state"))
-    return isRequestId(ref) && state ? { kind, from, token, ref, state, text } : undefined
+    return isRequestId(ref) && state ? { kind, from, ref, state, text } : undefined
   }
   return undefined
 }
 
 /**
- * The message with `from` kept only if its token is that pane's.
+ * The message with `from` kept only if its MAC is that pane's (`sealedBy`).
  *
  * A pane id is public — `ade-msg list` prints every one — so without this
  * any session could sign as another, and answer a request made to it. An
  * unproven sender is refused for the kinds in {@link UNVERIFIED_ACTING};
  * the others stay anonymous and are handled by their own rules.
  */
-export function verifySender<M extends Message>(message: M, tokenOf: (paneId: string) => string | undefined): M {
-  const expected = message.from ? tokenOf(message.from) : undefined
-  const proven = expected !== undefined && message.token === expected
+export function verifySender<M extends Message>(message: M, proven: boolean): M {
   return proven ? message : { ...message, from: "" }
 }
+
+/** The `from` a message's JSON says, before anything has proved it. */
+export function claimedSender(json: string): string {
+  try {
+    const from: unknown = (JSON.parse(json) as { from?: unknown } | null)?.from
+    return typeof from === "string" ? from : ""
+  } catch {
+    return ""
+  }
+}
+
+/** The receipt for a file with no signature. ADE rewrites `ade-msg` at each start, so only a client from before an update, or a hand-written file, gets it. */
+export const UNSEALED_MAIL = "errore: messaggio senza firma: viene da un ade-msg di prima di un aggiornamento di ADE, o non l'ha scritto ade-msg. Non è stato eseguito: riprova"
 
 const UNVERIFIED_ACTING: ReadonlySet<Message["kind"]> = new Set([
   "send",
@@ -346,6 +353,12 @@ const UNVERIFIED_ACTING: ReadonlySet<Message["kind"]> = new Set([
   "design",
   "design-proponi",
   "design-attendi",
+  // These read and write a project's data, and with no sender the only project left is the one the window shows:
+  // `ADE_PANE_TOKEN= ade-msg kv get x` from another project would read it.
+  "kv",
+  "memory",
+  "registro",
+  "whoowns",
 ])
 
 export function unverifiedSenderRefusal(message: Message): string | undefined {
@@ -662,6 +675,8 @@ export const MAX_REBELLS = 3
 export interface InboxEntry {
   /** The sender has been told, once, that ADE is holding this back. */
   told?: boolean
+  /** The bells ran out and the sender was told. It stays, as the sender was told it does, for the pane's next process. */
+  warned?: boolean
   /** The message or request id, as the sender knows it. */
   id: string
   paneId: string
@@ -710,7 +725,7 @@ export function formatBell(
  * `done` once it was read or its session is gone (a request to a closed
  * session is settled by the request table). A bell rings again only in a
  * session free to act on it and after {@link REBELL_AFTER_MS}; after
- * {@link MAX_REBELLS} the sender is told, once, and the entry is dropped.
+ * {@link MAX_REBELLS} the sender is told, once, and the entry waits.
  */
 export function inboxAction(
   entry: InboxEntry,
@@ -718,6 +733,7 @@ export function inboxAction(
   now: number,
 ): "done" | "wait" | "ring" | "warn" | "tell" {
   if (target.read || !target.running) return "done"
+  if (entry.warned) return "wait"
   if (!target.free) {
     /*
      * Held, not ignored. A pane whose line the user began keeps the mail for
@@ -1581,7 +1597,7 @@ export function requestsTable(
   ])
   const widths = [0, 1, 2, 3].map((col) => Math.max(...rows.map((row) => row[col]!.length)))
   const lines = rows.map((row) => row.map((cell, col) => (col < 4 ? cell.padEnd(widths[col]!) : cell)).join("  "))
-  return `${lines.join("\n")}\n\nattendi: ade-msg wait <id> [<id>...] [--any]   annulla: ade-msg cancel <id>\n${pending}`
+  return `${lines.join("\n")}\n\nattendi: ade-msg wait <id> [<id>...] [--any] (solo chi l'ha chiesta)   annulla: ade-msg cancel <id>\n${pending}`
 }
 
 /** Requests as saved across a restart; anything malformed is dropped. */
@@ -1766,6 +1782,7 @@ export const USAGE_DESIGN = [
 export const USAGE_DECISIONI = [
   "ade-msg registro <decisioni|design> <aperta|risposta|rimandata|riaperta|chiusa> '<json>'",
   "  scrive un evento nel registro Decisioni o Design: il json ha i campi senza type, at e by (li mette ADE);",
+  "  by è il nome della tua sessione: una risposta scritta così nel pannello è «riportata da» te, non un clic dell'utente.",
   "  k serve, tranne per aperta. ADE controlla la riga, la scrive e dice se il tasto la mostra; rimandata solo",
   "  per decisioni. I registri si scrivono solo così. Per un design la strada semplice è ade-msg design proponi.",
   "  Il json anche da file (--file <percorso>) o da stdin (--stdin, al posto del json): da PowerShell 5.1 usa",
@@ -1876,7 +1893,10 @@ export function noticeTarget(
   return open(from) ? { pane: from } : undefined
 }
 
-/** The `by` of an event `ade-msg registro` writes: never empty, whoever sent it. */
+/**
+ * The `by` of an event `ade-msg registro` writes: never empty, whoever sent it, and never the user's own name, which
+ * a pane can still be titled by hand or by its terminal: a session cannot sign an answer as the user.
+ */
 export function registerAuthor(title: string | undefined, from: string | undefined): string {
-  return title || from || "ade-msg"
+  return (title && !isReservedName(title) ? title : "") || from || "ade-msg"
 }

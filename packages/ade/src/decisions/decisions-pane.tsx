@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js"
-import { formatDay, formatMoment, togglePick } from "./answer"
+import { answerByline, formatDay, formatMoment, isUsersOwnAnswer, togglePick } from "./answer"
 import { submitControl } from "./card"
 import { DecisionCard } from "./decision-card"
 import { recipientHint } from "./decisions-sheet"
@@ -175,7 +175,11 @@ export function DecisionsPane(props: {
                         <span data-slot="decision-key">{decision.k}</span>
                         <h3 data-slot="decision-title">{decision.title}</h3>
                         <span data-slot="decision-pill" data-tone="done">
-                          {t("decisions.pill.answered")}
+                          {t(
+                            decision.answer && !isUsersOwnAnswer(decision.answer)
+                              ? "decisions.pill.relayed"
+                              : "decisions.pill.answered",
+                          )}
                         </span>
                       </header>
                       <div data-slot="decision-answer">
@@ -308,7 +312,7 @@ function deliveryText(hub: DecisionsHub, decision: Decision, now: Date): string 
   const delivery = hub.delivery(decision)
   if (delivery.state === "consegnata") return t("decisions.delivery.done", delivery.to, formatMoment(delivery.at, now))
   if (delivery.state === "in coda") return queuedText(hub.recipient())
-  return t("decisions.delivery.by", decision.answer?.by ?? "?", formatDay(decision.answer?.at ?? "", now))
+  return answerByline(decision.answer ?? { by: "?" }, formatDay(decision.answer?.at ?? "", now))
 }
 
 export function queuedText(recipient: RecipientStatus): string {
