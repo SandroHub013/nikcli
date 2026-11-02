@@ -8,6 +8,7 @@
  */
 import { Show, createResource, createSignal, type JSX } from "solid-js"
 import { t } from "../i18n"
+import { Button, IconButton } from "../ui/controls"
 import type { AgentStatus, Probe } from "./availability"
 import {
   PREREQUISITES,
@@ -79,9 +80,9 @@ export function InstallPanel(props: InstallPanelProps): JSX.Element {
     <section data-slot="install" data-agent-id={props.status.agent.id} aria-label={t("install.title", label())}>
       <header data-slot="install-head">
         <h2 data-slot="install-title">{t("install.title", label())}</h2>
-        <button type="button" data-slot="install-close" onClick={() => props.onClose()} aria-label={t("install.close")}>
-          ✕
-        </button>
+        <IconButton size="sm" data-slot="install-close" label={t("install.close")} onClick={() => props.onClose()}>
+          <span data-ui="icon-cross" aria-hidden="true" />
+        </IconButton>
       </header>
 
       <Show when={entry()?.caveat}>{(caveat) => <p data-slot="install-caveat">{caveatText(caveat())}</p>}</Show>
@@ -97,9 +98,9 @@ export function InstallPanel(props: InstallPanelProps): JSX.Element {
             <div data-slot="install-command">
               <span data-slot="install-command-label">{t("install.command")}</span>
               <code data-slot="install-line">{current().line}</code>
-              <button type="button" data-slot="install-copy" onClick={() => void copy()}>
+              <Button size="sm" data-slot="install-copy" onClick={() => void copy()}>
                 {copied() ? t("install.copied") : t("install.copy")}
-              </button>
+              </Button>
             </div>
             <Show when={current().adapted}>
               {(adapted) => <p data-slot="install-caveat">{t(`install.caveat.${adapted()}` as const)}</p>}
@@ -124,8 +125,8 @@ export function InstallPanel(props: InstallPanelProps): JSX.Element {
 
       <div data-slot="install-actions">
         <Show when={command() && props.onRun}>
-          <button
-            type="button"
+          <Button
+            size="sm"
             data-slot="install-run"
             title={t("install.runHint")}
             onClick={() => {
@@ -135,16 +136,16 @@ export function InstallPanel(props: InstallPanelProps): JSX.Element {
             }}
           >
             {t("install.run")}
-          </button>
+          </Button>
         </Show>
-        <button type="button" data-slot="install-recheck" disabled={outcome() === "checking"} onClick={() => void recheck()}>
+        <Button size="sm" data-slot="install-recheck" disabled={outcome() === "checking"} onClick={() => void recheck()}>
           {outcome() === "checking" ? t("install.rechecking") : t("install.recheck")}
-        </button>
+        </Button>
         <Show when={entry()}>
           {(current) => (
-            <button type="button" data-slot="install-page" onClick={() => props.onOpenPage(current().page)}>
+            <Button size="sm" data-slot="install-page" onClick={() => props.onOpenPage(current().page)}>
               {t("install.page")}
-            </button>
+            </Button>
           )}
         </Show>
       </div>

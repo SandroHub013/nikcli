@@ -37,6 +37,13 @@ const REDRAWN = /(^|\n)\s*(height|min-height|border-radius|background|border|fon
 
 const SURFACES: Surface[] = [
   {
+    name: "the session launcher",
+    tsx: ["session-new/session-new.tsx", "session-new/install-panel.tsx"],
+    slots: ["new-cancel", "new-launch-btn", "new-close", "install-close", "install-copy", "install-run", "install-recheck", "install-page"],
+    css: ["session-new/session-new.css"],
+    forbidden: REDRAWN,
+  },
+  {
     name: "settings",
     tsx: ["settings/shell.tsx", "settings/account.tsx", "settings/sections.tsx"],
     slots: ["settings-check-update", "settings-close", "settings-done", "switch-continue", "switch-cancel"],

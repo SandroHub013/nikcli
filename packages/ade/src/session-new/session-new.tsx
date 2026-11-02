@@ -17,6 +17,7 @@ import { openExternally } from "../browser/host-bridge"
 import { willLaunch } from "./launch"
 import { MAX_SESSIONS, MIN_SESSIONS, clampSessions, type PresetId } from "./preset"
 import { t } from "../i18n"
+import { Button, IconButton } from "../ui/controls"
 
 export interface SessionNewProps {
   workspace: string
@@ -119,12 +120,13 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
           <div data-slot="new-spacer" />
           <div data-slot="new-actions">
             <Show when={props.onClose}>
-              <button type="button" data-slot="new-cancel" onClick={() => props.onClose?.()}>
+              <Button variant="ghost" data-slot="new-cancel" onClick={() => props.onClose?.()}>
                 {t("new.cancel")}
-              </button>
+              </Button>
             </Show>
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              size="lg"
               data-slot="new-launch-btn"
               disabled={blocked() !== undefined}
               title={blocked()}
@@ -134,11 +136,11 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
               <span data-slot="new-launch-hint" aria-hidden="true">
                 ⏎
               </span>
-            </button>
+            </Button>
             <Show when={props.onClose}>
-              <button type="button" data-slot="new-close" onClick={() => props.onClose?.()} aria-label={t("new.close")}>
-                ✕
-              </button>
+              <IconButton data-slot="new-close" label={t("new.close")} onClick={() => props.onClose?.()}>
+                <span data-ui="icon-cross" aria-hidden="true" />
+              </IconButton>
             </Show>
           </div>
         </header>
@@ -263,12 +265,13 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
             </span>
             <div data-slot="new-spacer" />
             <Show when={props.onClose}>
-              <button type="button" data-slot="new-cancel" onClick={() => props.onClose?.()}>
+              <Button variant="ghost" data-slot="new-cancel" onClick={() => props.onClose?.()}>
                 {t("new.cancel")}
-              </button>
+              </Button>
             </Show>
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              size="lg"
               data-slot="new-launch-btn"
               disabled={blocked() !== undefined}
               title={blocked()}
@@ -278,7 +281,7 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
               <span data-slot="new-launch-hint" aria-hidden="true">
                 ⏎
               </span>
-            </button>
+            </Button>
           </footer>
         </div>
       </div>

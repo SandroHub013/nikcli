@@ -158,7 +158,6 @@ describe("the button scale", () => {
    */
   const SCALED: Record<string, number> = {
     '[data-slot="chat-send"]': 32,
-    '[data-slot="new-launch-btn"]': 32,
     '[data-slot="bots-btn"]': 26,
     '[data-slot="settings-choice"]': 26,
     '[data-slot="bar-queue"]': 26,

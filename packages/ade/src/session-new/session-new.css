@@ -99,31 +99,6 @@
   gap: var(--ade-space-3);
 }
 
-[data-slot="new-close"] {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--ade-border);
-  border-radius: var(--ade-radius-md);
-  background: transparent;
-  color: var(--ade-text-weak);
-  cursor: pointer;
-  transition:
-    background var(--ade-dur-fast) var(--ade-ease),
-    color var(--ade-dur-fast) var(--ade-ease),
-    transform var(--ade-dur-fast) var(--ade-ease);
-}
-
-[data-slot="new-close"]:active {
-  transform: var(--ade-press);
-}
-
-[data-slot="new-close"]:hover {
-  background: var(--ade-hover);
-  color: var(--ade-text);
-}
-
 [data-slot="new-summary"] {
   color: var(--ade-text-weak);
   font-family: var(--ade-mono);
@@ -131,27 +106,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-[data-slot="new-cancel"] {
-  padding: var(--ade-space-3) var(--ade-space-5);
-  border: 0;
-  border-radius: var(--ade-radius-md);
-  background: transparent;
-  color: var(--ade-text-soft);
-  font-family: inherit;
-  font-size: var(--ade-font-md);
-  cursor: pointer;
-  transition: var(--ade-btn-transition);
-}
-
-[data-slot="new-cancel"]:active {
-  transform: var(--ade-press);
-}
-
-[data-slot="new-cancel"]:hover {
-  background: var(--ade-hover);
-  color: var(--ade-text);
 }
 
 [data-slot="new-foot"] {
@@ -163,33 +117,9 @@
   margin-top: var(--ade-space-2);
 }
 
+/* A Button (primary, lg). Off while the agents are being looked up, or when none is installed: the line above the cards says which. */
 [data-slot="new-launch-btn"] {
-  display: inline-flex;
-  align-items: center;
   gap: var(--ade-space-4);
-  height: 32px;
-  padding: 0 var(--ade-space-7);
-  border: 0;
-  border-radius: var(--ade-radius-md);
-  background: var(--ade-accent);
-  color: var(--ade-accent-fg);
-  font-family: inherit;
-  font-size: var(--ade-font-md);
-  font-weight: var(--ade-weight-semibold);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: var(--ade-btn-transition);
-}
-
-[data-slot="new-launch-btn"]:hover:not(:disabled) {
-  background: var(--ade-accent-strong);
-}
-
-/* Off while the agents are being looked up, or when none is installed: the line above the cards says which. */
-[data-slot="new-launch-btn"]:disabled {
-  background: var(--ade-active);
-  color: var(--ade-text-weak);
-  cursor: not-allowed;
 }
 
 [data-slot="new-agents-note"] {
@@ -198,21 +128,9 @@
   font-size: var(--ade-font-md);
 }
 
-[data-slot="new-launch-btn"]:active:not(:disabled) {
-  background: var(--ade-accent-strong);
-  transform: var(--ade-press);
-}
-
 [data-slot="new-launch-hint"] {
   font-family: var(--ade-mono);
   opacity: 0.65;
-}
-
-[data-slot="new-close"]:focus-visible,
-[data-slot="new-cancel"]:focus-visible,
-[data-slot="new-launch-btn"]:focus-visible {
-  outline: none;
-  box-shadow: var(--ade-focus-ring);
 }
 
 /* ── refinements ───────────────────────────────────────────────────────────── */
@@ -647,14 +565,6 @@
   font-weight: var(--ade-weight-semibold);
 }
 
-[data-slot="install-close"] {
-  border: 0;
-  background: transparent;
-  color: var(--ade-text-weak);
-  cursor: pointer;
-  font: inherit;
-}
-
 [data-slot="install-command"] {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -685,46 +595,28 @@
   gap: var(--ade-space-2);
 }
 
-[data-slot="install-copy"],
-[data-slot="install-run"],
-[data-slot="install-recheck"],
-[data-slot="install-page"],
-[data-slot="install-link"] {
-  padding: 4px 10px;
-  border: 1px solid var(--ade-border);
-  border-radius: var(--ade-radius-md);
-  background: var(--ade-raised);
-  color: var(--ade-text);
-  font: inherit;
-  cursor: pointer;
-}
-
+/* Buttons (sm). The run button wears the agent's own colour through the primitive's variables. */
 [data-slot="install-run"] {
-  border-color: var(--cli-color, var(--ade-accent));
-  background: var(--cli-tint, var(--ade-accent-soft));
-  font-weight: var(--ade-weight-semibold);
+  --ade-btn-border: var(--cli-color, var(--ade-accent));
+  --ade-btn-bg: var(--cli-tint, var(--ade-accent-soft));
+  --ade-btn-bg-hover: var(--cli-tint, var(--ade-accent-soft));
 }
 
+/* A link in a sentence, not a button: it keeps its own look. */
 [data-slot="install-link"] {
   padding: 0 4px;
   border: 0;
   background: transparent;
   color: var(--ade-accent);
+  font: inherit;
+  cursor: pointer;
   text-decoration: underline;
 }
 
-[data-slot="install-copy"]:disabled,
-[data-slot="install-run"]:disabled,
 [data-slot="install-recheck"]:disabled {
-  opacity: 0.5;
   cursor: progress;
 }
 
-[data-slot="install-run"]:focus-visible,
-[data-slot="install-recheck"]:focus-visible,
-[data-slot="install-page"]:focus-visible,
-[data-slot="install-copy"]:focus-visible,
-[data-slot="install-close"]:focus-visible,
 [data-slot="install-link"]:focus-visible {
   outline: none;
   box-shadow: var(--ade-focus-ring);
@@ -760,10 +652,7 @@
   [data-slot="new-agent-glyph"],
   [data-slot="new-agent-check"],
   [data-slot="new-count"],
-  [data-slot="new-compose"],
-  [data-slot="new-launch-btn"],
-  [data-slot="new-close"],
-  [data-slot="new-cancel"] {
+  [data-slot="new-compose"] {
     transition: none;
   }
 }

@@ -39,8 +39,6 @@ const PRESSED = [
   '[data-component="remote-space"] [data-slot="primary"]:active',
   '[data-component="remote-space"] [data-slot="secondary"]:active',
   '[data-slot="keys-agent"]:active',
-  '[data-slot="new-close"]:active',
-  '[data-slot="new-cancel"]:active',
   '[data-slot="new-agent"]:active:not(:disabled)',
   '[data-slot="new-count"]:active',
   '[data-slot="hook-action"]:active:not(:disabled)',
