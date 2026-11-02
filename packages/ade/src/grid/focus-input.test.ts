@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeEach } from "bun:test"
-import { findFocusTarget, focusPane, holdsFocus } from "./focus-input"
+import { findFocusTarget, focusPane, focusResizeGrip, holdsFocus, holdsFocusInTile, leaveResizeGrip } from "./focus-input"
 
 /**
  * A pane as the grid actually builds one, minus everything irrelevant.
@@ -119,5 +119,71 @@ describe("holdsFocus", () => {
     expect(holdsFocus(root, outside)).toBe(false)
     expect(holdsFocus(root, null)).toBe(false)
     expect(holdsFocus(null, outside)).toBe(false)
+  })
+})
+
+/** A tile as the grid builds it: the cell holds the pane and, beside it, the resize grip. */
+function tile(id: string, options: { terminal?: boolean } = { terminal: true }) {
+  const cell = document.createElement("div")
+  cell.setAttribute("data-slot", "grid-cell")
+  cell.setAttribute("data-tile-id", id)
+  const root = pane(options)
+  const grip = document.createElement("div")
+  grip.setAttribute("data-slot", "tile-resize")
+  grip.tabIndex = 0
+  cell.append(root, grip)
+  document.body.appendChild(cell)
+  return { cell, root, grip }
+}
+
+describe("the resize grip beside a session pane (UX-22)", () => {
+  beforeEach(() => {
+    document.body.innerHTML = ""
+  })
+
+  test("the pane keeps the caret when it is on the grip: the pane's focus effect leaves it there", () => {
+    const { root, grip } = tile("a")
+    grip.focus()
+    // `holdsFocus(root, …)` said no: the grip is the pane's sibling, and the effect moved the caret into the terminal.
+    expect(holdsFocus(root, document.activeElement)).toBe(false)
+    expect(holdsFocusInTile(root, document.activeElement)).toBe(true)
+  })
+
+  test("a caret in another tile is still not this pane's", () => {
+    const first = tile("a")
+    const second = tile("b")
+    second.grip.focus()
+    expect(holdsFocusInTile(first.root, document.activeElement)).toBe(false)
+    expect(holdsFocusInTile(second.root, document.activeElement)).toBe(true)
+  })
+
+  test("outside the grid a pane is its own tile", () => {
+    const root = pane({ terminal: true })
+    document.body.appendChild(root)
+    expect(holdsFocusInTile(root, root.querySelector("textarea"))).toBe(true)
+    expect(holdsFocusInTile(null, root)).toBe(false)
+  })
+
+  test("the palette command puts the caret on the grip of the pane it is asked for", () => {
+    const first = tile("a")
+    const second = tile("b")
+    first.root.querySelector("textarea")!.focus()
+    expect(focusResizeGrip("b")).toBe(true)
+    expect(document.activeElement).toBe(second.grip)
+    expect(focusResizeGrip("nope")).toBe(false)
+  })
+
+  test("Esc gives the caret back to the session's terminal, the way out of a grip a terminal cannot Tab to", () => {
+    const { root, grip } = tile("a")
+    grip.focus()
+    expect(leaveResizeGrip(grip)).toBe(true)
+    expect(document.activeElement).toBe(root.querySelector("textarea"))
+  })
+
+  test("a tile with nothing to focus gives nothing back", () => {
+    const { grip } = tile("a", { terminal: false })
+    grip.focus()
+    expect(leaveResizeGrip(grip)).toBe(false)
+    expect(document.activeElement).toBe(grip)
   })
 })

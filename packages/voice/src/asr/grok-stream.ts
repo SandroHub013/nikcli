@@ -17,6 +17,7 @@
  */
 
 import { markVoice } from "../timing"
+import { STT_STREAM_CANCELLED } from "./stream-cancelled"
 import { plainProblem } from "../effect/errors"
 import { t as tr } from "@ragu/ade/i18n"
 import type {
@@ -287,12 +288,7 @@ function pcm16le(samples: Float32Array): Uint8Array {
   return bytes
 }
 
-/**
- * What a transport says when the session it was asked to use was cancelled from
- * outside — the xAI key removed while a frame was on its way. Not a network
- * failure: the sentence goes to the batch, and no pause is owed (review S7, B2).
- */
-export const STT_STREAM_CANCELLED = "stt_stream cancelled"
+export { STT_STREAM_CANCELLED }
 
 /** The refusal codes as the local runtime reports them, in its own words. */
 function reasonOf(message: string): SttStreamReason {

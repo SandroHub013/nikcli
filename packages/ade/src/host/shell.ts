@@ -475,7 +475,7 @@ import { openReclaimed, sealForPane, sealForRequest } from "../session/mail-seal
 import { createLineAccumulator } from "./line-stream"
 import { orderedWrites } from "./ordered-writes"
 import type { TokenUsage } from "../session/shared"
-import type { InstallProgress, PackStatus } from "@ragu/voice"
+import type { InstallProgress, PackStatus } from "@ragu/voice/light"
 import { keyError, type KeyDraft, type KeyInfo } from "../secrets/keys"
 import type { QualityLevel, RecordTarget, RecordingState } from "../record/recording"
 import type { AssetsStatus } from "../raguverse/assets"

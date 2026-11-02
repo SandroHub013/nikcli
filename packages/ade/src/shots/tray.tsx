@@ -281,7 +281,7 @@ export function ShotTray(props: ShotTrayProps) {
                    */
                   <figure
                     data-slot="shot"
-                    title={shot.name}
+                    title={[shot.name, t("shots.thumb.tip")].join("\n")}
                     draggable={true}
                     role="button"
                     tabindex={0}

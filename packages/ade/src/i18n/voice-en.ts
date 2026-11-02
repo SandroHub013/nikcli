@@ -314,6 +314,7 @@ export const voiceEn: VoiceMessages = {
   "vui.device.mic": (position) => `Microphone ${position}`,
   "vui.device.output": (position) => `Audio output ${position}`,
   "vui.device.missing": "Device not connected",
+  "vui.load.failed": "The voice did not load. Try again in a moment.",
   "vui.backend.title": "Recognition",
   "vui.backend.desc": "How your voice becomes text",
   "vui.backend.readyLocal": "Ready (local)",

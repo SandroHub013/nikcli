@@ -17,6 +17,8 @@ import {
 } from "./keys"
 import { xaiKeyDraft, xaiKeyEntry, xaiKeyUse } from "./xai-key"
 import "./keys.css"
+// The dialog's buttons are the settings panel's (`settings-choice`); the panel's chunk is not loaded until it is opened.
+import "../settings/sections.css"
 import { t } from "../i18n"
 
 /** What the section and the request dialog need from the host. */

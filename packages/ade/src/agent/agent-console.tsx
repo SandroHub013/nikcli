@@ -17,7 +17,8 @@
  */
 
 import { createEffect, createSignal, on, For, Show, onCleanup } from "solid-js"
-import { groupIntoTurns, type AgentEntry, type AgentTurn } from "@ragu/voice"
+import { groupIntoTurns } from "@ragu/voice/light"
+import type { AgentEntry, AgentTurn } from "@ragu/voice/core"
 import { presenceLabel, presenceOf } from "./status"
 import { isVoiceReady, voicePrerequisitesList } from "./onboarding"
 import "./agent-console.css"

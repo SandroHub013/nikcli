@@ -20,6 +20,7 @@ import {
   moveTile,
   neighbour,
   packTiles,
+  resizeByKey,
   spanInGrid,
   swapTiles,
 } from "./arrange"
@@ -285,5 +286,28 @@ describe("a pane alone in the grid", () => {
     expect(tiles[0]).toEqual(tall)
     const columns = gridColumns({ count: cellsWanted(tiles), ...box })
     expect(effectiveSpan(tiles[0]!, columns).rows).toBe(3)
+  })
+})
+
+describe("resizing by keyboard", () => {
+  const here: Span = { columns: 2, rows: 1 }
+
+  test("each arrow adds or takes away one cell, the way dragging the corner does", () => {
+    expect(resizeByKey(here, "ArrowRight", 4)).toEqual({ columns: 3, rows: 1 })
+    expect(resizeByKey(here, "ArrowLeft", 4)).toEqual({ columns: 1, rows: 1 })
+    expect(resizeByKey(here, "ArrowDown", 4)).toEqual({ columns: 2, rows: 2 })
+    expect(resizeByKey({ columns: 2, rows: 2 }, "ArrowUp", 4)).toEqual({ columns: 2, rows: 1 })
+  })
+
+  test("at a limit it answers nothing, so the grid is not handed a size it would clamp", () => {
+    expect(resizeByKey({ columns: 1, rows: 1 }, "ArrowLeft", 4)).toBeUndefined()
+    expect(resizeByKey({ columns: 1, rows: 1 }, "ArrowUp", 4)).toBeUndefined()
+    expect(resizeByKey({ columns: 4, rows: 1 }, "ArrowRight", 4)).toBeUndefined()
+    expect(resizeByKey({ columns: 1, rows: 3 }, "ArrowDown", 4)).toBeUndefined()
+  })
+
+  test("any other key changes nothing", () => {
+    expect(resizeByKey(here, "Enter", 4)).toBeUndefined()
+    expect(resizeByKey(here, "a", 4)).toBeUndefined()
   })
 })

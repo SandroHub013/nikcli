@@ -12,7 +12,7 @@ import {
   type LocalProvider,
   type PackState,
   type PackStatus,
-} from "@ragu/voice"
+} from "@ragu/voice/light"
 
 /** The commands of the host facade this needs; each may be missing. */
 export interface VoicePackHost {
