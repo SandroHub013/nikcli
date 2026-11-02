@@ -859,8 +859,6 @@ export function Workbench() {
   const [starting, setStarting] = createSignal(false)
   /* The agent «Nuova sessione» opens on, set when an install the user started has just finished. */
   const [launcherAgent, setLauncherAgent] = createSignal<string>()
-  /* The install panes (pane id → the agent being installed), watched for their end (`session-new/install-follow.ts`). */
-  const installWatch = new Map<string, InstallWatch>()
   const [remoteOpen, setRemoteOpen] = createSignal(false)
   const themeState = createThemeState()
   const theme = themeState.theme
@@ -7845,7 +7843,6 @@ export function Workbench() {
     running.delete(id)
     // A start still awaiting its spawn ends the process it gets back (SES-2).
     running.cancelStart(id)
-    installWatch.delete(id)
     touchRunning()
     // A question the voice is asking about this pane has nobody left to answer it.
     if (questionOpen(id)) {
@@ -7876,9 +7873,10 @@ export function Workbench() {
     running.delete(id)
     touchRunning()
     // An install pane whose installer succeeded: the agents are looked up again and the launcher opens (UX-2).
-    const watched = installWatch.get(id)
-    if (watched) {
-      installWatch.delete(id)
+    // The agent is on the pane itself (`Pane.installFor`), so a refused first start that is retried is still followed.
+    const installing = wb().panes.find((pane) => pane.id === id)?.installFor
+    if (installing) {
+      const watched = { agentId: installing, label: agentLabel(installing) }
       if (installExit(watched, { code, ...(failed ? { failed } : {}) })) void installFinished(id, watched)
     }
     forgetQuiet(id)
@@ -7904,6 +7902,21 @@ export function Workbench() {
     const outcome = await watchInstall(watch, () => recheckAgents(host))
     if (outcome === "missing") {
       if (wb().panes.some((pane) => pane.id === paneId)) tellPane(paneId, t("install.stillMissing"))
+      return
+    }
+    /*
+     * The launcher takes the whole grid, so it opens only when the user is still looking at the install pane, in the
+     * project it belongs to. Anywhere else a note in the pane and a toast say it is ready (audit UX-2).
+     */
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    const here =
+      pane !== undefined &&
+      wb().view === "code" &&
+      wb().focusedId === paneId &&
+      paneProject(pane, project(), recents()).kind === "open"
+    if (!here) {
+      if (pane) tellPane(paneId, t("install.readyElsewhere", watch.label))
+      toast.show(t("install.autoFoundElsewhere", watch.label))
       return
     }
     setLauncherAgent(watch.agentId)
@@ -10525,7 +10538,7 @@ export function Workbench() {
                         { index: 1, agentId: "terminal", role: "agent" },
                       )
                       // The form goes away with the new pane: the pane follows its own end and says what comes next.
-                      installWatch.set(made.id, { agentId: input.agentId, label: input.label })
+                      setWb((w) => updatePane(w, made.id, { installFor: input.agentId }))
                       tellPane(made.id, t("install.paneNote", input.label))
                     }}
                   />

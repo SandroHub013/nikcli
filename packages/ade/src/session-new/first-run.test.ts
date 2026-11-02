@@ -3,6 +3,8 @@ import { compileSolidJsx } from "../test-support/solid-jsx"
 import type { Host } from "../host/shell"
 import { typedInstallLine, installExit, watchInstall } from "./install-follow"
 import { detectAgents } from "./availability"
+import { INSTALLS, commandFor, terminalLine } from "./install"
+import { addPane, createWorkbench, toWorkspaceState } from "../surface/state"
 
 compileSolidJsx()
 const { render } = await import("solid-js/web")
@@ -43,14 +45,26 @@ const launchButtons = (root: HTMLElement) =>
 const enter = (root: HTMLElement) =>
   root.querySelector<HTMLElement>("section")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
 
+/* A real PC: the shell is always there, the agents are not. */
+const SHELLS = ["cmd", "sh", "zsh", "bash", "powershell"]
+
 describe("the launcher with no agent installed (UX-1)", () => {
-  test("«Avvia» and Enter are off, and the note says why", async () => {
-    const { root, launched } = await mount([])
+  test("a shell does not count as an agent: «Avvia» and Enter are off, and the note says why", async () => {
+    const { root, launched } = await mount(SHELLS)
     expect(launchButtons(root).every((b) => b.disabled)).toBe(true)
     expect(root.querySelector('[data-slot="new-agents-note"]')?.textContent).toContain("Nessun agente installato")
     enter(root)
     launchButtons(root)[0]!.click()
     expect(launched).toEqual([])
+  })
+
+  test("clicking Terminal turns «Avvia» back on, and it starts a terminal", async () => {
+    const { root, launched } = await mount(SHELLS)
+    root.querySelector<HTMLButtonElement>('[data-slot="new-agent"][data-agent-id="terminal"]')!.click()
+    await settle()
+    expect(launchButtons(root).every((b) => !b.disabled)).toBe(true)
+    launchButtons(root)[0]!.click()
+    expect(launched).toEqual(["terminal"])
   })
 
   test("while the lookup runs it says so and does not launch", async () => {
@@ -62,11 +76,11 @@ describe("the launcher with no agent installed (UX-1)", () => {
   })
 
   test("with an agent installed it launches, and an installed initialAgent is preselected", async () => {
-    const { root, launched } = await mount(["claude", "codex"], { initialAgent: "codex" })
+    const { root, launched } = await mount([...SHELLS, "claude", "codex"], { initialAgent: "codex" })
     expect(launchButtons(root).some((b) => b.disabled)).toBe(false)
     launchButtons(root)[0]!.click()
     expect(launched).toEqual(["codex"])
-    const absent = await mount(["claude"], { initialAgent: "kimi" })
+    const absent = await mount([...SHELLS, "claude"], { initialAgent: "kimi" })
     launchButtons(absent.root)[0]!.click()
     expect(absent.launched).toEqual(["claude-code"])
   })
@@ -93,12 +107,39 @@ describe("the install follow-through (UX-2)", () => {
   })
 })
 
+describe("an install pane is never run again by ADE (B3)", () => {
+  test("it is not saved, so the restore at start cannot type its installer again", () => {
+    let wb = addPane(createWorkbench(), {
+      id: "i", title: "Installa Claude Code", status: "done", mode: "custom", workspaceId: "web", lines: [],
+      model: "terminal", agent: "terminal", task: "irm https://x | iex && exit", installFor: "claude-code",
+    })
+    wb = addPane(wb, {
+      id: "k", title: "Sessione", status: "idle", mode: "custom", workspaceId: "web", lines: [],
+      model: "terminal", agent: "terminal", task: "ls",
+    })
+    expect(toWorkspaceState(wb).panes.map((pane) => pane.id)).toEqual(["k"])
+  })
+
+  test("on Windows no catalogue line has a pipe, ampersand or semicolon outside double quotes, so && exit binds to all of it", () => {
+    for (const entry of INSTALLS) {
+      const command = commandFor(entry, "windows")
+      if (!command) continue
+      const outside = terminalLine(command).replace(/"[^"]*"/g, '""').replace(/'[^']*'/g, "''")
+      expect([entry.agentId, /[|&;]/.test(outside)]).toEqual([entry.agentId, false])
+    }
+  })
+})
+
 describe("the workbench wiring", () => {
   test("a pane for no agent says so, and install panes are watched", async () => {
     const src = await Bun.file(new URL("../surface/workbench.tsx", import.meta.url)).text()
     expect(src).toContain('tellPane(paneId, t("pane.noAgent"))')
     expect(src).toContain("typedInstallLine(input.line)")
-    expect(src).toContain("installWatch.set(made.id")
+    expect(src).toContain("installFor: input.agentId")
+    // The launcher takes the grid only when the user is still on the install pane, in its project (B2).
+    const done = src.slice(src.indexOf("const installFinished"))
+    expect(done.indexOf("wb().focusedId === paneId")).toBeGreaterThan(-1)
+    expect(done.indexOf("wb().focusedId === paneId")).toBeLessThan(done.indexOf("setStarting(true)"))
     expect(src).toContain('if (!key && voiceSettings().replyBackend === "mai") key = await copyRaguKey(host)')
   })
 })

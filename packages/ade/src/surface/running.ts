@@ -72,7 +72,8 @@ export class RunningSessions extends Map<string, SpawnedSession> {
    */
   adopt(id: string, token: symbol, session: SpawnedSession, refused = false): boolean {
     if (refused || !this.starting(id, token)) {
-      if (refused) this.#starts.delete(id)
+      // Only its own token: a newer start of the pane may be in flight (review N2).
+      if (refused && this.starting(id, token)) this.#starts.delete(id)
       void session.kill({ tree: true })
       return false
     }

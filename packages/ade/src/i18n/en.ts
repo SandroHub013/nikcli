@@ -290,8 +290,10 @@ export const en: Messages = {
   "install.notFound":
     "I can't find it yet. If the terminal shows an error, the install isn't finished: fix it and try again. If it is finished, close and reopen New session.",
   "install.paneNote": (agent) =>
-    `When the install ends, ADE checks by itself and reopens New session with ${agent} ready. On an error the terminal stays open.`,
+    `When the install ends, ADE checks by itself and reopens New session with ${agent} ready. On an error the terminal usually stays open.`,
   "install.stillMissing": "I can't find it yet. Open New session and press Check again on its card.",
+  "install.readyElsewhere": (agent) => `${agent} is installed: open New session (Ctrl+N) to start it.`,
+  "install.autoFoundElsewhere": (agent) => `${agent} installed: open New session (Ctrl+N) to start it.`,
   "install.autoFound": (agent) => `${agent} is installed: you can start it from New session now.`,
   "install.source": (source, date) => `Source: ${source}, checked on ${date}`,
   "install.caveat.subscription": "Using it needs a GitHub Copilot subscription.",

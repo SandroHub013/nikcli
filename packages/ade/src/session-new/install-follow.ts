@@ -19,9 +19,10 @@ export interface InstallWatch {
  * The line typed into the install terminal: the install command, then `exit` only if it succeeded.
  *
  * The pane is a shell, and a shell stays open after its command, so the end of the install would never be seen. With
- * `&& exit` a success closes the shell (code 0, which is what `installExit` waits for) and a failure leaves it open,
- * with the installer's error on screen for the user to read. Every catalogue line is one command, so `&&` binds to
- * all of it (a test checks that none of them holds a `||` or `;`).
+ * `&& exit` a success closes the shell (code 0, which is what `installExit` waits for) and a failure usually leaves
+ * it open, with the installer's error on screen. Usually: a pipeline's status is its last command's, so a failed
+ * download piped into a shell can still exit 0 (the recheck then says the agent is missing). Every Windows line has its
+ * `|`, `&` and `;` inside double quotes, so `&&` binds to all of it (a test checks that).
  */
 export function typedInstallLine(line: string): string {
   return `${line} && exit`
