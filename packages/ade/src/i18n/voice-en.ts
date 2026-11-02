@@ -194,7 +194,7 @@ export const voiceEn: VoiceMessages = {
   "vui.reply.mai.it-IT-Luca": "Luca",
   "vui.reply.mai.it-IT-Luca.desc": "Male, Italian",
   "vui.reply.mai.it-IT-Rosa": "Rosa",
-  "vui.reply.mai.it-IT-Rosa.desc": "Female, Italian, the default",
+  "vui.reply.mai.it-IT-Rosa.desc": "Female, Italian, paid (OpenRouter)",
   "vui.reply.mai.licence": "Microsoft MAI-Voice, through OpenRouter.",
   "vui.replies.maiEnglish": "MAI only reads Italian: a reply in another language is read by the local voice.",
   // Reply voice on Microsoft MAI, in the OpenRouter card

@@ -246,7 +246,7 @@ export function saveVoiceSettings(
   storage?: Storage,
   options?: VoiceSettingsLoadOptions,
 ): NormalizedVoiceSettings {
-  // The same identity as the load: in ADE Test, a first save must not write the new profile's Rosa to disk.
+  // The same identity as the load: in ADE Test, a first save must not write a new profile to disk as a stored choice.
   const current = loadVoiceSettings(storage, options)
   const merged = { ...current.settings, ...patch }
   const normalized = normalizeSettings(merged, options)

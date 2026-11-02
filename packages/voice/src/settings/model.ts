@@ -576,7 +576,7 @@ export function normalizeSettings(
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     corrections.push(t("vui.fix.defaults"))
     // ADE Test never starts on a voice that spends a key. Everyone else does:
-    // a profile with nothing in it is a new one, and a new one is Rosa.
+    // a profile with nothing in it is a new one, and a new one is Ugo (free, local).
     const settings = testIdentity
       ? {
           ...DEFAULT_VOICE_SETTINGS,

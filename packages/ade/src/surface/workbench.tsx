@@ -5923,7 +5923,22 @@ export function Workbench() {
    * system voice underneath while it downloads or when it fails. The host is
    * looked up per call, so the browser harness simply never gets past status.
    */
+  /*
+   * Piper's 63 MB are fetched only after the user pressed «Scarica» in the voice settings (once, remembered): a fresh
+   * profile speaks with the system voice until then, and a reply never starts a download by itself (review N8).
+   */
+  const DOWNLOAD_CONSENT_KEY = "ade.voice.download-consent"
+  let consentedNow = false
+  const downloadConsented = () => {
+    if (consentedNow) return true
+    try {
+      return localStorage.getItem(DOWNLOAD_CONSENT_KEY) === "1"
+    } catch {
+      return false
+    }
+  }
   const naturalSpeaker = createNaturalSpeaker({
+    mayDownload: () => downloadConsented(),
     /*
      * Which voice speaks, and in which language — one answer, because the voice
      * is chosen *for* the language and two of them could come apart. The
@@ -6162,6 +6177,13 @@ export function Workbench() {
 
   const downloadNaturalVoice = async () => {
     if (voiceDownloading()) return
+    // The click is the consent; remembered, so a later start does not ask again.
+    consentedNow = true
+    try {
+      localStorage.setItem(DOWNLOAD_CONSENT_KEY, "1")
+    } catch {
+      // Without storage the consent lasts until the page is reloaded.
+    }
     const v = activePiperVoice()
     setVoiceDownloading(true)
     speaker.prepare()

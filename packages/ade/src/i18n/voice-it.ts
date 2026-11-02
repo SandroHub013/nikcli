@@ -194,7 +194,7 @@ export const voiceIt = {
   "vui.reply.mai.it-IT-Luca": "Luca",
   "vui.reply.mai.it-IT-Luca.desc": "Maschile, italiano",
   "vui.reply.mai.it-IT-Rosa": "Rosa",
-  "vui.reply.mai.it-IT-Rosa.desc": "Femminile, italiano, predefinita",
+  "vui.reply.mai.it-IT-Rosa.desc": "Femminile, italiano, a pagamento (OpenRouter)",
   "vui.reply.mai.licence": "Microsoft MAI-Voice, via OpenRouter.",
   "vui.replies.maiEnglish": "MAI legge solo l'italiano: una risposta in un'altra lingua la legge la voce locale.",
   // Voce delle risposte su Microsoft MAI, nella scheda OpenRouter

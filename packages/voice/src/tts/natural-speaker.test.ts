@@ -112,6 +112,20 @@ describe("tts/natural-speaker", () => {
     expect(h.played).toEqual(["Seconda risposta."])
   })
 
+  test("with no consent to download, a missing voice is never fetched by a reply (N8), and is once consent is given", async () => {
+    let consent = false
+    const h = harness({ mayDownload: () => consent })
+    h.setInstalled(false)
+    const speaker = createNaturalSpeaker(h.deps)
+    await speaker.speak("Prima risposta.")
+    await speaker.speak("Seconda risposta.")
+    expect(h.installs).toEqual([])
+    expect(h.fallback.spoken).toEqual(["Prima risposta.", "Seconda risposta."])
+    consent = true
+    await speaker.speak("Terza risposta.")
+    expect(h.installs).toEqual(["ugo"])
+  })
+
   test("a failed natural voice download stays failed until a later successful retry", async () => {
     let installed = false
     let attempts = 0
