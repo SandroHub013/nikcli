@@ -562,6 +562,10 @@ export const voiceIt = {
   "voice.msg.host.noProject": "Non c'è nessun progetto aperto: dimmi in quale progetto avviare la sessione.",
   "voice.msg.host.noProcess": (paneId: string) => `Il pannello '${paneId}' non ha un processo vivo a cui inviare il messaggio.`,
   "voice.msg.host.noSession": (paneId: string) => `Nessuna sessione attiva per il pannello '${paneId}'.`,
+  "voice.msg.host.typingPending":
+    "In quel pannello c'è una riga scritta a metà: inviala o cancellala prima. Il testo non è stato inviato, lo trovi nel pannello.",
+  "voice.msg.host.typingHeld": (text: string) =>
+    `Voce: non inviato, qui c'è una riga scritta a metà. Inviala o cancellala, poi ripeti. Il testo era: «${text}»`,
   "voice.msg.host.searchDesktopOnly": "la ricerca nel progetto funziona solo nell'app desktop",
   "voice.msg.host.searchNoProject": "non c'è nessun progetto aperto in cui cercare",
   "voice.msg.host.searchUnreadable": (why: string) => `non riesco a leggere i file del progetto (${why})`,

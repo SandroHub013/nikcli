@@ -46,6 +46,8 @@ export interface AdeVoiceHostDeps {
   /** A note the user has to read, over the terminal as well as in the transcript. */
   tellPane: (paneId: string, text: string) => void
   permissions: () => Record<string, PermissionRequest>
+  /** The user has begun a line in the pane and not sent it (`session/typing.ts`), the rule a delivery waits on. */
+  isTyping?: (paneId: string) => boolean
   answerPermission: (paneId: string, answer: PermissionAnswer) => void
   /**
    * The spoken decision on a `send` the voice agent wrote: deliver it, or
@@ -354,6 +356,15 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
        */
       refuseWhileAsking(paneId)
       const singleLine = asOneLine(text)
+      /*
+       * Not on top of the user's half-typed line (MOD-2): «rm -rf build && » and a dictated «esegui i test» went in
+       * as one command, and its Enter submitted it. The mail queue waits on the same rule. Refused, said aloud and
+       * over the pane, with the words, so nothing dictated is lost.
+       */
+      if (deps.isTyping?.(paneId)) {
+        deps.tellPane(paneId, t("voice.msg.host.typingHeld", singleLine))
+        throw new Error(t("voice.msg.host.typingPending"))
+      }
       deps.setWb((w) => updatePane(w, paneId, { status: "working", activity: "running" }))
       deps.appendLine(paneId, `> ${singleLine}`, "shell")
       session.write(asSubmittedLine(singleLine))

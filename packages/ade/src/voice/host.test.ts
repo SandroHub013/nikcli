@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { codeOf } from "../test-support/source-text"
 import { resetLocaleForTests } from "../i18n/locale"
 import { createAdeVoiceHost, type AdeVoiceHostDeps } from "./host"
 import type { VoiceAgent } from "./agent"
@@ -190,6 +192,30 @@ describe("createAdeVoiceHost", () => {
     await host.sendPrompt("p1", `innocuo${CR}git push --force`)
 
     expect(writtenLines[0].split(CR).length - 1).toBe(1)
+  })
+
+  /*
+   * MOD-2: the user had typed «rm -rf build && » and not pressed Enter; the voice sent «esegui i test», and the agent
+   * got «rm -rf build && esegui i test», submitted.
+   */
+  test("sendPrompt does not submit on top of the user's half-typed line, and says so with the words", async () => {
+    const writtenLines: string[] = []
+    const { deps, told } = createMockDeps({
+      isRunning: () => true,
+      getRunningSession: () => ({ write: (line: string) => writtenLines.push(line) }),
+      isTyping: (id) => id === "p1",
+    })
+    const host = createAdeVoiceHost(deps)
+
+    await expect(host.sendPrompt("p1", "esegui i test")).rejects.toThrow("riga scritta a metà")
+    expect(writtenLines).toEqual([])
+    expect(told).toHaveLength(1)
+    expect(told[0]!.paneId).toBe("p1")
+    expect(told[0]!.text).toContain("esegui i test")
+
+    // Another pane, with nothing typed in it: sent.
+    await host.sendPrompt("p2", "esegui i test")
+    expect(writtenLines).toEqual([`esegui i test${String.fromCharCode(13)}`])
   })
 
   /*
@@ -1139,5 +1165,14 @@ describe("no voice text into a pane asking a permission", () => {
     const host = createAdeVoiceHost(deps)
     await expect(host.insertText("p1", "sistema i test")).rejects.toThrow("permesso")
     expect(writtenLines).toEqual([])
+  })
+})
+
+describe("the workbench's voice host", () => {
+  const source = codeOf(readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8"))
+  const call = source.slice(source.indexOf(codeOf("const voiceHost = createAdeVoiceHost({")))
+
+  test("is told when the user has a line pending, by the rule the mail queue uses (MOD-2)", () => {
+    expect(call.slice(0, 1500)).toContain(codeOf("isTyping: (id) => isTyping(records.typed.get(id)),"))
   })
 })

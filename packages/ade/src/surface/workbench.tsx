@@ -5642,6 +5642,7 @@ export function Workbench() {
     appendLine: (id, text, kind) => appendLine(id, text, kind),
     tellPane: (id, text) => tellPane(id, text),
     permissions,
+    isTyping: (id) => isTyping(records.typed.get(id)),
     answerPermission: (id, ans) => answerPermission(id, ans),
     confirmVoiceSend: (id, approved) => {
       if (approved) voiceSendDecisions.set(id, "approved")
