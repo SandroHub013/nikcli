@@ -57,7 +57,14 @@ export function createLineWriter<T>(
         // A line that blew up on the detectors does not take the ones read before it away.
         held = undefined
         heldRaw = undefined
-        for (const [paneId, lines] of mine) write(paneId, lines)
+        for (const [paneId, lines] of mine) {
+          // Solid runs effects inside this write: a broken one hides no question and takes no other pane's lines.
+          try {
+            write(paneId, lines)
+          } catch (error) {
+            console.error("[ADE] a chunk's lines could not be written:", error)
+          }
+        }
         for (const [paneId, lines] of mineRaw) {
           for (const raw of lines.slice(-WATCHED_TAIL)) {
             try {

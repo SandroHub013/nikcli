@@ -253,6 +253,31 @@ describe("the search for a question in a chunk", () => {
     }
   })
 
+  test("an effect that throws on the store's write hides no question, and costs no other pane its lines", () => {
+    const realError = console.error
+    console.error = () => {}
+    try {
+      const searched: string[] = []
+      const written: string[] = []
+      const lines = createLineWriter<string>(
+        (id, added) => {
+          if (id === "rotto") throw new Error("effect")
+          written.push(...added)
+        },
+        (_, raw) => searched.push(raw),
+      )
+      lines.together(() => {
+        lines.add("rotto", "continuare? [y/N]")
+        lines.add("sano", "riga")
+        lines.watch("rotto", "continuare? [y/N]")
+      })
+      expect(searched).toEqual(["continuare? [y/N]"])
+      expect(written).toEqual(["riga"])
+    } finally {
+      console.error = realError
+    }
+  })
+
   test("lint: the workbench's output goes through this search and not around it", () => {
     expect(WORKBENCH).toContain("paneLines.watch(id, text)")
     expect(WORKBENCH).not.toContain("    watchForPermission(id, text)\n")
