@@ -255,7 +255,7 @@ describe("«Ricontrolla»", () => {
     await settle()
     button(root, "install-recheck").click()
     await settle()
-    expect(root.querySelector('[data-slot="install-outcome"]')?.textContent).toContain("Ancora non lo trovo")
+    expect(root.querySelector('[data-slot="install-outcome"]')?.textContent).toContain("Non lo trovo ancora")
     expect(card(root, "kimi").dataset.availability).toBe("assente")
     // The message survives the new status the recheck produced: the panel was not rebuilt.
     expect(panel(root)?.dataset.agentId).toBe("kimi")

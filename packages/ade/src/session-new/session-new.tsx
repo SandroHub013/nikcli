@@ -31,6 +31,8 @@ export interface SessionNewProps {
   openPage?: (url: string) => void
   /** The system the commands are chosen for; the one ADE runs on unless a test says otherwise. */
   os?: InstallOs
+  /** The agent to start on, when one was just installed: used only while it is installed, else the usual default. */
+  initialAgent?: string
 }
 
 const ROLE_SUFFIX: Readonly<Record<string, string>> = {
@@ -62,12 +64,28 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
     mutate({ host, statuses })
     return statuses.find((status) => status.agent.id === id)
   }
-  const agentId = createMemo(() => chosen() ?? defaultAgentId(agents() ?? []) ?? "")
+  /*
+   * The agent a session would start: the one picked, else the one an install just made ready, else the first that is
+   * installed. Never one known to be absent, and "" when none is: a session for no agent is a pane that says «Pronta»
+   * for ever (audit UX-1).
+   */
+  const agentId = createMemo(() => {
+    const picked = chosen() ?? props.initialAgent
+    const status = picked ? (agents() ?? []).find((candidate) => candidate.agent.id === picked) : undefined
+    if (picked && status && status.availability !== "assente") return picked
+    return defaultAgentId(agents() ?? []) ?? ""
+  })
   const [count, setCount] = createSignal(1)
 
   const entries = createMemo(() => willLaunch({ agentId: agentId(), count: count() }))
 
-  const launch = () => props.onLaunch?.({ agentId: agentId(), count: count(), task: "" })
+  /* Why «Avvia» is off, or undefined when it is on: the lookup is still running, or nothing here can be started. */
+  const blocked = () => (agents() === undefined ? t("new.looking") : agentId() === "" ? t("new.noneInstalled") : undefined)
+
+  const launch = () => {
+    if (blocked()) return
+    props.onLaunch?.({ agentId: agentId(), count: count(), task: "" })
+  }
 
   return (
     <section
@@ -100,7 +118,13 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
                 {t("new.cancel")}
               </button>
             </Show>
-            <button type="button" data-slot="new-launch-btn" onClick={launch}>
+            <button
+              type="button"
+              data-slot="new-launch-btn"
+              disabled={blocked() !== undefined}
+              title={blocked()}
+              onClick={launch}
+            >
               {t("new.launch", count())}
               <span data-slot="new-launch-hint" aria-hidden="true">
                 ⏎
@@ -117,6 +141,13 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
         <div data-slot="new-body">
           <fieldset data-slot="new-section">
             <legend data-slot="new-legend">{t("new.agent")}</legend>
+            <Show when={blocked()}>
+              {(why) => (
+                <p data-slot="new-agents-note" role="status" aria-live="polite">
+                  {why()}
+                </p>
+              )}
+            </Show>
             <div data-slot="new-agents">
               <For each={agents() ?? []}>
                 {(status: AgentStatus) => {
@@ -222,14 +253,22 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
           </fieldset>
 
           <footer data-slot="new-foot">
-            <span data-slot="new-summary">{t("new.summary", count(), agentLabel(agentId()), props.workspace)}</span>
+            <span data-slot="new-summary">
+              {t("new.summary", count(), agentId() ? agentLabel(agentId()) : t("new.noAgentChosen"), props.workspace)}
+            </span>
             <div data-slot="new-spacer" />
             <Show when={props.onClose}>
               <button type="button" data-slot="new-cancel" onClick={() => props.onClose?.()}>
                 {t("new.cancel")}
               </button>
             </Show>
-            <button type="button" data-slot="new-launch-btn" onClick={launch}>
+            <button
+              type="button"
+              data-slot="new-launch-btn"
+              disabled={blocked() !== undefined}
+              title={blocked()}
+              onClick={launch}
+            >
               {t("new.launch", count())}
               <span data-slot="new-launch-hint" aria-hidden="true">
                 ⏎
