@@ -4,11 +4,15 @@
 //! them. What they all have is a shell tool and a terminal, so the channel is
 //! built from exactly those two things:
 //!
-//! - every session ADE starts finds `ade-msg` on its PATH, with its own pane id
-//!   in `ADE_PANE_ID`, the secret that proves it in `ADE_PANE_TOKEN`, and the
-//!   mailbox in `ADE_MAILBOX`;
+//! - every session ADE starts finds `ade-msg` on its PATH, from a folder beside
+//!   the mailbox, with its own pane id in `ADE_PANE_ID`, the secret that proves it
+//!   in `ADE_PANE_TOKEN`, and the mailbox in `ADE_MAILBOX`;
 //! - `ade-msg send|ask|spawn|reply` drops a JSON file in `outbox/` and waits
 //!   for a receipt; `ade-msg list` and `agents` print what ADE last published;
+//! - every session can write in this folder, so what `ade-msg` posts and what it
+//!   reads carries a MAC keyed by the pane's token (`src/session/mail-seal.ts`):
+//!   a file another session dropped here is not believed, and the token itself is
+//!   never in the folder;
 //! - the frontend takes the outbox, types each message into the target pane's
 //!   terminal as if the user had, and writes the receipt;
 //! - `ask` and `spawn` then keep waiting, the way a subagent call does, for
@@ -68,15 +72,28 @@ pub fn mailbox_path(app: &tauri::AppHandle) -> Option<PathBuf> {
         std::env::var_os(MAILBOX_ROOT_ENV),
         app.path().app_local_data_dir().ok().map(|data| data.join(MAILBOX_SUBDIR)),
     )?;
-    for sub in ["outbox", "receipts", "results", "bin"] {
+    for sub in ["outbox", "receipts", "results"] {
         fs::create_dir_all(dir.join(sub)).ok()?;
     }
     Some(dir)
 }
 
+/// Where the scripts go for a mailbox at `mailbox`: beside it, never inside.
+///
+/// Every session runs them and every session can write in the mailbox, so in there one
+/// session could rewrite the `ade-msg` the others run, and an agent a CLI sandboxes, with
+/// write access to the mailbox only, would get out through a session that is not. Per
+/// mailbox, since an ADE Test of another worktree has its own version of the scripts (S25).
+fn bin_beside(mailbox: &Path) -> Option<PathBuf> {
+    let name = mailbox.file_name()?.to_string_lossy();
+    Some(mailbox.with_file_name(if name == MAILBOX_SUBDIR { "bin".to_string() } else { format!("{name}-bin") }))
+}
+
 /// The directory prepended to every session's PATH.
 pub fn bin_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
-    mailbox_path(app).map(|dir| dir.join("bin"))
+    let bin = bin_beside(&mailbox_path(app)?)?;
+    fs::create_dir_all(&bin).ok()?;
+    Some(bin)
 }
 
 /// Writes the `ade-msg` scripts and clears old leftovers. Called at startup.
@@ -85,7 +102,9 @@ pub fn bin_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
 /// runs the version that matches the ADE that will read its messages.
 pub fn install(app: &tauri::AppHandle) {
     let Some(dir) = mailbox_path(app) else { return };
-    let bin = dir.join("bin");
+    let Some(bin) = bin_dir(app) else { return };
+    // Where an older ADE put them: nothing has them on its PATH any more, and they would not read today's mail.
+    let _ = fs::remove_dir_all(dir.join("bin"));
     let _ = fs::write(bin.join("ade-msg.ps1"), PS1);
     let _ = fs::write(bin.join("ade-msg.cmd"), CMD);
     let _ = fs::write(bin.join("ade-msg"), SH);
@@ -506,6 +525,29 @@ function Fail($message) { [Console]::Error.WriteLine("ade-msg: $message"); exit 
 # lower integrity level than the mailbox) was a screenful of PowerShell error.
 function Has($path) { try { return [IO.File]::Exists($path) } catch { return $false } }
 
+# Any session can write in the mailbox. So what ADE leaves for this session starts with a MAC keyed by this session's
+# own token, which the others do not have, and what this session posts is signed the same way (mail-seal.ts).
+function Mac($kind, $id, $body) {
+  $hmac = New-Object Security.Cryptography.HMACSHA256 (, $utf8.GetBytes([string]$env:ADE_PANE_TOKEN))
+  $hash = $hmac.ComputeHash($utf8.GetBytes("$kind`n$id`n$body"))
+  return ([BitConverter]::ToString($hash) -replace '-', '').ToLowerInvariant()
+}
+# The text of a file ADE wrote for this session as $kind of $id; $null for any other file. With no token nothing is
+# believed: anybody can sign with an empty key.
+function Sealed($kind, $id, $file) {
+  if (-not $env:ADE_PANE_TOKEN -or -not $file.StartsWith('ade-mac1 ') -or $file.IndexOf("`n") -ne 73) { return $null }
+  $body = $file.Substring(74)
+  if ($file.Substring(9, 64) -cne (Mac $kind $id $body)) { return $null }
+  return $body
+}
+# Said once for each file: a forged one must not fill a wait that looks at it four times a second.
+$refused = @{}
+function Refused($what, $id) {
+  if ($refused["$what $id"]) { return }
+  $refused["$what $id"] = $true
+  [Console]::Error.WriteLine("ade-msg: scartato $what $id`: non l'ha scritto ADE per questa sessione. Un'altra sessione lo ha messo nella casella, o viene da prima che questa sessione fosse riavviata.")
+}
+
 $all = @($args | ForEach-Object { [string]$_ })
 $cmd = if ($all.Count -gt 0) { $all[0] } else { '' }
 # -h/--help anywhere prints the help and posts nothing. An argument that is only
@@ -614,6 +656,7 @@ if ($cmd -eq 'registro' -and $fromStdin) {
 }
 
 function Post($fields) {
+  if (-not $env:ADE_PANE_TOKEN) { [Console]::Error.WriteLine('ade-msg: ADE_PANE_TOKEN mancante: ADE non puo'' riconoscere questa shell, lancia ade-msg dal terminale di un pannello di ADE.'); exit 2 }
   $id = ('{0}-{1}' -f [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(), ([guid]::NewGuid().ToString('N').Substring(0, 8)))
   # Past one message ADE would cut the text; the whole of it goes to a file the recipient can read.
   $long = [string]$fields['text']
@@ -623,27 +666,33 @@ function Post($fields) {
     $fields['text'] = "Testo completo ($($long.Length) caratteri) in $path, leggilo da li'. Inizio: " + $long.Substring(0, 1500)
   }
   $fields['from'] = $env:ADE_PANE_ID
-  $fields['token'] = $env:ADE_PANE_TOKEN
   $json = $fields | ConvertTo-Json -Compress
   $out = Join-Path $box 'outbox'
   $part = Join-Path $out "$id.part"
-  [IO.File]::WriteAllText($part, $json, $utf8)
+  [IO.File]::WriteAllText($part, "ade-mac1 $(Mac 'outbox' $id $json)`n$json", $utf8)
   Move-Item -LiteralPath $part -Destination (Join-Path $out "$id.json")
   return $id
 }
 
 # The receipt: what ADE did with the message. $null when ADE has not answered yet.
 function Receipt($id) {
-  $receipt = Join-Path (Join-Path $box 'receipts') "$id.txt"
   for ($i = 0; $i -lt 50; $i++) {
-    if (Test-Path $receipt) {
-      $r = [IO.File]::ReadAllText($receipt, $utf8)
-      Remove-Item -LiteralPath $receipt -ErrorAction SilentlyContinue
-      return $r.Trim()
-    }
+    $r = TakeReceipt $id
+    if ($null -ne $r) { return $r }
     Start-Sleep -Milliseconds 200
   }
   return $null
+}
+
+# The receipt if it is there and ADE wrote it. One it did not is thrown away, so the real one can still come.
+function TakeReceipt($id) {
+  $receipt = Join-Path (Join-Path $box 'receipts') "$id.txt"
+  if (-not (Test-Path $receipt)) { return $null }
+  $file = [IO.File]::ReadAllText($receipt, $utf8)
+  Remove-Item -LiteralPath $receipt -ErrorAction SilentlyContinue
+  $r = Sealed 'receipt' $id $file
+  if ($null -eq $r) { Refused 'una ricevuta per' $id; return $null }
+  return $r.Trim()
 }
 
 # Posts and prints the receipt; exits 1 when ADE refused.
@@ -681,19 +730,28 @@ function TakeResult($id) {
     $claimed = $true
     try { Move-Item -LiteralPath $ready -Destination $taken -Force } catch { $claimed = $false }
     if ($claimed) {
-      $r = [IO.File]::ReadAllText($taken, $utf8)
-      Move-Item -LiteralPath $taken -Destination $closed -Force -ErrorAction SilentlyContinue
-      return $r
+      $r = Sealed 'result' $id ([IO.File]::ReadAllText($taken, $utf8))
+      if ($null -ne $r) {
+        Move-Item -LiteralPath $taken -Destination $closed -Force -ErrorAction SilentlyContinue
+        return $r
+      }
+      Remove-Item -LiteralPath $taken -ErrorAction SilentlyContinue
+      Refused 'una risposta per' $id
     }
   }
   if (Has $typed) {
-    $r = [IO.File]::ReadAllText($typed, $utf8)
-    Move-Item -LiteralPath $typed -Destination $closed -Force -ErrorAction SilentlyContinue
-    return $r
+    $r = Sealed 'result' $id ([IO.File]::ReadAllText($typed, $utf8))
+    if ($null -ne $r) {
+      Move-Item -LiteralPath $typed -Destination $closed -Force -ErrorAction SilentlyContinue
+      return $r
+    }
+    Refused 'una risposta per' $id
   }
   # Answered already, to an earlier wait or into the terminal: said at once, not waited for.
   if (Has $closed) {
-    return "ade-msg: la richiesta $id e' gia' chiusa. La sua risposta, gia' consegnata:`n" + [IO.File]::ReadAllText($closed, $utf8)
+    $r = Sealed 'result' $id ([IO.File]::ReadAllText($closed, $utf8))
+    if ($null -ne $r) { return "ade-msg: la richiesta $id e' gia' chiusa. La sua risposta, gia' consegnata:`n" + $r }
+    Refused 'una risposta per' $id
   }
   return $null
 }
@@ -715,12 +773,15 @@ function AwaitIds([string[]]$ids) {
         $ok = $true
         try { Move-Item -LiteralPath $updateFile -Destination $claimed -Force } catch { $ok = $false }
         if ($ok) {
-          $u = [IO.File]::ReadAllText($claimed, $utf8)
+          $u = Sealed 'update' $id ([IO.File]::ReadAllText($claimed, $utf8))
           Remove-Item -LiteralPath $claimed -ErrorAction SilentlyContinue
-          Write-Output $u
-          $others = @($pending | Where-Object { $_ -ne $id })
-          if ($others.Count -gt 0) { Write-Output "(ancora in attesa anche di: $($others -join ' '))" }
-          exit 0
+          if ($null -ne $u) {
+            Write-Output $u
+            $others = @($pending | Where-Object { $_ -ne $id })
+            if ($others.Count -gt 0) { Write-Output "(ancora in attesa anche di: $($others -join ' '))" }
+            exit 0
+          }
+          Refused 'un aggiornamento per' $id
         }
       }
       $r = TakeResult $id
@@ -738,7 +799,8 @@ function AwaitIds([string[]]$ids) {
       }
       if (Has $stateFile) {
         $s = $null
-        try { $s = [IO.File]::ReadAllText($stateFile, $utf8).Trim() } catch {}
+        try { $s = Sealed 'state' $id ([IO.File]::ReadAllText($stateFile, $utf8)) } catch {}
+        if ($s) { $s = $s.Trim() }
         if ($s -and $seen[$id] -ne $s) { $seen[$id] = $s; [Console]::Error.WriteLine("ade-msg: richiesta $id - $s") }
       }
     }
@@ -771,7 +833,10 @@ switch ($cmd) {
     $done = Join-Path $dir 'handled'
     if (-not (Test-Path -LiteralPath $done)) { [void](New-Item -ItemType Directory -Path $done) }
     foreach ($f in $files) {
-      Write-Output ([IO.File]::ReadAllText($f.FullName, $utf8))
+      $m = Sealed 'inbox' $f.BaseName ([IO.File]::ReadAllText($f.FullName, $utf8))
+      # Removed, not moved to handled/: that move tells ADE it was read, and one it wrote and is not there is sent again.
+      if ($null -eq $m) { Refused 'un messaggio in inbox,' $f.BaseName; Remove-Item -LiteralPath $f.FullName -ErrorAction SilentlyContinue; continue }
+      Write-Output $m
       Write-Output ''
       Move-Item -LiteralPath $f.FullName -Destination (Join-Path $done $f.Name) -Force
     }
@@ -862,9 +927,8 @@ switch ($cmd) {
       while ([DateTime]::UtcNow -lt $deadline) {
         # A receipt later than Receipt waited for: a refusal ends the wait instead of sitting it out.
         if ($null -eq $r -and (Has $late)) {
-          $r = ([IO.File]::ReadAllText($late, $utf8)).Trim()
-          Remove-Item -LiteralPath $late -ErrorAction SilentlyContinue
-          if (-not $r.StartsWith('ok')) { Write-Output $r; exit 1 }
+          $r = TakeReceipt $id
+          if ($null -ne $r -and -not $r.StartsWith('ok')) { Write-Output $r; exit 1 }
         }
         $res = TakeResult $id
         if ($null -ne $res) { Write-Output $res.Trim(); exit 0 }
@@ -946,6 +1010,63 @@ fail() { echo "ade-msg: $1" >&2; exit 1; }
 esc() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' -e 's/\r/\\r/g' | awk 'BEGIN{ORS="\\n"} {print}' | sed 's/\\n$//'; }
 valid_id() { case "$1" in ''|*[!A-Za-z0-9_-]*) return 1 ;; esac; return 0; }
 
+# Any session can write in the mailbox. So what ADE leaves for this session starts with a MAC keyed by this session's
+# own token, which the others do not have, and what this session posts is signed the same way (mail-seal.ts). HMAC-SHA256
+# made from the hash alone: `openssl dgst -hmac` would put the key on a command line, where ps shows it.
+hash_cmd=""
+if command -v sha256sum >/dev/null 2>&1; then hash_cmd=sha256sum
+elif command -v shasum >/dev/null 2>&1; then hash_cmd=shasum
+elif command -v openssl >/dev/null 2>&1; then hash_cmd=openssl
+fi
+need_hash() { [ -n "$hash_cmd" ] || fail "manca sha256sum, shasum od openssl: non posso firmare ne' controllare chi scrive nella casella, quindi non continuo"; }
+digest() {
+  case "$hash_cmd" in
+    sha256sum) sha256sum ;;
+    shasum) shasum -a 256 ;;
+    *) openssl dgst -sha256 | sed 's/.*= *//' ;;
+  esac | cut -c1-64
+}
+# The key's 64 bytes xored with each pad, as printf formats. No fork for each byte but the one that reads it.
+ipad=""; opad=""
+hmac_pads() {
+  [ -n "$ipad" ] && return 0
+  pad_key="$ADE_PANE_TOKEN"; pad_n=0
+  [ "${#pad_key}" -le 64 ] || fail "ADE_PANE_TOKEN troppo lungo"
+  while [ $pad_n -lt 64 ]; do
+    pad_v=0
+    if [ -n "$pad_key" ]; then pad_c="${pad_key%"${pad_key#?}"}"; pad_key="${pad_key#?}"; pad_v=$(printf '%d' "'$pad_c"); fi
+    pad_i=$((pad_v ^ 54)); pad_o=$((pad_v ^ 92))
+    ipad="$ipad\\$(( ((pad_i>>6)&7)*100 + ((pad_i>>3)&7)*10 + (pad_i&7) ))"
+    opad="$opad\\$(( ((pad_o>>6)&7)*100 + ((pad_o>>3)&7)*10 + (pad_o&7) ))"
+    pad_n=$((pad_n+1))
+  done
+}
+# The HMAC of stdin. hmac_pads and need_hash first, in the shell itself: this runs in a subshell, where a failure is lost.
+hmac() {
+  h="$({ printf "$ipad"; cat; } | digest)"; bin=""
+  while [ -n "$h" ]; do
+    b="${h%"${h#??}"}"; h="${h#??}"; v=$((0x$b))
+    bin="$bin\\$(( ((v>>6)&7)*100 + ((v>>3)&7)*10 + (v&7) ))"
+  done
+  { printf "$opad"; printf "$bin"; } | digest
+}
+# Whether file $3 is what ADE wrote for this session as $1 of $2; its text is then tail -n +2. With no token nothing is
+# believed: anybody can sign with an empty key.
+sealed() {
+  [ -n "$ADE_PANE_TOKEN" ] || return 1
+  need_hash; hmac_pads
+  line="$(head -n 1 "$3")"
+  case "$line" in "ade-mac1 "*) ;; *) return 1 ;; esac
+  [ "$line" = "ade-mac1 $({ printf '%s\n%s\n' "$1" "$2"; tail -n +2 "$3"; } | hmac)" ]
+}
+# Said once for each file: a forged one must not fill a wait that looks at it four times a second.
+said_refused=""
+refused() {
+  case " $said_refused " in *" $2:$1 "*) return 0 ;; esac
+  said_refused="$said_refused $2:$1"
+  echo "ade-msg: scartato $1 $2: non l'ha scritto ADE per questa sessione. Un'altra sessione lo ha messo nella casella, o viene da prima che questa sessione fosse riavviata." >&2
+}
+
 cmd="$1"; [ $# -gt 0 ] && shift
 # -h/--help anywhere prints the help and posts nothing. An argument that is only
 # an option is never text: a typo must not become a message. After a lone --
@@ -1023,21 +1144,31 @@ fi
 if [ "$cmd" = "registro" ] && [ "$stdin" = 1 ]; then text="$(cat)"; fi
 
 post() {
+  [ -n "$ADE_PANE_TOKEN" ] || { echo "ade-msg: ADE_PANE_TOKEN mancante: ADE non puo' riconoscere questa shell, lancia ade-msg dal terminale di un pannello di ADE." >&2; exit 2; }
+  need_hash; hmac_pads
   id="$(date +%s)000-$$"
   if [ "${#text}" -gt 40000 ]; then
     long="$box/results/$id.long.txt"; printf '%s' "$text" > "$long"
     text="Testo completo (${#text} caratteri) in $long, leggilo da li'. Inizio: $(printf '%s' "$text" | head -c 1500)"
   fi
-  printf '{"from":"%s","token":"%s",%s,"text":"%s"}' "$(esc "$ADE_PANE_ID")" "$(esc "$ADE_PANE_TOKEN")" "$1" "$(esc "$text")" > "$box/outbox/$id.part"
+  body="$(printf '{"from":"%s",%s,"text":"%s"}' "$(esc "$ADE_PANE_ID")" "$1" "$(esc "$text")")"
+  printf 'ade-mac1 %s\n%s' "$({ printf 'outbox\n%s\n%s' "$id" "$body"; } | hmac)" "$body" > "$box/outbox/$id.part"
   mv "$box/outbox/$id.part" "$box/outbox/$id.json"
 }
 receipt() {
   r=""; i=0
   while [ $i -lt 50 ]; do
-    if [ -f "$box/receipts/$id.txt" ]; then r="$(cat "$box/receipts/$id.txt")"; rm -f "$box/receipts/$id.txt"; return 0; fi
+    if take_receipt; then return 0; fi
     sleep 0.2; i=$((i+1))
   done
   return 1
+}
+# The receipt if it is there and ADE wrote it. One it did not is thrown away, so the real one can still come.
+take_receipt() {
+  f="$box/receipts/$id.txt"
+  [ -f "$f" ] || return 1
+  if sealed receipt "$id" "$f"; then r="$(tail -n +2 "$f")"; rm -f "$f"; return 0; fi
+  rm -f "$f"; refused "una ricevuta per" "$id"; return 1
 }
 confirm() {
   post "$1"
@@ -1059,12 +1190,25 @@ show() {
 take() {
   got=""
   if [ -f "$box/results/$1.txt" ] && mv "$box/results/$1.txt" "$box/results/$1.taken" 2>/dev/null; then
-    got="$(cat "$box/results/$1.taken")"; mv -f "$box/results/$1.taken" "$box/results/$1.closed" 2>/dev/null; return 0
+    if sealed result "$1" "$box/results/$1.taken"; then
+      got="$(tail -n +2 "$box/results/$1.taken")"; mv -f "$box/results/$1.taken" "$box/results/$1.closed" 2>/dev/null; return 0
+    fi
+    rm -f "$box/results/$1.taken"; refused "una risposta per" "$1"
   fi
-  if [ -f "$box/results/$1.typed" ]; then got="$(cat "$box/results/$1.typed")"; mv -f "$box/results/$1.typed" "$box/results/$1.closed" 2>/dev/null; return 0; fi
+  if [ -f "$box/results/$1.typed" ]; then
+    if sealed result "$1" "$box/results/$1.typed"; then
+      got="$(tail -n +2 "$box/results/$1.typed")"; mv -f "$box/results/$1.typed" "$box/results/$1.closed" 2>/dev/null; return 0
+    fi
+    refused "una risposta per" "$1"
+  fi
   # Answered already, to an earlier wait or into the terminal: said at once, not waited for.
-  if [ -f "$box/results/$1.closed" ]; then got="ade-msg: la richiesta $1 e' gia' chiusa. La sua risposta, gia' consegnata:
-$(cat "$box/results/$1.closed")"; return 0; fi
+  if [ -f "$box/results/$1.closed" ]; then
+    if sealed result "$1" "$box/results/$1.closed"; then
+      got="ade-msg: la richiesta $1 e' gia' chiusa. La sua risposta, gia' consegnata:
+$(tail -n +2 "$box/results/$1.closed")"; return 0
+    fi
+    refused "una risposta per" "$1"
+  fi
   return 1
 }
 await() {
@@ -1075,10 +1219,13 @@ await() {
     still=""
     for rid in $pending; do
       if [ -f "$box/results/$rid.update" ] && mv "$box/results/$rid.update" "$box/results/$rid.update-taken" 2>/dev/null; then
-        cat "$box/results/$rid.update-taken"; echo; rm -f "$box/results/$rid.update-taken"
-        rest=""; for o in $pending; do [ "$o" != "$rid" ] && rest="${rest:+$rest }$o"; done
-        [ -n "$rest" ] && echo "(ancora in attesa anche di: $rest)"
-        exit 0
+        if sealed update "$rid" "$box/results/$rid.update-taken"; then
+          tail -n +2 "$box/results/$rid.update-taken"; echo; rm -f "$box/results/$rid.update-taken"
+          rest=""; for o in $pending; do [ "$o" != "$rid" ] && rest="${rest:+$rest }$o"; done
+          [ -n "$rest" ] && echo "(ancora in attesa anche di: $rest)"
+          exit 0
+        fi
+        rm -f "$box/results/$rid.update-taken"; refused "un aggiornamento per" "$rid"
       fi
       if take "$rid"; then
         rm -f "$box/results/$rid.state"
@@ -1091,8 +1238,8 @@ await() {
         fi
       else
         still="${still:+$still }$rid"
-        if [ -f "$box/results/$rid.state" ]; then
-          s="$(cat "$box/results/$rid.state")"; key="seen_$(printf '%s' "$rid" | tr -c 'A-Za-z0-9_' '_')"
+        if [ -f "$box/results/$rid.state" ] && sealed state "$rid" "$box/results/$rid.state"; then
+          s="$(tail -n +2 "$box/results/$rid.state")"; key="seen_$(printf '%s' "$rid" | tr -c 'A-Za-z0-9_' '_')"
           eval "old=\"\${$key}\""
           if [ "$s" != "$old" ]; then eval "$key=\"\$s\""; echo "ade-msg: richiesta $rid - $s" >&2; fi
         fi
@@ -1120,7 +1267,10 @@ case "$cmd" in
     dir="$box/inbox/$ADE_PANE_ID"; found=0
     for f in "$dir"/*.msg; do
       [ -f "$f" ] || continue
-      found=1; mkdir -p "$dir/handled"; cat "$f"; printf '\n\n'; mv -f "$f" "$dir/handled/"
+      found=1; name="$(basename "$f" .msg)"
+      # Removed, not moved to handled/: that move tells ADE it was read, and one it wrote and is not there is sent again.
+      if ! sealed inbox "$name" "$f"; then refused "un messaggio in inbox," "$name"; rm -f "$f"; continue; fi
+      mkdir -p "$dir/handled"; tail -n +2 "$f"; printf '\n\n'; mv -f "$f" "$dir/handled/"
     done
     [ $found = 1 ] || echo "nessun messaggio in attesa" ;;
   who-owns) [ -n "$head" ] || usage; text="$head${text:+ $text}"; show "\"kind\":\"whoowns\"" ;;
@@ -1184,8 +1334,7 @@ case "$cmd" in
       end=$(( $(date +%s) + t ))
       while [ "$(date +%s)" -lt "$end" ]; do
         # A receipt later than receipt() waited for: a refusal ends the wait instead of sitting it out.
-        if [ -z "$r" ] && [ -f "$box/receipts/$id.txt" ]; then
-          r="$(cat "$box/receipts/$id.txt")"; rm -f "$box/receipts/$id.txt"
+        if [ -z "$r" ] && take_receipt; then
           case "$r" in ok*) ;; *) echo "$r"; exit 1 ;; esac
         fi
         if take "$id"; then printf '%s\n' "$got"; exit 0; fi
@@ -1364,6 +1513,7 @@ mod tests {
             .args(["kv", "lock", "pc:prova"])
             .current_dir(&base)
             .env("ADE_MAILBOX", &base)
+            .env("ADE_PANE_TOKEN", TOKEN)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -1502,6 +1652,23 @@ mod tests {
         assert!(PS1.contains("--note") && SH.contains("\\\"note\\\":"));
     }
 
+    /// What the scripts run with in these tests, and what signs the files they read.
+    #[cfg(windows)]
+    const TOKEN: &str = "0123456789abcdef01234567";
+
+    /// A file as `mail-seal.ts` writes it. HMAC-SHA256 by hand: the app has no other use for an hmac crate.
+    #[cfg(windows)]
+    fn sealed(kind: &str, id: &str, body: &str) -> String {
+        use sha2::{Digest, Sha256};
+        let mut key = [0u8; 64];
+        key[..TOKEN.len()].copy_from_slice(TOKEN.as_bytes());
+        let pad = |x: u8| key.iter().map(|byte| byte ^ x).collect::<Vec<u8>>();
+        let inner = Sha256::new().chain_update(pad(0x36)).chain_update(format!("{kind}\n{id}\n{body}")).finalize();
+        let outer = Sha256::new().chain_update(pad(0x5c)).chain_update(inner).finalize();
+        let mac: String = outer.iter().map(|byte| format!("{byte:02x}")).collect();
+        format!("ade-mac1 {mac}\n{body}")
+    }
+
     /// A folder under the test TEMP, removed when dropped: on a failed assertion too.
     #[cfg(windows)]
     struct Scratch(PathBuf);
@@ -1541,6 +1708,7 @@ mod tests {
             .args(args)
             .current_dir(&base)
             .env("ADE_MAILBOX", &base)
+            .env("ADE_PANE_TOKEN", TOKEN)
             .stdin(if stdin.is_some() { Stdio::piped() } else { Stdio::null() })
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -1557,14 +1725,16 @@ mod tests {
             if let Some(path) = found {
                 let id = path.file_stem().unwrap().to_string_lossy().into_owned();
                 let body = fs::read_to_string(&path).unwrap();
-                fs::write(base.join("receipts").join(format!("{id}.txt")), "ok").unwrap();
+                fs::write(base.join("receipts").join(format!("{id}.txt")), sealed("receipt", &id, "ok")).unwrap();
                 break body;
             }
             assert!(started.elapsed().as_secs() < 30, "ade-msg.ps1 posted nothing");
             std::thread::sleep(std::time::Duration::from_millis(50));
         };
         let _ = child.wait();
-        serde_json::from_str(posted.trim_start_matches('\u{feff}')).unwrap()
+        assert!(!posted.contains(TOKEN), "the token went into the outbox: {posted}");
+        let (_mac, json) = posted.split_once('\n').expect("the MAC on its own line");
+        serde_json::from_str(json).unwrap()
     }
 
     #[cfg(windows)]
@@ -1615,6 +1785,7 @@ mod tests {
             .args(args)
             .current_dir(base)
             .env("ADE_MAILBOX", base)
+            .env("ADE_PANE_TOKEN", TOKEN)
             .stdin(Stdio::null())
             .output()
             .unwrap();
@@ -1635,15 +1806,17 @@ mod tests {
         fs::create_dir_all(&results).unwrap();
 
         // Typed into the caller: nobody was waiting when the answer came.
-        fs::write(results.join("1790000000000-aaaa.txt"), "risposta A").unwrap();
-        assert_eq!(reclaim_result(&results, "1790000000000-aaaa").as_deref(), Some("risposta A"));
+        let answer = sealed("result", "1790000000000-aaaa", "risposta A");
+        fs::write(results.join("1790000000000-aaaa.txt"), &answer).unwrap();
+        // Whole: `.closed` stays sealed for a later wait, and the page checks what it takes back.
+        assert_eq!(reclaim_result(&results, "1790000000000-aaaa").as_deref(), Some(answer.as_str()));
         let (out, took) = run_ps1(&scratch.0, &["wait", "1790000000000-aaaa", "--timeout", "8"]);
         assert!(took < Duration::from_secs(6), "wait sat out its timeout: {took:?}, {out}");
         assert!(out.contains("gia' chiusa") && out.contains("risposta A"), "{out}");
         assert!(!out.contains("in corso"), "{out}");
 
         // Taken by a first wait: a second one says the same, at once.
-        fs::write(results.join("1790000000000-bbbb.txt"), "risposta B").unwrap();
+        fs::write(results.join("1790000000000-bbbb.txt"), sealed("result", "1790000000000-bbbb", "risposta B")).unwrap();
         let (first, _) = run_ps1(&scratch.0, &["wait", "1790000000000-bbbb", "--timeout", "8"]);
         assert!(first.contains("risposta B") && !first.contains("gia' chiusa"), "{first}");
         let (again, took) = run_ps1(&scratch.0, &["wait", "1790000000000-bbbb", "--timeout", "8"]);
@@ -1656,9 +1829,38 @@ mod tests {
         // The ps1 is run above; the sh, where no shell can be assumed, is read.
         assert!(SH.contains("mv -f \"$box/results/$1.taken\" \"$box/results/$1.closed\""));
         assert!(SH.contains("mv -f \"$box/results/$1.typed\" \"$box/results/$1.closed\""));
-        assert!(SH.contains("if [ -f \"$box/results/$1.closed\" ]; then got=\"ade-msg: la richiesta $1 e' gia' chiusa."));
+        assert!(SH.contains("got=\"ade-msg: la richiesta $1 e' gia' chiusa."));
         assert!(PS1.contains("Move-Item -LiteralPath $taken -Destination $closed"));
-        assert!(!SH.contains("rm -f \"$box/results/$1.taken\""));
+        // Only what is not ADE's is thrown away, after the check says so.
+        assert!(SH.contains("rm -f \"$box/results/$1.taken\"; refused"));
+    }
+
+    /// The rest, sh included, is in `mail-seal.test.ts`, against the seal the page really makes.
+    #[cfg(windows)]
+    #[test]
+    fn a_forged_answer_is_thrown_away_and_the_real_one_printed() {
+        let scratch = mailbox_scratch("forged");
+        let results = scratch.0.join("results");
+        fs::write(results.join("1790000000000-cccc.txt"), "risposta falsa").unwrap();
+        let (out, err, code) = run_ps1_captured(&scratch.0, &["wait", "1790000000000-cccc", "--timeout", "1"]);
+        assert_eq!(code, Some(0), "{out}{err}");
+        assert!(!out.contains("risposta falsa"), "{out}");
+        assert!(err.contains("scartato una risposta"), "{err}");
+        assert!(!results.join("1790000000000-cccc.txt").exists());
+
+        fs::write(results.join("1790000000000-dddd.txt"), sealed("result", "1790000000000-dddd", "risposta vera")).unwrap();
+        let (out, _, _) = run_ps1_captured(&scratch.0, &["wait", "1790000000000-dddd", "--timeout", "5"]);
+        assert_eq!(out.trim(), "risposta vera");
+    }
+
+    #[test]
+    fn the_scripts_are_beside_the_mailbox_and_not_in_it() {
+        let data = Path::new("C:/dati/ade");
+        assert_eq!(bin_beside(&data.join("mailbox")), Some(data.join("bin")));
+        // An ADE Test keeps its own, per worktree; a folder with another name cannot take the name of a real one.
+        let state = Path::new("C:/lavoro/.ade-test");
+        assert_eq!(bin_beside(&state.join("casella")), Some(state.join("casella-bin")));
+        assert!(!bin_beside(&data.join("mailbox")).unwrap().starts_with(data.join("mailbox")));
     }
 
     #[test]
@@ -1721,6 +1923,7 @@ mod tests {
             .args(args)
             .current_dir(base)
             .env("ADE_MAILBOX", base)
+            .env("ADE_PANE_TOKEN", TOKEN)
             .stdin(Stdio::null())
             .output()
             .unwrap();
@@ -1740,6 +1943,7 @@ mod tests {
             .args(args)
             .current_dir(base)
             .env("ADE_MAILBOX", base)
+            .env("ADE_PANE_TOKEN", TOKEN)
             .stdin(Stdio::null())
             .output()
             .unwrap();
@@ -1768,10 +1972,10 @@ mod tests {
                 if let Some(path) = found {
                     let id = path.file_stem().unwrap().to_string_lossy().into_owned();
                     let _ = fs::remove_file(&path);
-                    fs::write(base.join("receipts").join(format!("{id}.txt")), receipt).unwrap();
+                    fs::write(base.join("receipts").join(format!("{id}.txt")), sealed("receipt", &id, receipt)).unwrap();
                     if let Some((text, after)) = answer {
                         std::thread::sleep(after);
-                        fs::write(base.join("results").join(format!("{id}.txt")), text).unwrap();
+                        fs::write(base.join("results").join(format!("{id}.txt")), sealed("result", &id, text)).unwrap();
                     }
                     return Some(id);
                 }

@@ -68,6 +68,15 @@ import {
   voiceConfirmationFor,
 } from "./mailbox"
 
+/**
+ * A message as the intake leaves it. `"token"` in these bodies is the key its MAC was made with: `mail-seal.test.ts`
+ * tests the MAC, and here only what follows from it being that pane's or not.
+ */
+const sentWith = (json: string, tokenOf: (id: string) => string | undefined) => {
+  const { from, token } = JSON.parse(json) as { from?: string; token?: string }
+  return verifySender(parseMessage(json)!, !!from && tokenOf(from) !== undefined && tokenOf(from) === token)
+}
+
 const panes = [
   { id: "n1-0", title: "Sessione 1 — claude-code", agent: "claude-code", status: "idle" },
   { id: "n2-1", title: "Sessione 2 — codex", agent: "codex", status: "working" },
@@ -147,14 +156,12 @@ describe("resolveTarget", () => {
 test("verifySender keeps a sender only with that pane's token", () => {
   const tokens: Record<string, string> = { "n1-0": "secret" }
   const tokenOf = (id: string) => tokens[id]
-  const note = parseMessage('{"from":"n1-0","token":"secret","to":"2","text":"x"}')!
-  expect(verifySender(note, tokenOf).from).toBe("n1-0")
-  const forged = parseMessage('{"from":"n1-0","token":"guess","to":"2","text":"x"}')!
-  expect(verifySender(forged, tokenOf).from).toBe("")
+  expect(sentWith('{"from":"n1-0","token":"secret","to":"2","text":"x"}', tokenOf).from).toBe("n1-0")
+  expect(sentWith('{"from":"n1-0","token":"guess","to":"2","text":"x"}', tokenOf).from).toBe("")
   const bare = parseMessage('{"from":"n1-0","to":"2","text":"x"}')!
-  expect(verifySender(bare, tokenOf).from).toBe("")
+  expect(verifySender(bare, false).from).toBe("")
   const unknown = parseMessage('{"from":"n9-9","to":"2","text":"x"}')!
-  expect(verifySender(unknown, tokenOf).from).toBe("")
+  expect(verifySender(unknown, false).from).toBe("")
 })
 
 test("unverified acting messages are refused before voice confirmation", () => {
@@ -166,13 +173,10 @@ test("unverified acting messages are refused before voice confirmation", () => {
     '{"kind":"spawn","from":"","agent":"codex","text":"x"}',
     '{"kind":"send","from":"voce","token":"falso","to":"2","text":"x"}',
   ]) {
-    const message = verifySender(parseMessage(body)!, tokenOf)
+    const message = sentWith(body, tokenOf)
     expect(unverifiedSenderRefusal(message)).toBe(refusal)
   }
-  const verified = verifySender(
-    parseMessage('{"kind":"send","from":"n1-0","token":"segreto","to":"2","text":"x"}')!,
-    tokenOf,
-  )
+  const verified = sentWith('{"kind":"send","from":"n1-0","token":"segreto","to":"2","text":"x"}', tokenOf)
   expect(unverifiedSenderRefusal(verified)).toBeUndefined()
   expect(unverifiedSenderRefusal(parseMessage('{"kind":"reply","from":"","ref":"r1","text":"x"}')!)).toBeUndefined()
 })
@@ -186,7 +190,7 @@ test("an unverified interrupt or close is refused centrally, as a send is", () =
     '{"kind":"interrupt","from":"voce","token":"falso","to":"n2-1"}',
     '{"kind":"close","from":"voce","token":"falso","to":"n2-1"}',
   ]) {
-    expect(unverifiedSenderRefusal(verifySender(parseMessage(body)!, tokenOf))).toBe(refusal)
+    expect(unverifiedSenderRefusal(sentWith(body, tokenOf))).toBe(refusal)
   }
   for (const body of [
     '{"kind":"interrupt","from":"n1-0","token":"segreto","to":"n2-1"}',
@@ -194,7 +198,7 @@ test("an unverified interrupt or close is refused centrally, as a send is", () =
     '{"kind":"interrupt","from":"voce","token":"segreto","to":"n2-1"}',
     '{"kind":"close","from":"voce","token":"segreto","to":"n2-1"}',
   ]) {
-    expect(unverifiedSenderRefusal(verifySender(parseMessage(body)!, tokenOf))).toBeUndefined()
+    expect(unverifiedSenderRefusal(sentWith(body, tokenOf))).toBeUndefined()
   }
   expect(unverifiedSenderRefusal(parseMessage('{"kind":"relaunch","from":"","to":"n2-1"}')!)).toBeUndefined()
 })
@@ -217,10 +221,10 @@ test("a message with no proven sender cannot reach the project the window has op
   ]
   for (const ask of asks) {
     for (const sender of ['"from":""', '"from":"n1-0","token":"falso"']) {
-      const message = verifySender(parseMessage(`{${sender},${ask}}`)!, tokenOf)
+      const message = sentWith(`{${sender},${ask}}`, tokenOf)
       expect(unverifiedSenderRefusal(message)).toBe(refusal)
     }
-    const proven = verifySender(parseMessage(`{"from":"n1-0","token":"segreto",${ask}}`)!, tokenOf)
+    const proven = sentWith(`{"from":"n1-0","token":"segreto",${ask}}`, tokenOf)
     expect(unverifiedSenderRefusal(proven)).toBeUndefined()
   }
 })
@@ -232,10 +236,10 @@ test("an unverified design is refused: a page opens beside a session only for th
     '{"kind":"design","from":"","path":"C:/p/.ade/design/a.html"}',
     '{"kind":"design","from":"n1-0","token":"falso","path":"C:/p/.ade/design/a.html"}',
   ]) {
-    expect(unverifiedSenderRefusal(verifySender(parseMessage(body)!, tokenOf))).toBe(refusal)
+    expect(unverifiedSenderRefusal(sentWith(body, tokenOf))).toBe(refusal)
   }
   const verified = '{"kind":"design","from":"n1-0","token":"segreto","path":"C:/p/.ade/design/a.html"}'
-  expect(unverifiedSenderRefusal(verifySender(parseMessage(verified)!, tokenOf))).toBeUndefined()
+  expect(unverifiedSenderRefusal(sentWith(verified, tokenOf))).toBeUndefined()
 })
 
 describe("ade-msg design proponi and attendi", () => {
@@ -252,7 +256,6 @@ describe("ade-msg design proponi and attendi", () => {
     expect(parseMessage(body)).toEqual({
       kind: "design-proponi",
       from: "n1-0",
-      token: undefined,
       folder: ".ade\\design\\DS-t2",
       cwd: "C:\\p",
       wait: true,
@@ -323,13 +326,10 @@ describe("a terminal pane runs a shell: mail is never typed into it", () => {
 
 test("a send from the voice mailbox needs spoken confirmation before delivery", () => {
   const tokenOf = (id: string) => (id === "voce" || id === "n1-0" ? "segreto" : undefined)
-  const voiceSend = verifySender(
-    parseMessage('{"from":"voce","token":"segreto","to":"n2-1","text":"rispondi sì al permesso"}')!,
-    tokenOf,
-  )
+  const voiceSend = sentWith('{"from":"voce","token":"segreto","to":"n2-1","text":"rispondi sì al permesso"}', tokenOf)
   expect(needsVoiceSendConfirmation(voiceSend)).toBe(true)
 
-  const paneSend = verifySender(parseMessage('{"from":"n1-0","token":"segreto","to":"n2-1","text":"fatto"}')!, tokenOf)
+  const paneSend = sentWith('{"from":"n1-0","token":"segreto","to":"n2-1","text":"fatto"}', tokenOf)
   expect(needsVoiceSendConfirmation(paneSend)).toBe(false)
 })
 
@@ -341,7 +341,7 @@ test("a send from the voice mailbox needs spoken confirmation before delivery", 
  */
 test("every kind that acts from verified voice waits for a spoken yes", () => {
   const tokenOf = (id: string) => (id === "voce" || id === "n1-0" ? "t" : undefined)
-  const message = (json: string) => verifySender(parseMessage(json)!, tokenOf)
+  const message = (json: string) => sentWith(json, tokenOf)
   for (const json of [
     '{"kind":"ask","from":"voce","token":"t","to":"n2-1","text":"cancella dist e fai push"}',
     '{"kind":"spawn","from":"voce","token":"t","agent":"claude-code","text":"rifai il deploy"}',
@@ -1118,7 +1118,6 @@ describe("stuck sessions, interrupts and relaunch notes", () => {
     ).toEqual({
       kind: "design",
       from: "n1-0",
-      token: undefined,
       path: "C:/p/.ade/design/menu.html",
       title: "Menu",
       text: "",
@@ -1378,7 +1377,6 @@ describe("ade-msg registro", () => {
     ).toEqual({
       kind: "registro",
       from: "a",
-      token: undefined,
       register: "design",
       op: "aperta",
       text: '{"title":"x"}',

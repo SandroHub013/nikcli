@@ -45,16 +45,12 @@ function isMail(message: Message): message is Message & { kind: "send" | "ask"; 
 /**
  * The queue as it is written down.
  *
- * Without the token: it proved the sender to the process that received it, and the process that reads this back
- * has other tokens. `from` was verified before the message was queued and is kept as it stood.
+ * `from` was verified before the message was queued and is kept as it stood.
  */
 export function queueToSave(queue: readonly QueuedMessage[]): string {
   const kept = queue
     .filter((item) => isRequestId(item.id) && isMail(item.message))
-    .map(({ id, message, at }) => {
-      const { token: _token, ...rest } = message
-      return { id, at, message: rest }
-    })
+    .map(({ id, message, at }) => ({ id, at, message }))
   return JSON.stringify(kept)
 }
 

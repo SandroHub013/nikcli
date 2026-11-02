@@ -10,12 +10,12 @@ import type { Message } from "./mailbox"
  * crash) lost it with nobody told: the 17:43 message to «Sol 6.1 sandrobench» on 2026-10-14.
  */
 
-const send = (to: string, text = "ciao"): Message => ({ kind: "send", from: "p1", token: "segreto", to, text })
-const ask = (to: string): Message => ({ kind: "ask", from: "p1", token: "segreto", to, text: "fai", budget: 600 })
+const send = (to: string, text = "ciao"): Message => ({ kind: "send", from: "p1", to, text })
+const ask = (to: string): Message => ({ kind: "ask", from: "p1", to, text: "fai", budget: 600 })
 const NOW = 1_800_000_000_000
 
 describe("the queue of messages held for a busy session survives a restart", () => {
-  test("what was held is saved and read back in the same order, without the sender's token", () => {
+  test("what was held is saved and read back in the same order", () => {
     const queue: QueuedMessage[] = [
       { id: "r1", message: send("p2"), at: NOW - 5_000 },
       { id: "r2", message: ask("p3"), at: NOW - 1_000 },

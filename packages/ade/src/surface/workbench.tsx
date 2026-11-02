@@ -274,6 +274,7 @@ import { scrubSecrets } from "../bots/terms"
 import type { AgentFile } from "../bots/ragu"
 import type { Runner } from "../bots/runners"
 import { senderToken } from "../session/senders"
+import { firstTime, sealedBy, splitSealed, useMailKeys } from "../session/mail-seal"
 import { createActivityReads, type ActivityReads } from "../session/activity-reads"
 import { boardCandidates, parseOwners, whoOwns } from "../session/owners"
 import { mayReroute, pickProvider, setProviderPicker } from "../session/provider-pick"
@@ -367,6 +368,8 @@ import {
   resolveAgent,
   resolveTarget,
   sessionsTable,
+  UNSEALED_MAIL,
+  claimedSender,
   verifySender,
   unverifiedSenderRefusal,
   voiceConfirmationFor,
@@ -3058,9 +3061,11 @@ export function Workbench() {
       // Its sender was told «in coda» before the restart: the outcome is reported where it listens now (`deliverOne`).
       held.add(item.id)
       replayedMail.add(item.id)
+      rememberMailSender(item.id, item.message.from)
       mailQueue.push(item)
     }
     for (const { id, message } of expired) {
+      rememberMailSender(id, message.from)
       const to = message.kind === "send" || message.kind === "ask" ? message.to : ""
       const title = wb().panes.find((pane) => pane.id === to)?.title ?? to
       const text = `[ade-msg] errore: il messaggio ${id} per "${title}" era in coda da più di dodici ore, quando ADE è stato riavviato: non è stato consegnato`
@@ -3368,6 +3373,25 @@ export function Workbench() {
     paneTokens.set(paneId, token)
     return token
   }
+  /** A pane's token, or a background turn's (voice agent, bot) registered for its length. */
+  const tokenOfSender = (paneId: string) => (running.has(paneId) ? paneTokens.get(paneId) : senderToken(paneId))
+  /** Who sent each message taken: what ADE writes for a message's id is sealed with that sender's key (`mail-seal.ts`). */
+  const mailSenders = new Map<string, string>()
+  const rememberMailSender = (id: string, from: string) => {
+    if (!from) return
+    mailSenders.set(id, from)
+    if (mailSenders.size > 5000) mailSenders.delete(mailSenders.keys().next().value!)
+  }
+  /** The ids of the messages taken lately: a copy of one posted again is not carried out twice (`firstTime`). */
+  const mailSeen = new Map<string, number>()
+  useMailKeys({
+    forRequest: (id) => {
+      const pane =
+        mailSenders.get(id) ?? openRequests.get(id)?.from ?? designWaiters().find((waiter) => waiter.id === id)?.from
+      return pane ? tokenOfSender(pane) : undefined
+    },
+    forPane: tokenOfSender,
+  })
 
   /** How long a reply may sit unclaimed before it is typed into the caller instead. */
   const CLAIM_WINDOW_MS = 3000
@@ -3786,10 +3810,20 @@ export function Workbench() {
     const taken = (await host.mailboxTake?.().catch(() => [])) ?? []
     if (taken.length === 0) return
     for (const { id, body } of taken) {
-      const parsed = parseMessage(body)
-      // A pane's token, or a background turn's (voice agent, bot) registered for its length.
-      const message =
-        parsed && verifySender(parsed, (paneId) => (running.has(paneId) ? paneTokens.get(paneId) : senderToken(paneId)))
+      const sealed = splitSealed(body)
+      if (!sealed) {
+        void host.mailboxReceipt?.(id, UNSEALED_MAIL).catch(() => {})
+        continue
+      }
+      if (!firstTime(mailSeen, id, Date.now())) {
+        console.error(`ADE: posta ${id}: già presa o troppo vecchia, non la eseguo di nuovo`)
+        continue
+      }
+      const claimed = claimedSender(sealed.body)
+      const proven = await sealedBy(claimed ? tokenOfSender(claimed) : undefined, "outbox", id, sealed).catch(() => false)
+      if (proven) rememberMailSender(id, claimed)
+      const parsed = parseMessage(sealed.body)
+      const message = parsed && verifySender(parsed, proven)
       if (message) mailQueue.push({ id, message, at: Date.now() })
       else void host.mailboxReceipt?.(id, "errore: messaggio non valido").catch(() => {})
     }
