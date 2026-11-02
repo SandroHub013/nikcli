@@ -118,25 +118,9 @@
   color: var(--ade-text-weak);
 }
 
+/* A Button (ghost, sm): the rail only decides how wide it is. */
 [data-slot="settings-check-update"] {
-  background: transparent;
-  border: 1px solid var(--ade-border);
-  border-radius: var(--ade-radius-sm, 6px);
-  padding: 4px 8px;
-  font-size: var(--ade-font-sm);
-  color: var(--ade-text);
-  cursor: pointer;
-  text-align: center;
-  transition: background-color var(--ade-dur-fast) ease;
-}
-
-[data-slot="settings-check-update"]:hover {
-  background-color: var(--ade-hover);
-}
-
-[data-slot="settings-check-update"]:focus-visible {
-  outline: none;
-  box-shadow: var(--ade-focus-ring);
+  width: 100%;
 }
 
 /* Main panel area */
@@ -178,26 +162,9 @@
   color: var(--ade-text-weak);
 }
 
+/* An IconButton: the header only keeps it from shrinking. */
 [data-slot="settings-close"] {
-  background: transparent;
-  border: none;
-  padding: 6px;
-  border-radius: var(--ade-radius-sm, 6px);
-  color: var(--ade-text-weak);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-[data-slot="settings-close"]:hover {
-  background-color: var(--ade-hover);
-  color: var(--ade-text);
-}
-
-[data-slot="settings-close"]:focus-visible {
-  outline: none;
-  box-shadow: var(--ade-focus-ring);
+  flex: none;
 }
 
 /* Tab bar */
@@ -283,27 +250,6 @@
   gap: var(--space-3, 12px);
   justify-content: flex-end;
   flex-shrink: 0;
-}
-
-[data-slot="settings-done"] {
-  padding: 6px 16px;
-  font-size: var(--ade-font-lg);
-  font-weight: var(--ade-weight-medium);
-  border-radius: var(--ade-radius-md, 8px);
-  border: 1px solid var(--ade-border);
-  background-color: var(--ade-surface);
-  color: var(--ade-text);
-  cursor: pointer;
-  transition: background-color var(--ade-dur-fast) ease;
-}
-
-[data-slot="settings-done"]:hover {
-  background-color: var(--ade-hover);
-}
-
-[data-slot="settings-done"]:focus-visible {
-  outline: none;
-  box-shadow: var(--ade-focus-ring);
 }
 
 /* Responsive: narrow viewport (< 760px) */

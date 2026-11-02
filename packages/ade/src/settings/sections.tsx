@@ -8,6 +8,7 @@ import { DEFAULT_GLASS_OPACITY, GLASS_READABLE_MIN, THEME_CHOICES, isGlassReadab
 import type { GlassStatus } from "../surface/glass-window"
 import { shortcutGroups } from "../keyboard/shortcuts-list"
 import type { Platform } from "../keyboard/keymap"
+import { Button } from "../ui/controls"
 import "./sections.css"
 
 /**
@@ -482,16 +483,14 @@ export function RecordVideoSection(props: RecordVideoSectionProps) {
         <li data-slot="settings-row">
           <span data-slot="settings-name">{t("settings.record.folder")}</span>
           <span data-slot="settings-meta">{props.dir() ?? t("settings.record.folder.none")}</span>
-          <button type="button" data-slot="settings-choice" onClick={() => props.onPickFolder()}>
-            {t("settings.record.folder.choose")}
-          </button>
+          <Button onClick={() => props.onPickFolder()}>{t("settings.record.folder.choose")}</Button>
         </li>
       </ul>
 
       <div data-slot="settings-choices">
-        <button type="button" data-slot="settings-choice" data-action="record.export" onClick={() => props.onExport()}>
+        <Button data-action="record.export" onClick={() => props.onExport()}>
           {t("settings.record.export")}
-        </button>
+        </Button>
       </div>
       <p data-slot="settings-meta">{t("settings.record.export.desc")}</p>
     </>
@@ -534,29 +533,18 @@ export function UpdatesSection(props: UpdatesSectionProps) {
       </Show>
 
       <div data-slot="settings-choices">
-        <button
-          type="button"
-          data-slot="settings-choice"
-          data-action="update.check"
-          disabled={props.checking()}
-          onClick={() => props.onCheck()}
-        >
+        <Button data-action="update.check" disabled={props.checking()} onClick={() => props.onCheck()}>
           {props.checking() ? t("update.checking") : t("palette.update.check")}
-        </button>
+        </Button>
       </div>
 
       <Show when={props.available()}>
         {(update) => (
           <div data-slot="settings-notice" data-state="info" role="status">
             <span>{t("update.available", update().version)}</span>
-            <button
-              type="button"
-              data-slot="settings-choice"
-              data-action="update.install"
-              onClick={() => props.onInstall()}
-            >
+            <Button variant="primary" size="sm" data-action="update.install" onClick={() => props.onInstall()}>
               {t("update.restart.ok")}
-            </button>
+            </Button>
           </div>
         )}
       </Show>
