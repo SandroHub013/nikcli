@@ -9788,7 +9788,12 @@ export function Workbench() {
     // for the agent beside it, not for a prompt nothing will read.
     const task = entry.role === "shell" ? "" : input.task
     const hasInitialTask = Boolean(task.trim())
-    const title = input.title || task || defaultPaneTitle(entry.role, entry.index, agentLabel(entry.agentId))
+    const title = input.title || task || defaultPaneTitle(
+        entry.role,
+        entry.index,
+        agentLabel(entry.agentId),
+        wb().panes.map((pane) => pane.title),
+      )
     const open = project()
     // Another project's session (a subagent spawned from there) keeps that project's name; its root is found at start.
     const currentProj = input.projectRoot

@@ -23,3 +23,37 @@ describe("defaultPaneTitle", () => {
     expect(defaultPaneTitle("shell", 3, "Terminale")).toBe("Terminale 3")
   })
 })
+
+/*
+ * Live test 3, FAIL 10: two Terminals were both «Sessione 1 — Terminale». The number is the slot in the launch that
+ * made the pane (the form's «1.», «2.»), so every launch of one session started again at 1. A title already worn by a
+ * pane is taken: the number goes up to the first free one, and the sidebar can tell the sessions apart.
+ */
+describe("defaultPaneTitle and the titles already in use", () => {
+  test("a title nobody wears keeps the slot's own number", () => {
+    expect(defaultPaneTitle("agent", 1, "Terminale", [])).toBe("Sessione 1 — Terminale")
+    expect(defaultPaneTitle("agent", 2, "Claude Code", ["Sessione 1 — Claude Code"])).toBe("Sessione 2 — Claude Code")
+  })
+
+  test("a second Terminal launched alone is «Sessione 2», not «Sessione 1» again", () => {
+    expect(defaultPaneTitle("agent", 1, "Terminale", ["Sessione 1 — Terminale"])).toBe("Sessione 2 — Terminale")
+  })
+
+  test("it goes up to the first free number, past gaps and past other numbers", () => {
+    const taken = ["Sessione 1 — Terminale", "Sessione 2 — Terminale", "Sessione 4 — Terminale"]
+    expect(defaultPaneTitle("agent", 1, "Terminale", taken)).toBe("Sessione 3 — Terminale")
+  })
+
+  test("another agent's number does not count, nor a renamed pane's", () => {
+    expect(defaultPaneTitle("agent", 1, "Terminale", ["Sessione 1 — Claude Code", "fuoco1"])).toBe("Sessione 1 — Terminale")
+  })
+
+  test("a terminal slot goes up too, in its own form", () => {
+    expect(defaultPaneTitle("shell", 1, "Terminale", ["Terminale 1"])).toBe("Terminale 2")
+  })
+
+  test("in English as in Italian", () => {
+    resetLocaleForTests("en")
+    expect(defaultPaneTitle("agent", 1, "Terminal", ["Session 1 — Terminal"])).toBe("Session 2 — Terminal")
+  })
+})
