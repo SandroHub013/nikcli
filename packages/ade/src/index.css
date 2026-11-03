@@ -288,6 +288,15 @@ body[data-theme="glass"] #root,
   background: color-mix(in srgb, var(--ade-overlay) 92%, transparent);
 }
 
+/*
+ * Written exception: the notice strip is a warning to be read, and its own wash is 12% amber, so over the floor its
+ * ground was alpha 40% and white text on it 2.05:1 over a white desktop. It takes the overlay level, which ignores the
+ * slider, under its wash: 9.9:1 over a white desktop, 13:1 over a black one.
+ */
+[data-component="ade-shell"][data-theme="glass"] [data-slot="ade-notice"] {
+  background: linear-gradient(var(--ade-working-bg), var(--ade-working-bg)), var(--ade-overlay);
+}
+
 :root {
   /* ── surfaces ──────────────────────────────────────────────────────────── */
   /*

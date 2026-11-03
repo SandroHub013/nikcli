@@ -502,3 +502,33 @@ describe("the bot form's model chip", () => {
     }
   })
 })
+
+// ── 7. the notice strip in glass (live test 3, FAIL 5) ────────────────────────
+
+describe("the notice strip in glass", () => {
+  function stripBackground(): string | undefined {
+    let value: string | undefined
+    sheet("index.css").walkRules((rule) => {
+      if (rule.selector.replace(/\s+/g, " ") !== '[data-component="ade-shell"][data-theme="glass"] [data-slot="ade-notice"]') return
+      rule.walkDecls("background", (decl) => {
+        value = decl.value.replace(/\s+/g, " ").trim()
+      })
+    })
+    return value
+  }
+
+  test("sits on the overlay, which ignores the slider, under its own wash: its ground was alpha 40% (2.05:1 on a white desktop)", () => {
+    expect(stripBackground()).toBe(
+      "linear-gradient(var(--ade-working-bg), var(--ade-working-bg)), var(--ade-overlay)",
+    )
+  })
+
+  test("white text on it is 4.5:1 or more over the worst desktop, white", () => {
+    const wash = token("--ade-working-bg", "dark")
+    const ground = (desktop: Rgb) => over(wash, over(color(glassToken("--ade-overlay")), desktop))
+    const text = hex(glassToken("--ade-text"))
+    for (const desktop of [[255, 255, 255], [0, 0, 0], [128, 128, 128]] as Rgb[]) {
+      expect(ratio(text, ground(desktop))).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+})
