@@ -70,14 +70,14 @@ describe("decideOpening", () => {
     expect(decideOpening(input)).toBe("wait")
   })
 
-  test("abandons rather than answering a question that outlives the deadline", () => {
+  test("a question that outlives the deadline still holds the task: nothing is typed and nothing is given up", () => {
     const input = at({
       firstByteAt: 500,
       lastByteAt: 600,
-      now: OPENING_TIMEOUT_MS,
+      now: OPENING_TIMEOUT_MS * 10,
       permissionPending: true,
     })
-    expect(decideOpening(input)).toBe("abandon")
+    expect(decideOpening(input)).toBe("wait")
   })
 
   test("abandons a process that never said anything", () => {

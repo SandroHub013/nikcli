@@ -546,6 +546,8 @@ export const it = {
     "ADE non ha inviato il compito iniziale: la sessione non si è stabilizzata. Scrivilo tu quando è pronta.",
   "task.confirmTrust":
     "La sessione chiede la fiducia per questa cartella: confermala nel terminale e ADE scriverà il compito iniziale.",
+  "task.heldByMenu":
+    "Il compito iniziale aspetta il menu a schermo: rispondi e parte. Se non è un vero menu, premi Invio.",
   "task.trustAccepted": "Cartella di lavoro creata da ADE per questa sessione: fiducia confermata, poi il compito.",
   "task.stepNotSent": (text: string) =>
     `ADE non ha scritto «${text}»: la connessione non si è stabilizzata. Scrivilo tu.`,
@@ -1814,6 +1816,8 @@ export const it = {
   "note.memory": (line: string) => `Memoria: ${line}`,
   "note.subagent": (title: string) => `Subagent avviato: ${title}`,
   "note.mailHeldByLine": "Un messaggio per questa sessione aspetta: hai una riga a metà. Invia o cancella la riga e arriva.",
+  "note.mailHeldByMenu":
+    "Un messaggio aspetta il menu a schermo: rispondi e arriva. Se non è un vero menu, premi Invio.",
   "note.interruptedBy": (from: string) => `Interrotta da ${from}`,
   "note.restarted": (from: string, model: string) => `Riavviata da ${from}${model ? ` con il modello ${model}` : ""}`,
   "note.restartedFresh": (from: string, model: string) =>

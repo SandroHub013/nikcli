@@ -530,6 +530,8 @@ export const en: Messages = {
     "ADE didn't send the initial task because the session never settled. Type it yourself once it's ready.",
   "task.confirmTrust":
     "The session is asking you to trust this folder: confirm it in the terminal and ADE will type the initial task.",
+  "task.heldByMenu":
+    "The initial task is waiting for the menu on screen: answer it and it goes. If it isn't a real menu, press Enter.",
   "task.trustAccepted": "A work folder ADE made for this session: trust confirmed, then the task.",
   "task.stepNotSent": (text) => `ADE didn't type “${text}” because the connection never settled. Type it yourself.`,
   "task.agentMissing": (command) =>
@@ -1770,6 +1772,8 @@ export const en: Messages = {
   "note.memory": (line) => `Memory: ${line}`,
   "note.subagent": (title) => `Subagent started: ${title}`,
   "note.mailHeldByLine": "A message for this session is waiting: you have a line half written. Send or clear the line and it arrives.",
+  "note.mailHeldByMenu":
+    "A message is waiting for the menu on screen: answer it and it arrives. If it isn't a real menu, press Enter.",
   "note.interruptedBy": (from) => `Interrupted by ${from}`,
   "note.restarted": (from, model) => `Restarted by ${from}${model ? ` with model ${model}` : ""}`,
   "note.restartedFresh": (from, model) => `Restarted from scratch by ${from}${model ? ` with model ${model}` : ""}`,

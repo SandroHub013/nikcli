@@ -189,7 +189,7 @@ describe("the workbench", () => {
         "const questionOpen = (paneId: string) => isQuestionOpen(permissions()[paneId], activityOf.get(paneId)) || modeTracker.heldOpen(paneId) || screenAsks(paneId)",
       ),
     )
-    expect(source).toContain(codeOf("screenQuestion(getTerminal(paneId).terminal, pane.agent ?? pane.model)"))
+    expect(source).toContain(codeOf("menuHold.waiting(paneId, getTerminal(paneId).terminal, pane.agent ?? pane.model)"))
   })
 
   test("does not take a pane whose screen it cannot read as free", () => {

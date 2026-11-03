@@ -350,7 +350,7 @@ import {
   permissionIdentity,
   type PermissionAnswer,
 } from "../session/permission"
-import { bottomRows, folderTrust, openingTrust, screenQuestion } from "../session/screen-question"
+import { bottomRows, createMenuHold, folderTrust, openingTrust, statusFromScreen } from "../session/screen-question"
 import { readReportLine } from "../session/report"
 import { asOneLine, asSubmittedLine, confirmDeadline, pasteSettled, submitCheck } from "../session/typing"
 import { searchPaths, walkProject } from "../search"
@@ -412,7 +412,9 @@ import {
   type Message,
   formatBell,
   formatHeld,
+  formatHeldByMenu,
   formatHeldDialogReceipt,
+  formatHeldMenuReceipt,
   formatHeldReceipt,
   HELD_BY_LINE,
   formatUnread,
@@ -2781,6 +2783,19 @@ export function Workbench() {
   const heldStates = new Map<string, string>()
   /** Panes told, in their own terminal, that a message waits for the line typed in them. */
   const heldByLineNoted = new Set<string>()
+  /** Panes told, in their own terminal, that a message waits for the menu on their screen. */
+  const heldByMenuNoted = new Set<string>()
+  const noteHeldByMenu = (paneId: string) => {
+    if (heldByMenuNoted.has(paneId)) return
+    heldByMenuNoted.add(paneId)
+    tellPane(paneId, t("note.mailHeldByMenu"))
+  }
+  /** The mail is on its way: the note about what it waited for goes too (re-review N12). */
+  const dropPaneNote = (paneId: string, note: string) =>
+    setWb((w) => {
+      const pane = w.panes.find((candidate) => candidate.id === paneId)
+      return pane?.notices?.includes(note) ? updatePane(w, pane.id, { notices: pane.notices.filter((n) => n !== note) }) : w
+    })
 
   /*
    * The sessions Claude Code lists (`claude agents --json`, documented), so a
@@ -3431,8 +3446,78 @@ export function Workbench() {
   const screenAsks = (paneId: string) => {
     if (!running.has(paneId) || !hasTerminal(paneId)) return false
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
-    return pane !== undefined && screenQuestion(getTerminal(paneId).terminal, pane.agent ?? pane.model) !== undefined
+    const menu = pane && menuHold.waiting(paneId, getTerminal(paneId).terminal, pane.agent ?? pane.model)
+    if (!menu) return false
+    // With lines below it, where the CLI reports its turns: a turn over is not waiting on what it left on the screen.
+    return menu.under === 0 || !(hooked(paneId) && activityOf.get(paneId)?.state === "idle")
   }
+  /** Which menu on a screen still waits: the keys the user gave it say (`createMenuHold`). */
+  const menuHold = createMenuHold()
+  /** A key of the user's on its way to the pane, or an answer of the voice's: said before it is written. */
+  const menuKey = (paneId: string, enter = false) => {
+    // A line being written: this runs for every key, and a line's letters answer nothing.
+    if (!enter && isTyping(records.typed.get(paneId))) return
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    if (!pane || !hasTerminal(paneId)) return
+    menuHold.keyTyped(paneId, getTerminal(paneId).terminal, pane.agent ?? pane.model, enter)
+    // An Enter into a screen that then shows nothing new: no output will come to read it.
+    watchScreen(paneId)
+  }
+
+  /*
+   * The pane's status, from its screen (live test of 2026-11-02, FAIL 1).
+   *
+   * `watchForPermission` reads the stream, which loses a menu with a line printed below it and takes the pane back to
+   * working. Read after xterm has parsed, because until then the screen is the one before; at most once per
+   * `SCREEN_STATUS_MS` while output flows, because a flood parses dozens of chunks a second and the search is per row.
+   * Not where the hook reports turns: there the hook says what the pane is doing, and the words of a menu in a reply
+   * do not put it on «Permesso». What holds the mail is `questionOpen`, read at the moment of typing, and not this.
+   */
+  const SCREEN_STATUS_MS = 250
+  const screenWaiting = new Set<string>()
+  const screenReads = new Map<string, ReturnType<typeof setTimeout>>()
+  const watchScreen = (paneId: string) => {
+    if (screenReads.has(paneId)) return
+    screenReads.set(
+      paneId,
+      setTimeout(() => {
+        screenReads.delete(paneId)
+        readScreenStatus(paneId)
+      }, SCREEN_STATUS_MS),
+    )
+  }
+  const readScreenStatus = (paneId: string) => {
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    if (!pane || (pane.agent ?? pane.model) === "terminal") return void screenWaiting.delete(paneId)
+    const waiting = !(hooked(paneId) && activityOf.has(paneId)) && screenAsks(paneId)
+    const next = statusFromScreen({
+      waiting,
+      wasWaiting: screenWaiting.has(paneId),
+      status: pane.status,
+      other: permissions()[paneId] !== undefined || activityOf.get(paneId)?.state === "permission",
+    })
+    if (waiting) screenWaiting.add(paneId)
+    else screenWaiting.delete(paneId)
+    // Answered: the note goes at once, and the mail on the next round.
+    if (heldByMenuNoted.has(paneId) && !questionOpen(paneId)) {
+      heldByMenuNoted.delete(paneId)
+      dropPaneNote(paneId, t("note.mailHeldByMenu"))
+    }
+    if (next === "waiting") {
+      // A new question: the key that answered the last one is not this one's answer (re-review B7).
+      records.typed.update(paneId, questionOpened)
+      questionSeenAt.set(paneId, Date.now())
+      setWb((w) => updatePane(w, paneId, { status: "waiting", activity: "permission" }))
+    } else if (next === "working") {
+      questionSeenAt.set(paneId, Date.now())
+      setWb((w) => updatePane(w, paneId, { status: "working", activity: "running" }))
+      settleWhenQuiet(paneId)
+    }
+  }
+  onCleanup(() => {
+    for (const read of screenReads.values()) clearTimeout(read)
+    screenReads.clear()
+  })
 
   /*
    * One secret per spawn, in that process tree's environment only. A pane id
@@ -3634,6 +3719,7 @@ export function Workbench() {
    * An Enter into a prompt only the hook reported is its answer: see `promptAnswered`.
    */
   const turnSubmitted = (paneId: string) => {
+    menuKey(paneId, true)
     promptAnswered(paneId)
     // An Enter ADE saw is evidence, not a guess from output: this turn does not expire (`OUTPUT_CLAIM_MAX_MS`).
     claims.evidence(paneId)
@@ -3650,6 +3736,7 @@ export function Workbench() {
    * (`isQuestionOpen`); only the status moves.
    */
   const promptAnswered = (paneId: string) => {
+    menuKey(paneId)
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
     if (pane?.status !== "waiting" || permissions()[paneId] || activityOf.get(paneId)?.state !== "permission") return
     questionSeenAt.set(paneId, Date.now())
@@ -3983,6 +4070,7 @@ export function Workbench() {
       } else if ((await freeNow(host, item.paneId)) && !linesInFlight.has(item.paneId)) {
         if (!dropFrom(heldLines, item)) continue
         if (item.suspended) saveSuspendedMail()
+        if (heldByMenuNoted.delete(item.paneId)) dropPaneNote(item.paneId, t("note.mailHeldByMenu"))
         // Not typed while the session is still there (a prompt opened): back among the held lines.
         void (
           item.inbox
@@ -4010,14 +4098,17 @@ export function Workbench() {
         !item.told &&
         item.inbox?.from &&
         item.inbox.from !== item.paneId &&
-        isTyping(records.typed.get(item.paneId))
+        (isTyping(records.typed.get(item.paneId)) || questionOpen(item.paneId))
       ) {
         // Replies and updates too, not only what went to the inbox: the
         // sender is told at once, and once, why this is not arriving.
         item.told = true
+        const byMenu = !isTyping(records.typed.get(item.paneId))
+        if (byMenu) noteHeldByMenu(item.paneId)
         if (running.has(item.inbox.from)) {
           const reader = mailPanes().find((pane) => pane.id === item.paneId)
-          heldLines.push({ paneId: item.inbox.from, text: formatHeld(item.inbox, reader), told: true })
+          const text = byMenu ? formatHeldByMenu(item.inbox, reader) : formatHeld(item.inbox, reader)
+          heldLines.push({ paneId: item.inbox.from, text, told: true })
         }
       }
     }
@@ -5345,9 +5436,16 @@ export function Workbench() {
     // A standing permission prompt reads the next Enter as its answer: the message waits for it to go.
     if (questionOpen(target.pane.id)) {
       // The «Held message» window of the CLI: its Enter picks «Deny», so the message waits, and the sender is told once why.
-      if (modeTracker.heldOpen(target.pane.id) && !held.has(id)) {
+      const dialog = modeTracker.heldOpen(target.pane.id)
+      if (!dialog) noteHeldByMenu(target.pane.id)
+      if (!held.has(id)) {
         held.add(id)
-        await answer(formatHeldDialogReceipt(target.pane))
+        // Told now, and not «consegnato»: a menu's own Enter would have been ours (live test of 2026-11-02, FAIL 1).
+        await answer(dialog ? formatHeldDialogReceipt(target.pane) : formatHeldMenuReceipt(target.pane))
+      }
+      if (message.kind === "ask" && heldStates.get(id) !== "attende un permesso") {
+        heldStates.set(id, "attende un permesso")
+        await host.mailboxState?.(id, "attende un permesso").catch(() => {})
       }
       return false
     }
@@ -5392,13 +5490,10 @@ export function Workbench() {
     }
     heldStates.delete(id)
     if (heldByLineNoted.delete(target.pane.id)) {
-      // The line has gone and the mail is on its way: the note about it goes too (re-review N12).
-      const note = t("note.mailHeldByLine")
-      setWb((w) => {
-        const pane = w.panes.find((candidate) => candidate.id === target.pane.id)
-        return pane?.notices?.includes(note) ? updatePane(w, pane.id, { notices: pane.notices.filter((n) => n !== note) }) : w
-      })
+      // The line has gone and the mail is on its way: the note about it leaves `notices` too (re-review N12).
+      dropPaneNote(target.pane.id, t("note.mailHeldByLine"))
     }
+    if (heldByMenuNoted.delete(target.pane.id)) dropPaneNote(target.pane.id, t("note.mailHeldByMenu"))
 
     const targetDepth = depthOf(target.pane.id, parentOf)
     const context = {
@@ -7943,7 +8038,11 @@ export function Workbench() {
   /** `written` is called once the terminal has parsed the chunk, or at once when there is none: the host's flow control waits for it (RS-7). */
   const discardNotes = createDiscardNotes((paneId) => report(t("terminal.outputDiscarded"), "warning", paneId))
   onCleanup(() => discardNotes.dispose())
-  const feedTerminal = (paneId: string, chunk: string, written?: () => void) => {
+  const feedTerminal = (paneId: string, chunk: string, paid?: () => void) => {
+    const written = () => {
+      paid?.()
+      watchScreen(paneId)
+    }
     /*
      * Nothing is written to a pane that no longer exists.
      *
@@ -7955,7 +8054,7 @@ export function Workbench() {
      * already run.
      */
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
-    if (!pane) return written?.()
+    if (!pane) return paid?.()
 
     // A working agent keeps repainting (spinner, streamed text); every chunk
     // pushes back the moment the pane is declared idle again.
@@ -8093,6 +8192,9 @@ export function Workbench() {
    */
   const forgetPane = (id: string) => {
     records.forget(id)
+    menuHold.forget(id)
+    screenWaiting.delete(id)
+    heldByMenuNoted.delete(id)
     rawWindows.forget(id)
     paneClasses.delete(id)
     modeTracker.forget(id)
@@ -8628,6 +8730,7 @@ export function Workbench() {
      * and told the user the session was running again — the interface said
      * answered, the agent was still waiting.
      */
+    menuKey(paneId, true)
     session.write(asSubmittedLine(answer.send))
     appendLine(paneId, `> ${answerLabel(answer)}`, "shell")
 
@@ -9296,6 +9399,7 @@ export function Workbench() {
       startOnCleanScreen(paneId)
       discardNotes.started(paneId)
       modeTracker.forget(paneId)
+      menuHold.forget(paneId)
       paneClasses.delete(paneId)
       // A conversation reopened is drawn again, requests and all: those were acted on.
       screenRequests.start(
@@ -9485,6 +9589,10 @@ export function Workbench() {
         const startedAt = Date.now()
         // A folder-trust dialog in front of the task: answered or pointed out once (`openingTrust`).
         let trustHandled = false
+        // A menu in front of the task: said once, here and to whoever asked for the task. Its last moment on the screen
+        // is where the wait for a drawn screen starts again: what comes after an answer is still being drawn.
+        let menuTold = false
+        let menuAt: number | undefined
         const ownWorktree = launched?.worktree !== undefined && sameFolder(workDir, launched.worktree)
         const poll = setInterval(() => {
           /*
@@ -9505,6 +9613,8 @@ export function Workbench() {
               : undefined
           if (trust) {
             trustHandled = true
+            // Answered here: nobody has anything to be told about the dialog while the CLI redraws.
+            menuTold = openingTrust(trust, ownWorktree) === "accept"
             if (openingTrust(trust, ownWorktree) === "accept") {
               session.write("\r")
               appendLine(paneId, t("task.trustAccepted"), "note", "ade")
@@ -9513,17 +9623,33 @@ export function Workbench() {
             return
           }
 
+          const asked = questionOpen(paneId)
+          const request = [...openRequests.values()].find(
+            (candidate) => candidate.kind === "spawn" && candidate.to === paneId,
+          )
+          if (asked) {
+            menuAt = Date.now()
+            if (!menuTold && drawn) {
+              menuTold = true
+              if (!trustHandled) tellPane(paneId, t("task.heldByMenu"))
+              if (request) {
+                const reader = mailPanes().find((pane) => pane.id === paneId)
+                tellSender(request.from, formatHeldByMenu({ id: request.id, kind: "spawn" }, reader))
+              }
+            }
+          }
           const decision = decideOpening({
             startedAt,
-            firstByteAt,
-            lastByteAt,
+            firstByteAt: menuAt !== undefined && firstByteAt !== undefined ? Math.max(firstByteAt, menuAt) : firstByteAt,
+            lastByteAt: menuAt !== undefined && lastByteAt !== undefined ? Math.max(lastByteAt, menuAt) : lastByteAt,
             now: Date.now(),
-            permissionPending: questionOpen(paneId),
+            permissionPending: asked,
           })
           if (decision === "wait") return
 
           stopOpeningPoll(poll)
           if (decision === "send") {
+            if (menuTold) dropPaneNote(paneId, t("task.heldByMenu"))
             setWb((w) =>
               updatePane(w, paneId, {
                 status: "working",
@@ -9535,9 +9661,6 @@ export function Workbench() {
             // Into this poll's own session, the one checked above.
             const opening = typeIntoResumed ? task : withIntro(agentId, task)
             // A task from `ade-msg spawn` is a request like any other: too long to type, it goes to the inbox.
-            const request = [...openRequests.values()].find(
-              (candidate) => candidate.kind === "spawn" && candidate.to === paneId,
-            )
             if (request) {
               const meta = { id: request.id, kind: "spawn" as const, from: request.from }
               void getHost().then(async (host) => {

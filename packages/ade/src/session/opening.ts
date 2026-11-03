@@ -85,12 +85,12 @@ export function decideOpening(input: OpeningInput): OpeningDecision {
    * This is the failure the fixed timer actually produced, and it is the one
    * worth being stubborn about: a pending permission means the cursor is
    * sitting on a yes/no prompt, and the first character of an opening task
-   * would answer it. Waiting past the deadline and abandoning is right —
-   * the user is being asked something and gets to answer it themselves.
+   * would answer it. It waits for as long as the question stands, and not
+   * until a deadline: giving up lost the task of a session that sat on a
+   * dialog for a minute, and the user answers when they answer. The caller
+   * says in the pane what it waits for.
    */
-  if (input.permissionPending) {
-    return waitedFromSpawn >= timeoutMs ? "abandon" : "wait"
-  }
+  if (input.permissionPending) return "wait"
 
   const sinceLastByte = input.now - (input.lastByteAt ?? input.firstByteAt)
   if (sinceLastByte >= quietMs) return "send"

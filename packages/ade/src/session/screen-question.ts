@@ -12,7 +12,7 @@
  * (`PermissionSchema.screen`); a numbered list in a reply is no menu here either.
  */
 
-import { detectPermission, type PermissionRequest } from "./permission"
+import { detectPermission, menuAboveLines, permissionIdentity, type PermissionRequest } from "./permission"
 
 export interface ScreenTerminal {
   readonly rows: number
@@ -32,9 +32,110 @@ export function bottomRows(terminal: ScreenTerminal): string[] {
   return rows
 }
 
+/** A question on a screen. `under`: the rows with something on them below it, 0 when it is the last thing on the screen. */
+export type ScreenMenu = PermissionRequest & { under: number }
+
+function menuOnRows(rows: readonly string[], agentId: string): ScreenMenu | undefined {
+  const last = detectPermission([...rows], agentId, { screen: true })
+  if (last) return { ...last, under: 0 }
+  const above = menuAboveLines(rows)
+  return above && { ...above.request, under: above.under }
+}
+
 /** The question on `terminal`'s screen, if it is asking one. */
-export function screenQuestion(terminal: ScreenTerminal, agentId: string): PermissionRequest | undefined {
-  return detectPermission(bottomRows(terminal), agentId, { screen: true })
+export function screenQuestion(terminal: ScreenTerminal, agentId: string): ScreenMenu | undefined {
+  return menuOnRows(bottomRows(terminal), agentId)
+}
+
+/** The key the user typed into a menu with lines below it, and the screen it was typed on. */
+interface KeyedMenu {
+  identity: string
+  /** How many rows of the screen ask this question: one more is a new menu, the same words printed again. */
+  copies: number
+  screen: string
+  enter: boolean
+}
+
+export interface MenuHold {
+  /** The user typed a key that may answer what is on the screen: said before the key is written. */
+  keyTyped(paneId: string, terminal: ScreenTerminal, agentId: string, enter?: boolean): void
+  /** The menu that waits on the pane's screen now, if one does. */
+  waiting(paneId: string, terminal: ScreenTerminal, agentId: string): ScreenMenu | undefined
+  forget(paneId: string): void
+}
+
+/**
+ * Which of the menus on a screen still waits.
+ *
+ * A menu that is the last thing on the screen waits. One with lines below it may be waiting, or may be one already
+ * answered by a program that prints lines and never redraws, so what tells them apart is what the user did:
+ *
+ * - an Enter into it is its answer, whatever the program does next;
+ * - any other key answers it once the screen moves: a key the menu ignores changes nothing, and it still waits;
+ * - the same question printed again below the first is a new menu.
+ *
+ * Time and more output say nothing: a program that waits can go on printing (`mla`), and a timer that let the mail go
+ * would be typing into the menu. So a false positive, the words of a menu in a reply with its hint and all, holds mail
+ * until the user presses Enter or a key the screen shows, until it scrolls away, or, where the CLI reports its turns,
+ * until the turn is over (the caller's `screenAsks`). Until then the pane and the sender are told why.
+ */
+export function createMenuHold(): MenuHold {
+  const keyed = new Map<string, KeyedMenu>()
+  const identityOf = (menu: ScreenMenu) =>
+    `${permissionIdentity(menu)}\n${menu.answers.map((answer) => answer.label).join("\n")}`
+  const copiesOf = (rows: readonly string[], menu: ScreenMenu) => rows.filter((row) => row.includes(menu.what)).length
+  return {
+    keyTyped(paneId, terminal, agentId, enter = false) {
+      const rows = bottomRows(terminal)
+      const menu = menuOnRows(rows, agentId)
+      if (!menu) return
+      const before = keyed.get(paneId)
+      const identity = identityOf(menu)
+      keyed.set(paneId, {
+        identity,
+        copies: copiesOf(rows, menu),
+        screen: rows.join("\n"),
+        enter: enter || (before?.identity === identity && before.enter),
+      })
+    },
+    waiting(paneId, terminal, agentId) {
+      const rows = bottomRows(terminal)
+      const menu = menuOnRows(rows, agentId)
+      const key = keyed.get(paneId)
+      if (!menu) {
+        keyed.delete(paneId)
+        return undefined
+      }
+      if (!key) return menu
+      if (key.identity !== identityOf(menu) || copiesOf(rows, menu) > key.copies) {
+        keyed.delete(paneId)
+        return menu
+      }
+      if (menu.under === 0) return menu
+      return key.enter || rows.join("\n") !== key.screen ? undefined : menu
+    },
+    forget(paneId) {
+      keyed.delete(paneId)
+    },
+  }
+}
+
+/**
+ * What the pane's status becomes after a reading of its screen.
+ *
+ * The stream can lose a menu the screen still shows, and take the pane back to working, with a line printed below it.
+ * `other`: the stream's request or the hook's permission says the pane waits, whatever this reading says.
+ */
+export function statusFromScreen(input: {
+  waiting: boolean
+  /** This reading had the pane waiting last time. */
+  wasWaiting: boolean
+  status: string | undefined
+  other: boolean
+}): "waiting" | "working" | undefined {
+  if (input.waiting) return input.status === "waiting" ? undefined : "waiting"
+  if (input.wasWaiting && input.status === "waiting" && !input.other) return "working"
+  return undefined
 }
 
 /*
@@ -53,7 +154,7 @@ const YES_SELECTED_RE = /^\s*[│┃║]?\s*[❯›▶➤]\s*1[.)]\s*yes\b/i
  * asks nothing, or asks something else.
  */
 export function folderTrust(rows: readonly string[], agentId: string): { yesSelected: boolean } | undefined {
-  if (!detectPermission([...rows], agentId, { screen: true })) return undefined
+  if (!menuOnRows(rows, agentId)) return undefined
   if (!TRUST_RE.test(rows.join(" ").replace(/\s+/g, " "))) return undefined
   return { yesSelected: rows.some((row) => YES_SELECTED_RE.test(row)) }
 }

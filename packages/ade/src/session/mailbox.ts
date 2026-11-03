@@ -790,6 +790,26 @@ export function formatHeldDialogReceipt(target: MailPane | undefined): string {
   return `ok: in coda, "${target?.title ?? "la sessione"}" ha aperta la finestra «Held message from another session» (un tasto la rifiuterebbe): arriva appena è chiusa`
 }
 
+/** The receipt a sender gets for mail held back because the target's screen shows a menu waiting: what ADE types would answer it. */
+export function formatHeldMenuReceipt(target: MailPane | undefined): string {
+  return `ok: in coda, "${target?.title ?? "la sessione"}" ha a schermo un menu che aspetta una risposta (scriverci dentro la darebbe): arriva appena ha risposto`
+}
+
+/** Told to the sender, once, of a first task, a reply or an update held back by a menu on the target's screen. */
+export function formatHeldByMenu(entry: Pick<InboxEntry, "id" | "kind">, reader: MailPane | undefined): string {
+  const what =
+    entry.kind === "ask" || entry.kind === "spawn"
+      ? `la richiesta ${entry.id}`
+      : entry.kind === "reply"
+        ? `la tua risposta alla richiesta ${entry.id}`
+        : "il tuo messaggio"
+  return (
+    `[ade-msg] ADE ha ${what} per ${who(reader)} ma non la consegna ancora: ` +
+    `in quella sessione c'è a schermo un menu che aspetta una risposta, e scriverci dentro la darebbe. ` +
+    `Arriva da sola appena qualcuno ha risposto al menu: la sessione non ti sta ignorando.`
+  )
+}
+
 /** Told to the sender when a long message was never read. */
 export function formatUnread(entry: InboxEntry, reader: MailPane | undefined): string {
   const what = entry.kind === "ask" || entry.kind === "spawn" ? `la richiesta ${entry.id}` : "il tuo messaggio"
