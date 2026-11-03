@@ -60,6 +60,8 @@ function mountSession(pane: { suspended?: true; status: "idle" | "done"; activit
       isRunning: () => false,
       sessionFor: () => undefined,
       suspendCheck: () => ({ ok: false, reason: "notRunning" }),
+      deliverNowOffered: () => false,
+      deliverNow: () => {},
       resume: (id: string) => void calls.resume.push(id),
       restart: (pane: { id: string }) => void calls.restart.push(pane.id),
     } as never)
