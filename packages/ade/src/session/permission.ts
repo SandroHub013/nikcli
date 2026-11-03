@@ -339,8 +339,21 @@ const YN_PATTERN_RE = /(?:\[|\()([yYnN](?:\s*\/\s*[yYnN](?:\s*\/\s*[aAcCdD])?)?)
  * amend», opentui's «⇆ select  enter confirm». Codex's composer footer, «⏎ send  ⌃C quit», names no choice.
  */
 const HINT_KEY_RE = /^\s*(?:press\s+)?(?:enter|esc|tab|↑|↓|←|→|⇆|↵|⏎)(?![a-z])/i
-const HINT_DOES_RE = /\b(?:confirm|cancel|continue|select|exit|navigate|choose|reject)\b/i
+const HINT_DOES_RE = /\b(?:confirm|cancel|continue|select|exit|navigate|choose|reject|submit|dismiss|toggle|switch)\b/i
 const isMenuHint = (line: string) => line.trim().length <= 120 && HINT_KEY_RE.test(line) && HINT_DOES_RE.test(line)
+// A key and what it does, inside a hint: «enter submit», «Enter to confirm», «↑↓ select», «esc dismiss».
+const HINT_PAIR_RE =
+  /(?:^|[\s·|,])(enter|return|esc|tab|[↑↓←→⇆↵⏎]+)\s+(?:to\s+)?(?:confirm|cancel|continue|select|exit|navigate|choose|reject|submit|dismiss|toggle|switch)\b/gi
+/**
+ * A hint that names at least two keys, one of them Enter, says by itself that the numbers above it are choices: the
+ * question dialog of OpenCode and of ragu has free labels and shows the active one by colour alone. A sentence does not
+ * read that way: «Enter the folder, then tab to select» has a key and what it does only once. All the hint's rows
+ * together: in a narrow pane its footer wraps, down to one key on a row.
+ */
+const hintNamesEnterAndMore = (rows: readonly string[]) => {
+  const keys = [...rows.join("  ").matchAll(HINT_PAIR_RE)].map((pair) => pair[1]!)
+  return keys.length >= 2 && keys.some((key) => /^(?:enter|return|[↵⏎])$/i.test(key))
+}
 /** An option's first word when the options are answers (the same words `numbered-choices` takes). */
 const CHOICE_START_RE =
   /^(?:yes|no|allow|deny|approve|reject|cancel|skip|proceed|always|once|sì|nega|rifiuta|annulla|salta|always allow|allow always)\b/i
@@ -368,6 +381,73 @@ function numberedAnswers(options: readonly { num: string; text: string }[]): Per
       tone: idx === 0 && !isNegative ? ("primary" as const) : ("secondary" as const),
     }
   })
+}
+
+interface DrawnOption {
+  num: string
+  text: string
+  cursor: boolean
+}
+
+/**
+ * The numbered options whose last row is `end`, bottom up and numbered one after the other; a long label's wrapped rows
+ * belong to the option above. `first`: the row just above them, where the question is looked for from.
+ */
+function optionsAbove(drawn: readonly string[], lines: readonly string[], end: number) {
+  const options: DrawnOption[] = []
+  let i = end
+  while (i >= 0) {
+    const m = lines[i]!.match(NUMBERED_OPTION_RE)
+    if (m && (options.length === 0 || Number(m[1]) === Number(options[0]!.num) - 1)) {
+      options.unshift({ num: m[1]!, text: m[2]!.trim(), cursor: DRAWN_CURSOR_RE.test(drawn[i]!.replace(FRAME_RE, "")) })
+      i--
+      continue
+    }
+    if (m || lines[i]!.trim() === "") break
+    let j = i - 1
+    while (j >= 0 && i - j < WRAP_ROWS && lines[j]!.trim() !== "" && !NUMBERED_OPTION_RE.test(lines[j]!)) j--
+    const above = j >= 0 ? lines[j]!.match(NUMBERED_OPTION_RE) : null
+    if (!above || (options.length > 0 && Number(above[1]) !== Number(options[0]!.num) - 1)) break
+    i = j
+  }
+  return { options, first: i }
+}
+
+/** The request of options read by `optionsAbove`. The question: the nearest row above that asks one, else the nearest row with words. */
+function drawnRequest(lines: readonly string[], options: readonly DrawnOption[], first: number): PermissionRequest {
+  let questionIndex = -1
+  for (let k = first; k >= 0 && first - k < QUESTION_ROWS; k--) {
+    const text = lines[k]!.trim()
+    if (text.endsWith("?")) {
+      questionIndex = k
+      break
+    }
+    if (questionIndex < 0 && text && !BOX_EDGE_RE.test(lines[k]!)) questionIndex = k
+  }
+  const whatLine = questionIndex >= 0 ? lines[questionIndex]!.trim() : ""
+  const contextLines = lines.slice(Math.max(0, questionIndex), first + 1).filter((line) => line.trim())
+  const { kind, target } = extractKindAndTarget(whatLine, contextLines)
+  return { what: whatLine, kind, target, answers: numberedAnswers(options) }
+}
+
+/** A menu whose key hint is the last thing in `drawn` (schema `hinted-menu`, which says why). */
+function hintedMenu(drawn: string[]): PermissionRequest | undefined {
+  const lines = drawn.map(unframe)
+  let end = lines.length - 1
+  const hints: string[] = []
+  // The hint rows, and the blank rows and box edges around them.
+  while (end >= 0 && (BOX_EDGE_RE.test(lines[end]!) || isMenuHint(lines[end]!))) {
+    if (isMenuHint(lines[end]!)) hints.push(lines[end]!)
+    end--
+  }
+  if (hints.length === 0 || end < 1) return undefined
+
+  const { options, first } = optionsAbove(drawn, lines, end)
+  if (options.length < 2) return undefined
+  const cursors = options.filter((opt) => opt.cursor).length
+  const answers = options.every((opt) => CHOICE_START_RE.test(opt.text))
+  if (cursors !== 1 && !answers && !(options[0]!.num === "1" && hintNamesEnterAndMore(hints))) return undefined
+  return drawnRequest(lines, options, first)
 }
 
 export const PERMISSION_SCHEMAS: readonly PermissionSchema[] = [
@@ -587,53 +667,7 @@ export const PERMISSION_SCHEMAS: readonly PermissionSchema[] = [
     name: "Drawn menu with a key hint",
     priority: 90,
     screen: true,
-    match: (drawn: string[]): PermissionRequest | undefined => {
-      const lines = drawn.map(unframe)
-      let end = lines.length - 1
-      let hinted = false
-      // The hint rows, and the blank rows and box edges around them.
-      while (end >= 0 && (BOX_EDGE_RE.test(lines[end]) || isMenuHint(lines[end]))) {
-        if (isMenuHint(lines[end])) hinted = true
-        end--
-      }
-      if (!hinted || end < 1) return undefined
-
-      // The options, bottom up, numbered one after the other; a long label's wrapped rows belong to the option above.
-      const options: { num: string; text: string; cursor: boolean }[] = []
-      let i = end
-      while (i >= 0) {
-        const m = lines[i].match(NUMBERED_OPTION_RE)
-        if (m && (options.length === 0 || Number(m[1]) === Number(options[0].num) - 1)) {
-          options.unshift({ num: m[1], text: m[2].trim(), cursor: DRAWN_CURSOR_RE.test(drawn[i].replace(FRAME_RE, "")) })
-          i--
-          continue
-        }
-        if (m || lines[i].trim() === "") break
-        let j = i - 1
-        while (j >= 0 && i - j < WRAP_ROWS && lines[j].trim() !== "" && !NUMBERED_OPTION_RE.test(lines[j])) j--
-        const above = j >= 0 ? lines[j].match(NUMBERED_OPTION_RE) : null
-        if (!above || (options.length > 0 && Number(above[1]) !== Number(options[0].num) - 1)) break
-        i = j
-      }
-      if (options.length < 2) return undefined
-      const cursors = options.filter((opt) => opt.cursor).length
-      if (cursors !== 1 && !options.every((opt) => CHOICE_START_RE.test(opt.text))) return undefined
-
-      // The question: the nearest row above that asks one, else the nearest row with words.
-      let questionIndex = -1
-      for (let k = i; k >= 0 && i - k < QUESTION_ROWS; k--) {
-        const text = lines[k].trim()
-        if (text.endsWith("?")) {
-          questionIndex = k
-          break
-        }
-        if (questionIndex < 0 && text && !BOX_EDGE_RE.test(lines[k])) questionIndex = k
-      }
-      const whatLine = questionIndex >= 0 ? lines[questionIndex].trim() : ""
-      const contextLines = lines.slice(Math.max(0, questionIndex), i + 1).filter((line) => line.trim())
-      const { kind, target } = extractKindAndTarget(whatLine, contextLines)
-      return { what: whatLine, kind, target, answers: numberedAnswers(options) }
-    },
+    match: hintedMenu,
   },
 
   /*
@@ -758,6 +792,75 @@ export function detectPermission(
     }
   }
 
+  return undefined
+}
+
+/**
+ * Numbered choices in a closed box, with the cursor on one of them. `drawn` ends at the row that closes the box, and only
+ * the box counts: a user's message echoed as «› 1. fix this» above it, or the box of a menu already answered, are not
+ * this menu. From its nearest top edge, or from the top of the screen if that has scrolled off.
+ */
+function boxedMenu(drawn: string[]): PermissionRequest | undefined {
+  let top = drawn.length - 2
+  while (top > 0 && !/^\s*[╭┌]/.test(drawn[top]!)) top--
+  const box = drawn.slice(Math.max(top, 0))
+  const lines = box.map(unframe)
+  let end = lines.length - 1
+  while (end >= 0 && BOX_EDGE_RE.test(lines[end]!)) end--
+  if (end < 1) return undefined
+  const { options, first } = optionsAbove(box, lines, end)
+  if (options.length < 2 || options.filter((opt) => opt.cursor).length !== 1) return undefined
+  return drawnRequest(lines, options, first)
+}
+
+// ragu's confirm dialog: its own words, whole, wherever an overlay puts them on the row (`packages/tui/src/ui/dialog-confirm.tsx`).
+const CONFIRM_DIALOG_HINT = "Y/N or ←→ to switch, enter to confirm"
+
+/**
+ * ragu's `DialogConfirm`, if it stands on `rows`. Two boxed buttons and no number, and `Y` and `N` act at once, so the
+ * first y or n of a message would answer it. Read only by its hint, the one row of it no session text shares; those same
+ * words printed by something else hold mail until they scroll away.
+ */
+export function confirmDialog(rows: readonly string[]): PermissionRequest | undefined {
+  if (!rows.some((row) => row.includes(CONFIRM_DIALOG_HINT))) return undefined
+  return {
+    what: CONFIRM_DIALOG_HINT,
+    kind: "unknown",
+    answers: [
+      { intent: classifyAnswer("Confirm"), label: "Confirm", send: "y", tone: "primary" },
+      { intent: classifyAnswer("Cancel"), label: "Cancel", send: "n", tone: "secondary" },
+    ],
+  }
+}
+
+/** A row with nothing on it but a prompt: under a menu, it says the program is taking a line and no longer waits on the menu. */
+const BARE_PROMPT_RE = /^\s*[│┃║]?\s*[>›❯]\s*[│┃║]?\s*$/
+
+/**
+ * A drawn menu with lines below its key hint, and how many: its rows, as `hinted-menu` reads them, anywhere on the screen.
+ *
+ * `detectPermission` reads a screen from its last row, so a program that goes on printing under a menu it still waits on
+ * (a status line, some notes) had no menu at all: the pane read as working, and mail went in with its Enter (live test
+ * of 2026-11-02, FAIL 1). The hint is what says it is a menu, as in `hinted-menu`, so a numbered list in a reply is not
+ * one here either. This reading cannot tell a menu that waits from one already answered and left above what came next:
+ * `createMenuHold` is what does, with the keys. The last-line filters of `detectPermission` do not apply: they are about
+ * a last line, and here the last line is not the menu.
+ *
+ * A menu in a box of its own, with no hint (agy, `permission.test.ts`), says it is one by closing the box round options
+ * of which exactly one carries the cursor.
+ */
+export function menuAboveLines(rows: readonly string[]): { request: PermissionRequest; under: number } | undefined {
+  const clean = rows.map(stripAnsi)
+  for (let last = clean.length - 1; last >= 1; last--) {
+    const row = unframe(clean[last]!)
+    const closesBox = /[╰└]/.test(row) && BOX_EDGE_RE.test(row)
+    if (!closesBox && !isMenuHint(row)) continue
+    const above = clean.slice(0, last + 1)
+    const request = closesBox ? boxedMenu(above) : hintedMenu(above)
+    if (!request) continue
+    const below = clean.slice(last + 1).filter((line) => line.trim())
+    return below.some((row) => BARE_PROMPT_RE.test(row)) ? undefined : { request, under: below.length }
+  }
   return undefined
 }
 

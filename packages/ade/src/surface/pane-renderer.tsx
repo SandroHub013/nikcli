@@ -12,7 +12,7 @@ import { PluginPane } from "../plugin/pane"
 import type { AdePluginRuntime } from "../plugin/runtime"
 import { AgentMark } from "../session-new/agent-mark"
 import { formatCost, formatTokens } from "../session/metrics"
-import { isAnswerKey, isTyping, typedAfter } from "../session/typed-line"
+import { isAnswerKey, isEnterKey, isTyping, typedAfter } from "../session/typed-line"
 import { answersPrompt, isInterruptInput } from "../session/mailbox"
 import { showsSuspendButton, SUSPEND_REASON, type SuspendCheck } from "../session/suspend"
 import { formatDroppedPaths } from "../sidebar/file-drag"
@@ -98,8 +98,10 @@ export interface PaneRendererDeps {
   turnSubmitted: (id: string) => void
   /** A key typed in the pane that answers a prompt standing there (`answersPrompt`). */
   promptAnswered: (id: string) => void
-  /** Whether a menu stands in the pane now, as far as a key typed into it would be its answer (`menuOnScreen`). */
-  menuOpen: (id: string) => boolean
+  /** An Enter on its way to the pane: what it answers on the screen no longer waits (`createMenuHold`). */
+  menuEnter: (id: string) => void
+  /** Whether a menu stands in the pane now and `key` typed into it would be its answer (`menuOnScreen`). */
+  menuOpen: (id: string, key: string) => boolean
   /** An Esc or a Ctrl-C typed in the pane, which Claude Code reports to no hook. */
   interrupted: (id: string) => void
   /** "Riprova" on a session that failed. */
@@ -507,12 +509,13 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
            * never asks what is running: see `session/typing.ts`.
            */
           // Asked before the key is written: a key that answers a menu on screen is not a line begun (F2).
-          const menuOpen = isAnswerKey(data) && !isTyping(deps.records.typed.get(current().id)) && deps.menuOpen(current().id)
+          const menuOpen = isAnswerKey(data) && !isTyping(deps.records.typed.get(current().id)) && deps.menuOpen(current().id, data)
           deps.records.typed.update(current().id, (line) => typedAfter(line, data, Date.now(), menuOpen))
           // Enter typed straight into the terminal submits a turn, exactly as
           // the composer does; the quiet timer brings the pane back to idle.
           // …and a turn of its own, after which a repeated `@ade` line is a new request.
           if (answersPrompt(data)) deps.promptAnswered(current().id)
+          if (isEnterKey(data)) deps.menuEnter(current().id)
           if (data.includes("\r")) {
             deps.panels.newTurn(current().id)
             deps.turnSubmitted(current().id)
@@ -556,6 +559,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
                 // carriage return included: the CLI cannot tell the
                 // difference, which is the point.
                 deps.turnSubmitted(current().id)
+                deps.menuEnter(current().id)
                 deps.setWb((w) => updatePane(w, current().id, { status: "working", activity: "running" }))
                 deps.sessionFor(current().id)?.write(`${line}\r`)
               }

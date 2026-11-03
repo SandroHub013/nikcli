@@ -69,7 +69,7 @@ describe("the notice that output was discarded", () => {
   })
 
   test("lint: the workbench says a refusal, and each start of a pane forgets the one before", () => {
-    expect(WORKBENCH).toContain("if (!writeToTerminal(paneId, chunk, written)) discardNotes.refused(paneId)")
+    expect(WORKBENCH).toMatch(/if \(!writeToTerminal\(paneId, chunk, written\)\) \{[^}]*discardNotes\.refused\(paneId\)/)
     const starts = WORKBENCH.split("startOnCleanScreen(paneId)").slice(1)
     expect(starts.length).toBe(2)
     for (const after of starts) expect(after.trimStart().startsWith("discardNotes.started(paneId)")).toBe(true)
