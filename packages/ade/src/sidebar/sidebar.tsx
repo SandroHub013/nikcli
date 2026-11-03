@@ -150,6 +150,12 @@ export interface SidebarProps {
   /** The project whose files to show. Discovered from the host when absent. */
   project?: Project
   /**
+   * The workbench has settled with no project open. The sidebar then offers none: no folder, no tree, and it does not
+   * look for one in the folder ADE started from, which from the Start menu is the install folder (audit UX-5, live test 3
+   * FAIL 8). Absent, it keeps discovering a project of its own, as the browser harness and a bare sidebar need.
+   */
+  noProject?: boolean
+  /**
    * Searches the whole project by path. Absent when there is no disk to walk,
    * and then the box says it is only filtering what is already open.
    */
@@ -811,6 +817,13 @@ export function Sidebar(props: SidebarProps) {
 
     if (given) {
       show(given)
+      return
+    }
+
+    // Nothing to discover: the workbench has said there is no project, and what it says is not for the sidebar to second-guess.
+    if (props.noProject) {
+      setProject(undefined)
+      setRootNode(undefined)
       return
     }
 

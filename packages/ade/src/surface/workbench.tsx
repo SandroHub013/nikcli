@@ -10446,7 +10446,9 @@ export function Workbench() {
           onAddProject={hasHost() ? () => void addProject() : undefined}
           onAddRemote={hasHost() ? () => setRemoteOpen(true) : undefined}
           onSelectProject={(id) => void switchProject(id)}
-          onNewSession={() => setStarting(true)}
+          /* With no project there is nothing to start an agent in: the screen says so, and the sidebar must not offer it. */
+          onNewSession={project() ? () => setStarting(true) : undefined}
+          noProject={booting() === undefined && !project()}
           /* The row menu's verbs: one callback each, into the functions above. */
           onRenameSession={(id) => void renameSession(id)}
           onCloseSession={(id) => {
