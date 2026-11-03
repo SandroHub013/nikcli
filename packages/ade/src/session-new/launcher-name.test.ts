@@ -68,4 +68,10 @@ describe("the stylesheet of the cards", () => {
     expect(body).toMatch(/align-self:\s*flex-start/)
     expect(body).toMatch(/white-space:\s*nowrap/)
   })
+
+  test("lint: a card is at least 156 px, so the chip (96 px) and «Claude Code» (72 px) both fit; at 140 the chip was cut and the name ellipsised (review)", () => {
+    const body = /\[data-slot="new-agents"\]\s*\{([^}]*)\}/.exec(css)?.[1] ?? ""
+    const min = /minmax\((\d+)px,\s*1fr\)/.exec(body)?.[1]
+    expect(Number(min)).toBeGreaterThanOrEqual(156)
+  })
 })
