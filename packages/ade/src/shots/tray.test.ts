@@ -406,11 +406,35 @@ describe("the viewer's band and its buttons", () => {
   const viewerButtons = () => [...document.querySelectorAll<HTMLElement>('[data-component="shot-viewer"] button')]
   const viewerOpen = () => document.querySelector('[data-component="shot-viewer"]') !== null
 
+  /** A press as a mouse makes it: the button goes down on `down`, and the click lands on `up` (here, the frame, their common ancestor). */
+  const press = (down: Element, up: Element = down) => {
+    down.dispatchEvent(new Event("pointerdown", { bubbles: true }))
+    up.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+  }
+  const frame = () => document.querySelector<HTMLElement>('[data-slot="shot-viewer-frame"]')!
+
   test("a press on the frame's own ground, beside the picture, closes it", async () => {
     await open()
-    document.querySelector<HTMLElement>('[data-slot="shot-viewer-frame"]')!.click()
+    press(frame())
     await settle()
     expect(viewerOpen()).toBe(false)
+  })
+
+  test("a press that began on the picture and ended beside it does not (the click lands on the frame, their ancestor)", async () => {
+    await open({ load: async () => new Uint8Array([1, 2, 3]) })
+    await settle()
+    press(document.querySelector('[data-slot="shot-viewer-frame"] [data-slot="shot-image"]')!, frame())
+    await settle()
+    expect(viewerOpen()).toBe(true)
+  })
+
+  test("nor one that began on the caption, its name or a button, and ended beside them", async () => {
+    await open()
+    press(document.querySelector('[data-slot="shot-viewer-caption"]')!, frame())
+    press(document.querySelector('[data-slot="shot-viewer-name"]')!, frame())
+    press(viewerButtons()[0]!, frame())
+    await settle()
+    expect(viewerOpen()).toBe(true)
   })
 
   test("a press on the caption, its text or a button of it does not close it", async () => {
