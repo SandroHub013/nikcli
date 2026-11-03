@@ -2080,7 +2080,6 @@ export const it = {
   "bots.noDescription": "Nessuna descrizione.",
   "bots.blank.create": "Crea il primo bot",
   "bots.blank.createAnother": "Crea un bot",
-  "bots.roster.createFirst": "Crea il primo bot",
   "bots.blank.empty": "Nessun bot ancora. Premi + nella barra laterale per crearne uno.",
   "bots.blank.pick": "Scegli un bot nella barra laterale, o creane un altro.",
   "bots.face.shape": "Forma",

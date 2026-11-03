@@ -2024,7 +2024,6 @@ export const en: Messages = {
   "bots.noDescription": "No description.",
   "bots.blank.create": "Create the first bot",
   "bots.blank.createAnother": "Create a bot",
-  "bots.roster.createFirst": "Create the first bot",
   "bots.blank.empty": "No bots yet. Press + in the sidebar to create one.",
   "bots.blank.pick": "Choose a bot in the sidebar, or create another one.",
   "bots.face.shape": "Shape",

@@ -101,8 +101,14 @@ describe("D26: an empty place says what to press", () => {
     expect(blank).toContain("open(bot)")
   })
 
-  test("lint: the empty roster and the empty list of rooms have a button too", () => {
-    expect(view).toContain('t("bots.roster.createFirst")')
+  test("lint: the empty list of rooms has a button, and the empty roster has none: the empty centre has the one", () => {
+    // Live test 3, FAIL 9: «Crea il primo bot» was in the roster and in the centre at once. The roster keeps its «+».
+    const roster = view.slice(view.indexOf("export function BotsRoster"))
+    const empty = roster.slice(roster.indexOf('data-slot="bots-roster-empty"'), roster.indexOf('data-slot="bots-list"'))
+    expect(empty).toContain('t("bots.roster.empty")')
+    expect(empty).not.toContain("<button")
+    expect(view).not.toContain('t("bots.roster.createFirst")')
+    expect(view.match(/t\("bots\.blank\.create"\)/g)?.length).toBe(1)
     expect(rooms).toContain('t("bots.room.createFirst")')
     expect(rooms).toContain('t("bots.room.listEmpty")')
   })
@@ -157,5 +163,27 @@ describe("D22: the screen reader can follow", () => {
     expect(it["bots.face.shape.tri"]).toBe("triangolo")
     expect(view).not.toContain("title={shape}")
     expect(view).not.toContain("title={color}")
+  })
+})
+
+describe("the empty centre of the bots view is centred like the Agent and the Chat views", () => {
+  const sheet = read("bots.css")
+  /** The declarations of every rule whose selector is exactly `selector`. */
+  const body = (selector: string) => {
+    const at = (sheet.replace(/\/\*[\s\S]*?\*\//g, "") + "}").split("}")
+    return at
+      .map((rule) => rule.split("{"))
+      .filter(([head]) => head?.trim() === selector)
+      .map(([, declarations]) => declarations ?? "")
+      .join("\n")
+  }
+
+  test("lint: a column that centres its text and its button, with a width and auto margins, as agent-empty and chat-empty do", () => {
+    const blank = body('[data-slot="bots-blank"]')
+    expect(blank).toMatch(/align-items:\s*center/)
+    expect(blank).toMatch(/text-align:\s*center/)
+    expect(blank).toMatch(/margin:\s*\d+vh auto 0/)
+    expect(blank).toMatch(/max-width:\s*\d+px/)
+    expect(body('[data-slot="bots-blank-list"]')).toMatch(/justify-content:\s*center/)
   })
 })
