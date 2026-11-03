@@ -60,6 +60,7 @@ describe("the sidebar with no project open", () => {
     const { host, dispose } = mount({})
     await settle()
     expect(host.querySelector('[data-slot="project-name-text"]')?.textContent).toBe("ADE")
+    expect(host.querySelector('[data-slot="search-box"]')).not.toBeNull()
     dispose()
   })
 
@@ -68,6 +69,9 @@ describe("the sidebar with no project open", () => {
     await settle()
     expect(host.querySelector('[data-slot="project-name-text"]')).toBeNull()
     expect(host.querySelector('[data-slot="project-path"]')).toBeNull()
+    // The search box and its Files and Folders chips search a project: with none they answer «no file» to anything.
+    expect(host.querySelector('[data-slot="search-box"]')).toBeNull()
+    expect(host.querySelector('[data-slot="search-kind"]')).toBeNull()
     expect(host.textContent).not.toContain("ade.exe")
     expect(asked.filter((line) => line.startsWith("readDir"))).toEqual([])
     dispose()

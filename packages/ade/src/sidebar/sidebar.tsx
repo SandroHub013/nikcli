@@ -150,9 +150,10 @@ export interface SidebarProps {
   /** The project whose files to show. Discovered from the host when absent. */
   project?: Project
   /**
-   * The workbench has settled with no project open. The sidebar then offers none: no folder, no tree, and it does not
+   * The workbench has no project open. The sidebar then offers none: no folder, no tree, no search box, and it does not
    * look for one in the folder ADE started from, which from the Start menu is the install folder (audit UX-5, live test 3
-   * FAIL 8). Absent, it keeps discovering a project of its own, as the browser harness and a bare sidebar need.
+   * FAIL 8) and which `discoverProject` would be granted write access to. Absent, it keeps discovering a project of its
+   * own, as a bare sidebar needs.
    */
   noProject?: boolean
   /**
@@ -1505,71 +1506,74 @@ export function Sidebar(props: SidebarProps) {
           </div>
 
           <Show when={isOpen("file")}>
-            <div data-slot="search-box">
-              {/* The input sits inside a field rather than being one: on a card
-                a bare input has no edge of its own, and the focus ring has
-                nothing to sit on. The magnifier is what makes it read as
-                search before the placeholder is read. */}
-              <div data-slot="search-field">
-                <svg
-                  data-slot="search-leading"
-                  viewBox="0 0 16 16"
-                  width="12"
-                  height="12"
-                  aria-hidden="true"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.4"
-                >
-                  <circle cx="7" cy="7" r="4.2" />
-                  <path d="M10.2 10.2L14 14" stroke-linecap="round" />
-                </svg>
-                <input
-                  type="text"
-                  data-slot="search-input"
-                  placeholder={props.searchFiles ? t("sidebar.search.project") : t("sidebar.search.open")}
-                  title={t("sidebar.search.help")}
-                  value={searchQuery()}
-                  onInput={onSearchInput}
-                  onKeyDown={onSearchKeyDown}
-                />
-                <Show when={searchQuery()}>
-                  <IconButton
-                    size="sm"
-                    data-slot="search-clear"
-                    label={t("sidebar.search.clear")}
-                    onClick={() => setSearchQuery("")}
+            {/* A box that searches nothing is a dead control: with no project, `searchProjectFiles` answers «no file» to every query. */}
+            <Show when={!props.noProject}>
+              <div data-slot="search-box">
+                {/* The input sits inside a field rather than being one: on a card
+                  a bare input has no edge of its own, and the focus ring has
+                  nothing to sit on. The magnifier is what makes it read as
+                  search before the placeholder is read. */}
+                <div data-slot="search-field">
+                  <svg
+                    data-slot="search-leading"
+                    viewBox="0 0 16 16"
+                    width="12"
+                    height="12"
+                    aria-hidden="true"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.4"
                   >
-                    <span data-ui="icon-cross" aria-hidden="true" />
-                  </IconButton>
-                </Show>
+                    <circle cx="7" cy="7" r="4.2" />
+                    <path d="M10.2 10.2L14 14" stroke-linecap="round" />
+                  </svg>
+                  <input
+                    type="text"
+                    data-slot="search-input"
+                    placeholder={props.searchFiles ? t("sidebar.search.project") : t("sidebar.search.open")}
+                    title={t("sidebar.search.help")}
+                    value={searchQuery()}
+                    onInput={onSearchInput}
+                    onKeyDown={onSearchKeyDown}
+                  />
+                  <Show when={searchQuery()}>
+                    <IconButton
+                      size="sm"
+                      data-slot="search-clear"
+                      label={t("sidebar.search.clear")}
+                      onClick={() => setSearchQuery("")}
+                    >
+                      <span data-ui="icon-cross" aria-hidden="true" />
+                    </IconButton>
+                  </Show>
+                </div>
+                {/* Two chips that cannot both be off: turning off the last one
+                  turns the other on (`toggleKind`). */}
+                <div data-slot="search-kinds" role="group" aria-label={t("sidebar.search.show")}>
+                  <button
+                    type="button"
+                    data-slot="search-kind"
+                    aria-pressed={kinds().has("file")}
+                    data-active={kinds().has("file") ? "true" : undefined}
+                    onClick={() => flipKind("file")}
+                  >
+                    {t("sidebar.search.files")}
+                  </button>
+                  <button
+                    type="button"
+                    data-slot="search-kind"
+                    aria-pressed={kinds().has("directory")}
+                    data-active={kinds().has("directory") ? "true" : undefined}
+                    onClick={() => flipKind("directory")}
+                  >
+                    {t("sidebar.search.folders")}
+                  </button>
+                  <Show when={props.searchFiles && searchQuery().trim() && !searching()}>
+                    <span data-slot="search-count">{projectHits().length >= 200 ? "200+" : projectHits().length}</span>
+                  </Show>
+                </div>
               </div>
-              {/* Two chips that cannot both be off: turning off the last one
-                turns the other on (`toggleKind`). */}
-              <div data-slot="search-kinds" role="group" aria-label={t("sidebar.search.show")}>
-                <button
-                  type="button"
-                  data-slot="search-kind"
-                  aria-pressed={kinds().has("file")}
-                  data-active={kinds().has("file") ? "true" : undefined}
-                  onClick={() => flipKind("file")}
-                >
-                  {t("sidebar.search.files")}
-                </button>
-                <button
-                  type="button"
-                  data-slot="search-kind"
-                  aria-pressed={kinds().has("directory")}
-                  data-active={kinds().has("directory") ? "true" : undefined}
-                  onClick={() => flipKind("directory")}
-                >
-                  {t("sidebar.search.folders")}
-                </button>
-                <Show when={props.searchFiles && searchQuery().trim() && !searching()}>
-                  <span data-slot="search-count">{projectHits().length >= 200 ? "200+" : projectHits().length}</span>
-                </Show>
-              </div>
-            </div>
+            </Show>
 
             {/* While a project-wide query stands, its results take the tree's
               place: showing both would make the same file appear twice with
