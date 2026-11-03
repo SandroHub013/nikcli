@@ -152,6 +152,15 @@ export function questionOpened(line: TypedLine | undefined): TypedLine | undefin
   return line?.answered ? undefined : line
 }
 
+/**
+ * Whether the user has begun a line since `typedAt`, ADE's own text having gone in then: its Enter would send their half
+ * line. A key that answered a menu has begun nothing: read as a line, it held back the Enter of the mail that waited on
+ * that menu, and the text stayed there without it (live test of 2026-11-03, n. 7).
+ */
+export function typedSince(line: TypedLine | undefined, typedAt: number): boolean {
+  return isTyping(line) && line!.at >= typedAt
+}
+
 /** The line as it was, minus a pending Escape, with the clock moved on. */
 function keep(line: TypedLine | undefined, now: number): TypedLine | undefined {
   return line ? { pending: line.pending, at: now } : undefined

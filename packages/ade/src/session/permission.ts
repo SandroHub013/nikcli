@@ -833,6 +833,27 @@ export function confirmDialog(rows: readonly string[]): PermissionRequest | unde
   }
 }
 
+const TRUST_ANSWER_RE = /^\s*[│┃║]?\s*([❯›▶➤>])?\s*(?:\d[.)]\s*)?(yes, i trust this folder|no, exit)\s*[│┃║]?\s*$/i
+
+/**
+ * The trust dialog of Claude Code and agy, with no number on its answers and, in Claude Code, «No, exit» first: read by
+ * its two answers, one of which carries the cursor (live test of 2026-11-03, n. 1 and 2).
+ */
+export function trustDialog(rows: readonly string[]): PermissionRequest | undefined {
+  const answers = rows.map((row) => row.match(TRUST_ANSWER_RE)).filter((match) => match !== null)
+  if (answers.length !== 2 || answers.filter((match) => match[1]).length !== 1) return undefined
+  const named = new Set(answers.map((match) => match[2]!.toLowerCase()))
+  if (named.size !== 2) return undefined
+  return {
+    what: "Do you trust this folder?",
+    kind: "unknown",
+    answers: answers.map((match) => {
+      const label = match[2]!
+      return { intent: classifyAnswer(label), label, send: "", tone: match[1] ? ("primary" as const) : ("secondary" as const) }
+    }),
+  }
+}
+
 /** A row with nothing on it but a prompt: under a menu, it says the program is taking a line and no longer waits on the menu. */
 const BARE_PROMPT_RE = /^\s*[│┃║]?\s*[>›❯]\s*[│┃║]?\s*$/
 
@@ -849,7 +870,10 @@ const BARE_PROMPT_RE = /^\s*[│┃║]?\s*[>›❯]\s*[│┃║]?\s*$/
  * A menu in a box of its own, with no hint (agy, `permission.test.ts`), says it is one by closing the box round options
  * of which exactly one carries the cursor.
  */
-export function menuAboveLines(rows: readonly string[]): { request: PermissionRequest; under: number } | undefined {
+export function menuAboveLines(
+  rows: readonly string[],
+  options: { overPrompt?: boolean } = {},
+): { request: PermissionRequest; under: number } | undefined {
   const clean = rows.map(stripAnsi)
   for (let last = clean.length - 1; last >= 1; last--) {
     const row = unframe(clean[last]!)
@@ -859,7 +883,9 @@ export function menuAboveLines(rows: readonly string[]): { request: PermissionRe
     const request = closesBox ? boxedMenu(above) : hintedMenu(above)
     if (!request) continue
     const below = clean.slice(last + 1).filter((line) => line.trim())
-    return below.some((row) => BARE_PROMPT_RE.test(row)) ? undefined : { request, under: below.length }
+    return !options.overPrompt && below.some((row) => BARE_PROMPT_RE.test(row))
+      ? undefined
+      : { request, under: below.length }
   }
   return undefined
 }

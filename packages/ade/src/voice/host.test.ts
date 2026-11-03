@@ -1195,7 +1195,7 @@ describe("the workbench's voice host", () => {
   const call = source.slice(source.indexOf(codeOf("const voiceHost = createAdeVoiceHost({")))
 
   test("is told when the user has a line pending, by the rule the mail queue uses (MOD-2)", () => {
-    expect(call.slice(0, 1500)).toContain(codeOf("isTyping: (id) => isTyping(records.typed.get(id)),"))
+    expect(call.slice(0, 1500)).toContain(codeOf("isTyping: (id) => lineBegun(id),"))
   })
 
   test("asks the workbench's own question gate, screen and hook included (B1)", () => {

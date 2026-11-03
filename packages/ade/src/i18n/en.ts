@@ -529,6 +529,12 @@ export const en: Messages = {
   "task.notSent": "The initial task hasn't gone yet: the session has written nothing for a minute. It goes as soon as the session writes something.",
   "task.confirmTrust":
     "The session is asking you to trust this folder: confirm it in the terminal and ADE will type the initial task.",
+  "task.exitedUnsent": "The session closed before it got the initial task: ADE did not type it.",
+  "task.exitedOnTrust": "The session closed on its trust dialog («No, exit»): ADE did not type the initial task.",
+  "pane.deliverNow": "Deliver now: types and presses Enter",
+  "note.deliverNowOffer": (agent: string) =>
+    `ADE doesn't recognise ${agent}'s screen and the mail is waiting. «Deliver now» types one message and presses Enter on what shows now.`,
+  "note.enterStuck": "The text is typed but ADE didn't press Enter: the input box did not come back. If the text is there, press Enter yourself.",
   "task.heldByMenu":
     "The initial task waits on the question on screen. If it's not real or you answered, press Enter; if nothing changes, it goes when the session moves on.",
   "task.notTyped": "ADE didn't type the initial task: a menu opened just then. Answer it and type the task yourself.",

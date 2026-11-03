@@ -56,6 +56,10 @@ export async function typeThenEnter(input: {
   alive: () => boolean
   permissionOpen: () => boolean
   typedDuring?: () => boolean
+  /** Where the agent's box can be read: what became of the text in it (`textInBox`). */
+  textShown?: () => Promise<TextInBox>
+  /** What stops the Enter, when that is not what stopped the text: a box with the text in it is no longer empty. */
+  enterBlocked?: () => boolean
 }): Promise<LineOutcome> {
   if (input.permissionOpen()) return "not-typed"
   const taken = input.write(input.text)
@@ -63,10 +67,55 @@ export async function typeThenEnter(input: {
   if ((await taken) === false) return "not-typed"
   if (!input.alive()) return "not-typed"
   if (input.typedDuring?.()) return "typed-no-enter"
+  if (input.textShown) {
+    const shown = await input.textShown()
+    if (!input.alive() || shown === "empty") return "not-typed"
+    if (shown === "stuck" || input.typedDuring?.()) return "typed-no-enter"
+  }
   const entered: unknown[] = []
-  const pressed = pressEnter((data) => void entered.push(input.write(data)), input.permissionOpen)
+  const pressed = pressEnter((data) => void entered.push(input.write(data)), input.enterBlocked ?? input.permissionOpen)
   if (!pressed || (await entered[0]) === false) return "typed-no-enter"
   return "sent"
+}
+
+/**
+ * What became of a line's text in the agent's box.
+ *
+ * `shows`: the box stopped being empty. That is the sign, and not the text seen again: a long paste shows as «[Pasted text
+ * #1 +3 lines]», a long line wraps, runs out of the box or is redrawn by opentui.
+ * `empty`: the box is there and empty, so the text went nowhere: no Enter, and the mail goes back in the queue.
+ * `stuck`: the box has not come back in time, with the text perhaps in it. The Enter goes no further, and the pane and the
+ * sender are told.
+ */
+export type TextInBox = "shows" | "empty" | "stuck"
+
+/** How long an empty box may take to show a text whose paste has settled. */
+export const TEXT_SHOWS_WITHIN_MS = 3_000
+/** How long an Enter waits for a box that a dialog has covered: the user answers when they answer, but not for ever. */
+export const ENTER_PATIENCE_MS = 120_000
+/** The read's own pace: at most four times a second, and nothing per chunk. */
+export const BOX_READ_MS = 250
+
+export async function textInBox(input: {
+  read: () => "ready" | "draft" | "none"
+  /** The session has gone, or the user has begun typing: the caller decides, and nothing more is read. */
+  stop: () => boolean
+  now?: () => number
+  sleep?: (ms: number) => Promise<void>
+}): Promise<TextInBox> {
+  const now = input.now ?? Date.now
+  const sleep = input.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
+  const from = now()
+  let emptyFrom: number | undefined
+  while (!input.stop()) {
+    const box = input.read()
+    if (box === "draft") return "shows"
+    emptyFrom = box === "ready" ? (emptyFrom ?? now()) : undefined
+    if (emptyFrom !== undefined && now() - emptyFrom >= TEXT_SHOWS_WITHIN_MS) return "empty"
+    if (now() - from >= ENTER_PATIENCE_MS) return "stuck"
+    await sleep(BOX_READ_MS)
+  }
+  return "shows"
 }
 
 /**

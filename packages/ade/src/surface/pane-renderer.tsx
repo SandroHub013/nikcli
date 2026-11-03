@@ -102,6 +102,10 @@ export interface PaneRendererDeps {
   menuEnter: (id: string) => void
   /** Whether a menu stands in the pane now and `key` typed into it would be its answer (`menuOnScreen`). */
   menuOpen: (id: string, key: string) => boolean
+  /** Whether the pane offers «Consegna ora»: its agent's box is not recognised (`session/deliver-now.ts`). */
+  deliverNowOffered: (id: string) => boolean
+  /** The click: one message, with its Enter, on what shows now. */
+  deliverNow: (id: string) => void
   /** An Esc or a Ctrl-C typed in the pane, which Claude Code reports to no hook. */
   interrupted: (id: string) => void
   /** "Riprova" on a session that failed. */
@@ -587,7 +591,9 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
                       onClick: () => deps.restart(current()),
                     },
                   ]
-                : undefined
+                : deps.deliverNowOffered(current().id)
+                  ? [{ label: t("pane.deliverNow"), tone: "primary" as const, onClick: () => deps.deliverNow(current().id) }]
+                  : undefined
         }
         inputHint={current().suspended && !deps.isRunning(current().id) ? t("pane.input.suspended") : undefined}
         lines={current().lines}

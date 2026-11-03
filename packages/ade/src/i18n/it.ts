@@ -548,6 +548,12 @@ export const it = {
   "task.heldByMenu":
     "Il compito iniziale aspetta la domanda a schermo. Se non è vera o hai già risposto, premi Invio; se non cambia nulla, parte quando la sessione va avanti.",
   "task.notTyped": "ADE non ha scritto il compito iniziale: si è aperto un menu proprio allora. Rispondi e scrivilo tu.",
+  "task.exitedUnsent": "La sessione si è chiusa prima di ricevere il compito iniziale: ADE non l'ha scritto.",
+  "task.exitedOnTrust": "La sessione si è chiusa sul dialogo di fiducia («No, exit»): ADE non ha scritto il compito iniziale.",
+  "pane.deliverNow": "Consegna ora: scrive e preme Invio",
+  "note.deliverNowOffer": (agent: string) =>
+    `ADE non riconosce lo schermo di ${agent} e la posta aspetta. «Consegna ora» scrive un messaggio e preme Invio su quello che si vede ora.`,
+  "note.enterStuck": "Il testo è scritto ma ADE non ha premuto Invio: il compositore non è tornato. Se il testo è lì, premi Invio tu.",
   "task.trustAccepted": "Cartella di lavoro creata da ADE per questa sessione: fiducia confermata, poi il compito.",
   "task.stepHeld": (text: string) =>
     `ADE non ha ancora scritto «${text}»: la sessione aspetta una risposta, una password o un menu. Lo scrive appena si chiude.`,
