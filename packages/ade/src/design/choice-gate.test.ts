@@ -23,7 +23,7 @@ const proposal: DesignProposal = {
     { name: "1 · Scura", description: "", preview: "" },
     { name: "2 · Carta", description: "", preview: "" },
   ],
-  recommend: "2 · Carta",
+  recommend: { option: "2 · Carta" },
   raisedBy: "fable",
   openedAt: "2026-11-03T10:00:00Z",
   status: "aperta",
