@@ -804,8 +804,8 @@ export async function lastHereBesideMints(
  * The folders whose "most recent conversation" a restore has handed out, per
  * agent: the claims `planRestore` made.
  *
- * The panes it plans are not the only ones that start: the ones whose agent
- * had already exited are reopened in the same breath (`exitedToReopen`), and
+ * The panes it plans are not the only ones that start: the live ones with
+ * nothing to resume are reopened in the same breath (`liveToReopen`), and
  * `lastTakenFor` only sees the ids panes hold, not a claim made a moment ago
  * whose `session.list` has not answered yet. A reopened pane placed before
  * the planned one took `here` too, and the two could open one conversation

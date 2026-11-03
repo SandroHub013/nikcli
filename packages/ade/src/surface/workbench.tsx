@@ -269,7 +269,7 @@ import {
   deriveWorkspaces,
   toWorkspaceState,
   fromWorkspaceState,
-  exitedToReopen,
+  liveToReopen,
   sessionsToResume,
   nextView,
   ADE_VIEW_LABELS,
@@ -705,7 +705,7 @@ import {
 import { cleanTranscriptLine } from "../session/transcript-line"
 import { createLineWriter, withLines } from "./pane-lines"
 import { createRawWindows } from "../session/raw-window"
-import { NEW_PANE_ITEMS, showsNewPane, type NewPaneItem } from "./new-pane"
+import { NEW_PANE_ITEMS, showsAllForNewPane, showsNewPane, type NewPaneItem } from "./new-pane"
 import {
   addNotice,
   bellTone,
@@ -7253,17 +7253,18 @@ export function Workbench() {
         }
 
         /*
-         * And the sessions whose agent had already exited, too.
+         * And the sessions that were alive but had nothing to resume (a terminal).
          *
-         * They used to wait for a click on "Riprendi", and nobody opens ADE to
-         * look at a dead transcript: the pane is there to be used. `reopen`
-         * asks for the conversation by id when there is one, and starts the
-         * agent fresh when there is not.
+         * Not the ones that had ended: an exit, 0 or not, and a start that
+         * failed wait for a click on "Riprendi". Reopened here, a session closed
+         * with /exit ran `claude --resume` by itself at every start (prova 4,
+         * item 12). `reopen` asks for the conversation by id when there is one,
+         * and starts the agent fresh when there is not.
          */
         // With the claims just handed out: a pane planned `here` has not reported its id yet.
         const claims = restoreClaims(planned)
         const plannedIds = new Set(sessions.map((session) => session.pane.id))
-        for (const pane of exitedToReopen(wb().panes, plannedIds)) void reopen(pane, undefined, claims)
+        for (const pane of liveToReopen(wb().panes, plannedIds, restored)) void reopen(pane, undefined, claims)
       }
     }
 
@@ -7703,6 +7704,9 @@ export function Workbench() {
       setPaletteOpen(false)
       return
     }
+
+    // A maximised pane would hide the one this opens: the grid comes back first (prova 4, item 13).
+    setWb((w) => showsAllForNewPane(w, id))
 
     if (id === "session.new") {
       // A pane is born because a process is starting, never before: the button

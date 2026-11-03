@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from "solid-js"
 import { Sheet, SheetTitle } from "../ui/sheet"
-import { enterReady, sheetKey } from "./answer"
+import { enterReady, isAnswerable, isOwnButton, sheetKey } from "./answer"
 import { isFormField } from "../decisions/answer"
 import { submitControl } from "./card"
 import { DesignCard } from "./design-card"
@@ -104,7 +104,14 @@ export function DesignSheet(props: {
       proposal && draft && enterReady(Boolean(proposal.multi), draft.picked, draft.note, props.hub.chosen(proposal.k)),
     )
     const inText = event.target === note
-    const action = sheetKey(event, proposal?.variants.length ?? 0, inText, picked, !inText && isFormField(event.target))
+    const action = sheetKey(
+      event,
+      proposal?.variants.length ?? 0,
+      inText,
+      picked,
+      !inText && isFormField(event.target),
+      isOwnButton(event.target),
+    )
     if (!action) return
     event.preventDefault()
     event.stopPropagation()
@@ -177,6 +184,7 @@ export function DesignSheet(props: {
                   inline: props.hub.inlineRecipient(),
                   busy: props.hub.busy(k),
                   label: open().length > 1 ? t("design.submitNext") : t("design.submit"),
+                  chosen: isAnswerable(props.hub.draft(k).picked, props.hub.draft(k).note),
                 })}
                 onInline={(id) => props.hub.setInlineRecipient(id)}
                 onRecord={() => void submit("record")}

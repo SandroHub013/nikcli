@@ -813,8 +813,11 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
           ...(p.resumeId ? { resumeId: p.resumeId } : {}),
           ...(p.linkNonce ? { linkNonce: p.linkNonce } : {}),
           ...(p.otherDir ? { otherDir: p.otherDir } : {}),
-          /* A suspended session's transcript already ends with the note that says so: nothing is restarted to report. */
-          lines: p.suspended
+          /*
+           * A suspended session's transcript already ends with the note that says so, and an ended one (exit, failed
+           * start) is not restarted either: nothing is reopened to report, and «Riapro la conversazione» would be false.
+           */
+          lines: p.suspended || !LIVE_STATUSES.includes(p.status)
             ? history
             : [
                 ...history,
@@ -913,13 +916,29 @@ export function sessionsToResume(state: WorkspaceState): PaneState[] {
   )
 }
 
+/** What a saved pane's status says about its process: alive when ADE saved, or over (`done`, `error`). */
+const LIVE_STATUSES: readonly string[] = ["idle", "provisioning", "working", "waiting"]
+
 /**
- * The second half of a restore: the sessions whose agent had already exited,
- * reopened too — every session pane `planned` (`sessionsToResume`) did not
- * take. Not a suspended one: it waits for "Riprendi", restart or not (P1-C6).
+ * The second half of a restore: the sessions that were alive when ADE went away
+ * and `sessionsToResume` did not take — a terminal has no task and no
+ * conversation, so it is not «resumable», but it was running and comes back.
+ *
+ * Read from the saved state, as `sessionsToResume` is: the restored panes have
+ * forgotten whether they were running. A session that had ended — it exited
+ * (0 or not), or its start failed — stays ended until the user presses
+ * «Riprendi»: it used to be reopened here too, and a Claude session closed with
+ * /exit started `claude --resume` by itself, on the user's subscription, at
+ * every start (prova 4, item 12). A suspended one waits for «Riprendi» as well (P1-C6).
  */
-export function exitedToReopen(panes: readonly Pane[], planned: ReadonlySet<string>): Pane[] {
+export function liveToReopen(panes: readonly Pane[], planned: ReadonlySet<string>, saved: WorkspaceState): Pane[] {
+  const alive = new Set(saved.panes.filter((pane) => LIVE_STATUSES.includes(pane.status)).map((pane) => pane.id))
   return panes.filter(
-    (pane) => !planned.has(pane.id) && !isPanelPane(pane) && !pane.suspended && Boolean(pane.agent ?? pane.model),
+    (pane) =>
+      alive.has(pane.id) &&
+      !planned.has(pane.id) &&
+      !isPanelPane(pane) &&
+      !pane.suspended &&
+      Boolean(pane.agent ?? pane.model),
   )
 }

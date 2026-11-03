@@ -3,7 +3,7 @@ import { parseWorkspace, serializeWorkspace } from "../session/persist"
 import { resetLocaleForTests } from "../i18n"
 import {
   createWorkbench,
-  exitedToReopen,
+  liveToReopen,
   fromWorkspaceState,
   isResumable,
   sessionsToResume,
@@ -82,12 +82,13 @@ describe("the restore does not wake a suspended session", () => {
     expect(sessionsToResume(state).map((pane) => pane.id)).toEqual(["b"])
   })
 
-  test("not reopened by the second round, while an exited session that is not suspended still is", () => {
+  test("not reopened by the second round, while a live session that is not suspended and was not planned still is", () => {
     const panes = [
       claude({ suspended: true }),
-      claude({ id: "gone", status: "done", activity: "done" }),
+      claude({ id: "gone", status: "idle", activity: "done" }),
       claude({ id: "planned" }),
     ]
-    expect(exitedToReopen(panes, new Set(["planned"])).map((pane) => pane.id)).toEqual(["gone"])
+    const state = saveAndRead(panes)
+    expect(liveToReopen(fromWorkspaceState(state).panes, new Set(["planned"]), state).map((pane) => pane.id)).toEqual(["gone"])
   })
 })

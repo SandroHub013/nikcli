@@ -207,7 +207,7 @@ export function DesignCard(props: {
       <div data-slot="design-actions">
         <Button
           data-slot="design-submit" variant="primary" size="lg"
-          disabled={props.control.disabled}
+          disabled={props.control.disabled || !props.control.answerable}
           onClick={() => props.onSubmit()}
         >
           {props.control.label}
@@ -226,7 +226,7 @@ export function DesignCard(props: {
             type="button"
             data-slot="design-ghost"
             data-action="record"
-            disabled={props.busy}
+            disabled={props.busy || !props.control.answerable}
             onClick={() => props.onRecord()}
           >
             {t("design.submit.record")}

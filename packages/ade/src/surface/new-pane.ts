@@ -11,7 +11,7 @@
  * that names a command nothing handles is a button that does nothing.
  */
 
-import type { AdeView } from "./state"
+import type { AdeView, Workbench } from "./state"
 import { t } from "../i18n"
 
 export interface NewPaneItem {
@@ -124,6 +124,27 @@ export const NEW_PANE_ITEMS: readonly NewPaneItem[] = [
 /** The entry a plain click performs. */
 export function primaryItem(items: readonly NewPaneItem[] = NEW_PANE_ITEMS): NewPaneItem | undefined {
   return items.find((item) => item.primary) ?? items[0]
+}
+
+/**
+ * What a command of the menu does to a maximised pane: it brings the grid back.
+ *
+ * The grid shows only the maximised pane while one is set, so a pane opened
+ * (or focused, when it was already there) behind it was out of sight and the
+ * button seemed to do nothing; people pressed it twice (prova 4, item 13). The
+ * same the new session's launch does: «Narrowed to nothing». Not «Nuova sessione»
+ * (the launcher covers the grid, and a cancelled one leaves the pane maximised). Any other command,
+ * and a grid with nothing maximised, come back as they are.
+ */
+export function showsAllForNewPane(workbench: Workbench, commandId: string): Workbench {
+  // Not the launcher: it covers the grid while it is open, and the launch un-maximises when it starts a session.
+  if (
+    workbench.expandedId === undefined ||
+    commandId === "session.new" ||
+    !NEW_PANE_ITEMS.some((item) => item.commandId === commandId)
+  )
+    return workbench
+  return { ...workbench, expandedId: undefined }
 }
 
 /**
