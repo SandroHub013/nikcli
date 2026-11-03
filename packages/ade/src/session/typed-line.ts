@@ -66,8 +66,9 @@ export function isTyping(line: TypedLine | undefined): boolean {
 /**
  * The count after `data` reached the session as the user's input.
  *
- * `menuOpen`: a menu was standing when the key arrived. The FIRST key there, on an empty line, is the menu's answer
- * («y», «q», «2») and goes into no input line, so it is not a draft: counting it left the pane looking half-written
+ * `menuOpen`: a menu was standing when the key arrived and, where the screen is all that says so, names that key
+ * (`menuOnScreen`). The FIRST key there, on an empty line, is the menu's answer («y», «2») and goes into no input line,
+ * so it is not a draft: counting it left the pane looking half-written
  * for ever after a one-key answer with no Enter, and every message to it held without limit (live test 2026-11-02,
  * F2). Only the first: xterm hands over typing one key at a time, and a menu the hook still reports while a tool runs
  * would otherwise swallow the whole instruction the user types ahead, and the mail would land in it (review B1). The

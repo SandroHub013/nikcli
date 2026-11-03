@@ -547,8 +547,11 @@ export const it = {
   "task.confirmTrust":
     "La sessione chiede la fiducia per questa cartella: confermala nel terminale e ADE scriverà il compito iniziale.",
   "task.heldByMenu":
-    "Il compito iniziale aspetta il menu a schermo: rispondi e parte. Se non è un vero menu, premi Invio.",
+    "Il compito iniziale aspetta che si chiuda la domanda a schermo. Se non è vera, premi Invio; se non cambia nulla, parte quando la sessione va avanti.",
+  "task.notTyped": "ADE non ha scritto il compito iniziale: si è aperto un menu proprio allora. Rispondi e scrivilo tu.",
   "task.trustAccepted": "Cartella di lavoro creata da ADE per questa sessione: fiducia confermata, poi il compito.",
+  "task.stepHeld": (text: string) =>
+    `ADE non ha ancora scritto «${text}»: la sessione aspetta una risposta, una password o un menu. Lo scrive appena si chiude.`,
   "task.stepNotSent": (text: string) =>
     `ADE non ha scritto «${text}»: la connessione non si è stabilizzata. Scrivilo tu.`,
   "task.agentMissing": (command: string) =>
@@ -1817,7 +1820,7 @@ export const it = {
   "note.subagent": (title: string) => `Subagent avviato: ${title}`,
   "note.mailHeldByLine": "Un messaggio per questa sessione aspetta: hai una riga a metà. Invia o cancella la riga e arriva.",
   "note.mailHeldByMenu":
-    "Un messaggio aspetta il menu a schermo: rispondi e arriva. Se non è un vero menu, premi Invio.",
+    "Un messaggio aspetta che si chiuda la domanda a schermo. Se non è vera, premi Invio; se non cambia nulla, si libera quando la sessione va avanti o riparte.",
   "note.interruptedBy": (from: string) => `Interrotta da ${from}`,
   "note.restarted": (from: string, model: string) => `Riavviata da ${from}${model ? ` con il modello ${model}` : ""}`,
   "note.restartedFresh": (from: string, model: string) =>

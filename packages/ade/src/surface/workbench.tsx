@@ -350,7 +350,15 @@ import {
   permissionIdentity,
   type PermissionAnswer,
 } from "../session/permission"
-import { bottomRows, createMenuHold, folderTrust, openingTrust, statusFromScreen } from "../session/screen-question"
+import {
+  bottomRows,
+  createMenuHold,
+  createUnparsed,
+  folderTrust,
+  menuNames,
+  openingTrust,
+  statusFromScreen,
+} from "../session/screen-question"
 import { readReportLine } from "../session/report"
 import { asOneLine, asSubmittedLine, confirmDeadline, pasteSettled, submitCheck } from "../session/typing"
 import { searchPaths, walkProject } from "../search"
@@ -681,7 +689,15 @@ import {
 } from "../terminal/registry"
 import { createDiscardNotes } from "../terminal/discard-notes"
 import type { LinkRequest } from "../terminal/links"
-import { OPENING_QUIET_MS, decideOpening } from "../session/opening"
+import {
+  REMOTE_STEP_NOTE_MS,
+  bytesAfter,
+  clockAfterMenu,
+  decideOpening,
+  drawsText,
+  screenDrawn,
+  type OpeningBytes,
+} from "../session/opening"
 import { cleanTranscriptLine } from "../session/transcript-line"
 import { createLineWriter, withLines } from "./pane-lines"
 import { createRawWindows } from "../session/raw-window"
@@ -3074,7 +3090,8 @@ export function Workbench() {
         // A turn only output declared and ADE gave up: a TUI that repaints is not busy for that (`OUTPUT_CLAIM_MAX_MS`).
         quarantined: claims.quarantined(paneId),
         // Where a menu drawn with the cursor would show (`screenAsks`): unread, a quiet pane without hooks is not free.
-        screenUnread: !hasTerminal(paneId),
+        // Nor with chunks xterm has not parsed: in a window hidden for minutes a menu can have arrived and not be on the screen.
+        screenUnread: !hasTerminal(paneId) || unparsed.behind(paneId),
         ...(activity ? { activity } : {}),
         ...(lastOutputAt.has(paneId) ? { lastOutputAt: lastOutputAt.get(paneId)! } : {}),
       },
@@ -3427,15 +3444,21 @@ export function Workbench() {
     isQuestionOpen(permissions()[paneId], activityOf.get(paneId)) || modeTracker.heldOpen(paneId) || screenAsks(paneId)
 
   /*
-   * Whether a key typed now is the answer to a menu: for `typedAfter`, which then does not count the first key as a draft.
+   * Whether `key` typed now is the answer to a menu: for `typedAfter`, which then does not count the first key as a draft.
    * Narrower than `questionOpen`, which holds mail: the hook's `permission` stays in the file until the turn ends (the
    * hook writes nothing at the answer), so it counts only while the pane is still `waiting`, which the first key
-   * (`promptAnswered`) turns off. The screen reading and the dialog window are live, and stand as they are (review B1).
+   * (`promptAnswered`) turns off. The dialog window is live, and stands as it is (review B1).
+   *
+   * What the screen shows may be the words of a menu in a reply, over a composer. There only a key the menu names is an
+   * answer: any other is the start of the user's line, and the mail must not land after it, whatever then becomes of
+   * those words (review of menu-posta, B2).
    */
-  const menuOnScreen = (paneId: string) => {
+  const menuOnScreen = (paneId: string, key: string) => {
     const waiting = wb().panes.find((candidate) => candidate.id === paneId)?.status === "waiting"
     const byHook = waiting && isQuestionOpen(permissions()[paneId], activityOf.get(paneId))
-    return byHook || modeTracker.heldOpen(paneId) || screenAsks(paneId)
+    if (byHook || modeTracker.heldOpen(paneId)) return true
+    const menu = screenMenu(paneId)
+    return menu !== undefined && menuNames(menu, key)
   }
 
   /*
@@ -3443,23 +3466,26 @@ export function Workbench() {
    * never sees whole: read off the pane's screen whenever typing is weighed (`session/screen-question.ts`, SES-3). It
    * holds the Enter; it is not offered to the voice to answer, its keys are arrows.
    */
-  const screenAsks = (paneId: string) => {
-    if (!running.has(paneId) || !hasTerminal(paneId)) return false
+  const screenMenu = (paneId: string) => {
+    if (!running.has(paneId) || !hasTerminal(paneId)) return undefined
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
     const menu = pane && menuHold.waiting(paneId, getTerminal(paneId).terminal, pane.agent ?? pane.model)
-    if (!menu) return false
+    if (!menu) return undefined
     // With lines below it, where the CLI reports its turns: a turn over is not waiting on what it left on the screen.
-    return menu.under === 0 || !(hooked(paneId) && activityOf.get(paneId)?.state === "idle")
+    return menu.under === 0 || !(hooked(paneId) && activityOf.get(paneId)?.state === "idle") ? menu : undefined
   }
+  const screenAsks = (paneId: string) => screenMenu(paneId) !== undefined
   /** Which menu on a screen still waits: the keys the user gave it say (`createMenuHold`). */
   const menuHold = createMenuHold()
+  /** What has arrived and xterm has not parsed: the screen says nothing about it yet. */
+  const unparsed = createUnparsed()
   /** A key of the user's on its way to the pane, or an answer of the voice's: said before it is written. */
-  const menuKey = (paneId: string, enter = false) => {
+  const menuKey = (paneId: string, key: string) => {
     // A line being written: this runs for every key, and a line's letters answer nothing.
-    if (!enter && isTyping(records.typed.get(paneId))) return
+    if (!key.includes("\r") && isTyping(records.typed.get(paneId))) return
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
     if (!pane || !hasTerminal(paneId)) return
-    menuHold.keyTyped(paneId, getTerminal(paneId).terminal, pane.agent ?? pane.model, enter)
+    menuHold.keyTyped(paneId, getTerminal(paneId).terminal, pane.agent ?? pane.model, key)
     // An Enter into a screen that then shows nothing new: no output will come to read it.
     watchScreen(paneId)
   }
@@ -3719,8 +3745,8 @@ export function Workbench() {
    * An Enter into a prompt only the hook reported is its answer: see `promptAnswered`.
    */
   const turnSubmitted = (paneId: string) => {
-    menuKey(paneId, true)
     promptAnswered(paneId)
+    menuKey(paneId, "\r")
     // An Enter ADE saw is evidence, not a guess from output: this turn does not expire (`OUTPUT_CLAIM_MAX_MS`).
     claims.evidence(paneId)
     markWorking(paneId)
@@ -3736,7 +3762,6 @@ export function Workbench() {
    * (`isQuestionOpen`); only the status moves.
    */
   const promptAnswered = (paneId: string) => {
-    menuKey(paneId)
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
     if (pane?.status !== "waiting" || permissions()[paneId] || activityOf.get(paneId)?.state !== "permission") return
     questionSeenAt.set(paneId, Date.now())
@@ -8041,6 +8066,7 @@ export function Workbench() {
   const feedTerminal = (paneId: string, chunk: string, paid?: () => void) => {
     const written = () => {
       paid?.()
+      unparsed.parsed(paneId)
       watchScreen(paneId)
     }
     /*
@@ -8063,8 +8089,13 @@ export function Workbench() {
     else if (hooked(paneId) && interruptEnds(activityOf.get(paneId), interruptedAt.get(paneId))) settleWhenQuiet(paneId)
     else if (pane.status === "idle") noticeWorkFromOutput(pane)
 
+    // Before the write: right after a key of the user's, xterm parses within the call, and calls `written` from it.
+    unparsed.fed(paneId)
     // xterm refused the data (50 MB unparsed): said in the pane, not for every chunk after it.
-    if (!writeToTerminal(paneId, chunk, written)) discardNotes.refused(paneId)
+    if (!writeToTerminal(paneId, chunk, written)) {
+      unparsed.parsed(paneId)
+      discardNotes.refused(paneId)
+    }
     screenRequests.fed(paneId)
     if (!liveTerminals().has(paneId)) {
       setLiveTerminals((ids) => new Set(ids).add(paneId))
@@ -8193,6 +8224,7 @@ export function Workbench() {
   const forgetPane = (id: string) => {
     records.forget(id)
     menuHold.forget(id)
+    unparsed.forget(id)
     screenWaiting.delete(id)
     heldByMenuNoted.delete(id)
     rawWindows.forget(id)
@@ -8730,7 +8762,7 @@ export function Workbench() {
      * and told the user the session was running again — the interface said
      * answered, the agent was still waiting.
      */
-    menuKey(paneId, true)
+    menuKey(paneId, "\r")
     session.write(asSubmittedLine(answer.send))
     appendLine(paneId, `> ${answerLabel(answer)}`, "shell")
 
@@ -9383,14 +9415,13 @@ export function Workbench() {
        * you run it yourself is what it does here.
        */
       /*
-       * When the CLI first spoke, and when it last did.
+       * When the CLI first drew something, and when it last wrote.
        *
-       * Both are needed to know the screen is drawn: the first byte says the
-       * program is alive, the gap since the last one says it has stopped
-       * repainting. See `decideOpening`.
+       * Both are needed to know the screen is drawn: the first text says the
+       * program is up, the gap since the last byte says it has stopped
+       * repainting. See `decideOpening` and `bytesAfter`.
        */
-      let firstByteAt: number | undefined
-      let lastByteAt: number | undefined
+      let openingBytes: OpeningBytes = {}
 
       // Closed, or started again, during the awaits above: nothing to spawn.
       if (!running.starting(paneId, start)) return
@@ -9400,6 +9431,7 @@ export function Workbench() {
       discardNotes.started(paneId)
       modeTracker.forget(paneId)
       menuHold.forget(paneId)
+      if (heldByMenuNoted.delete(paneId)) dropPaneNote(paneId, t("note.mailHeldByMenu"))
       paneClasses.delete(paneId)
       // A conversation reopened is drawn again, requests and all: those were acted on.
       screenRequests.start(
@@ -9416,8 +9448,7 @@ export function Workbench() {
         cwd: workDir,
         onData: (chunk, written) => {
           const now = Date.now()
-          firstByteAt ??= now
-          lastByteAt = now
+          openingBytes = bytesAfter(openingBytes, chunk, now)
           lastOutputAt.set(paneId, now)
           noteBracketedPaste(paneId, chunk)
           // The mode bar is repainted on every Shift+Tab, in a chunk with no newline: read from the raw bytes, the last one seen is the pane's class (native mail is picked on it).
@@ -9605,8 +9636,8 @@ export function Workbench() {
             return
           }
 
-          // Read once the screen is drawn: a dialog read half painted has no cursor yet.
-          const drawn = lastByteAt !== undefined && Date.now() - lastByteAt >= OPENING_QUIET_MS
+          // Read once the screen is drawn: a dialog read half painted has no cursor yet. A ticking row never goes quiet.
+          const drawn = screenDrawn(openingBytes, Date.now())
           const trust =
             !trustHandled && drawn && hasTerminal(paneId)
               ? folderTrust(bottomRows(getTerminal(paneId).terminal), agentId)
@@ -9639,11 +9670,10 @@ export function Workbench() {
             }
           }
           const decision = decideOpening({
-            startedAt,
-            firstByteAt: menuAt !== undefined && firstByteAt !== undefined ? Math.max(firstByteAt, menuAt) : firstByteAt,
-            lastByteAt: menuAt !== undefined && lastByteAt !== undefined ? Math.max(lastByteAt, menuAt) : lastByteAt,
+            ...clockAfterMenu({ startedAt, ...openingBytes }, menuAt),
             now: Date.now(),
-            permissionPending: asked,
+            // Chunks xterm has not parsed: what they draw may be a menu.
+            permissionPending: asked || unparsed.behind(paneId),
           })
           if (decision === "wait") return
 
@@ -9660,16 +9690,22 @@ export function Workbench() {
             // Text and Enter apart, for the reason `typeLine` gives.
             // Into this poll's own session, the one checked above.
             const opening = typeIntoResumed ? task : withIntro(agentId, task)
+            // Refused at the last moment, by a menu that came while it waited in the pane's line queue: said, not lost.
+            const typeOpening = async () => {
+              if ((await typeLineOutcome(session, opening)) !== "not-typed" || running.get(paneId) !== session) return
+              setWb((w) => updatePane(w, paneId, { status: "idle", activity: "ready" }))
+              tellPane(paneId, t("task.notTyped"))
+            }
             // A task from `ade-msg spawn` is a request like any other: too long to type, it goes to the inbox.
             if (request) {
               const meta = { id: request.id, kind: "spawn" as const, from: request.from }
               void getHost().then(async (host) => {
-                if (!host) return void typeLine(session, opening)
+                if (!host) return void typeOpening()
                 // A prompt at start-up: the task waits among the held lines instead of going missing.
                 if ((await deliverText(host, paneId, opening, meta)) === "held")
                   heldLines.push({ paneId, text: opening, inbox: meta })
               })
-            } else void typeLine(session, opening)
+            } else void typeOpening()
             return
           }
           /*
@@ -9736,6 +9772,7 @@ export function Workbench() {
     let sinceStep = ""
     // The shell's prompt as it was when the agent was typed: the shell coming back to it means the agent is not running.
     let promptBefore = ""
+    let textAt: number | undefined
     let spawned: SpawnedSession | undefined
     // The host refused to start it: said by `onRefused`, then the exit that follows.
     let refused = false
@@ -9745,6 +9782,8 @@ export function Workbench() {
       if (!running.starting(paneId, start)) return
       startOnCleanScreen(paneId)
       discardNotes.started(paneId)
+      menuHold.forget(paneId)
+      if (heldByMenuNoted.delete(paneId)) dropPaneNote(paneId, t("note.mailHeldByMenu"))
       // Born at the pane's size, not the host's 120x30 (S77); undefined for a pane not yet fitted.
       const bornAt = ptySize(paneId)
       const paneToken = await freshPaneToken(host, paneId)
@@ -9755,6 +9794,8 @@ export function Workbench() {
         ...(home ? { cwd: home } : {}),
         onData: (chunk, written) => {
           lastOutputAt.set(paneId, Date.now())
+          // ConPTY's own bytes are not ssh having said anything (`bytesAfter`).
+          if (drawsText(chunk)) textAt = Date.now()
           noteBracketedPaste(paneId, chunk)
           tail = (tail + stripAnsi(chunk)).slice(-400)
           // Whole, up to a generous cap: a PowerShell 5.1 error is 400+ characters, and what says it comes first.
@@ -9792,24 +9833,31 @@ export function Workbench() {
       let index = 0
       let stepStart = Date.now()
       let stepFirst: number | undefined
+      let stepHeldTold = false
       const poll = setInterval(() => {
         if (running.get(paneId) !== session) {
           stopOpeningPoll(poll)
           return
         }
         const last = lastOutputAt.get(paneId)
-        if (last !== undefined && last > stepStart) stepFirst ??= last
+        if (textAt !== undefined && textAt > stepStart) stepFirst ??= textAt
         const lastLine =
           tail
             .split(/\r?\n|\r/)
             .filter((line) => line.trim())
             .pop() ?? ""
+        // A password or a menu is waited out for as long as it takes, and said once, with the step that has not gone.
+        const asking = sshAsking(lastLine) || questionOpen(paneId)
+        if (asking && !stepHeldTold && Date.now() - stepStart >= REMOTE_STEP_NOTE_MS) {
+          stepHeldTold = true
+          tellPane(paneId, t("task.stepHeld", String(steps[index])))
+        }
         const decision = decideOpening({
           startedAt: stepStart,
           firstByteAt: stepFirst,
           lastByteAt: stepFirst === undefined ? undefined : last,
           now: Date.now(),
-          permissionPending: sshAsking(lastLine) || questionOpen(paneId),
+          permissionPending: asking,
           // The first step waits out a password typed by hand.
           ...(index === 0 ? { timeoutMs: 180_000 } : {}),
         })
@@ -9841,6 +9889,7 @@ export function Workbench() {
         }
         stepStart = Date.now()
         stepFirst = undefined
+        stepHeldTold = false
       }, 150)
       openingPolls.add(poll)
     } catch (e) {
@@ -10150,6 +10199,7 @@ export function Workbench() {
     turnSubmitted,
     promptAnswered,
     menuOpen: menuOnScreen,
+    menuKey,
     interrupted,
     restart: (pane, line) => void reopen(pane, line),
     suspendCheck: suspendCheckFor,

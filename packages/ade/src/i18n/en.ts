@@ -531,8 +531,11 @@ export const en: Messages = {
   "task.confirmTrust":
     "The session is asking you to trust this folder: confirm it in the terminal and ADE will type the initial task.",
   "task.heldByMenu":
-    "The initial task is waiting for the menu on screen: answer it and it goes. If it isn't a real menu, press Enter.",
+    "The initial task is waiting for the question on screen to close. If it isn't real, press Enter; if nothing changes, it goes when the session moves on.",
+  "task.notTyped": "ADE didn't type the initial task: a menu opened just then. Answer it and type the task yourself.",
   "task.trustAccepted": "A work folder ADE made for this session: trust confirmed, then the task.",
+  "task.stepHeld": (text) =>
+    `ADE hasn't typed “${text}” yet: the session is waiting for an answer, a password or a menu. It types it as soon as that closes.`,
   "task.stepNotSent": (text) => `ADE didn't type “${text}” because the connection never settled. Type it yourself.`,
   "task.agentMissing": (command) =>
     `“${command}” isn't installed on the server, so ADE didn't type the task: the remote shell would have run it as a command.`,
@@ -1773,7 +1776,7 @@ export const en: Messages = {
   "note.subagent": (title) => `Subagent started: ${title}`,
   "note.mailHeldByLine": "A message for this session is waiting: you have a line half written. Send or clear the line and it arrives.",
   "note.mailHeldByMenu":
-    "A message is waiting for the menu on screen: answer it and it arrives. If it isn't a real menu, press Enter.",
+    "A message is waiting for the question on screen to close. If it isn't real, press Enter; if nothing changes, it clears when the session moves on or restarts.",
   "note.interruptedBy": (from) => `Interrupted by ${from}`,
   "note.restarted": (from, model) => `Restarted by ${from}${model ? ` with model ${model}` : ""}`,
   "note.restartedFresh": (from, model) => `Restarted from scratch by ${from}${model ? ` with model ${model}` : ""}`,

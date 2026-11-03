@@ -792,7 +792,7 @@ export function formatHeldDialogReceipt(target: MailPane | undefined): string {
 
 /** The receipt a sender gets for mail held back because the target's screen shows a menu waiting: what ADE types would answer it. */
 export function formatHeldMenuReceipt(target: MailPane | undefined): string {
-  return `ok: in coda, "${target?.title ?? "la sessione"}" ha a schermo un menu che aspetta una risposta (scriverci dentro la darebbe): arriva appena ha risposto`
+  return `ok: in coda, "${target?.title ?? "la sessione"}" ha a schermo un menu che aspetta una risposta (scriverci dentro la darebbe): arriva appena si chiude`
 }
 
 /** Told to the sender, once, of a first task, a reply or an update held back by a menu on the target's screen. */
@@ -806,7 +806,7 @@ export function formatHeldByMenu(entry: Pick<InboxEntry, "id" | "kind">, reader:
   return (
     `[ade-msg] ADE ha ${what} per ${who(reader)} ma non la consegna ancora: ` +
     `in quella sessione c'è a schermo un menu che aspetta una risposta, e scriverci dentro la darebbe. ` +
-    `Arriva da sola appena qualcuno ha risposto al menu: la sessione non ti sta ignorando.`
+    `Arriva da sola appena il menu si chiude: la sessione non ti sta ignorando.`
   )
 }
 

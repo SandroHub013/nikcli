@@ -193,7 +193,7 @@ describe("the workbench", () => {
   })
 
   test("does not take a pane whose screen it cannot read as free", () => {
-    expect(source).toContain(codeOf("screenUnread: !hasTerminal(paneId),"))
+    expect(source).toContain(codeOf("screenUnread: !hasTerminal(paneId) || unparsed.behind(paneId),"))
   })
 })
 

@@ -8,7 +8,8 @@ import { typeThenEnter } from "./enter"
 import { formatHeldByMenu, formatHeldMenuReceipt } from "./mailbox"
 import { decideOpening, OPENING_TIMEOUT_MS } from "./opening"
 import { detectPermission, followPermission, type PermissionRequest } from "./permission"
-import { createMenuHold, screenQuestion, statusFromScreen } from "./screen-question"
+import { createMenuHold, createUnparsed, menuNames, screenQuestion, statusFromScreen } from "./screen-question"
+import { isAnswerKey, isTyping, typedAfter, type TypedLine } from "./typed-line"
 
 /*
  * Live test of 2026-11-02, FAIL 1 and 2: ADE typed mail and first tasks, Enter included, into a menu that stood on the
@@ -37,13 +38,6 @@ const OPENS_ON_MENU_UTF8 = [
   "FAKE AGENT ready (goose)",
   "\x1b[?25l\r\n> \r\nRun the start command?\r\n  ❯ 1. Yes, proceed\r\n    2. No\x1b[7;1H Enter to confirm · Esc to cancel \x1b[?25h",
 ]
-/*
- * The same, as it happened in the live test: the raw UTF-8 of `fs.writeSync` on a console still on its OEM code page.
- * Mid-turn the same menu came out whole, because `ade-msg inbox` had run in that console: `ade-msg.ps1` sets
- * `[Console]::OutputEncoding` to UTF-8 (`mailbox.rs`), and that stays for the console.
- */
-const OPENS_ON_MENU_OEM = OPENS_ON_MENU_UTF8.map((chunk) => chunk.replace("❯", "ÔØ»").replace("·", "┬À"))
-
 function written(terminal: Terminal, text: string): Promise<void> {
   return new Promise((resolve) => terminal.write(text, resolve))
 }
@@ -54,6 +48,7 @@ function pane() {
   const stream = createLineAccumulator()
   const raw: string[] = []
   let pending: PermissionRequest | undefined
+  let line: TypedLine | undefined
   const hold = createMenuHold()
   const lines = createLineWriter<string>(
     () => {},
@@ -76,8 +71,20 @@ function pane() {
     },
     /** A key of the user's on its way to the pane (`menuKey`), written after it is said. */
     async key(data: string, answer = "") {
-      hold.keyTyped("p", terminal, AGENT, data.includes("\r"))
+      hold.keyTyped("p", terminal, AGENT, data)
       if (answer) await this.feed(answer)
+    },
+    /** A key as `onInput` takes it: counted (`menuOnScreen`, F2), told to the hold (`menuKey`), then written. */
+    async type(data: string, echo = "") {
+      const menu = hold.waiting("p", terminal, AGENT)
+      const answers = menu !== undefined && isAnswerKey(data) && !isTyping(line) && menuNames(menu, data)
+      line = typedAfter(line, data, Date.now(), answers)
+      if (data.includes("\r") || !isTyping(line)) hold.keyTyped("p", terminal, AGENT, data)
+      if (echo) await this.feed(echo)
+    },
+    /** What keeps mail out of the pane: `questionOpen`, or a line the user has begun. */
+    mailWaits() {
+      return this.questionOpen() || isTyping(line)
     },
     /** `questionOpen`, as far as the stream and the screen go. */
     questionOpen: () => pending !== undefined || hold.waiting("p", terminal, AGENT) !== undefined,
@@ -142,35 +149,28 @@ describe("a menu with lines below it is a menu that waits", () => {
 })
 
 describe("an agent that opens on a menu gets nothing typed into it", () => {
-  for (const [name, chunks] of [
-    ["a console in UTF-8", OPENS_ON_MENU_UTF8],
-    ["menu0 as in the live test: raw UTF-8 on the OEM code page", OPENS_ON_MENU_OEM],
-  ] as const) {
-    describe(name, () => {
-      test("spawn: the first task waits", async () => {
-        const p = pane()
-        await p.feed(...chunks)
-        expect(opening(p, 1000)).toBe("wait")
-        expect(await typedInto(p)).toEqual([])
-      })
+  test("spawn: the first task waits", async () => {
+    const p = pane()
+    await p.feed(...OPENS_ON_MENU_UTF8)
+    expect(opening(p, 1000)).toBe("wait")
+    expect(await typedInto(p)).toEqual([])
+  })
 
-      test("relaunch with a request open: over the old process's screen, moved away", async () => {
-        const p = pane()
-        await written(p.terminal, CLEANED)
-        await p.feed(...chunks)
-        expect(opening(p, 1000)).toBe("wait")
-        expect(await typedInto(p)).toEqual([])
-      })
+  test("relaunch with a request open: over the old process's screen, moved away", async () => {
+    const p = pane()
+    await written(p.terminal, CLEANED)
+    await p.feed(...OPENS_ON_MENU_UTF8)
+    expect(opening(p, 1000)).toBe("wait")
+    expect(await typedInto(p)).toEqual([])
+  })
 
-      test("reload: the preamble waits, and the task is not given up on a timer", async () => {
-        const p = pane()
-        await p.feed(...chunks)
-        expect(opening(p, 1400)).toBe("wait")
-        expect(opening(p, OPENING_TIMEOUT_MS * 10)).toBe("wait")
-        expect(await typedInto(p)).toEqual([])
-      })
-    })
-  }
+  test("reload: the preamble waits, and the task is not given up on a timer", async () => {
+    const p = pane()
+    await p.feed(...OPENS_ON_MENU_UTF8)
+    expect(opening(p, 1400)).toBe("wait")
+    expect(opening(p, OPENING_TIMEOUT_MS * 10)).toBe("wait")
+    expect(await typedInto(p)).toEqual([])
+  })
 
   test("once the menu is gone the task goes", async () => {
     const p = pane()
@@ -374,6 +374,290 @@ describe("the sender hears it is held", () => {
   })
 })
 
+describe("a key the menu does not name never releases it", () => {
+  test("x, and the program goes on printing under the menu", async () => {
+    const p = pane()
+    await p.feed(FILL, "ml", ON_FULL_SCREEN + NOTES)
+    await p.key("x")
+    await p.feed("note 4: still waiting\r\n")
+    expect(p.questionOpen()).toBe(true)
+    expect(await typedInto(p)).toEqual([])
+  })
+
+  test("mla: x within its 3 s, and the notes come after it", async () => {
+    const p = pane()
+    await p.feed(FILL, "la\r\nRun the build command?\r\n  ❯ 1. Yes, proceed\r\n    2. No\r\n")
+    await p.feed("\n Enter to confirm · Esc to cancel\x1b[1C")
+    await p.key("x")
+    await p.feed(NOTES)
+    expect(p.questionOpen()).toBe(true)
+  })
+
+  test("x, and a status row repainted in place", async () => {
+    const p = pane()
+    await p.feed(FILL, "ml", ON_FULL_SCREEN + "\r\nstatus 12:00:01")
+    await p.key("x")
+    await p.feed("\x1b[2K\rstatus 12:00:02")
+    expect(p.questionOpen()).toBe(true)
+  })
+
+  test("a digit the menu names, when all it does is move the highlight in place", async () => {
+    const p = pane()
+    await p.feed("Run the build command?\r\n  ❯ 1. Yes, proceed\r\n    2. No\r\n\r\n Enter to confirm · Esc to cancel\r\nstatus")
+    await p.key("2")
+    await p.feed("\x1b[2;1H    1. Yes, proceed\x1b[K\x1b[3;1H  ❯ 2. No\x1b[K\x1b[6;1H")
+    expect(p.questionOpen()).toBe(true)
+  })
+
+  test("a key it names, once the program has printed what came of it", async () => {
+    const p = pane()
+    await p.feed(FILL, "ml", ON_FULL_SCREEN + NOTES)
+    await p.key("2", " [2]\r\nanswered\r\n")
+    expect(p.questionOpen()).toBe(false)
+  })
+
+  test("what a menu names: its numbers, and a letter its label shows", async () => {
+    const terminal = new Terminal({ cols: 100, rows: 24, allowProposedApi: true })
+    await written(terminal, "Run it?\r\n› 1. Yes, proceed (y)\r\n  2. No, and tell Codex what to do (esc)\r\n\r\n  Press enter to confirm or esc to cancel")
+    const menu = screenQuestion(terminal, "codex")!
+    expect(["1", "2", "y", "Y"].filter((key) => menuNames(menu, key))).toEqual(["1", "2", "y", "Y"])
+    expect(["3", "x", "h", "es"].filter((key) => menuNames(menu, key))).toEqual([])
+  })
+})
+
+describe("a line the user has begun under the words of a menu", () => {
+  const QUOTED =
+    "\r\nThe tool drew this:\r\nRun the build command?\r\n  ❯ 1. Yes, proceed\r\n    2. No\r\n Enter to confirm · Esc to cancel\r\n\r\n> "
+  const LIST = "\r\nWhich do you prefer?\r\n1. Yes\r\n2. No\r\n\r\n> "
+
+  test("a menu quoted with its hint: h, and the mail does not land after the h", async () => {
+    const p = pane()
+    await p.feed(FILL, QUOTED)
+    await p.type("h", "h")
+    expect(p.mailWaits()).toBe(true)
+  })
+
+  test("a list of answers over a composer: the echo takes the reading away, and the h still counts", async () => {
+    const p = pane()
+    await p.feed(FILL, LIST)
+    await p.type("h", "h")
+    expect(p.mailWaits()).toBe(true)
+  })
+
+  test("the quoted menu scrolls away with the h still there", async () => {
+    const p = pane()
+    await p.feed(FILL, QUOTED)
+    await p.type("h", "h")
+    await p.feed("\r\n" + "more output\r\n".repeat(ROWS))
+    expect(p.mailWaits()).toBe(true)
+  })
+
+  test("a digit as the first thing typed: its echo in the composer does not release the menu", async () => {
+    const p = pane()
+    await p.feed(FILL, QUOTED)
+    await p.type("1", "1")
+    expect(p.mailWaits()).toBe(true)
+  })
+
+  test("the Enter sends the line, and the mail goes", async () => {
+    const p = pane()
+    await p.feed(FILL, QUOTED)
+    await p.type("h", "h")
+    await p.type("\r", "\r\nworking\r\nworking\r\n")
+    expect(p.mailWaits()).toBe(false)
+  })
+
+  test("a one-key answer the menu names is no line begun (F2)", async () => {
+    const p = pane()
+    await p.feed(FILL, "ml", ON_FULL_SCREEN + NOTES)
+    await p.type("1", " [1]\r\nanswered; working...\r\nworking 1/4\r\n")
+    expect(p.mailWaits()).toBe(false)
+  })
+
+  test("a key it does not name, into a menu that then goes: counted as a line until an Enter, the side the count errs on", async () => {
+    const p = pane()
+    await p.feed(FILL, "ml", ON_FULL_SCREEN + NOTES)
+    await p.type("q", "\x1b[2J\x1b[H> ")
+    expect(p.questionOpen()).toBe(false)
+    expect(p.mailWaits()).toBe(true)
+    await p.type("\r", "\r\n> ")
+    expect(p.mailWaits()).toBe(false)
+  })
+})
+
+describe("the question dialog of OpenCode, and of ragu without its plugin", () => {
+  // `packages/tui/src/routes/session/question.tsx`: the active option by colour alone, free labels, its own last row.
+  const DIALOG = [
+    "  Which library should we use?",
+    "",
+    "  1. Foo",
+    "     The foo library",
+    "  2. Bar",
+    "     The bar library",
+    "  3. Type your own answer",
+    "",
+  ]
+  const rowsOf = async (rows: readonly string[]) => {
+    const terminal = new Terminal({ cols: 100, rows: 24, allowProposedApi: true })
+    await written(terminal, rows.join("\r\n"))
+    return screenQuestion(terminal, "opencode")
+  }
+
+  for (const hint of [
+    "  ↑↓ select  enter submit  esc dismiss",
+    "  ⇆ tab switch  ↑↓ select  enter confirm  esc dismiss",
+    "  ↑↓ select  enter toggle  esc dismiss",
+    "  ↑↓ select · enter submit · esc dismiss",
+  ]) {
+    test(`read by its hint: ${hint.trim()}`, async () => {
+      const menu = await rowsOf([...DIALOG, hint])
+      expect(menu?.what).toBe("Which library should we use?")
+      expect(menu?.answers.map((answer) => answer.label)).toEqual(["Foo", "Bar", "Type your own answer"])
+    })
+  }
+
+  test("with a row below it, and a digit is a key it names", async () => {
+    const menu = await rowsOf([...DIALOG, "  ↑↓ select  enter submit  esc dismiss", "  flash · 12% used"])
+    expect(menu?.under).toBe(1)
+    expect(menuNames(menu!, "2")).toBe(true)
+    expect(menuNames(menu!, "h")).toBe(false)
+  })
+
+  const PROSE = ["● Here is the plan:", "  1. Install the dependencies first.", "  2. Run the tests afterwards.", ""]
+  for (const [name, rows] of [
+    ["a hint that names one key", [...PROSE, "Press enter to continue"]],
+    ["a sentence that starts with a key", [...PROSE, "Enter the folder, then tab to select a file"]],
+    ["two keys, neither of them Enter", [...PROSE, "Esc to cancel · Tab to amend"]],
+    ["ordinary prose", [...PROSE, "Then tell me how it went."]],
+    [
+      "numbers that do not start from 1",
+      ["● The rest of the plan:", "  3. Install the dependencies first.", "  4. Run the tests afterwards.", "", "  ↑↓ select  enter submit  esc dismiss"],
+    ],
+    [
+      "a gap in the numbers",
+      ["● Which ones:", "  1. Install the dependencies first.", "  3. Run the tests afterwards.", "", "  ↑↓ select  enter submit  esc dismiss"],
+    ],
+  ] as const) {
+    test(`a reply stays a reply: ${name}`, async () => {
+      expect(await rowsOf(rows)).toBeUndefined()
+    })
+  }
+})
+
+describe("ragu's confirm dialog", () => {
+  // `packages/tui/src/ui/dialog-confirm.tsx`: an overlay, so the session's own text may stand on the row either side.
+  const DIALOG = ["  Update available", "", "  Install now?", "", "      Cancel      Confirm", "", ""]
+
+  test("read by its hint: Y or N act at once, and a mail's first letter would be one", async () => {
+    const terminal = new Terminal({ cols: 100, rows: 24, allowProposedApi: true })
+    await written(terminal, [...DIALOG, "        Y/N or ←→ to switch, enter to confirm", "", "  background"].join("\r\n"))
+    const menu = screenQuestion(terminal, "ragu")
+    expect(menu?.under).toBe(0)
+    expect(menuNames(menu!, "y")).toBe(true)
+    expect(menuNames(menu!, "N")).toBe(true)
+    expect(menuNames(menu!, "x")).toBe(false)
+  })
+
+  test("with the session's text either side of it", async () => {
+    const terminal = new Terminal({ cols: 100, rows: 24, allowProposedApi: true })
+    await written(terminal, "old text    Y/N or ←→ to switch, enter to confirm    old text")
+    expect(screenQuestion(terminal, "ragu")).toBeDefined()
+  })
+})
+
+describe("a menu in a box of its own: only this box counts (agy)", () => {
+  const STATUS = "  model: flash  12% used"
+  const box = (...inside: string[]) => ["╭" + "─".repeat(60) + "╮", ...inside.map((row) => `│ ${row.padEnd(58)} │`), "╰" + "─".repeat(60) + "╯"]
+  const read = async (rows: readonly string[], cols = 100) => {
+    const terminal = new Terminal({ cols, rows: 24, allowProposedApi: true })
+    await written(terminal, rows.join("\r\n"))
+    return screenQuestion(terminal, "agy")
+  }
+
+  test("a label that wraps inside the box", async () => {
+    const menu = await read([...box("Do you want to edit a.ts?", "› 1. Yes, and allow every later edit of this file in", "     this whole session", "  2. No"), STATUS])
+    expect(menu?.what).toBe("Do you want to edit a.ts?")
+    expect(menu?.answers.length).toBe(2)
+  })
+
+  test("a blank row above the options, and a label over 40 characters", async () => {
+    const menu = await read([...box("Do you want to edit a.ts?", "", "› 1. Yes, and allow every later edit of this file", "  2. No"), STATUS])
+    expect(menu?.what).toBe("Do you want to edit a.ts?")
+  })
+
+  test("a row like a selected option above the box: the user's own message, echoed", async () => {
+    const menu = await read(["› 1. fix this", "  2. fix that", "", ...box("Do you want to edit a.ts?", "› 1. Yes", "  2. No"), STATUS])
+    expect(menu?.what).toBe("Do you want to edit a.ts?")
+    expect(menu?.answers.map((answer) => answer.label)).toEqual(["Yes", "No"])
+  })
+
+  test("an answered box above a new one: the new one is read, and its question is new to the hold", async () => {
+    const hold = createMenuHold()
+    const terminal = new Terminal({ cols: 100, rows: 24, allowProposedApi: true })
+    await written(terminal, [...box("Do you want to edit a.ts?", "› 1. Yes", "  2. No"), STATUS].join("\r\n"))
+    hold.keyTyped("p", terminal, "agy", "\r")
+    await written(terminal, "\r\nedited a.ts\r\n" + [...box("Do you want to edit b.ts?", "› 1. Yes", "  2. No"), STATUS].join("\r\n"))
+    expect(screenQuestion(terminal, "agy")?.what).toBe("Do you want to edit b.ts?")
+    expect(hold.waiting("p", terminal, "agy")?.what).toBe("Do you want to edit b.ts?")
+  })
+
+  test("two cursors in the same box are not a menu, and a box of text with no cursor neither", async () => {
+    expect(await read([...box("Pick?", "› 1. Yes", "› 2. No"), STATUS])).toBeUndefined()
+    expect(await read([...box("Notes", "  1. read the file", "  2. fix it"), STATUS])).toBeUndefined()
+  })
+})
+
+describe("what xterm has not parsed yet", () => {
+  test("a pane is behind from the chunk it was given until xterm has parsed it, and the screen does not know yet", async () => {
+    const terminal = new Terminal({ cols: COLS, rows: ROWS, allowProposedApi: true })
+    const unparsed = createUnparsed()
+    const parsed = new Promise<void>((resolve) => {
+      terminal.write(ON_FULL_SCREEN, () => {
+        unparsed.parsed("p")
+        resolve()
+      })
+      unparsed.fed("p")
+    })
+    expect(screenQuestion(terminal, AGENT)).toBeUndefined()
+    expect(unparsed.behind("p")).toBe(true)
+    await parsed
+    expect(unparsed.behind("p")).toBe(false)
+    expect(screenQuestion(terminal, AGENT)).toBeDefined()
+  })
+
+  test("two chunks: behind until the last, and a late callback after a forget does no harm", () => {
+    const unparsed = createUnparsed()
+    unparsed.fed("p")
+    unparsed.fed("p")
+    unparsed.parsed("p")
+    expect(unparsed.behind("p")).toBe(true)
+    unparsed.parsed("p")
+    expect(unparsed.behind("p")).toBe(false)
+    unparsed.fed("p")
+    unparsed.forget("p")
+    unparsed.parsed("p")
+    expect(unparsed.behind("p")).toBe(false)
+  })
+})
+
+describe("a menu with no question above it", () => {
+  const MENU = "  ❯ 1. Yes, proceed\r\n    2. No\r\n\r\n Enter to confirm · Esc to cancel\r\nnote\r\n"
+
+  test("printed again below the first, it is a new menu", async () => {
+    const terminal = new Terminal({ cols: COLS, rows: 40, allowProposedApi: true })
+    const hold = createMenuHold()
+    await written(terminal, MENU)
+    expect(screenQuestion(terminal, AGENT)?.what).toBe("")
+    hold.keyTyped("p", terminal, AGENT, "1")
+    await written(terminal, " [1]\r\nanswered\r\n")
+    expect(hold.waiting("p", terminal, AGENT)).toBeUndefined()
+    // Far enough below that the words above it are no question of its own, and with more under it than the key saw.
+    await written(terminal, "\r\n".repeat(13) + MENU + "note 2\r\nnote 3\r\n")
+    expect(screenQuestion(terminal, AGENT)?.what).toBe("")
+    expect(hold.waiting("p", terminal, AGENT)).toBeDefined()
+  })
+})
+
 describe("lint: the workbench's wiring", () => {
   const source = codeOf(readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8"))
   const between = (from: string, to: string) => {
@@ -392,19 +676,67 @@ describe("lint: the workbench's wiring", () => {
   test("lint: the screen is read after xterm has parsed each chunk", () => {
     const feed = between("const feedTerminal = (", "const addProject")
     expect(feed).toContain(codeOf("watchScreen(paneId)"))
-    expect(feed).toContain(codeOf("if (!writeToTerminal(paneId, chunk, written)) discardNotes.refused(paneId)"))
+    expect(feed).toContain(codeOf("if (!writeToTerminal(paneId, chunk, written)) {"))
+  })
+
+  test("lint: a chunk counts as unparsed from before its write until xterm calls back, or refuses it", () => {
+    const feed = between("const feedTerminal = (", "const addProject")
+    expect(feed.indexOf(codeOf("unparsed.fed(paneId)"))).toBeGreaterThanOrEqual(0)
+    expect(feed.indexOf(codeOf("unparsed.fed(paneId)"))).toBeLessThan(feed.indexOf(codeOf("writeToTerminal(paneId, chunk, written)")))
+    expect(feed.split(codeOf("unparsed.parsed(paneId)")).length).toBe(3)
+    expect(between("const forgetPane = (", "rawWindows.forget(id)")).toContain(codeOf("unparsed.forget(id)"))
   })
 
   test("lint: every key on its way to a pane reaches the hold before it is written", () => {
-    expect(between("const turnSubmitted = (", "promptAnswered(paneId)")).toContain(codeOf("menuKey(paneId, true)"))
-    expect(between("const promptAnswered = (", "const pane =")).toContain(codeOf("menuKey(paneId)"))
-    expect(between("const answerPermission = (", "appendLine(paneId")).toContain(codeOf("menuKey(paneId, true)"))
+    const renderer = readFileSync(new URL("../surface/pane-renderer.tsx", import.meta.url), "utf8")
+    expect(renderer).toContain("if (answersPrompt(data)) deps.menuKey(current().id, data)")
+    expect(renderer.indexOf("deps.menuKey(current().id, data)")).toBeLessThan(renderer.indexOf("session.write(data)"))
+    expect(between("const turnSubmitted = (", "claims.evidence(paneId)")).toContain(codeOf('menuKey(paneId, "\\r")'))
+    expect(between("const answerPermission = (", "appendLine(paneId")).toContain(codeOf('menuKey(paneId, "\\r")'))
+  })
+
+  test("lint: on a screen's word alone, only a key the menu names is not the start of a line", () => {
+    const body = between("const menuOnScreen = (", "const screenMenu = (")
+    expect(body).toContain(codeOf("menu !== undefined && menuNames(menu, key)"))
+    expect(readFileSync(new URL("../surface/pane-renderer.tsx", import.meta.url), "utf8")).toContain(
+      "deps.menuOpen(current().id, data)",
+    )
   })
 
   test("lint: the first task asks the screen on every pass, and says what it waits for", () => {
     const poll = between("if (starting.typesTask) {", "openingPolls.add(poll)")
     expect(poll).toContain(codeOf("const asked = questionOpen(paneId)"))
-    expect(poll).toContain(codeOf("permissionPending: asked"))
+    expect(poll).toContain(codeOf("permissionPending: asked || unparsed.behind(paneId)"))
     expect(poll).toContain(codeOf('t("task.heldByMenu")'))
+  })
+
+  test("lint: the opening's clock is the helpers', from the first text, and starts again after a question", () => {
+    const poll = between("if (starting.typesTask) {", "openingPolls.add(poll)")
+    expect(poll).toContain(codeOf("...clockAfterMenu({ startedAt, ...openingBytes }, menuAt),"))
+    expect(poll).toContain(codeOf("const drawn = screenDrawn(openingBytes, Date.now())"))
+    expect(source).toContain(codeOf("openingBytes = bytesAfter(openingBytes, chunk, now)"))
+  })
+
+  test("lint: a first task refused at the last moment is said, on both of its paths", () => {
+    const poll = between("if (starting.typesTask) {", "openingPolls.add(poll)")
+    expect(poll).toContain(codeOf('t("task.notTyped")'))
+    expect(poll).toContain(codeOf("if (!host) return void typeOpening()"))
+    expect(poll).toContain(codeOf("else void typeOpening()"))
+    expect(poll).not.toContain(codeOf("typeLine(session, opening)"))
+  })
+
+  test("lint: a remote session forgets the hold and the note, reads the first text, and says a step held for long", () => {
+    const remote = between("const startRemoteProcess = async (", "openingPolls.add(poll)")
+    expect(remote).toContain(codeOf("menuHold.forget(paneId)"))
+    expect(remote).toContain(codeOf('if (heldByMenuNoted.delete(paneId)) dropPaneNote(paneId, t("note.mailHeldByMenu"))'))
+    expect(remote).toContain(codeOf("if (drawsText(chunk)) textAt = Date.now()"))
+    expect(remote).toContain(codeOf("Date.now() - stepStart >= REMOTE_STEP_NOTE_MS"))
+    expect(remote).toContain(codeOf('t("task.stepHeld", String(steps[index]))'))
+    expect(remote).toContain(codeOf("permissionPending: asking"))
+  })
+
+  test("lint: a restart forgets the note of the process before it", () => {
+    const local = between("const startProcess = async (", "const startRemoteProcess = async (")
+    expect(local).toContain(codeOf('if (heldByMenuNoted.delete(paneId)) dropPaneNote(paneId, t("note.mailHeldByMenu"))'))
   })
 })

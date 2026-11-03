@@ -241,6 +241,6 @@ test("lint: the terminal asks whether a question is open before it counts a key"
     expect(renderer).toContain("typedAfter(line, data, Date.now(), menuOpen)")
   const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf-8")
   // Re-review N16: a line that already has typing in it ignores the answer, so the screen is not read for it.
-  expect(renderer).toContain("isAnswerKey(data) && !isTyping(deps.records.typed.get(current().id)) && deps.menuOpen(current().id)")
+  expect(renderer).toContain("isAnswerKey(data) && !isTyping(deps.records.typed.get(current().id)) && deps.menuOpen(current().id, data)")
   expect(workbench).toMatch(/promptAnswered,\r?\n\s+menuOpen: menuOnScreen,/)
 })

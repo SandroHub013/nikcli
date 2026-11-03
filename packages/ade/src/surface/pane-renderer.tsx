@@ -98,8 +98,10 @@ export interface PaneRendererDeps {
   turnSubmitted: (id: string) => void
   /** A key typed in the pane that answers a prompt standing there (`answersPrompt`). */
   promptAnswered: (id: string) => void
-  /** Whether a menu stands in the pane now, as far as a key typed into it would be its answer (`menuOnScreen`). */
-  menuOpen: (id: string) => boolean
+  /** Whether a menu stands in the pane now and `key` typed into it would be its answer (`menuOnScreen`). */
+  menuOpen: (id: string, key: string) => boolean
+  /** A key on its way to the pane: which menu on its screen still waits depends on it (`createMenuHold`). */
+  menuKey: (id: string, key: string) => void
   /** An Esc or a Ctrl-C typed in the pane, which Claude Code reports to no hook. */
   interrupted: (id: string) => void
   /** "Riprova" on a session that failed. */
@@ -507,11 +509,12 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
            * never asks what is running: see `session/typing.ts`.
            */
           // Asked before the key is written: a key that answers a menu on screen is not a line begun (F2).
-          const menuOpen = isAnswerKey(data) && !isTyping(deps.records.typed.get(current().id)) && deps.menuOpen(current().id)
+          const menuOpen = isAnswerKey(data) && !isTyping(deps.records.typed.get(current().id)) && deps.menuOpen(current().id, data)
           deps.records.typed.update(current().id, (line) => typedAfter(line, data, Date.now(), menuOpen))
           // Enter typed straight into the terminal submits a turn, exactly as
           // the composer does; the quiet timer brings the pane back to idle.
           // …and a turn of its own, after which a repeated `@ade` line is a new request.
+          if (answersPrompt(data)) deps.menuKey(current().id, data)
           if (answersPrompt(data)) deps.promptAnswered(current().id)
           if (data.includes("\r")) {
             deps.panels.newTurn(current().id)

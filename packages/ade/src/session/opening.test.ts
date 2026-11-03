@@ -1,5 +1,15 @@
 import { describe, expect, test } from "bun:test"
-import { OPENING_QUIET_MS, OPENING_SETTLE_MS, OPENING_TIMEOUT_MS, decideOpening, type OpeningInput } from "./opening"
+import {
+  OPENING_QUIET_MS,
+  OPENING_SETTLE_MS,
+  OPENING_TIMEOUT_MS,
+  bytesAfter,
+  clockAfterMenu,
+  decideOpening,
+  screenDrawn,
+  type OpeningBytes,
+  type OpeningInput,
+} from "./opening"
 
 const at = (overrides: Partial<OpeningInput>): OpeningInput => ({
   startedAt: 0,
@@ -112,5 +122,105 @@ describe("decideOpening", () => {
         }),
       ),
     ).toBe("send")
+  })
+})
+
+/*
+ * The poll of a first task, tick by tick, as the workbench drives it: the question stands until `answeredAt`, and the
+ * clock starts again from the last pass that saw it (review of menu-posta, B1).
+ */
+function ticksAfterAnswer(answeredAt: number): string[] {
+  const bytes: OpeningBytes = { firstByteAt: 100, lastByteAt: 200 }
+  const decisions: string[] = []
+  let menuAt: number | undefined
+  for (let now = 100; now <= answeredAt + 1_000; now += 100) {
+    const asked = now < answeredAt
+    if (asked) menuAt = now
+    const decision = decideOpening({
+      ...clockAfterMenu({ startedAt: 0, ...bytes }, menuAt),
+      now,
+      permissionPending: asked,
+    })
+    if (now >= answeredAt) decisions.push(decision)
+    if (decision !== "wait") break
+  }
+  return decisions
+}
+
+describe("a question answered late does not cost the task", () => {
+  test("answered at 59 s, the task goes", () => {
+    expect(ticksAfterAnswer(59_000).at(-1)).toBe("send")
+  })
+
+  test("answered at 61 s, past the opening's deadline, the task goes", () => {
+    expect(ticksAfterAnswer(61_000)).not.toContain("abandon")
+    expect(ticksAfterAnswer(61_000).at(-1)).toBe("send")
+  })
+
+  test("answered after ten minutes, the task goes", () => {
+    expect(ticksAfterAnswer(600_000).at(-1)).toBe("send")
+  })
+
+  test("it goes once the screen has been quiet, not on the tick of the answer", () => {
+    expect(ticksAfterAnswer(61_000)[0]).toBe("wait")
+  })
+})
+
+/*
+ * ConPTY speaks before the program does: its modes, the title and the cursor, about 100 ms after spawn (bytes of the
+ * live test of 2026-11-02). Counted as the CLI having spoken, the task was typed 0.5 s after spawn on a blank screen,
+ * into whatever the program opens on (review of menu-posta, B3).
+ */
+describe("the first byte is the first thing drawn", () => {
+  const CONPTY = "\x1b[?9001h\x1b[?1004h\x1b[m\x1b]0;C:\\Windows\\System32\\cmd.exe\x07\x1b[?25h"
+  const decide = (bytes: OpeningBytes, now: number) =>
+    decideOpening({ startedAt: 0, ...bytes, now, permissionPending: false })
+
+  test("ConPTY's own bytes, and nothing else, for as long as the program takes to start", () => {
+    const bytes = bytesAfter({}, CONPTY, 100)
+    expect(decide(bytes, 520)).toBe("wait")
+    expect(decide(bytes, 12_000)).toBe("wait")
+  })
+
+  test("a blank screen, cursor moves and line ends are nothing drawn either", () => {
+    expect(bytesAfter({}, "\x1b[2J\x1b[H\r\n  \r\n", 100)).toEqual({})
+  })
+
+  test("the first text starts the clock, and every byte after it keeps it going", () => {
+    let bytes = bytesAfter({}, CONPTY, 100)
+    bytes = bytesAfter(bytes, "FAKE AGENT ready", 12_000)
+    expect(bytes).toEqual({ firstByteAt: 12_000, lastByteAt: 12_000 })
+    bytes = bytesAfter(bytes, "\x1b[?25h", 12_100)
+    expect(bytes).toEqual({ firstByteAt: 12_000, lastByteAt: 12_100 })
+    expect(decide(bytes, 12_100 + OPENING_QUIET_MS - 1)).toBe("wait")
+    expect(decide(bytes, 12_100 + OPENING_QUIET_MS)).toBe("send")
+  })
+
+  test("the limit that stays: a banner, 400 ms of quiet, then a menu", () => {
+    const bytes = bytesAfter({}, "Loading...", 1_000)
+    expect(decide(bytes, 1_000 + OPENING_QUIET_MS)).toBe("send")
+  })
+})
+
+/*
+ * A menu with a ticking status row never goes quiet. The note, the line to the parent and the trust dialog waited for
+ * quiet, so nobody was told anything (review of menu-posta, N4).
+ */
+describe("when the screen counts as drawn", () => {
+  test("quiet", () => {
+    expect(screenDrawn({ firstByteAt: 1_000, lastByteAt: 1_200 }, 1_200 + OPENING_QUIET_MS)).toBe(true)
+  })
+
+  test("still painting, and not for long", () => {
+    expect(screenDrawn({ firstByteAt: 1_000, lastByteAt: 1_200 }, 1_300)).toBe(false)
+  })
+
+  test("animated: past the settle it is as drawn as it gets", () => {
+    const now = 1_000 + OPENING_SETTLE_MS
+    expect(screenDrawn({ firstByteAt: 1_000, lastByteAt: now - 80 }, now)).toBe(true)
+  })
+
+  test("nothing drawn yet", () => {
+    expect(screenDrawn({}, 100_000)).toBe(false)
   })
 })

@@ -12,7 +12,14 @@
  * (`PermissionSchema.screen`); a numbered list in a reply is no menu here either.
  */
 
-import { detectPermission, menuAboveLines, permissionIdentity, type PermissionRequest } from "./permission"
+import {
+  BARE_PROMPT_RE,
+  confirmDialog,
+  detectPermission,
+  menuAboveLines,
+  permissionIdentity,
+  type PermissionRequest,
+} from "./permission"
 
 export interface ScreenTerminal {
   readonly rows: number
@@ -36,6 +43,8 @@ export function bottomRows(terminal: ScreenTerminal): string[] {
 export type ScreenMenu = PermissionRequest & { under: number }
 
 function menuOnRows(rows: readonly string[], agentId: string): ScreenMenu | undefined {
+  const dialog = confirmDialog(rows)
+  if (dialog) return { ...dialog, under: 0 }
   const last = detectPermission([...rows], agentId, { screen: true })
   if (last) return { ...last, under: 0 }
   const above = menuAboveLines(rows)
@@ -47,18 +56,30 @@ export function screenQuestion(terminal: ScreenTerminal, agentId: string): Scree
   return menuOnRows(bottomRows(terminal), agentId)
 }
 
-/** The key the user typed into a menu with lines below it, and the screen it was typed on. */
+/**
+ * Whether `menu` says it takes `key`: what one of its answers sends (its number, or ragu's y and n), or the letter a label
+ * shows in brackets, «Yes, proceed (y)». Enter is everyone's, and is not asked here.
+ */
+export function menuNames(menu: PermissionRequest, key: string): boolean {
+  const pressed = key.toLowerCase()
+  return menu.answers.some(
+    (answer) => answer.send.toLowerCase() === pressed || answer.label.toLowerCase().endsWith(`(${pressed})`),
+  )
+}
+
+/** The key that may have answered a menu, and what stood on the screen when it was typed. */
 interface KeyedMenu {
   identity: string
   /** How many rows of the screen ask this question: one more is a new menu, the same words printed again. */
   copies: number
-  screen: string
+  /** The rows under the menu when the key was typed, a composer's empty prompt among them. */
+  below: number
   enter: boolean
 }
 
 export interface MenuHold {
   /** The user typed a key that may answer what is on the screen: said before the key is written. */
-  keyTyped(paneId: string, terminal: ScreenTerminal, agentId: string, enter?: boolean): void
+  keyTyped(paneId: string, terminal: ScreenTerminal, agentId: string, key: string): void
   /** The menu that waits on the pane's screen now, if one does. */
   waiting(paneId: string, terminal: ScreenTerminal, agentId: string): ScreenMenu | undefined
   forget(paneId: string): void
@@ -71,30 +92,46 @@ export interface MenuHold {
  * answered by a program that prints lines and never redraws, so what tells them apart is what the user did:
  *
  * - an Enter into it is its answer, whatever the program does next;
- * - any other key answers it once the screen moves: a key the menu ignores changes nothing, and it still waits;
+ * - a key it names (`menuNames`) is its answer once the program has printed more under it. The echo of a key on a row
+ *   already there, a status repainted, a highlight moved: none of those is more;
+ * - a key it does not name says nothing, however much the screen moves: the programs this exists for go on printing;
  * - the same question printed again below the first is a new menu.
  *
  * Time and more output say nothing: a program that waits can go on printing (`mla`), and a timer that let the mail go
  * would be typing into the menu. So a false positive, the words of a menu in a reply with its hint and all, holds mail
- * until the user presses Enter or a key the screen shows, until it scrolls away, or, where the CLI reports its turns,
- * until the turn is over (the caller's `screenAsks`). Until then the pane and the sender are told why.
+ * until the user presses Enter, until it scrolls away, or, where the CLI reports its turns, until the turn is over (the
+ * caller's `screenAsks`). Until then the pane and the sender are told why.
+ *
+ * What it cannot tell: a digit that only moves the highlight of a menu whose program is also printing under it reads as
+ * an answer. Whether real agents do that is for a live check.
  */
 export function createMenuHold(): MenuHold {
   const keyed = new Map<string, KeyedMenu>()
   const identityOf = (menu: ScreenMenu) =>
     `${permissionIdentity(menu)}\n${menu.answers.map((answer) => answer.label).join("\n")}`
-  const copiesOf = (rows: readonly string[], menu: ScreenMenu) => rows.filter((row) => row.includes(menu.what)).length
+  // A menu with no question over it goes by its first answer: an empty string is in every row.
+  const copiesOf = (rows: readonly string[], menu: ScreenMenu) => {
+    const words = menu.what || menu.answers[0]?.label || ""
+    return rows.filter((row) => row.includes(words)).length
+  }
+  const rowsBelow = (rows: readonly string[], menu: ScreenMenu) => {
+    if (menu.under > 0) return menu.under
+    const filled = rows.filter((row) => row.trim())
+    return BARE_PROMPT_RE.test(filled[filled.length - 1] ?? "") ? 1 : 0
+  }
   return {
-    keyTyped(paneId, terminal, agentId, enter = false) {
+    keyTyped(paneId, terminal, agentId, key) {
       const rows = bottomRows(terminal)
       const menu = menuOnRows(rows, agentId)
       if (!menu) return
+      const enter = key.includes("\r")
+      if (!enter && !menuNames(menu, key)) return
       const before = keyed.get(paneId)
       const identity = identityOf(menu)
       keyed.set(paneId, {
         identity,
         copies: copiesOf(rows, menu),
-        screen: rows.join("\n"),
+        below: rowsBelow(rows, menu),
         enter: enter || (before?.identity === identity && before.enter),
       })
     },
@@ -112,10 +149,29 @@ export function createMenuHold(): MenuHold {
         return menu
       }
       if (menu.under === 0) return menu
-      return key.enter || rows.join("\n") !== key.screen ? undefined : menu
+      return key.enter || menu.under > key.below ? undefined : menu
     },
     forget(paneId) {
       keyed.delete(paneId)
+    },
+  }
+}
+
+/** Chunks given to xterm and not yet parsed, per pane: until they are, the screen says nothing about them. */
+export function createUnparsed() {
+  const counts = new Map<string, number>()
+  return {
+    fed(paneId: string) {
+      counts.set(paneId, (counts.get(paneId) ?? 0) + 1)
+    },
+    parsed(paneId: string) {
+      const left = (counts.get(paneId) ?? 0) - 1
+      if (left > 0) counts.set(paneId, left)
+      else counts.delete(paneId)
+    },
+    behind: (paneId: string) => counts.has(paneId),
+    forget(paneId: string) {
+      counts.delete(paneId)
     },
   }
 }
