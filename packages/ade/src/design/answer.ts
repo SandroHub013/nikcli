@@ -29,12 +29,18 @@ export function sheetKey(
    * (audit 0.7.7, MEDIO 7).
    */
   inField = false,
+  /**
+   * The key is aimed at a button that is not the answer's own — «Scegli questa» of another variant, «Altro giro»,
+   * the ×. Enter on it is that button's click: without this, Tab to «Scegli questa» of variant 2 and Enter recorded
+   * the variant picked before. Ctrl/Cmd+Enter still submits: it is chosen on purpose.
+   */
+  onOwnButton = false,
 ): SheetKey | undefined {
   if (event.key === "Escape") return { kind: "close" }
   if (inField) return undefined
   if (event.key === "Enter") {
     if (event.ctrlKey || event.metaKey) return { kind: "submit" }
-    if (inText) return undefined
+    if (inText || onOwnButton) return undefined
     return picked ? { kind: "submit" } : { kind: "need-choice" }
   }
   if (inText || event.ctrlKey || event.metaKey || event.altKey) return undefined
@@ -45,6 +51,17 @@ export function sheetKey(
   if (event.key === "ArrowRight") return { kind: "next" }
   if (event.key === "ArrowLeft") return { kind: "previous" }
   return undefined
+}
+
+/**
+ * Whether a key's target is a button whose Enter is its own: any button of the sheet but the options (Enter after
+ * clicking one records the answer) and «Registra scelta» itself.
+ */
+export function isOwnButton(target: unknown): boolean {
+  const element = target as { tagName?: unknown; dataset?: { slot?: string } } | null
+  if (element?.tagName !== "BUTTON") return false
+  const slot = element.dataset?.slot
+  return slot !== "variant-pick-button" && slot !== "design-submit"
 }
 
 /** What is picked in a card: one index, or for a `multi` question the boxes ticked. */
@@ -80,12 +97,13 @@ export function enterReady(multi: boolean, picked: Picked, note: string, chosenH
 }
 
 /**
- * Whether the card's answer buttons are on: a single question needs a pick
- * (nothing is preselected, not even the recommended), a `multi` one a box or a
- * note. «Altro giro» does not wait for this: its note is its own answer.
+ * Whether the card's answer buttons are on: a pick (nothing is preselected, not
+ * even the recommended) or a note. The user's own words are an answer: they
+ * record `words` and no `choice`, so none is invented; a plain Enter still needs
+ * a pick (`enterReady`). «Altro giro» does not wait for this: its note is its own answer.
  */
-export function isAnswerable(multi: boolean, picked: Picked, note: string): boolean {
-  return multi ? hasPick(picked) || note.trim().length > 0 : hasPick(picked)
+export function isAnswerable(picked: Picked, note: string): boolean {
+  return hasPick(picked) || note.trim().length > 0
 }
 
 export function answerEvent(

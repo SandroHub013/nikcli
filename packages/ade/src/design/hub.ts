@@ -180,7 +180,7 @@ export function createDesignHub(deps: {
         inline: inline(),
         busy: busyKeys().has(proposal.k),
         label: "",
-        chosen: isAnswerable(Boolean(proposal.multi), current.picked, current.note),
+        chosen: isAnswerable(current.picked, current.note),
       })
       // Nothing chosen: nothing is written, and it says why (the buttons are off, Enter and a script reach here).
       if (!control.answerable) {

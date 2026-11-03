@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { isAnswerable } from "./answer"
+import { isAnswerable, isOwnButton, sheetKey } from "./answer"
 import { submitControl, submitSteps } from "./card"
 import type { RecipientStatus } from "./delivery"
 import { createDesignHub } from "./hub"
@@ -31,13 +31,43 @@ const proposal: DesignProposal = {
 }
 
 describe("the Design sheet records only a choice somebody made", () => {
-  test("isAnswerable: a single question needs a pick, a multi one a box or a note", () => {
-    expect(isAnswerable(false, undefined, "")).toBe(false)
-    expect(isAnswerable(false, undefined, "una nota")).toBe(false)
-    expect(isAnswerable(false, 0, "")).toBe(true)
-    expect(isAnswerable(true, [], "")).toBe(false)
-    expect(isAnswerable(true, [], "una nota")).toBe(true)
-    expect(isAnswerable(true, [1], "")).toBe(true)
+  test("isAnswerable: a pick, or a note (the user's own words are an answer: 6 of 24 in the register are)", () => {
+    expect(isAnswerable(undefined, "")).toBe(false)
+    expect(isAnswerable(undefined, "   ")).toBe(false)
+    expect(isAnswerable(undefined, "non mi convincono")).toBe(true)
+    expect(isAnswerable(0, "")).toBe(true)
+    expect(isAnswerable([], "")).toBe(false)
+    expect(isAnswerable([], "una nota")).toBe(true)
+    expect(isAnswerable([1], "")).toBe(true)
+  })
+
+  test("a note alone: the button is on and the hub records the words, with no choice invented", async () => {
+    const events: DesignEvent[] = []
+    const register = {
+      path: () => "C:\p\.ade\design.jsonl",
+      loaded: () => undefined,
+      state: () => undefined,
+      error: () => undefined,
+      now: () => new Date(),
+      refresh: async () => {},
+      append: async (event: DesignEvent) => {
+        events.push(event)
+      },
+      watch: () => () => {},
+    } as unknown as DesignRegister
+    const hub = createDesignHub({
+      register,
+      recipient: () => ready,
+      sessions: () => sessions,
+      choose: () => {},
+      delivery: () => ({ state: "in coda" }),
+      onAnswered: () => {},
+    })
+    hub.setDraft(proposal.k, { note: "non mi convincono" })
+    expect(await hub.submit(proposal, "primary")).toBe(true)
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({ type: "risposta", words: "non mi convincono" })
+    expect(events[0]).not.toHaveProperty("choice")
   })
 
   test("nothing chosen: the main button and «Registra senza inviare» are off and a press runs nothing", () => {
@@ -88,6 +118,19 @@ describe("the Design sheet records only a choice somebody made", () => {
     expect(await hub.submit(proposal, "primary")).toBe(false)
     expect(await hub.submit(proposal, "record")).toBe(false)
     expect(events).toEqual([])
+  })
+
+  test("Enter on a button that is not the answer's own is that button's click, not the answer", () => {
+    const button = (slot: string) => ({ tagName: "BUTTON", dataset: { slot } })
+    // «Scegli questa» of another variant, «Altro giro», the cross: their own Enter.
+    for (const slot of ["variant-choose", "design-ghost", "sheet-close"]) expect([slot, isOwnButton(button(slot))]).toEqual([slot, true])
+    // The option just clicked and «Registra scelta» still answer on Enter.
+    for (const slot of ["variant-pick-button", "design-submit"]) expect([slot, isOwnButton(button(slot))]).toEqual([slot, false])
+    expect(isOwnButton({ tagName: "TEXTAREA", dataset: {} })).toBe(false)
+    expect(sheetKey({ key: "Enter" }, 2, false, true, false, true)).toBeUndefined()
+    // Ctrl+Enter is chosen on purpose, and still answers.
+    expect(sheetKey({ key: "Enter", ctrlKey: true }, 2, false, true, false, true)).toEqual({ kind: "submit" })
+    expect(sheetKey({ key: "Enter" }, 2, false, true, false, false)).toEqual({ kind: "submit" })
   })
 
   test("lint: the card turns the answer buttons off by `answerable`, and «Altro giro» does not wait for a pick", () => {

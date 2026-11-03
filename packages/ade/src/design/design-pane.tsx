@@ -52,7 +52,7 @@ export function DesignPane(props: {
         inline: props.hub.inlineRecipient(),
         busy: props.hub.busy(proposal.k),
         label: t("design.submit"),
-        chosen: isAnswerable(Boolean(proposal.multi), props.hub.draft(proposal.k).picked, props.hub.draft(proposal.k).note),
+        chosen: isAnswerable(props.hub.draft(proposal.k).picked, props.hub.draft(proposal.k).note),
       })}
       onInline={(id) => props.hub.setInlineRecipient(id)}
       onRecord={() => void props.hub.submit(proposal, "record")}
