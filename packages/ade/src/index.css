@@ -151,10 +151,14 @@
    * the one value here that does NOT follow the slider. A menu is opened to be
    * read, over whatever happens to be underneath — a terminal mid-scroll, a
    * transcript — and dragging the glass to its most extreme must not take that
-   * away. 0.92 keeps a hint of translucency and still hides what is below.
+   * away. 0.98 keeps a hint of translucency and still hides what is below:
+   * at 0.92 the terminal's white text came through at 1.25:1 under Settings and
+   * the Decisions sheet (live test 3, FAIL 6); at 0.98 it is 1.06:1 at worst,
+   * which is a tint and not a letter. 0.99 would hide a little more, and the
+   * sheet would no longer be glass at all.
    */
   --ade-raised: rgba(255, 255, 255, 0.06);
-  --ade-overlay: rgba(36, 30, 27, 0.92);
+  --ade-overlay: rgba(36, 30, 27, 0.98);
 
   --ade-border-subtle: rgba(255, 255, 255, 0.08);
   --ade-border: rgba(255, 255, 255, 0.12);
@@ -286,6 +290,14 @@ body[data-theme="glass"] #root,
  */
 [data-component="ade-shell"][data-theme="glass"] [data-component="session-pane"] > [data-slot="pane-header"] {
   background: color-mix(in srgb, var(--ade-overlay) 92%, transparent);
+}
+
+/*
+ * Written exception: the Impara bar sits over the world's own HUD, and with no ground of its own the HUD's words ran
+ * under the buttons «Torna al mondo / Esporta / Importa» (live test 3, FAIL 6). It takes the overlay level.
+ */
+[data-component="ade-shell"][data-theme="glass"] [data-slot="learn-progress"] {
+  background: var(--ade-overlay);
 }
 
 /*

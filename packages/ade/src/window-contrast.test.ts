@@ -532,3 +532,38 @@ describe("the notice strip in glass", () => {
     }
   })
 })
+
+// ── 8. what shows through a glass sheet (live test 3, FAIL 6) ─────────────────
+
+describe("the sheets and the Impara bar in glass hide what is under them", () => {
+  /**
+   * The contrast between a pixel of white terminal text and a pixel of its ground, once the overlay is over both: the
+   * ground under a terminal's text is the reading ground (18, 13, 11) at the slider's top, over the desktop; white
+   * desktop and black desktop bracket it.
+   */
+  function leaked(): number {
+    const overlay = color(glassToken("--ade-overlay"))
+    const text = over(overlay, [255, 255, 255])
+    const worst = [over([18, 13, 11, 0.89], [255, 255, 255]), over([18, 13, 11, 0.89], [0, 0, 0])]
+    return Math.max(...worst.map((ground) => ratio(text, over(overlay, ground))))
+  }
+
+  test("the overlay lets through under 1.1:1 of the text below it (at alpha 0.92 it was 1.29 and legible)", () => {
+    expect(leaked()).toBeLessThan(1.1)
+  })
+
+  test("and it is still a little less than opaque: glass stays glass on the app's frame, the sheets are a floor of their own", () => {
+    expect(color(glassToken("--ade-overlay"))[3]).toBeLessThan(1)
+  })
+
+  test("the Impara bar sits on the overlay in glass: its buttons were over the world's HUD text", () => {
+    let value: string | undefined
+    sheet("index.css").walkRules((rule) => {
+      if (rule.selector.replace(/\s+/g, " ") !== '[data-component="ade-shell"][data-theme="glass"] [data-slot="learn-progress"]') return
+      rule.walkDecls("background", (decl) => {
+        value = decl.value.trim()
+      })
+    })
+    expect(value).toBe("var(--ade-overlay)")
+  })
+})
