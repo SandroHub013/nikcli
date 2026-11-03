@@ -301,13 +301,17 @@ fn resolve_command(command: &str, which: impl Fn(&str) -> Option<String>) -> Opt
 /// wheel and drops the clicks; the pane gives the left button back to ADE
 /// (`programHasWheelOnly` in `terminal/registry.ts`), where a click takes two
 /// (`menu-click.ts`). Only in the panes ADE starts: never the user's settings.
+///
+/// `CLAUDE_CODE_NATIVE_CURSOR=1`: Claude Code hides the terminal's cursor unless
+/// a remote flag says otherwise, and ADE reads its input box by that cursor
+/// (`session/composer.ts`). Without it the reading rests on the position alone.
 fn agent_env(command: &str) -> &'static [(&'static str, &'static str)] {
     let stem = command_stem(command.trim());
     // Both names, and the nikcli of before ragu's rename too (`legacy_cli`).
     if crate::legacy_cli::is_cli_stem(stem) {
         &[("RAGU_SERVICE", "0"), ("NIKCLI_SERVICE", "0")]
     } else if stem.eq_ignore_ascii_case("claude") {
-        &[("CLAUDE_CODE_DISABLE_MOUSE_CLICKS", "1")]
+        &[("CLAUDE_CODE_DISABLE_MOUSE_CLICKS", "1"), ("CLAUDE_CODE_NATIVE_CURSOR", "1")]
     } else {
         &[]
     }
@@ -3322,7 +3326,11 @@ mod tests {
     #[test]
     fn claude_is_started_with_its_clicks_off_and_its_wheel_on() {
         for name in ["claude", "Claude", "claude.exe", "claude.cmd"] {
-            assert_eq!(agent_env(name), &[("CLAUDE_CODE_DISABLE_MOUSE_CLICKS", "1")], "{name}");
+            assert_eq!(
+                agent_env(name),
+                &[("CLAUDE_CODE_DISABLE_MOUSE_CLICKS", "1"), ("CLAUDE_CODE_NATIVE_CURSOR", "1")],
+                "{name}"
+            );
         }
     }
 

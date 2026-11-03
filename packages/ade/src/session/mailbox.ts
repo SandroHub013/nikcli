@@ -820,7 +820,7 @@ export function formatHeldSilentReceipt(target: MailPane | undefined): string {
 /** Told to the sender when ADE cannot read the screen of the session that holds its mail (`session/deliver-now.ts`). */
 export function formatHeldByScreen(agent: string, reader: MailPane | undefined): string {
   return (
-    `[ade-msg] ADE non riconosce lo schermo di ${agent} in ${who(reader)}, e non vi scrive il tuo messaggio: ` +
+    `[ade-msg] ADE non riconosce lo schermo di ${agent} in ${who(reader)}, o vi legge una riga già iniziata, e non vi scrive il tuo messaggio: ` +
     `aspetta l'utente, che lì ha il tasto per consegnarlo. La sessione non ti sta ignorando.`
   )
 }

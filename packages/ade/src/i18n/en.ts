@@ -533,11 +533,12 @@ export const en: Messages = {
   "task.exitedOnTrust": "The session closed on its trust dialog («No, exit»): ADE did not type the initial task.",
   "pane.deliverNow": "Deliver now: types and presses Enter",
   "note.deliverNowOffer": (agent: string) =>
-    `ADE doesn't recognise ${agent}'s screen and the mail is waiting. «Deliver now» types one message and presses Enter on what shows now.`,
+    `ADE doesn't recognise ${agent}'s screen, or there is already text in its input box, and the mail is waiting. «Deliver now» types one message and presses Enter on what shows now: any text already there goes with it.`,
+  "note.deliverNowLapsed": "«Deliver now» delivered nothing: the message did not go and is still queued.",
   "note.enterStuck": "The text is typed but ADE didn't press Enter: the input box did not come back. If the text is there, press Enter yourself.",
   "task.heldByMenu":
     "The initial task waits on the question on screen. If it's not real or you answered, press Enter; if nothing changes, it goes when the session moves on.",
-  "task.notTyped": "ADE didn't type the initial task: a menu opened just then. Answer it and type the task yourself.",
+  "task.notTyped": "The initial task did not arrive: a menu opened just then, or the text did not show in the input box. Check the pane and, if it isn't there, type it yourself.",
   "task.trustAccepted": "A work folder ADE made for this session: trust confirmed, then the task.",
   "task.stepHeld": (text) =>
     `ADE hasn't typed “${text}” yet: the session is waiting for an answer, a password or a menu. It types it as soon as that closes.`,

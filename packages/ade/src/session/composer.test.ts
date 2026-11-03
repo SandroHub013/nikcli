@@ -3,7 +3,17 @@ import { readFileSync } from "node:fs"
 import { Terminal } from "@xterm/xterm"
 import { loadCapture, play, screenText, terminalFor, writtenTo } from "../test-support/live-bytes"
 import { codeOf } from "../test-support/source-text"
-import { composerOf, enterBlocked, lineBegunNow, mayTypeNow, questionHolds, type ComposerState } from "./composer"
+import { AGENTS } from "../session-new/agents"
+import {
+  composerOf,
+  enterBlocked,
+  lineBegunNow,
+  mayTypeNow,
+  questionHolds,
+  readsComposer,
+  watchCursor,
+  type ComposerState,
+} from "./composer"
 import { typeThenEnter, textInBox, BOX_READ_MS, ENTER_PATIENCE_MS, TEXT_SHOWS_WITHIN_MS } from "./enter"
 import {
   BOX_QUIET_MS,
@@ -72,28 +82,28 @@ async function shutWhile(
 
 describe("n. 1: Claude Code's trust dialog", () => {
   test("nothing goes while it stands, in any frame", async () => {
-    await shutWhile("claude-fiducia", "claude", "trust this folder")
+    await shutWhile("claude-fiducia", "claude-code", "trust this folder")
   })
 
   test("the frame ADE typed on then: no text, and no Enter that would pick «No, exit»", async () => {
     const terminal = await play("claude-fiducia", () => {})
     expect(screenText(terminal)).toContain("No, exit")
-    expect(await typedOn(terminal, "claude")).toEqual([])
+    expect(await typedOn(terminal, "claude-code")).toEqual([])
   })
 
   test("the reading of menus sees it: the pane says so, and it is no screen ADE cannot read", async () => {
     const terminal = await play("claude-fiducia", () => {})
-    expect(screenQuestion(terminal, "claude")?.answers.map((answer) => answer.label)).toEqual([
+    expect(screenQuestion(terminal, "claude-code")?.answers.map((answer) => answer.label)).toEqual([
       "No, exit",
       "Yes, I trust this folder",
     ])
     // «No, exit» is selected, so ADE's own worktree does not get its Enter either (`openingTrust`).
-    expect(folderTrust(bottomRows(terminal), "claude")).toEqual({ yesSelected: false })
+    expect(folderTrust(bottomRows(terminal), "claude-code")).toEqual({ yesSelected: false })
   })
 
   test("«Yes» from the user: the box comes, and the task goes", async () => {
     const states: (ComposerState | undefined)[] = []
-    await play("claude-fiducia-si", (terminal) => states.push(composerOf(terminal, "claude")))
+    await play("claude-fiducia-si", (terminal) => states.push(composerOf(terminal, "claude-code")))
     expect(states).toContain("none")
     expect(states[states.length - 1]).toBe("ready")
   })
@@ -258,15 +268,15 @@ describe("n. 9: nothing is typed on a blank screen", () => {
   test("a known agent: a blank screen has no box", async () => {
     const terminal = terminalFor(loadCapture("claude-fiducia"))
     await writtenTo(terminal, "\x1b[?25h\x1b[2J\x1b[H")
-    expect(composerOf(terminal, "claude")).toBe("none")
-    expect(await typedOn(terminal, "claude")).toEqual([])
+    expect(composerOf(terminal, "claude-code")).toBe("none")
+    expect(await typedOn(terminal, "claude-code")).toEqual([])
   })
 })
 
 describe("n. 8 and 11: what is begun is read, and not counted", () => {
   test("Claude Code after a refused plan: an empty box, whatever the hook goes on saying", async () => {
     const terminal = await play("claude-piano", () => {})
-    expect(composerOf(terminal, "claude")).toBe("ready")
+    expect(composerOf(terminal, "claude-code")).toBe("ready")
     const activity: Activity = { state: "busy", at: 0 }
     const target = { hooked: true, permissionPending: false, typing: false, activity, lastOutputAt: 1_000 }
     expect(isFree(target, 1_000 + BOX_QUIET_MS - 1)).toBe(false)
@@ -275,7 +285,7 @@ describe("n. 8 and 11: what is begun is read, and not counted", () => {
     expect(isFree({ ...target, boxReady: true }, 1_000 + BOX_QUIET_MS)).toBe(true)
     // The count says a line was begun, from the «2» that refused it. The box says none was.
     const count = typedAfter(undefined, "2", 0)
-    expect(lineBegunNow(composerOf(terminal, "claude"), (count?.pending ?? 0) > 0)).toBe(false)
+    expect(lineBegunNow(composerOf(terminal, "claude-code"), (count?.pending ?? 0) > 0)).toBe(false)
   })
 
   test("a hook's permission over an empty box that has stopped drawing: answered, the turn over", () => {
@@ -287,7 +297,7 @@ describe("n. 8 and 11: what is begun is read, and not counted", () => {
 
   test("a turn still going keeps drawing: on the real bytes it never stands still that long", async () => {
     for (const [name, agent, turn] of [
-      ["claude-piano", "claude", /… \(\d+s/],
+      ["claude-piano", "claude-code", /… \(\d+s/],
       ["ragu-avvio-normale", "ragu", /esc interrompi/],
     ] as const) {
       let frames = 0
@@ -339,7 +349,7 @@ describe("n. 8 and 11: what is begun is read, and not counted", () => {
 
 describe("a normal turn delivers at once: a wrong hold is as bad as a wrong send", () => {
   const AT_REST: [string, string, number][] = [
-    ["claude-piano", "claude", 4_000],
+    ["claude-piano", "claude-code", 4_000],
     ["agy-invio-nel-box", "agy", 5_000],
     ["ragu-avvio-normale", "ragu", 3_000],
     ["opencode-stretta-lunga", "opencode", 8_000],
@@ -357,7 +367,7 @@ describe("a normal turn delivers at once: a wrong hold is as bad as a wrong send
       expect(composerOf(terminal, agent)).toBe("ready")
       expect(gate(terminal, agent)).toBe(true)
 
-      const hooked = agent === "claude" || agent === "ragu"
+      const hooked = agent === "claude-code" || agent === "ragu"
       const activity: Activity = { state: "idle", at: 0 }
       expect(
         isFree(
@@ -387,7 +397,7 @@ describe("a normal turn delivers at once: a wrong hold is as bad as a wrong send
   test("Claude Code: a line that wraps over four rows, the cursor on the last", async () => {
     let wrapped = false
     await play("claude-piano", (terminal, at) => {
-      if (at >= 2_653 && at < 3_000) wrapped ||= composerOf(terminal, "claude") === "draft"
+      if (at >= 2_653 && at < 3_000) wrapped ||= composerOf(terminal, "claude-code") === "draft"
     })
     expect(wrapped).toBe(true)
   })
@@ -403,17 +413,17 @@ describe("the Enter: the box that stops being empty is the sign", () => {
 
   test("Claude Code shows a long paste as a label", async () => {
     const terminal = await box([RULE, "❯ [Pasted text #1 +12 lines]", RULE], [29, 1])
-    expect(composerOf(terminal, "claude")).toBe("draft")
+    expect(composerOf(terminal, "claude-code")).toBe("draft")
   })
 
   test("a text longer than the box: its first row is out of view, between the two rules", async () => {
     const terminal = await box([RULE, "  rest of a long line", "  and the end of it", RULE], [20, 2])
-    expect(composerOf(terminal, "claude")).toBe("draft")
+    expect(composerOf(terminal, "claude-code")).toBe("draft")
   })
 
   test("a draft whose cursor went back to the start is not an empty box", async () => {
     const terminal = await box([RULE, "❯ ciao", RULE], [2, 1])
-    expect(composerOf(terminal, "claude")).toBe("draft")
+    expect(composerOf(terminal, "claude-code")).toBe("draft")
   })
 
   test("opentui: a line on the row above the cursor, in the same bar", async () => {
@@ -487,6 +497,157 @@ describe("the Enter: the box that stops being empty is the sign", () => {
   })
 })
 
+describe("the id a pane carries is the catalogue's (review B1)", () => {
+  const idOf = (command: string) => AGENTS.find((agent) => agent.command === command)!.id
+
+  test("the four agents whose box is read, as the catalogue names them", () => {
+    for (const command of ["claude", "agy", "ragu", "opencode"]) expect(readsComposer(idOf(command))).toBe(true)
+  })
+
+  test("Claude Code's real bytes, under that id: the box at rest, and no box on its trust dialog", async () => {
+    const atRest = await play("claude-fiducia-si", () => {})
+    expect(composerOf(atRest, idOf("claude"))).toBe("ready")
+    const dialog = await play("claude-fiducia", () => {})
+    expect(composerOf(dialog, idOf("claude"))).toBe("none")
+  })
+})
+
+/** A terminal whose cursor mode is followed, with `frame` drawn on it. */
+async function drawn(frame: string, cols = 80, rows = 12) {
+  const terminal = new Terminal({ cols, rows, allowProposedApi: true })
+  watchCursor(terminal)
+  await writtenTo(terminal, frame)
+  return terminal
+}
+const rowsAt = (rows: string[], cursor: [number, number]) =>
+  rows.map((row, y) => `\x1b[${y + 1};1H${row}`).join("") + `\x1b[${cursor[1] + 1};${cursor[0] + 1}H`
+
+describe("a placeholder that wraps is still a placeholder (review B2)", () => {
+  const MODEL = "  ┃  Build · Grok 4.7 · xAI"
+
+  test("ragu's long example at the home box's width, from its real bytes: an empty box", async () => {
+    const states: (ComposerState | undefined)[] = []
+    await play(
+      "ragu-conferma-47",
+      (terminal, at) => {
+        if (at < 1_600 && screenText(terminal).includes('progetto?"')) states.push(composerOf(terminal, "ragu"))
+      },
+      { cols: 158, rows: 17 },
+    )
+    expect(states.length).toBeGreaterThan(0)
+    expect(new Set(states)).toEqual(new Set(["ready"]))
+  })
+
+  test("in a narrow pane, over three rows", async () => {
+    const terminal = await drawn(
+      rowsAt(
+        ['  ┃  Chiedi qualsiasi cosa... "Qual è', "  ┃  lo stack tecnologico", '  ┃  di questo progetto?"', MODEL],
+        [5, 0],
+      ),
+    )
+    expect(composerOf(terminal, "ragu")).toBe("ready")
+  })
+
+  test("a row after its closing quote is a line", async () => {
+    const terminal = await drawn(rowsAt(['  ┃  Ask anything... "Fix a TODO"', "  ┃  and this", MODEL], [5, 0]))
+    expect(composerOf(terminal, "ragu")).toBe("draft")
+  })
+
+  test("a quote that never closes before the model's row is no placeholder", async () => {
+    const terminal = await drawn(rowsAt(['  ┃  Ask anything... "Fix a TODO', "  ┃  and this", MODEL], [5, 0]))
+    expect(composerOf(terminal, "ragu")).toBe("draft")
+  })
+})
+
+describe("Claude Code's cursor can stay hidden: a remote flag decides, and position still tells (review B3)", () => {
+  const RULE = "─".repeat(78)
+  const CLAUDE = "claude-code"
+
+  test("at rest, as it draws without the flag: an inverse first letter, the rest dim", async () => {
+    const box = rowsAt([RULE, '❯ \x1b[7mT\x1b[27m\x1b[2mry "refactor foo"\x1b[22m', RULE, "  ? for shortcuts"], [2, 1])
+    expect(composerOf(await drawn(`\x1b[?25l${box}`), CLAUDE)).toBe("ready")
+  })
+
+  test("at rest with no placeholder: an inverse blank cell", async () => {
+    const box = rowsAt([RULE, "❯ \x1b[7m \x1b[27m", RULE], [2, 1])
+    expect(composerOf(await drawn(`\x1b[?25l${box}`), CLAUDE)).toBe("ready")
+  })
+
+  test("a line in the box, cursor hidden, wherever the caret is", async () => {
+    const after = rowsAt([RULE, "❯ ciao\x1b[7m \x1b[27m", RULE], [6, 1])
+    expect(composerOf(await drawn(`\x1b[?25l${after}`), CLAUDE)).toBe("draft")
+    const before = rowsAt([RULE, "❯ \x1b[7mc\x1b[27miao", RULE], [2, 1])
+    expect(composerOf(await drawn(`\x1b[?25l${before}`), CLAUDE)).toBe("draft")
+    const alone = rowsAt([RULE, "❯ \x1b[7mc\x1b[27m", RULE], [2, 1])
+    expect(composerOf(await drawn(`\x1b[?25l${alone}`), CLAUDE)).toBe("draft")
+  })
+
+  test("a dialog parks the cursor elsewhere: no box, hidden or not", async () => {
+    const dialog = rowsAt([RULE, " Do something?", " ❯ 1. Yes", "   2. No", RULE, "", "  footer"], [0, 6])
+    expect(composerOf(await drawn(`\x1b[?25l${dialog}`), CLAUDE)).toBe("none")
+  })
+
+  test("on its real bytes the position alone keeps every dialog shut: with the cursor hidden, never the box", async () => {
+    for (const name of ["claude-fiducia", "claude-fiducia-si", "claude-piano"]) {
+      const capture = loadCapture(name)
+      const terminal = terminalFor(capture)
+      let hidden = false
+      const follows = (to: boolean) => (params: (number | number[])[]) => {
+        if (params.includes(25)) hidden = to
+        return false
+      }
+      terminal.parser.registerCsiHandler({ prefix: "?", final: "l" }, follows(true))
+      terminal.parser.registerCsiHandler({ prefix: "?", final: "h" }, follows(false))
+      let frames = 0
+      for (const [, chunk] of capture.chunks) {
+        await writtenTo(terminal, chunk)
+        if (!hidden) continue
+        frames++
+        expect(composerOf(terminal, CLAUDE)).toBe("none")
+      }
+      expect(`${name}:${frames > 0}`).toBe(`${name}:true`)
+    }
+  })
+
+  test("for agy and the agents of opentui a hidden cursor stays decisive: their dialogs leave it over the box", async () => {
+    const ruled = rowsAt([RULE, "> ", RULE], [2, 1])
+    expect(composerOf(await drawn(ruled), "agy")).toBe("ready")
+    expect(composerOf(await drawn(`\x1b[?25l${ruled}`), "agy")).toBe("none")
+    const bar = rowsAt(["  ┃", "  ┃", "  ┃  Build · Grok 4.7 · xAI"], [5, 1])
+    for (const agent of ["ragu", "opencode"]) {
+      expect(composerOf(await drawn(bar), agent)).toBe("ready")
+      expect(composerOf(await drawn(`\x1b[?25l${bar}`), agent)).toBe("none")
+    }
+  })
+
+  test("lint: the panes ADE starts ask Claude Code for its cursor", () => {
+    const pty = readFileSync(new URL("../../src-tauri/src/pty.rs", import.meta.url), "utf8")
+    const agentEnv = pty.slice(pty.indexOf("fn agent_env("), pty.indexOf("const CLAUDE_ACCOUNT_VARS"))
+    expect(agentEnv).toContain('("CLAUDE_CODE_NATIVE_CURSOR", "1")')
+  })
+})
+
+describe("ragu gives its box the cursor back on a focus-in, under a dialog still open (review B4)", () => {
+  /** A dialog over the box, in a pane wide enough for the model's row and the input column to stand left of it. */
+  const FOCUS_IN = "\x1b[?1000h\x1b[?1004h\x1b[?2004h\x1b[10;6H\x1b[?25h"
+  const under = "\x1b[?1049h\x1b[2J\x1b[9;3H┃\x1b[10;3H┃\x1b[11;3H┃  Build · Grok 4.7 · xAI\x1b[12;3H┃"
+  const dialog = (cols: number) =>
+    `\x1b[7;${cols - 45}HDelete Skill\x1b[9;${cols - 45}HY/N or ←→ to switch, enter to confirm`
+
+  for (const cols of [101, 158]) {
+    test(`at ${cols} columns: no box, whatever the reading of menus says`, async () => {
+      const terminal = await drawn(`${under}${dialog(cols)}\x1b[14;46H\x1b[?25l${FOCUS_IN}`, cols, 17)
+      expect(composerOf(terminal, "ragu")).toBe("none")
+      expect(mayTypeNow({ composer: composerOf(terminal, "ragu"), question: false, nothingDrawn: false })).toBe(false)
+    })
+  }
+
+  test("the same frame with no dialog is the box", async () => {
+    const terminal = await drawn(`${under}${FOCUS_IN}`, 158, 17)
+    expect(composerOf(terminal, "ragu")).toBe("ready")
+  })
+})
+
 describe("the gate and what it does not touch", () => {
   test("an agent ADE does not know stays on the reading of menus", () => {
     const terminal = new Terminal({ cols: 80, rows: 5, allowProposedApi: true })
@@ -552,7 +713,7 @@ describe("the gate and what it does not touch", () => {
   })
 
   test("lint: a remote session's agent command goes into the shell, and its task into the box", () => {
-    expect(workbench).toContain("voidtypeLine(session,text,{intoShell})")
+    expect(workbench).toContain("voidtypeLine(session,text,{intoShell,mail:!intoShell})")
     expect(between("conststartRemoteProcess=", "constaddRemoteSpace=")).toContain("composerNow(paneId)")
   })
 

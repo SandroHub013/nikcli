@@ -2,101 +2,149 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { codeOf } from "../test-support/source-text"
 import { composerLogEntry, logWith, maskRow } from "./composer-log"
-import { createDeliverNow, DELIVER_NOW_AFTER_MS } from "./deliver-now"
+import { createDeliverNow, DELIVER_NOW_AFTER_MS, turnKnown, type BlindHold } from "./deliver-now"
 import { typeThenEnter } from "./enter"
+import { STALE_BUSY_MS } from "./mailbox"
+import { OUTPUT_CLAIM_MAX_MS } from "./output-activity"
 import { Terminal } from "@xterm/xterm"
 import { writtenTo } from "../test-support/live-bytes"
 
-const STILL = { blind: true, lastOutputAt: 0 }
+const BLIND: BlindHold = { blind: true }
+const CLEAR: BlindHold = { blind: false }
+const AFTER = DELIVER_NOW_AFTER_MS
 
-/** A pane whose box is not recognised, held for the whole wait, on a screen that has stopped. */
+type Now = ReturnType<typeof createDeliverNow>
+
+/** The mail's rounds, one a second from `from` to `to`, each finding it held. What the last change was. */
+function rounds(now: Now, from: number, to: number, hold: BlindHold = BLIND, sender?: string) {
+  let change: ReturnType<Now["mailHeld"]>
+  for (let at = from; at <= to; at += 1_000) change = now.mailHeld("p", hold, at, sender) ?? change
+  return change
+}
+
+/** A pane whose box is not recognised, held for the whole wait. */
 function offered() {
   const now = createDeliverNow()
-  now.mailHeld("p", STILL, 0, "sender")
-  expect(now.mailHeld("p", STILL, DELIVER_NOW_AFTER_MS, "sender")).toBe("offered")
+  expect(rounds(now, 0, AFTER, BLIND, "sender")).toBe("offered")
   return now
 }
 
 describe("when it shows", () => {
   test("not before the 30 s", () => {
     const now = createDeliverNow()
-    expect(now.mailHeld("p", STILL, 0)).toBeUndefined()
-    expect(now.mailHeld("p", STILL, DELIVER_NOW_AFTER_MS - 1)).toBeUndefined()
+    expect(rounds(now, 0, AFTER - 1_000)).toBeUndefined()
     expect(now.offered("p")).toBe(false)
   })
 
-  test("not on a screen that moves: a held mail counts from the last byte", () => {
+  test("never on a menu the reading sees, a trust dialog included, nor in a turn: `blind` is false there", () => {
     const now = createDeliverNow()
-    now.mailHeld("p", { blind: true, lastOutputAt: 0 }, 0)
-    expect(
-      now.mailHeld("p", { blind: true, lastOutputAt: DELIVER_NOW_AFTER_MS - 1 }, DELIVER_NOW_AFTER_MS),
-    ).toBeUndefined()
-    expect(now.offered("p")).toBe(false)
-  })
-
-  test("never on a menu the reading sees, a trust dialog included: there the answer is the menu's", () => {
-    const now = createDeliverNow()
-    for (const at of [0, DELIVER_NOW_AFTER_MS, DELIVER_NOW_AFTER_MS * 10]) {
-      expect(now.mailHeld("p", { blind: false, lastOutputAt: 0 }, at)).toBeUndefined()
-    }
+    expect(rounds(now, 0, AFTER * 10, CLEAR)).toBeUndefined()
     expect(now.offered("p")).toBe(false)
   })
 
   test("a menu for a moment starts the wait again", () => {
     const now = createDeliverNow()
-    now.mailHeld("p", STILL, 0)
-    now.mailHeld("p", { blind: false, lastOutputAt: 0 }, 10_000)
-    expect(now.mailHeld("p", STILL, DELIVER_NOW_AFTER_MS)).toBeUndefined()
-    expect(now.mailHeld("p", STILL, 10_000 + DELIVER_NOW_AFTER_MS)).toBeUndefined()
-    expect(now.mailHeld("p", STILL, DELIVER_NOW_AFTER_MS * 2)).toBe("offered")
+    rounds(now, 0, 10_000)
+    now.mailHeld("p", CLEAR, 11_000)
+    expect(rounds(now, 12_000, 12_000 + AFTER - 1_000)).toBeUndefined()
+    expect(now.mailHeld("p", BLIND, 12_000 + AFTER)).toBe("offered")
+  })
+
+  test("mail held once, long ago, does not count for the mail held now", () => {
+    const now = createDeliverNow()
+    rounds(now, 0, 20_000)
+    expect(rounds(now, 80_000, 80_000 + AFTER - 1_000)).toBeUndefined()
+    expect(now.mailHeld("p", BLIND, 80_000 + AFTER)).toBe("offered")
+  })
+
+  test("a line in the box that stands still counts, as a box not recognised does", () => {
+    const now = createDeliverNow()
+    expect(rounds(now, 0, AFTER, { blind: true, line: "2,5:❯ ciao" })).toBe("offered")
+  })
+
+  test("a line being written does not: each change of it starts the wait again", () => {
+    const now = createDeliverNow()
+    rounds(now, 0, 20_000, { blind: true, line: "a" })
+    expect(rounds(now, 21_000, 21_000 + AFTER - 1_000, { blind: true, line: "ab" })).toBeUndefined()
+    expect(now.mailHeld("p", { blind: true, line: "ab" }, 21_000 + AFTER)).toBe("offered")
   })
 
   test("once, with who to tell", () => {
     const now = offered()
-    expect(now.mailHeld("p", STILL, DELIVER_NOW_AFTER_MS + 700)).toBeUndefined()
+    expect(now.mailHeld("p", BLIND, AFTER + 700)).toBeUndefined()
     expect(now.senders("p")).toEqual(["sender"])
   })
 })
 
+describe("a turn going, for what ADE knows", () => {
+  const NOW = 100 * 60_000
+
+  test("the hook's word, where there is one", () => {
+    const facts = { working: false, now: NOW }
+    expect(turnKnown({ ...facts, activity: { state: "busy", at: NOW - 1_000 } })).toBe(true)
+    expect(turnKnown({ ...facts, activity: { state: "idle", at: NOW - 1_000 } })).toBe(false)
+    // A Stop that never came: past this, a busy is not believed anywhere else either.
+    expect(turnKnown({ ...facts, activity: { state: "busy", at: NOW - STALE_BUSY_MS } })).toBe(false)
+  })
+
+  test("no hook: a line ADE saw go, for as long as a turn is believed", () => {
+    const facts = { working: true, now: NOW }
+    expect(turnKnown({ ...facts, workingSince: NOW - 1_000 })).toBe(true)
+    expect(turnKnown({ ...facts, workingSince: NOW - OUTPUT_CLAIM_MAX_MS })).toBe(false)
+    expect(turnKnown({ working: false, workingSince: NOW - 1_000, now: NOW })).toBe(false)
+  })
+
+  test("a pane still starting is `working` with no turn yet: its first task is what starts one", () => {
+    expect(turnKnown({ working: true, now: NOW })).toBe(false)
+  })
+})
+
 describe("when it goes", () => {
-  test("the screen moved", () => {
-    const now = offered()
-    const moved = { blind: true, lastOutputAt: DELIVER_NOW_AFTER_MS + 100 }
-    now.mailHeld("p", STILL, DELIVER_NOW_AFTER_MS + 100)
-    expect(now.review("p", moved, DELIVER_NOW_AFTER_MS + 200)).toBe("withdrawn")
+  test("the line in the box changed", () => {
+    const now = createDeliverNow()
+    rounds(now, 0, AFTER, { blind: true, line: "a" })
+    expect(now.review("p", { blind: true, line: "ab" }, AFTER + 100)).toBe("withdrawn")
     expect(now.offered("p")).toBe(false)
   })
 
   test("a menu came, or the box did", () => {
     const now = offered()
-    expect(now.review("p", { blind: false, lastOutputAt: 0 }, DELIVER_NOW_AFTER_MS + 100)).toBe("withdrawn")
+    expect(now.review("p", CLEAR, AFTER + 100)).toBe("withdrawn")
   })
 
   test("the mail has gone: no round found it held", () => {
     const now = offered()
-    expect(now.review("p", STILL, DELIVER_NOW_AFTER_MS + 1_000)).toBeUndefined()
-    expect(now.review("p", STILL, DELIVER_NOW_AFTER_MS + 6_000)).toBe("withdrawn")
+    expect(now.review("p", BLIND, AFTER + 1_000)).toBeUndefined()
+    expect(now.review("p", BLIND, AFTER + 6_000)).toBe("withdrawn")
   })
 })
 
 describe("the click", () => {
   test("one click, one message, and the action goes: never by itself", () => {
     const now = offered()
-    expect(now.armed("p", DELIVER_NOW_AFTER_MS)).toBe(false)
-    expect(now.take("p", DELIVER_NOW_AFTER_MS)).toBe(false)
-    expect(now.click("p", false, DELIVER_NOW_AFTER_MS)).toBe(true)
+    expect(now.armed("p", AFTER)).toBe(false)
+    expect(now.take("p", AFTER)).toBe(false)
+    expect(now.click("p", false, AFTER)).toBe(true)
     expect(now.offered("p")).toBe(false)
-    expect(now.armed("p", DELIVER_NOW_AFTER_MS + 1)).toBe(true)
-    expect(now.take("p", DELIVER_NOW_AFTER_MS + 1)).toBe(true)
+    expect(now.armed("p", AFTER + 1)).toBe(true)
+    expect(now.take("p", AFTER + 1)).toBe(true)
     // The next message waits like any other.
-    expect(now.armed("p", DELIVER_NOW_AFTER_MS + 2)).toBe(false)
-    expect(now.take("p", DELIVER_NOW_AFTER_MS + 2)).toBe(false)
-    expect(now.click("p", false, DELIVER_NOW_AFTER_MS + 3)).toBe(false)
+    expect(now.armed("p", AFTER + 2)).toBe(false)
+    expect(now.take("p", AFTER + 2)).toBe(false)
+    expect(now.click("p", false, AFTER + 3)).toBe(false)
+  })
+
+  test("the next message waits its whole 30 s: the click said nothing about it", () => {
+    const now = offered()
+    now.click("p", false, AFTER)
+    now.take("p", AFTER + 1_000)
+    expect(rounds(now, AFTER + 2_000, AFTER + 2_000 + AFTER - 1_000)).toBeUndefined()
+    expect(now.mailHeld("p", BLIND, AFTER + 2_000 + AFTER)).toBe("offered")
   })
 
   test("the line it lets through has its text and its Enter, and the one after it nothing", async () => {
     const now = offered()
-    now.click("p", false, DELIVER_NOW_AFTER_MS)
+    now.click("p", false, AFTER)
     const typed: string[] = []
     const line = (text: string, armed: boolean) =>
       typeThenEnter({
@@ -107,22 +155,40 @@ describe("the click", () => {
         // The box is not there: only the click opens the gate, and the reading of menus sees none.
         permissionOpen: () => !armed,
       })
-    expect(await line("uno", now.take("p", DELIVER_NOW_AFTER_MS + 1))).toBe("sent")
-    expect(await line("due", now.take("p", DELIVER_NOW_AFTER_MS + 2))).toBe("not-typed")
+    expect(await line("uno", now.take("p", AFTER + 1))).toBe("sent")
+    expect(await line("due", now.take("p", AFTER + 2))).toBe("not-typed")
     expect(typed).toEqual(["uno", "\r"])
   })
 
   test("a menu that came before the click takes it back", () => {
     const now = offered()
-    expect(now.click("p", true, DELIVER_NOW_AFTER_MS)).toBe(false)
+    expect(now.click("p", true, AFTER)).toBe(false)
     expect(now.offered("p")).toBe(false)
-    expect(now.armed("p", DELIVER_NOW_AFTER_MS)).toBe(false)
+    expect(now.armed("p", AFTER)).toBe(false)
   })
 
   test("a click whose message did not go says nothing about the screen later", () => {
     const now = offered()
-    now.click("p", false, DELIVER_NOW_AFTER_MS)
-    expect(now.take("p", DELIVER_NOW_AFTER_MS + 10_000)).toBe(false)
+    now.click("p", false, AFTER)
+    expect(now.take("p", AFTER + 10_000)).toBe(false)
+  })
+
+  test("and it is not lost in silence: said once, and the action comes back while the mail waits", () => {
+    const now = offered()
+    now.click("p", false, AFTER)
+    expect(rounds(now, AFTER + 1_000, AFTER + 9_000)).toBeUndefined()
+    expect(now.lapsed(AFTER + 9_000)).toEqual([])
+    expect(now.lapsed(AFTER + 10_000)).toEqual(["p"])
+    expect(now.lapsed(AFTER + 11_000)).toEqual([])
+    expect(now.armed("p", AFTER + 10_000)).toBe(false)
+    expect(now.mailHeld("p", BLIND, AFTER + 10_000)).toBe("offered")
+  })
+
+  test("a click spent by its message has nothing to say", () => {
+    const now = offered()
+    now.click("p", false, AFTER)
+    now.take("p", AFTER + 1_000)
+    expect(now.lapsed(AFTER + 20_000)).toEqual([])
   })
 
   test("a session that has gone takes it with it", () => {
@@ -132,10 +198,15 @@ describe("the click", () => {
   })
 
   const source = (path: string) => codeOf(readFileSync(new URL(path, import.meta.url), "utf8"))
+  const workbench = source("../surface/workbench.tsx")
+  const between = (from: string, to: string) => {
+    const start = workbench.indexOf(from)
+    expect(start).toBeGreaterThan(0)
+    return workbench.slice(start, workbench.indexOf(to, start))
+  }
 
   test("lint: only the pane's button clicks it", () => {
     const renderer = source("../surface/pane-renderer.tsx")
-    const workbench = source("../surface/workbench.tsx")
     expect(renderer).toContain("onClick:()=>deps.deliverNow(current().id)")
     expect(workbench.split("deliverNow.click(").length).toBe(2)
     const start = workbench.indexOf("constpressDeliverNow=")
@@ -143,6 +214,28 @@ describe("the click", () => {
     expect(workbench.indexOf("deliverNow.click(")).toBeGreaterThan(start)
     expect(workbench.indexOf("deliverNow.click(")).toBeLessThan(start + 100)
     expect(workbench).toContain("deliverNow:pressDeliverNow")
+  })
+
+  test("lint: the byte that ticks does not count: Claude Code at rest writes every 20 s", () => {
+    const body = between("constblindHold=", "constdeliverNowNote=")
+    expect(body).toContain("turnKnown(")
+    expect(body).not.toContain("lastOutputAt")
+  })
+
+  test("lint: the click goes to mail, and a reminder, a time note or a panel's reply neither spends it nor passes on it", () => {
+    expect(between("consttypeLineNow=", "constESC=")).toContain("constarmed=mail&&paneId!==undefined&&deliverNow.take(")
+    expect(workbench).toContain("mail&&deliverNow.armed(paneId,Date.now())")
+    expect(workbench).toContain("typeLine(session,formatTimeNote(request,now,timeNote),{unlessBusy:true})")
+    expect(workbench).toContain("typeLine(session,handled.reply,{unlessBusy:true})")
+    expect(between("constfreeNow=", "constisHooked=")).toContain("if(mail&&deliverNow.armed(")
+    // ADE's own notices wait among the held lines too, and are no message: they neither bring the action nor spend it.
+    expect(workbench).toContain("heldLines.push({paneId:target.pane,text,told:true})")
+    expect(workbench).toContain("freeNow(host,item.paneId,!item.told)")
+    expect(workbench).toContain("if(!item.told)noteMailHeld(item.paneId,item.inbox?.from)")
+  })
+
+  test("lint: a first task held on a line in the box is said too, after the same wait", () => {
+    expect(workbench).toContain('if(boxRead&&boxHolds&&!asked&&box!=="ready")noteMailHeld(paneId,request?.from)')
   })
 })
 

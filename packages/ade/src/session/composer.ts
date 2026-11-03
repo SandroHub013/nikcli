@@ -12,11 +12,14 @@
  * What is begun can be read too: a line in the box is a fact, and not a count of keys (`session/typed-line.ts`).
  */
 
+import { confirmDialog } from "./permission"
+
 export type ComposerState = "ready" | "draft" | "none"
 
 interface ComposerCell {
   getChars(): string
   isDim(): number | boolean
+  isInverse(): number | boolean
 }
 
 interface ComposerLine {
@@ -39,7 +42,14 @@ export interface ComposerTerminal {
 /** A row of the box's frame: Claude Code and agy draw one above and one below it, and may label it on the right. */
 const RULE = /^─{4,}/
 /** The prompt glyph of a box between two rules. */
-const RULED_PROMPT: Record<string, string> = { claude: "❯", agy: ">" }
+const RULED_PROMPT: Record<string, string> = { "claude-code": "❯", agy: ">" }
+/**
+ * Where a hidden cursor says nothing about the box. Claude Code shows its cursor only under a remote flag, or the variable
+ * ADE sets (`agent_env` in `pty.rs`), which an older CLI or a second flag can ignore; without it the cursor stays hidden for
+ * the whole session. Its dialogs still take the cursor out of the box, so the position tells. For agy and the agents of
+ * opentui the hidden cursor is the signal: their dialogs leave it over the box.
+ */
+const HIDES_ITS_CURSOR = new Set(["claude-code"])
 /** The agents of opentui: a bar down the left of the box, its first row the text, with the agent and model below. */
 const BAR_AGENTS = new Set(["ragu", "opencode"])
 const BAR_ROW = /^( *)┃( |$)/
@@ -84,7 +94,9 @@ export function readsComposer(agentId: string): boolean {
 /** The state of the agent's box on `terminal`'s screen, or `undefined` for an agent whose box ADE does not know. */
 export function composerOf(terminal: ComposerTerminal, agentId: string): ComposerState | undefined {
   if (!readsComposer(agentId)) return undefined
-  if (hiddenCursor.has(terminal)) return "none"
+  if (hiddenCursor.has(terminal) && !HIDES_ITS_CURSOR.has(agentId)) return "none"
+  // ragu gives its box the cursor back on a focus-in, with a dialog still open over it: the reading has to say so here.
+  if (agentId === "ragu" && confirmDialog(rowsOf(terminal))) return "none"
   const glyph = RULED_PROMPT[agentId]
   return glyph ? ruledBox(terminal, glyph) : barBox(terminal)
 }
@@ -92,6 +104,13 @@ export function composerOf(terminal: ComposerTerminal, agentId: string): Compose
 const lineAt = (terminal: ComposerTerminal, y: number) =>
   terminal.buffer.active.getLine(terminal.buffer.active.baseY + y)
 const textAt = (terminal: ComposerTerminal, y: number) => lineAt(terminal, y)?.translateToString(true) ?? ""
+const rowsOf = (terminal: ComposerTerminal) => Array.from({ length: terminal.rows }, (_, y) => textAt(terminal, y))
+
+/** The row the cursor is on, and where: a line at rest says the same each time, and one being written does not. */
+export function composerLine(terminal: ComposerTerminal): string {
+  const { cursorX, cursorY } = terminal.buffer.active
+  return `${cursorX},${cursorY}:${textAt(terminal, cursorY)}`
+}
 
 /** A row inside a box of many lines: empty, or indented under the prompt. */
 const continues = (row: string) => row === "" || row.startsWith("  ")
@@ -126,12 +145,17 @@ function ruledBox(terminal: ComposerTerminal, glyph: string): ComposerState {
   return afterCursorIsPlaceholder(lineAt(terminal, cursorY), cursorX) ? "ready" : "draft"
 }
 
-/** Nothing after the cursor, or only dim text: Claude Code's `Try "refactor <filepath>"`. */
+/**
+ * Nothing after the cursor, or only dim text: Claude Code's `Try "refactor <filepath>"`. Without its native cursor it draws
+ * the caret itself, an inverse first letter over the dim rest. An inverse letter alone is a letter typed, with the caret on it.
+ */
 function afterCursorIsPlaceholder(line: ComposerLine | undefined, cursorX: number): boolean {
   const after = line?.translateToString(true, cursorX) ?? ""
   for (let i = 0; i < after.length; i++) {
     const cell = line?.getCell?.(cursorX + i)
-    if (cell?.getChars().trim() && !cell.isDim()) return false
+    if (!cell?.getChars().trim() || cell.isDim()) continue
+    if (i === 0 && cell.isInverse() && after.length > 1) continue
+    return false
   }
   return true
 }
@@ -189,6 +213,16 @@ function barBox(terminal: ComposerTerminal): ComposerState {
   const rowHasText = (y: number) => textAt(terminal, y).charAt(inputColumn).trim() !== ""
   if (cursorX !== inputColumn) return "draft"
   for (let y = cursorY - 1; y >= 0 && BAR_ROW.test(textAt(terminal, y)); y--) if (rowHasText(y)) return "draft"
-  for (let y = cursorY + 1; y < model; y++) if (rowHasText(y)) return "draft"
-  return !rowHasText(cursorY) || BAR_PLACEHOLDER.test(here.slice(inputColumn)) ? "ready" : "draft"
+  const first = here.slice(inputColumn)
+  const placeholder = BAR_PLACEHOLDER.test(first)
+  if (rowHasText(cursorY) && !placeholder) return "draft"
+  // A long example wraps: the rows down to its closing quote are the example too. Past that, or with no quote, a row is a line.
+  let below = cursorY + 1
+  if (placeholder && !first.slice(first.indexOf('"') + 1).includes('"')) {
+    while (below < model && !textAt(terminal, below).slice(inputColumn).includes('"')) below++
+    if (below === model) return "draft"
+    below++
+  }
+  for (let y = below; y < model; y++) if (rowHasText(y)) return "draft"
+  return "ready"
 }

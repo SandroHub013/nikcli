@@ -547,12 +547,13 @@ export const it = {
     "La sessione chiede la fiducia per questa cartella: confermala nel terminale e ADE scriverà il compito iniziale.",
   "task.heldByMenu":
     "Il compito iniziale aspetta la domanda a schermo. Se non è vera o hai già risposto, premi Invio; se non cambia nulla, parte quando la sessione va avanti.",
-  "task.notTyped": "ADE non ha scritto il compito iniziale: si è aperto un menu proprio allora. Rispondi e scrivilo tu.",
+  "task.notTyped": "Il compito iniziale non è arrivato: si è aperto un menu proprio allora, o il testo non è comparso nel compositore. Guarda il riquadro e, se non c'è, scrivilo tu.",
   "task.exitedUnsent": "La sessione si è chiusa prima di ricevere il compito iniziale: ADE non l'ha scritto.",
   "task.exitedOnTrust": "La sessione si è chiusa sul dialogo di fiducia («No, exit»): ADE non ha scritto il compito iniziale.",
   "pane.deliverNow": "Consegna ora: scrive e preme Invio",
   "note.deliverNowOffer": (agent: string) =>
-    `ADE non riconosce lo schermo di ${agent} e la posta aspetta. «Consegna ora» scrive un messaggio e preme Invio su quello che si vede ora.`,
+    `ADE non riconosce lo schermo di ${agent}, o nel compositore c'è già del testo, e la posta aspetta. «Consegna ora» scrive un messaggio e preme Invio su quello che si vede ora: il testo già scritto parte con lui.`,
+  "note.deliverNowLapsed": "«Consegna ora» non ha consegnato niente: il messaggio non è partito ed è ancora in coda.",
   "note.enterStuck": "Il testo è scritto ma ADE non ha premuto Invio: il compositore non è tornato. Se il testo è lì, premi Invio tu.",
   "task.trustAccepted": "Cartella di lavoro creata da ADE per questa sessione: fiducia confermata, poi il compito.",
   "task.stepHeld": (text: string) =>

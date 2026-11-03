@@ -480,6 +480,7 @@ import { watchLongTasks } from "../session/long-task-log"
 import { formatSpawnFailed, spawnOutcome } from "../session/spawn-outcome"
 import { isTyping, questionOpened, submittedSince, typedAfter, typedSince } from "../session/typed-line"
 import {
+  composerLine,
   composerOf,
   enterBlocked,
   lineBegunNow,
@@ -489,7 +490,7 @@ import {
   type ComposerState,
 } from "../session/composer"
 import { COMPOSER_LOG_KEY, composerLogEntry, logWith, type ComposerLogReason } from "../session/composer-log"
-import { createDeliverNow, type DeliverNowChange } from "../session/deliver-now"
+import { createDeliverNow, turnKnown, type BlindHold, type DeliverNowChange } from "../session/deliver-now"
 import { parseQueue, queueToSave, waitsForRestore } from "../session/mail-queue"
 import {
   clientStoppedReading,
@@ -2667,7 +2668,7 @@ export function Workbench() {
   const typeLine = async (
     session: SpawnedSession,
     text: string,
-    options: { unlessBusy?: boolean; intoShell?: boolean } = {},
+    options: { unlessBusy?: boolean; intoShell?: boolean; mail?: boolean } = {},
   ): Promise<boolean> => lineGiven(await typeLineOutcome(session, text, options))
 
   /** The lines queued or being typed, per pane: `freeNow` reads it first. */
@@ -2676,8 +2677,11 @@ export function Workbench() {
   const typeLineOutcome = (
     session: SpawnedSession,
     text: string,
-    /** `intoShell`: a remote session's first step, the agent's command, typed into the shell before there is any agent. */
-    options: { unlessBusy?: boolean; intoShell?: boolean } = {},
+    /**
+     * `intoShell`: a remote session's first step, the agent's command, typed into the shell before there is any agent.
+     * `mail`: a message or a first task, the only lines «Consegna ora» lets through: a reminder neither spends it nor passes on it.
+     */
+    options: { unlessBusy?: boolean; intoShell?: boolean; mail?: boolean } = {},
   ): Promise<LineOutcome> => {
     const paneId = [...running.entries()].find(([, live]) => live === session)?.[0]
     const job = async (): Promise<LineOutcome> => {
@@ -2690,12 +2694,17 @@ export function Workbench() {
         })
       )
         return "not-typed"
-      return typeLineNow(session, text, options.intoShell)
+      return typeLineNow(session, text, options.intoShell, options.mail)
     }
     return paneId === undefined ? job() : linesInFlight.track(paneId, lineQueue(paneId, job))
   }
 
-  const typeLineNow = async (session: SpawnedSession, text: string, intoShell = false): Promise<LineOutcome> => {
+  const typeLineNow = async (
+    session: SpawnedSession,
+    text: string,
+    intoShell = false,
+    mail = false,
+  ): Promise<LineOutcome> => {
     const line = asOneLine(text)
     const paneId = [...running.entries()].find(([, live]) => live === session)?.[0]
     /*
@@ -2717,7 +2726,7 @@ export function Workbench() {
     const typedAt = Date.now()
     const alive = () => [...running.values()].includes(session)
     // «Consegna ora»: this one line goes on the user's word, with its Enter, on whatever shows then. Spent here.
-    const armed = paneId !== undefined && deliverNow.take(paneId, typedAt)
+    const armed = mail && paneId !== undefined && deliverNow.take(paneId, typedAt)
     const typedDuring = () => paneId !== undefined && typedSince(records.typed.get(paneId), typedAt)
     // Passing the box on the user's word, or before there is any agent: the reading of menus alone can still stop it.
     const pastBox = armed || intoShell
@@ -2771,6 +2780,11 @@ export function Workbench() {
       claims.evidence(paneId)
       markWorking(paneId)
       void confirmSubmitted(paneId, session, typedAt)
+    }
+    // The click was spent on this line: if it did not go, that is said, and the mail is still queued.
+    if (paneId !== undefined && armed) {
+      if (outcome === "not-typed") tellPane(paneId, t("note.deliverNowLapsed"))
+      else dropPaneNote(paneId, t("note.deliverNowLapsed"))
     }
     if (paneId !== undefined && stuck) {
       enterStuck.add(session)
@@ -3122,11 +3136,15 @@ export function Workbench() {
   }
 
   /** Whether a pane can be typed into now without interrupting it; reads its turn activity when hooked. */
-  const freeNow = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, paneId: string): Promise<boolean> => {
+  const freeNow = async (
+    host: NonNullable<Awaited<ReturnType<typeof getHost>>>,
+    paneId: string,
+    mail = false,
+  ): Promise<boolean> => {
     // A line on its way is a turn about to start (`createInFlight`).
     if (linesInFlight.has(paneId)) return false
-    // «Consegna ora» says go, and the reading of menus alone can still say no.
-    if (deliverNow.armed(paneId, Date.now())) return !questionOpen(paneId)
+    // «Consegna ora» says go, for the mail it was pressed for, and the reading of menus alone can still say no.
+    if (mail && deliverNow.armed(paneId, Date.now())) return !questionOpen(paneId)
     const isHooked = hooked(paneId)
     let activity = activityOf.get(paneId)
     const nonce = paneNonces.get(paneId)
@@ -3312,7 +3330,7 @@ export function Workbench() {
     const session = running.get(paneId)
     if (!session) return "closed"
     // A prompt open now takes no text at all: the message waits for it to go (`deliveryResult`).
-    if (!mayType(paneId)) return "held"
+    if (!mayType(paneId, true)) return "held"
     // Given even when a prompt held its Enter back; the sender is told it is waiting.
     const given = (outcome: LineOutcome, stored = false) => {
       if (outcome === "typed-no-enter" && meta.from) {
@@ -3330,7 +3348,7 @@ export function Workbench() {
       return deliveryResult(outcome, running.get(paneId) === session, stored)
     }
     if (!goesToInbox(line) || !host.mailboxInboxPut || !host.mailboxInboxRead)
-      return given(await typeLineOutcome(session, line))
+      return given(await typeLineOutcome(session, line, { mail: true }))
     const at = Date.now()
     const entry: InboxEntry = {
       id: meta.id,
@@ -3347,7 +3365,7 @@ export function Workbench() {
       () => true,
       () => false,
     )
-    if (!stored) return given(await typeLineOutcome(session, line))
+    if (!stored) return given(await typeLineOutcome(session, line, { mail: true }))
     inboxPending.push(entry)
     saveInbox()
     return given(
@@ -3358,6 +3376,7 @@ export function Workbench() {
           mailPanes().find((pane) => pane.id === meta.from),
           line.length,
         ),
+        { mail: true },
       ),
       true,
     )
@@ -3367,7 +3386,8 @@ export function Workbench() {
   const tellSender = (from: string | undefined, text: string) => {
     const target = noticeTarget(from, (paneId) => running.has(paneId))
     if (target === "window") report(text, "info")
-    else if (target) heldLines.push({ paneId: target.pane, text })
+    // `told`: a notice from ADE, and no message of anyone's. «Consegna ora» is not for it.
+    else if (target) heldLines.push({ paneId: target.pane, text, told: true })
   }
 
   /** Rings again for unread inbox messages, and tells the sender of one never read. */
@@ -3538,12 +3558,12 @@ export function Workbench() {
     return composerOf(getTerminal(paneId).terminal, agent)
   }
   /** Whether a line may be typed now, whoever's it is: every road in `typeThenEnter` asks this first. */
-  const mayType = (paneId: string) =>
+  const mayType = (paneId: string, mail = false) =>
     mayTypeNow({
       composer: composerNow(paneId),
       question: questionOpen(paneId),
       nothingDrawn: running.has(paneId) && undrawnSince.has(paneId) && !activityOf.has(paneId),
-      armed: deliverNow.armed(paneId, Date.now()),
+      armed: mail && deliverNow.armed(paneId, Date.now()),
     })
   const lineBegun = (paneId: string) => lineBegunNow(composerNow(paneId), isTyping(records.typed.get(paneId)))
   const heldByQuestion = (paneId: string) => questionHolds(composerNow(paneId), questionOpen(paneId))
@@ -3552,15 +3572,25 @@ export function Workbench() {
   /** The way out when an agent's box is no longer recognised: see `session/deliver-now.ts`. */
   const deliverNow = createDeliverNow()
   const [deliverNowPanes, setDeliverNowPanes] = createSignal<ReadonlySet<string>>(new Set())
-  const blindHold = (paneId: string) => ({
-    blind: composerNow(paneId) === "none" && !questionOpen(paneId),
-    ...(lastOutputAt.has(paneId) ? { lastOutputAt: lastOutputAt.get(paneId)! } : {}),
-  })
+  const blindHold = (paneId: string): BlindHold => {
+    const box = composerNow(paneId)
+    const turn = turnKnown({
+      ...(activityOf.has(paneId) ? { activity: activityOf.get(paneId)! } : {}),
+      working: wb().panes.find((pane) => pane.id === paneId)?.status === "working",
+      ...(workingSince.has(paneId) ? { workingSince: workingSince.get(paneId)! } : {}),
+      now: Date.now(),
+    })
+    return {
+      blind: (box === "none" || box === "draft") && !questionOpen(paneId) && !turn,
+      ...(box === "draft" ? { line: composerLine(getTerminal(paneId).terminal) } : {}),
+    }
+  }
   const deliverNowNote = (paneId: string) =>
     t("note.deliverNowOffer", agentLabel(wb().panes.find((pane) => pane.id === paneId)?.agent ?? ""))
   const deliverNowChanged = (paneId: string, change: DeliverNowChange) => {
     if (!change) return
     setDeliverNowPanes(new Set(deliverNow.offeredPanes()))
+    dropPaneNote(paneId, t("note.deliverNowLapsed"))
     if (change === "withdrawn") return dropPaneNote(paneId, deliverNowNote(paneId))
     tellPane(paneId, deliverNowNote(paneId))
     logComposer(paneId, "offered")
@@ -4220,6 +4250,7 @@ export function Workbench() {
 
   /** What moves: the held lines, and the queue's lanes when a session has gone free. Typing is never awaited here. */
   const moveMail = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>) => {
+    for (const paneId of deliverNow.lapsed(Date.now())) tellPane(paneId, t("note.deliverNowLapsed"))
     for (const paneId of deliverNow.offeredPanes()) {
       deliverNowChanged(paneId, deliverNow.review(paneId, blindHold(paneId), Date.now()))
     }
@@ -4254,7 +4285,7 @@ export function Workbench() {
         if (item.suspended) saveSuspendedMail()
         tellPane(item.paneId, t("note.mailNotTyped", asOneLine(item.text).slice(0, 160)))
         // Read again after the await: a lane may have started a line for this pane in the meantime.
-      } else if ((await freeNow(host, item.paneId)) && !linesInFlight.has(item.paneId)) {
+      } else if ((await freeNow(host, item.paneId, !item.told)) && !linesInFlight.has(item.paneId)) {
         if (!dropFrom(heldLines, item)) continue
         if (item.suspended) saveSuspendedMail()
         if (heldByMenuNoted.delete(item.paneId)) dropPaneNote(item.paneId, t("note.mailHeldByMenu"))
@@ -4273,7 +4304,7 @@ export function Workbench() {
                 }
                 return result === "held"
               })
-            : typeLineOutcome(session, item.text).then(
+            : typeLineOutcome(session, item.text, { mail: !item.told }).then(
                 (outcome) => deliveryResult(outcome, running.get(item.paneId) === session) === "held",
               )
         ).then((again) => {
@@ -4282,7 +4313,7 @@ export function Workbench() {
           if (item.suspended) saveSuspendedMail()
         })
       } else {
-        noteMailHeld(item.paneId, item.inbox?.from)
+        if (!item.told) noteMailHeld(item.paneId, item.inbox?.from)
         if (
           !item.told &&
           item.inbox?.from &&
@@ -5646,7 +5677,7 @@ export function Workbench() {
      * sender is told at once, so it neither resends nor stops waiting.
      */
     // Read again after the await: the round's held lines may have started one for this pane in the meantime.
-    if (!(await freeNow(host, target.pane.id)) || linesInFlight.has(target.pane.id)) {
+    if (!(await freeNow(host, target.pane.id, true)) || linesInFlight.has(target.pane.id)) {
       noteMailHeld(target.pane.id, message.from)
       const byLine = lineBegun(target.pane.id)
       const bySilence = !byLine && silentFor(target.pane.id) !== undefined
@@ -6295,6 +6326,7 @@ export function Workbench() {
     tellPane: (id, text) => tellPane(id, text),
     permissions,
     isTyping: (id) => lineBegun(id),
+    mayType: (id) => mayType(id),
     questionOpen: (id) => questionOpen(id),
     answerPermission: (id, ans) => answerPermission(id, ans),
     confirmVoiceSend: (id, approved) => {
@@ -9530,6 +9562,8 @@ export function Workbench() {
     else paneNonces.delete(paneId)
     // A new process owes nothing to what the last one printed: no claim, no quarantine.
     claims.forget(paneId)
+    // Nor a turn: until the first line goes, a pane still starting says `working` with none going (`turnKnown`).
+    workingSince.delete(paneId)
     // The previous spawn's, saved with the pane: its worker may still be the one writing (MEDIO 1).
     const formerNonce = wb().panes.find((pane) => pane.id === paneId)?.linkNonce
     if (nonce && formerNonce && formerNonce !== nonce && takesActivityExtension(agentId)) {
@@ -9891,7 +9925,7 @@ export function Workbench() {
             box !== undefined &&
             !(readySince !== undefined && pollAt - readySince >= OPENING_SETTLE_MS) &&
             !(deliverNow.armed(paneId, pollAt) && !asked)
-          if (boxRead && boxHolds && !asked && box === "none") noteMailHeld(paneId, request?.from)
+          if (boxRead && boxHolds && !asked && box !== "ready") noteMailHeld(paneId, request?.from)
           if (asked) {
             menuAt = Date.now()
             if (!menuTold && drawn) {
@@ -9945,7 +9979,8 @@ export function Workbench() {
           const opening = typeIntoResumed ? task : withIntro(agentId, task)
           // Refused at the last moment, by a menu that came while it waited in the pane's line queue: said, not lost.
           const typeOpening = async () => {
-            if ((await typeLineOutcome(session, opening)) !== "not-typed" || running.get(paneId) !== session) return
+            if ((await typeLineOutcome(session, opening, { mail: true })) !== "not-typed" || running.get(paneId) !== session)
+              return
             setWb((w) => updatePane(w, paneId, { status: "idle", activity: "ready" }))
             tellPane(paneId, t("task.notTyped"))
           }
@@ -10096,7 +10131,7 @@ export function Workbench() {
           stepBoxAt = stepAt
           stepBox = !shellOnly && index === 1 ? composerNow(paneId) : undefined
           stepReadySince = stepBox === "ready" ? (stepReadySince ?? stepAt) : undefined
-          if (stepBox === "none" && !questionOpen(paneId)) noteMailHeld(paneId)
+          if (stepBox !== undefined && stepBox !== "ready" && !questionOpen(paneId)) noteMailHeld(paneId)
         }
         const boxHolds =
           stepBox !== undefined &&
@@ -10145,7 +10180,7 @@ export function Workbench() {
         const intoShell = index === 0
         index += 1
         sinceStep = ""
-        void typeLine(session, text, { intoShell })
+        void typeLine(session, text, { intoShell, mail: !intoShell })
         setWb((w) =>
           updatePane(w, paneId, { activity: index < steps.length || !task.trim() ? "connected" : "running" }),
         )

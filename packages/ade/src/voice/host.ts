@@ -53,6 +53,8 @@ export interface AdeVoiceHostDeps {
    * `permission` state, which `permissions` alone does not carry (review of invio-giusto, B1).
    */
   questionOpen?: (paneId: string) => boolean
+  /** Whether a line may be typed there now: the gate every line ADE types asks (`mayTypeNow`). */
+  mayType?: (paneId: string) => boolean
   answerPermission: (paneId: string, answer: PermissionAnswer) => void
   /**
    * The spoken decision on a `send` the voice agent wrote: deliver it, or
@@ -153,6 +155,9 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
    */
   const refuseWhileAsking = (paneId: string, words?: string) => {
     if (!deps.permissions()[paneId] && !deps.questionOpen?.(paneId)) return
+    refuse(paneId, words)
+  }
+  const refuse = (paneId: string, words?: string): never => {
     /*
      * The words over the pane, as for a half-typed line: refused, they would otherwise be gone from the user's
      * view (a menu read off the screen held the write in silence while the voice said «inviata», B1).
@@ -375,6 +380,8 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
         deps.tellPane(paneId, t("voice.msg.host.typingHeld", singleLine))
         throw new Error(t("voice.msg.host.typingPending"))
       }
+      // A dialog the reading of menus does not know: the box is simply not there, and the Enter would answer it unseen.
+      if (deps.mayType && !deps.mayType(paneId)) refuse(paneId, singleLine)
       deps.setWb((w) => updatePane(w, paneId, { status: "working", activity: "running" }))
       deps.appendLine(paneId, `> ${singleLine}`, "shell")
       session.write(asSubmittedLine(singleLine))
