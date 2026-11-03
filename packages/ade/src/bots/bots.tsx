@@ -986,11 +986,9 @@ export function BotsRoster(props: BotsRosterProps) {
         when={(roster() ?? []).length > 0}
         fallback={
           <p data-slot="bots-roster-empty">
+            {/* No button here: the «+» above is the roster's, and the empty centre has the one «Crea il primo bot». */}
             <Show when={!roster.loading} fallback={<>{t("bots.roster.loading")}</>}>
-              {t("bots.roster.empty")}{" "}
-              <button type="button" data-slot="bots-link" onClick={startNewBot}>
-                {t("bots.roster.createFirst")}
-              </button>
+              {t("bots.roster.empty")}
             </Show>
           </p>
         }

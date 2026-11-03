@@ -502,3 +502,95 @@ describe("the bot form's model chip", () => {
     }
   })
 })
+
+// ── 7. the notice strip in glass (live test 3, FAIL 5) ────────────────────────
+
+describe("the notice strip in glass", () => {
+  function stripBackground(): string | undefined {
+    let value: string | undefined
+    sheet("index.css").walkRules((rule) => {
+      if (rule.selector.replace(/\s+/g, " ") !== '[data-component="ade-shell"][data-theme="glass"] [data-slot="ade-notice"]') return
+      rule.walkDecls("background", (decl) => {
+        value = decl.value.replace(/\s+/g, " ").trim()
+      })
+    })
+    return value
+  }
+
+  test("sits on the overlay, which ignores the slider, under its own wash: its ground was alpha 40% (2.05:1 on a white desktop)", () => {
+    expect(stripBackground()).toBe(
+      "linear-gradient(var(--ade-working-bg), var(--ade-working-bg)), var(--ade-overlay)",
+    )
+  })
+
+  test("white text on it is 4.5:1 or more over the worst desktop, white", () => {
+    const wash = token("--ade-working-bg", "dark")
+    const ground = (desktop: Rgb) => over(wash, over(color(glassToken("--ade-overlay")), desktop))
+    const text = hex(glassToken("--ade-text"))
+    for (const desktop of [[255, 255, 255], [0, 0, 0], [128, 128, 128]] as Rgb[]) {
+      expect(ratio(text, ground(desktop))).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+})
+
+// ── 8. what shows through a glass sheet (live test 3, FAIL 6) ─────────────────
+
+describe("what floats over the terminals in glass hides what is under it", () => {
+  /**
+   * The contrast between a pixel of white terminal text and a pixel of its ground, once the overlay is over both, with
+   * nothing else on top: the case of a menu or a tooltip, which have no scrim. The ground under a terminal's text is the
+   * reading ground (18, 13, 11) at the slider's top, over the desktop; a white and a black desktop bracket it. A sheet sits
+   * under a scrim as well (review: 1.02 at 0.98), so this is the worse of the two.
+   */
+  function leaked(): number {
+    const overlay = color(glassToken("--ade-overlay"))
+    const text = over(overlay, [255, 255, 255])
+    const worst = [over([18, 13, 11, 0.89], [255, 255, 255]), over([18, 13, 11, 0.89], [0, 0, 0])]
+    return Math.max(...worst.map((ground) => ratio(text, over(overlay, ground))))
+  }
+
+  test("the overlay lets through under 1.07:1 of the text below a menu (at alpha 0.92 it was 1.29, and under a sheet's scrim 1.09: letters)", () => {
+    expect(leaked()).toBeLessThan(1.07)
+  })
+
+  test("and it is still a little less than opaque: glass stays glass on the app's frame, what floats is a floor of its own", () => {
+    expect(color(glassToken("--ade-overlay"))[3]).toBeLessThan(1)
+  })
+
+  /** The `background` of the one rule whose selector is the glass shell and `slots`. */
+  function glassBackground(slots: string): string | undefined {
+    let value: string | undefined
+    sheet("index.css").walkRules((rule) => {
+      const selector = rule.selector.replace(/\s+/g, " ")
+      if (selector !== `[data-component="ade-shell"][data-theme="glass"] ${slots}`) return
+      rule.walkDecls("background", (decl) => {
+        value = decl.value.replace(/\s+/g, " ").trim()
+      })
+    })
+    return value
+  }
+
+  test("the Impara layer sits on the overlay in glass: its bar was over the world's HUD text, and so was the page until its frame painted", () => {
+    expect(glassBackground('[data-slot="raguverse-learn"]')).toBe("var(--ade-overlay)")
+  })
+
+  test("the toasts, the sheet's and the pane's, sit on the overlay: they were on the 6% lift, and terminal text ran through them", () => {
+    expect(glassBackground('[data-slot="ade-toast"], [data-component="ade-shell"][data-theme="glass"] [data-slot="pane-toast"]')).toBe(
+      "var(--ade-overlay)",
+    )
+  })
+
+  test("the voice notice sits on the overlay under its own tone's wash, like the notice strip", () => {
+    expect(glassBackground('[data-slot="ade-voice-notice"]')).toBe(
+      "linear-gradient(var(--ade-notice-bg), var(--ade-notice-bg)), var(--ade-overlay)",
+    )
+  })
+
+  test("the voice notice's amber text on it is 4.5:1 or more over a white and a black desktop", () => {
+    const wash = token("--ade-working-bg", "dark")
+    const text = rgb(token("--ade-working", "dark"))
+    for (const desktop of [[255, 255, 255], [0, 0, 0]] as Rgb[]) {
+      expect(ratio(text, over(wash, over(color(glassToken("--ade-overlay")), desktop)))).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+})

@@ -179,7 +179,7 @@ import { exitedActivity } from "../grid/activity"
 import type { McpConfigIO } from "../extensions/mcp-config"
 import { willLaunch, type LaunchEntry } from "../session-new/launch"
 import type { PresetId } from "../session-new/preset"
-import { defaultPaneTitle } from "./pane-title"
+import { defaultPaneTitle, titlesOfProject } from "./pane-title"
 import { Sidebar } from "../sidebar"
 import { formatDroppedPaths } from "../sidebar/file-drag"
 import { IconButton, Notice as NoticeBanner } from "../ui/controls"
@@ -9788,7 +9788,6 @@ export function Workbench() {
     // for the agent beside it, not for a prompt nothing will read.
     const task = entry.role === "shell" ? "" : input.task
     const hasInitialTask = Boolean(task.trim())
-    const title = input.title || task || defaultPaneTitle(entry.role, entry.index, agentLabel(entry.agentId))
     const open = project()
     // Another project's session (a subagent spawned from there) keeps that project's name; its root is found at start.
     const currentProj = input.projectRoot
@@ -9798,6 +9797,18 @@ export function Workbench() {
       : input.workspaceId && input.workspaceId !== open?.name
         ? undefined
         : open
+    const workspaceId = input.workspaceId || currentProj?.name || "workspace"
+    const projectRoot = input.projectRoot ?? currentProj?.root
+    // Numbered within the pane's own project: the first Terminal of a project is «Sessione 1» whatever the others hold.
+    const title =
+      input.title ||
+      task ||
+      defaultPaneTitle(
+        entry.role,
+        entry.index,
+        agentLabel(entry.agentId),
+        titlesOfProject(wb().panes, { workspaceId, ...(projectRoot ? { projectRoot } : {}) }),
+      )
     setWb((w) =>
       addPane(
         w,
@@ -9812,8 +9823,8 @@ export function Workbench() {
           mode: input.preset ?? "custom",
           task,
           lines: [{ kind: "note", text: task || t("task.none") }],
-          workspaceId: input.workspaceId || currentProj?.name || "workspace",
-          ...((input.projectRoot ?? currentProj?.root) ? { projectRoot: input.projectRoot ?? currentProj!.root } : {}),
+          workspaceId,
+          ...(projectRoot ? { projectRoot } : {}),
           cwd: input.worktree?.path ?? currentProj?.root,
           tree: input.worktree
             ? { branch: input.worktree.branch, fidelity: "full", note: t("pane.tree.worktree", input.worktree.path) }
@@ -10446,7 +10457,9 @@ export function Workbench() {
           onAddProject={hasHost() ? () => void addProject() : undefined}
           onAddRemote={hasHost() ? () => setRemoteOpen(true) : undefined}
           onSelectProject={(id) => void switchProject(id)}
-          onNewSession={() => setStarting(true)}
+          /* With no project there is nothing to start an agent in: the screen says so, and the sidebar must not offer it. */
+          onNewSession={project() ? () => setStarting(true) : undefined}
+          noProject={!project()}
           /* The row menu's verbs: one callback each, into the functions above. */
           onRenameSession={(id) => void renameSession(id)}
           onCloseSession={(id) => {

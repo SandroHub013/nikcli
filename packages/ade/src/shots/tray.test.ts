@@ -157,7 +157,7 @@ describe("deleting a screenshot from the viewer", () => {
     host.querySelector<HTMLElement>('[data-slot="shot-open"]')!.click()
     return host
   }
-  const buttons = (host: HTMLElement) => [...document.querySelectorAll<HTMLElement>('[data-slot="shot-viewer-close"]')]
+  const buttons = (host: HTMLElement) => [...document.querySelectorAll<HTMLElement>('[data-component="shot-viewer"] button')]
   const byText = (host: HTMLElement, text: string) => buttons(host).find((button) => button.textContent === text)
 
   test("the first click only asks, with the file's name", () => {
@@ -386,5 +386,106 @@ describe("the screenshot tray and viewer, by keyboard and screen reader", () => 
     const css = readFileSync(new URL("./tray.css", import.meta.url), "utf8")
     expect(css).toMatch(/\[data-slot="shot-dismiss"\]::before \{[^}]*inset: -3px/)
     expect(css).toContain('[data-slot="shot"]:focus-within [data-slot="shot-dismiss"]')
+  })
+})
+
+/*
+ * Live test 3, FAIL 7 and the script that opened the delete prompt: a press in the empty band beside a narrow picture
+ * closes the viewer, and each button of the caption has a slot of its own («Elimina» and «Chiudi» shared one).
+ * Where the band is, in pixels, is for the eyes: no layout here.
+ */
+describe("the viewer's band and its buttons", () => {
+  const shot = { path: "C:/Pictures/Screenshots/a.png", name: "a.png", modified_ms: 1 }
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 20))
+  const open = async (extra: Record<string, unknown> = {}) => {
+    const host = mount({ shots: [shot], onDelete: async () => true, onSend: () => true, ...extra })
+    host.querySelector<HTMLElement>('[data-slot="shot-open"]')!.click()
+    await settle()
+    return host
+  }
+  const viewerButtons = () => [...document.querySelectorAll<HTMLElement>('[data-component="shot-viewer"] button')]
+  const viewerOpen = () => document.querySelector('[data-component="shot-viewer"]') !== null
+
+  /** A press as a mouse makes it: the button goes down on `down`, and the click lands on `up` (here, the frame, their common ancestor). */
+  const press = (down: Element, up: Element = down) => {
+    down.dispatchEvent(new Event("pointerdown", { bubbles: true }))
+    up.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+  }
+  const frame = () => document.querySelector<HTMLElement>('[data-slot="shot-viewer-frame"]')!
+
+  test("a press on the frame's own ground, beside the picture, closes it", async () => {
+    await open()
+    press(frame())
+    await settle()
+    expect(viewerOpen()).toBe(false)
+  })
+
+  test("a press that began on the picture and ended beside it does not (the click lands on the frame, their ancestor)", async () => {
+    await open({ load: async () => new Uint8Array([1, 2, 3]) })
+    await settle()
+    press(document.querySelector('[data-slot="shot-viewer-frame"] [data-slot="shot-image"]')!, frame())
+    await settle()
+    expect(viewerOpen()).toBe(true)
+  })
+
+  test("nor one that began on the caption, its name or a button, and ended beside them", async () => {
+    await open()
+    press(document.querySelector('[data-slot="shot-viewer-caption"]')!, frame())
+    press(document.querySelector('[data-slot="shot-viewer-name"]')!, frame())
+    press(viewerButtons()[0]!, frame())
+    await settle()
+    expect(viewerOpen()).toBe(true)
+  })
+
+  test("a press on the caption, its text or a button of it does not close it", async () => {
+    await open()
+    document.querySelector<HTMLElement>('[data-slot="shot-viewer-caption"]')!.click()
+    document.querySelector<HTMLElement>('[data-slot="shot-viewer-name"]')!.click()
+    document.querySelector<HTMLElement>('[data-slot="shot-viewer-hint"]')!.click()
+    await settle()
+    expect(viewerOpen()).toBe(true)
+  })
+
+  test("the picture itself, once it has loaded, is not a way out", async () => {
+    await open({ load: async () => new Uint8Array([1, 2, 3]) })
+    await settle()
+    const image = document.querySelector<HTMLElement>('[data-slot="shot-viewer-frame"] [data-slot="shot-image"]')
+    expect(image).not.toBeNull()
+    image!.click()
+    await settle()
+    expect(viewerOpen()).toBe(true)
+  })
+
+  test("every button of the viewer has a slot of its own, with the question open and without", async () => {
+    await open()
+    const slots = () => viewerButtons().map((button) => button.dataset.slot)
+    expect(slots().length).toBeGreaterThan(1)
+    expect(new Set(slots()).size).toBe(slots().length)
+    expect(slots()).toContain("shot-viewer-close")
+    const ask = viewerButtons().find((button) => button.textContent === t("shots.delete"))!
+    ask.click()
+    await settle()
+    expect(slots().length).toBe(2)
+    expect(new Set(slots()).size).toBe(slots().length)
+    // «Chiudi» is gone while the question is up, and nothing left answers to its slot.
+    expect(slots()).not.toContain("shot-viewer-close")
+  })
+
+  test("only «Chiudi» answers to shot-viewer-close, and pressing it closes the viewer without asking anything", async () => {
+    await open()
+    const closers = document.querySelectorAll<HTMLButtonElement>('[data-slot="shot-viewer-close"]')
+    expect(closers.length).toBe(1)
+    expect(closers[0]!.textContent).toBe(t("shots.close"))
+    closers[0]!.click()
+    await settle()
+    expect(viewerOpen()).toBe(false)
+  })
+
+  test("lint: the picture is as wide as it is drawn and centred, so the band beside it is the frame's and not the image's", () => {
+    const css = readFileSync(new URL("./tray.css", import.meta.url), "utf-8")
+    const body = /\[data-slot="shot-viewer-frame"\] \[data-slot="shot-image"\]\s*\{([^}]*)\}/.exec(css)?.[1] ?? ""
+    expect(body).toMatch(/width:\s*auto/)
+    expect(body).toMatch(/max-width:\s*100%/)
+    expect(body).toMatch(/align-self:\s*center/)
   })
 })

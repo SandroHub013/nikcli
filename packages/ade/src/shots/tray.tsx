@@ -183,6 +183,8 @@ export function ShotTray(props: ShotTrayProps) {
     resetViewer()
     setOpened(shot)
   }
+  /** Whether the press that is now ending began on the viewer's own ground (see the frame below). */
+  let pressedOnFrame = false
   const [strip, setStrip] = createSignal<HTMLDivElement>()
   /** Whether there are screenshots past each end of what you can see. */
   const [edges, setEdges] = createSignal({ left: false, right: false })
@@ -395,7 +397,20 @@ export function ShotTray(props: ShotTrayProps) {
       <Show when={opened()}>
         {(shot) => (
           <Sheet component="shot-viewer" surface={false} label={shot().name} onClose={closeViewer}>
-            <figure data-slot="shot-viewer-frame">
+            {/* A press on the frame's own ground, beside a narrow picture or between it and the caption, is a press outside
+                the picture: it closes, as one outside the frame does. The picture and the caption are not that ground. */}
+            {/* Where the press began, not only where it ended: the click goes to the nearest common ancestor of the two,
+                so a press on the picture released beside it would land here too. */}
+            <figure
+              data-slot="shot-viewer-frame"
+              onPointerDown={(event) => {
+                pressedOnFrame = event.target === event.currentTarget
+              }}
+              onClick={(event) => {
+                if (pressedOnFrame && event.target === event.currentTarget) closeViewer()
+                pressedOnFrame = false
+              }}
+            >
               <Thumb shot={shot()} load={props.load} />
               <figcaption data-slot="shot-viewer-caption">
                 <span data-slot="shot-viewer-name">{shot().name}</span>
@@ -423,7 +438,7 @@ export function ShotTray(props: ShotTrayProps) {
                   <Button
                     size="sm"
                     variant="danger"
-                    data-slot="shot-viewer-close"
+                    data-slot="shot-viewer-delete"
                     onClick={() => {
                       setDeleteFailed(false)
                       setAsking(true)
@@ -437,7 +452,7 @@ export function ShotTray(props: ShotTrayProps) {
                   {/* «Tieni» takes the place «Elimina» had, under the cursor: a double click keeps the file. */}
                   <Button
                     size="sm"
-                    data-slot="shot-viewer-close"
+                    data-slot="shot-viewer-keep"
                     disabled={deleting()}
                     ref={(button) => queueMicrotask(() => button.focus())}
                     onClick={() => setAsking(false)}
@@ -447,7 +462,7 @@ export function ShotTray(props: ShotTrayProps) {
                   <Button
                     size="sm"
                     variant="danger"
-                    data-slot="shot-viewer-close"
+                    data-slot="shot-viewer-confirm"
                     disabled={deleting()}
                     onClick={async (event) => {
                       // The second click of a double click on «Elimina» lands here: it is not a yes.

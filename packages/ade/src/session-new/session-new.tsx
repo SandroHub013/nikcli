@@ -177,23 +177,22 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
                       </span>
                       <div data-slot="new-agent-body">
                         <span data-slot="new-agent-label">{status.agent.label}</span>
-                      </div>
-                      <div data-slot="new-agent-badge-slot">
-                        <Show
-                          when={isAbsent()}
-                          fallback={
-                            <span
-                              data-slot="new-agent-check"
-                              data-visible={isSelected() ? "true" : undefined}
-                              aria-hidden={!isSelected()}
-                            >
-                              ✓
-                            </span>
-                          }
-                        >
+                        {/* Under the name, not beside it: in a row the chip took the width and the name shrank to one letter. */}
+                        <Show when={isAbsent()}>
                           <span data-slot="new-agent-missing">{t("new.missing")}</span>
                         </Show>
                       </div>
+                      <Show when={!isAbsent()}>
+                        <div data-slot="new-agent-badge-slot">
+                          <span
+                            data-slot="new-agent-check"
+                            data-visible={isSelected() ? "true" : undefined}
+                            aria-hidden={!isSelected()}
+                          >
+                            ✓
+                          </span>
+                        </div>
+                      </Show>
                     </button>
                   )
                 }}

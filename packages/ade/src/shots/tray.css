@@ -451,6 +451,11 @@
      be cropped away. */
   object-fit: contain;
   max-height: 76vh;
+  /* As wide as it is drawn, and centred: at the thumbnail's 100% a narrow picture sat in an image box as wide as the
+     frame, and the cream bands beside it were the image's, which a press does not close (live test 3, FAIL 7). */
+  width: auto;
+  max-width: 100%;
+  align-self: center;
   height: auto;
   border-radius: var(--ade-radius-sm);
 }
@@ -487,6 +492,9 @@
 
 /* The caption's buttons are Buttons (sm); they only must not shrink in the caption row. */
 [data-slot="shot-viewer-close"],
+[data-slot="shot-viewer-delete"],
+[data-slot="shot-viewer-keep"],
+[data-slot="shot-viewer-confirm"],
 [data-slot="shot-viewer-send"] {
   flex: 0 0 auto;
 }
