@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { resetLocaleForTests } from "../i18n"
 import { parseWorkspace, serializeWorkspace } from "../session/persist"
 import { createWorkbench, fromWorkspaceState, liveToReopen, sessionsToResume, toWorkspaceState, type Pane } from "./state"
 
@@ -31,7 +32,8 @@ function restart(panes: Pane[]) {
   const restored = fromWorkspaceState(saved)
   const planned = sessionsToResume(saved).map((p) => p.id)
   const second = liveToReopen(restored.panes, new Set(planned), saved).map((p) => p.id)
-  return { planned, second, started: [...planned, ...second].sort() }
+  const notes = (id: string) => restored.panes.find((p) => p.id === id)!.lines.map((line) => line.text)
+  return { planned, second, started: [...planned, ...second].sort(), notes }
 }
 
 describe("a restart starts what was alive, not what had ended", () => {
@@ -59,6 +61,18 @@ describe("a restart starts what was alive, not what had ended", () => {
     ])
     expect(planned).toEqual([])
     expect(second).toEqual(["term"])
+  })
+
+  test("an ended session says nothing about reopening: no restore note on exit 0, exit 1 or a failed start", () => {
+    resetLocaleForTests("it")
+    for (const ended of [
+      pane("c1", { status: "done", activity: "done" }),
+      pane("c2", { status: "error", activity: "exited" }),
+      pane("f5", { status: "error", activity: "startFailed", agent: "goose", model: "goose" }),
+    ])
+      expect([ended.id, restart([ended]).notes(ended.id).filter((text) => /ripristinata|riapro|riprendo/i.test(text))]).toEqual([ended.id, []])
+    // A live one still carries it: it is the one being reopened.
+    expect(restart([pane("live", { status: "working" })]).notes("live").join(" ")).toContain("ripristinata")
   })
 
   test("suspended stays suspended, and a mix keeps each one's own end", () => {

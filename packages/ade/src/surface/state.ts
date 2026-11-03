@@ -813,8 +813,11 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
           ...(p.resumeId ? { resumeId: p.resumeId } : {}),
           ...(p.linkNonce ? { linkNonce: p.linkNonce } : {}),
           ...(p.otherDir ? { otherDir: p.otherDir } : {}),
-          /* A suspended session's transcript already ends with the note that says so: nothing is restarted to report. */
-          lines: p.suspended
+          /*
+           * A suspended session's transcript already ends with the note that says so, and an ended one (exit, failed
+           * start) is not restarted either: nothing is reopened to report, and «Riapro la conversazione» would be false.
+           */
+          lines: p.suspended || !LIVE_STATUSES.includes(p.status)
             ? history
             : [
                 ...history,
