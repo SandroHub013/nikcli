@@ -96,6 +96,11 @@
   box-shadow: var(--ade-shadow-sm);
 }
 
+/* The selected one sets a shadow of its own, later and as specific: without this the ring never paints on it (prova 4, item 15). */
+[data-slot="category-button"][data-active="true"]:focus-visible {
+  box-shadow: var(--ade-focus-ring), var(--ade-shadow-sm);
+}
+
 [data-slot="category-label"] {
   white-space: nowrap;
   overflow: hidden;
