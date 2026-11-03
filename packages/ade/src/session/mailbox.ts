@@ -810,6 +810,15 @@ export function formatHeldByMenu(entry: Pick<InboxEntry, "id" | "kind">, reader:
   )
 }
 
+/** Told to the sender, once, of a first task not yet typed because its session has drawn nothing by the deadline. */
+export function formatSilentStart(id: string, reader: MailPane | undefined): string {
+  return (
+    `[ade-msg] ADE ha la richiesta ${id} per ${who(reader)} ma non l'ha ancora digitata: ` +
+    `quella sessione non ha scritto niente da un minuto. ` +
+    `Arriva da sola appena scrive qualcosa; se il programma non parte, non arriva.`
+  )
+}
+
 /** Told to the sender when a long message was never read. */
 export function formatUnread(entry: InboxEntry, reader: MailPane | undefined): string {
   const what = entry.kind === "ask" || entry.kind === "spawn" ? `la richiesta ${entry.id}` : "il tuo messaggio"

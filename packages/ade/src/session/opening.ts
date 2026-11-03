@@ -65,7 +65,7 @@ export interface OpeningInput {
 /**
  * `wait` — not yet; ask again later.
  * `send` — the screen has settled, type it.
- * `abandon` — nothing came, or nothing settled; do not type, and say so.
+ * `abandon` — nothing came, or nothing settled; do not type, and say so (`openingStep` for a first task).
  */
 export type OpeningDecision = "wait" | "send" | "abandon"
 
@@ -105,9 +105,16 @@ export interface OpeningBytes {
   lastByteAt?: number
 }
 
-/** Whether a chunk puts anything on the screen, as against modes, a title, cursor moves and blanks. */
+/**
+ * Whether a chunk puts anything on the screen, as against modes, a title, cursor moves, queries and blanks.
+ *
+ * `stripAnsi` takes only the introducer of a string sequence and leaves its payload: opentui's queries before its first
+ * frame (`ESC P +q4d73 ESC \`, `ESC _ Gi=31337... ESC \`) and ncurses' `ESC ( B` would read as the CLI having drawn. So
+ * those go first. A sequence split across two chunks still reads as text.
+ */
 export function drawsText(chunk: string): boolean {
-  return /[^\s\x00-\x1f\x7f]/.test(stripAnsi(chunk))
+  const bare = chunk.replace(/\x1b[P^_X][\s\S]*?(?:\x07|\x1b\\)/g, "").replace(/\x1b[()#][0-9A-Za-z]/g, "")
+  return /[^\s\x00-\x1f\x7f]/.test(stripAnsi(bare))
 }
 
 /**
@@ -161,3 +168,16 @@ export function clockAfterMenu(
 
 /** How long a step of a remote session may wait on a question before the pane says it has not been typed. */
 export const REMOTE_STEP_NOTE_MS = 180_000
+
+/**
+ * What a first task's poll does with a decision. `tell`: say once, in the pane and to the sender, that the deadline has
+ * passed with nothing drawn, and go on waiting.
+ *
+ * With the clock at the first text the deadline can be reached: a CLI slow to start, behind Defender or on a loaded
+ * machine, lost its task just as it began to draw. A session that comes late gets its task. The poll ends by itself when
+ * the process exits.
+ */
+export function openingStep(decision: OpeningDecision, told: boolean): "wait" | "tell" | "send" {
+  if (decision === "abandon") return told ? "wait" : "tell"
+  return decision
+}

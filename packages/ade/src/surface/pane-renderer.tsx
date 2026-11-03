@@ -100,8 +100,6 @@ export interface PaneRendererDeps {
   promptAnswered: (id: string) => void
   /** Whether a menu stands in the pane now and `key` typed into it would be its answer (`menuOnScreen`). */
   menuOpen: (id: string, key: string) => boolean
-  /** A key on its way to the pane: which menu on its screen still waits depends on it (`createMenuHold`). */
-  menuKey: (id: string, key: string) => void
   /** An Esc or a Ctrl-C typed in the pane, which Claude Code reports to no hook. */
   interrupted: (id: string) => void
   /** "Riprova" on a session that failed. */
@@ -514,7 +512,6 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
           // Enter typed straight into the terminal submits a turn, exactly as
           // the composer does; the quiet timer brings the pane back to idle.
           // …and a turn of its own, after which a repeated `@ade` line is a new request.
-          if (answersPrompt(data)) deps.menuKey(current().id, data)
           if (answersPrompt(data)) deps.promptAnswered(current().id)
           if (data.includes("\r")) {
             deps.panels.newTurn(current().id)

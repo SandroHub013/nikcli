@@ -5,7 +5,7 @@ import { createLineAccumulator } from "../host/line-stream"
 import { createLineWriter } from "../surface/pane-lines"
 import { codeOf } from "../test-support/source-text"
 import { typeThenEnter } from "./enter"
-import { formatHeldByMenu, formatHeldMenuReceipt } from "./mailbox"
+import { formatHeldByMenu, formatHeldMenuReceipt, formatSilentStart } from "./mailbox"
 import { decideOpening, OPENING_TIMEOUT_MS } from "./opening"
 import { detectPermission, followPermission, type PermissionRequest } from "./permission"
 import { createMenuHold, createUnparsed, menuNames, screenQuestion, statusFromScreen } from "./screen-question"
@@ -69,17 +69,17 @@ function pane() {
         })
       }
     },
-    /** A key of the user's on its way to the pane (`menuKey`), written after it is said. */
+    /** A key of the user's on its way to the pane: an Enter is said before it is written (`menuEnter`). */
     async key(data: string, answer = "") {
-      hold.keyTyped("p", terminal, AGENT, data)
+      if (data.includes("\r")) hold.enterTyped("p", terminal, AGENT)
       if (answer) await this.feed(answer)
     },
-    /** A key as `onInput` takes it: counted (`menuOnScreen`, F2), told to the hold (`menuKey`), then written. */
+    /** A key as `onInput` takes it: counted (`menuOnScreen`, F2), told to the hold if an Enter, then written. */
     async type(data: string, echo = "") {
       const menu = hold.waiting("p", terminal, AGENT)
       const answers = menu !== undefined && isAnswerKey(data) && !isTyping(line) && menuNames(menu, data)
       line = typedAfter(line, data, Date.now(), answers)
-      if (data.includes("\r") || !isTyping(line)) hold.keyTyped("p", terminal, AGENT, data)
+      if (data.includes("\r")) hold.enterTyped("p", terminal, AGENT)
       if (echo) await this.feed(echo)
     },
     /** What keeps mail out of the pane: `questionOpen`, or a line the user has begun. */
@@ -206,11 +206,11 @@ describe("what is not a menu waiting holds nothing", () => {
     expect((await typedInto(p)).length).toBe(2)
   })
 
-  test("a menu already answered, by a program that prints lines and never redraws: a digit, then what it printed", async () => {
+  test("a menu already answered, by a program that prints lines and never redraws: a digit, what it printed, its prompt", async () => {
     const p = pane()
     await p.feed(FILL, "ml", ON_FULL_SCREEN + NOTES)
     expect(p.questionOpen()).toBe(true)
-    await p.key("1", " [1]\r\nanswered; working...\r\nworking 1/4\r\n")
+    await p.key("1", " [1]\r\nanswered; working...\r\nworking 1/4\r\n> ")
     expect(p.questionOpen()).toBe(false)
     expect((await typedInto(p)).length).toBe(2)
   })
@@ -255,7 +255,7 @@ describe("a key does not release a menu that goes on waiting", () => {
   test("the same question printed again below the first is a new menu", async () => {
     const p = pane()
     await p.feed(FILL, "ml", ON_FULL_SCREEN + NOTES)
-    await p.key("1", " [1]\r\nanswered\r\n")
+    await p.key("\r", "\r\nanswered\r\n")
     expect(p.questionOpen()).toBe(false)
     await p.feed(ON_FULL_SCREEN + NOTES)
     expect(p.questionOpen()).toBe(true)
@@ -265,7 +265,7 @@ describe("a key does not release a menu that goes on waiting", () => {
   test("another menu, under one answered, is a new menu", async () => {
     const p = pane()
     await p.feed(FILL, "ml", ON_FULL_SCREEN + NOTES)
-    await p.key("1", " [1]\r\nanswered\r\n")
+    await p.key("\r", "\r\nanswered\r\n")
     await p.feed(ON_FULL_SCREEN.replace("build", "second") + NOTES)
     expect(p.questionOpen()).toBe(true)
   })
@@ -368,6 +368,13 @@ describe("the sender hears it is held", () => {
     expect(receipt).not.toContain("consegnat")
   })
 
+  test("a first task whose session has drawn nothing by the deadline: not typed, and why", () => {
+    const told = formatSilentStart("r1", reader)
+    expect(told).toContain("r1")
+    expect(told).toContain("non l'ha ancora digitata")
+    expect(told).not.toContain("consegnat")
+  })
+
   test("a first task, a reply or an update hears the same", () => {
     expect(formatHeldByMenu({ id: "r1", kind: "spawn" }, reader)).toContain("la richiesta r1")
     expect(formatHeldByMenu({ id: "r1", kind: "reply" }, reader)).toContain("la tua risposta alla richiesta r1")
@@ -409,10 +416,30 @@ describe("a key the menu does not name never releases it", () => {
     expect(p.questionOpen()).toBe(true)
   })
 
-  test("a key it names, once the program has printed what came of it", async () => {
+  test("a digit that moves the highlight while the program prints below: the next Enter would confirm it", async () => {
+    const p = pane()
+    await p.feed("Run the build command?\r\n  ❯ 1. Yes, proceed\r\n    2. No\r\n\r\n Enter to confirm · Esc to cancel\r\nstatus")
+    await p.key("2")
+    await p.feed("\x1b[2;1H    1. Yes, proceed\x1b[K\x1b[3;1H  ❯ 2. No\x1b[K\x1b[6;1H\r\none more line\r\n")
+    expect(p.questionOpen()).toBe(true)
+    expect(await typedInto(p)).toEqual([])
+  })
+
+  test("a program that answers on a digit and never redraws: held until its prompt", async () => {
     const p = pane()
     await p.feed(FILL, "ml", ON_FULL_SCREEN + NOTES)
-    await p.key("2", " [2]\r\nanswered\r\n")
+    await p.key("1", " [1]\r\nanswered; working...\r\nworking 1/4\r\n")
+    expect(p.questionOpen()).toBe(true)
+    await p.feed("> ")
+    expect(p.questionOpen()).toBe(false)
+  })
+
+  test("a program that answers on a digit and never redraws: or until an Enter", async () => {
+    const p = pane()
+    await p.feed(FILL, "ml", ON_FULL_SCREEN + NOTES)
+    await p.key("1", " [1]\r\nanswered; working...\r\nworking 1/4\r\n")
+    expect(p.questionOpen()).toBe(true)
+    await p.key("\r")
     expect(p.questionOpen()).toBe(false)
   })
 
@@ -459,6 +486,14 @@ describe("a line the user has begun under the words of a menu", () => {
     expect(p.mailWaits()).toBe(true)
   })
 
+  test("a digit as the first thing typed, and then lines arrive under the menu", async () => {
+    const p = pane()
+    await p.feed(FILL, QUOTED)
+    await p.type("1", "1")
+    await p.feed("\r\nmore output\r\nmore output\r\nmore output")
+    expect(p.mailWaits()).toBe(true)
+  })
+
   test("the Enter sends the line, and the mail goes", async () => {
     const p = pane()
     await p.feed(FILL, QUOTED)
@@ -470,7 +505,7 @@ describe("a line the user has begun under the words of a menu", () => {
   test("a one-key answer the menu names is no line begun (F2)", async () => {
     const p = pane()
     await p.feed(FILL, "ml", ON_FULL_SCREEN + NOTES)
-    await p.type("1", " [1]\r\nanswered; working...\r\nworking 1/4\r\n")
+    await p.type("1", " [1]\r\nanswered; working...\r\nworking 1/4\r\n> ")
     expect(p.mailWaits()).toBe(false)
   })
 
@@ -516,6 +551,13 @@ describe("the question dialog of OpenCode, and of ragu without its plugin", () =
     })
   }
 
+  test("its footer wrapped in a narrow pane is still its hint, down to one key on a row", async () => {
+    const wrapped = await rowsOf([...DIALOG, "  ↑↓ select  enter submit", "  esc dismiss"])
+    expect(wrapped?.under).toBe(0)
+    const narrow = await rowsOf([...DIALOG, "  ⇆ tab switch", "  ↑↓ select", "  enter toggle", "  esc dismiss"])
+    expect(narrow?.under).toBe(0)
+  })
+
   test("with a row below it, and a digit is a key it names", async () => {
     const menu = await rowsOf([...DIALOG, "  ↑↓ select  enter submit  esc dismiss", "  flash · 12% used"])
     expect(menu?.under).toBe(1)
@@ -558,6 +600,13 @@ describe("ragu's confirm dialog", () => {
     expect(menuNames(menu!, "x")).toBe(false)
   })
 
+  test("those words printed by another agent are no dialog of ragu's: this team's panes read this very code", async () => {
+    const terminal = new Terminal({ cols: 100, rows: 24, allowProposedApi: true })
+    await written(terminal, "Its hint says: Y/N or ←→ to switch, enter to confirm\r\nmore of the reply")
+    expect(screenQuestion(terminal, "codex")).toBeUndefined()
+    expect(screenQuestion(terminal, "claude-code")).toBeUndefined()
+  })
+
   test("with the session's text either side of it", async () => {
     const terminal = new Terminal({ cols: 100, rows: 24, allowProposedApi: true })
     await written(terminal, "old text    Y/N or ←→ to switch, enter to confirm    old text")
@@ -595,7 +644,7 @@ describe("a menu in a box of its own: only this box counts (agy)", () => {
     const hold = createMenuHold()
     const terminal = new Terminal({ cols: 100, rows: 24, allowProposedApi: true })
     await written(terminal, [...box("Do you want to edit a.ts?", "› 1. Yes", "  2. No"), STATUS].join("\r\n"))
-    hold.keyTyped("p", terminal, "agy", "\r")
+    hold.enterTyped("p", terminal, "agy")
     await written(terminal, "\r\nedited a.ts\r\n" + [...box("Do you want to edit b.ts?", "› 1. Yes", "  2. No"), STATUS].join("\r\n"))
     expect(screenQuestion(terminal, "agy")?.what).toBe("Do you want to edit b.ts?")
     expect(hold.waiting("p", terminal, "agy")?.what).toBe("Do you want to edit b.ts?")
@@ -648,8 +697,8 @@ describe("a menu with no question above it", () => {
     const hold = createMenuHold()
     await written(terminal, MENU)
     expect(screenQuestion(terminal, AGENT)?.what).toBe("")
-    hold.keyTyped("p", terminal, AGENT, "1")
-    await written(terminal, " [1]\r\nanswered\r\n")
+    hold.enterTyped("p", terminal, AGENT)
+    await written(terminal, "\r\nanswered\r\n")
     expect(hold.waiting("p", terminal, AGENT)).toBeUndefined()
     // Far enough below that the words above it are no question of its own, and with more under it than the key saw.
     await written(terminal, "\r\n".repeat(13) + MENU + "note 2\r\nnote 3\r\n")
@@ -689,10 +738,11 @@ describe("lint: the workbench's wiring", () => {
 
   test("lint: every key on its way to a pane reaches the hold before it is written", () => {
     const renderer = readFileSync(new URL("../surface/pane-renderer.tsx", import.meta.url), "utf8")
-    expect(renderer).toContain("if (answersPrompt(data)) deps.menuKey(current().id, data)")
-    expect(renderer.indexOf("deps.menuKey(current().id, data)")).toBeLessThan(renderer.indexOf("session.write(data)"))
-    expect(between("const turnSubmitted = (", "claims.evidence(paneId)")).toContain(codeOf('menuKey(paneId, "\\r")'))
-    expect(between("const answerPermission = (", "appendLine(paneId")).toContain(codeOf('menuKey(paneId, "\\r")'))
+    const onInput = renderer.slice(renderer.indexOf("onInput={(data) => {"))
+    expect(onInput.indexOf("deps.turnSubmitted(current().id)")).toBeGreaterThan(0)
+    expect(onInput.indexOf("deps.turnSubmitted(current().id)")).toBeLessThan(onInput.indexOf("session.write(data)"))
+    expect(between("const turnSubmitted = (", "claims.evidence(paneId)")).toContain(codeOf("menuEnter(paneId)"))
+    expect(between("const answerPermission = (", "appendLine(paneId")).toContain(codeOf("menuEnter(paneId)"))
   })
 
   test("lint: on a screen's word alone, only a key the menu names is not the start of a line", () => {
@@ -717,6 +767,17 @@ describe("lint: the workbench's wiring", () => {
     expect(source).toContain(codeOf("openingBytes = bytesAfter(openingBytes, chunk, now)"))
   })
 
+  test("lint: the deadline does not end a first task's poll: it is said once, to the pane and to the sender", () => {
+    const poll = between("if (starting.typesTask) {", "openingPolls.add(poll)")
+    expect(poll).toContain(codeOf("const step = openingStep(decision, silenceTold)"))
+    const told = poll.slice(poll.indexOf(codeOf('if (step === "tell") {')), poll.indexOf(codeOf("stopOpeningPoll(poll)if (menuTold)")))
+    expect(told).toContain(codeOf('tellPane(paneId, t("task.notSent"))'))
+    expect(told).toContain(codeOf("tellSender(request.from, formatSilentStart(request.id, reader))"))
+    // It ends in its own return, so the pass that says it does not stop the poll.
+    expect(told.endsWith(codeOf("return }"))).toBe(true)
+    expect(poll).toContain(codeOf('if (silenceTold) dropPaneNote(paneId, t("task.notSent"))'))
+  })
+
   test("lint: a first task refused at the last moment is said, on both of its paths", () => {
     const poll = between("if (starting.typesTask) {", "openingPolls.add(poll)")
     expect(poll).toContain(codeOf('t("task.notTyped")'))
@@ -732,11 +793,13 @@ describe("lint: the workbench's wiring", () => {
     expect(remote).toContain(codeOf("if (drawsText(chunk)) textAt = Date.now()"))
     expect(remote).toContain(codeOf("Date.now() - stepStart >= REMOTE_STEP_NOTE_MS"))
     expect(remote).toContain(codeOf('t("task.stepHeld", String(steps[index]))'))
+    expect(remote).toContain(codeOf('if (stepHeldTold) dropPaneNote(paneId, t("task.stepHeld", text))'))
     expect(remote).toContain(codeOf("permissionPending: asking"))
   })
 
   test("lint: a restart forgets the note of the process before it", () => {
     const local = between("const startProcess = async (", "const startRemoteProcess = async (")
     expect(local).toContain(codeOf('if (heldByMenuNoted.delete(paneId)) dropPaneNote(paneId, t("note.mailHeldByMenu"))'))
+    expect(local).toContain(codeOf('dropPaneNote(paneId, t("task.heldByMenu")) dropPaneNote(paneId, t("task.notSent"))'))
   })
 })

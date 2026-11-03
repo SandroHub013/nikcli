@@ -421,6 +421,7 @@ import {
   formatBell,
   formatHeld,
   formatHeldByMenu,
+  formatSilentStart,
   formatHeldDialogReceipt,
   formatHeldMenuReceipt,
   formatHeldReceipt,
@@ -695,6 +696,7 @@ import {
   clockAfterMenu,
   decideOpening,
   drawsText,
+  openingStep,
   screenDrawn,
   type OpeningBytes,
 } from "../session/opening"
@@ -3479,14 +3481,12 @@ export function Workbench() {
   const menuHold = createMenuHold()
   /** What has arrived and xterm has not parsed: the screen says nothing about it yet. */
   const unparsed = createUnparsed()
-  /** A key of the user's on its way to the pane, or an answer of the voice's: said before it is written. */
-  const menuKey = (paneId: string, key: string) => {
-    // A line being written: this runs for every key, and a line's letters answer nothing.
-    if (!key.includes("\r") && isTyping(records.typed.get(paneId))) return
+  /** An Enter of the user's on its way to the pane, or an answer of the voice's: said before it is written. */
+  const menuEnter = (paneId: string) => {
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
     if (!pane || !hasTerminal(paneId)) return
-    menuHold.keyTyped(paneId, getTerminal(paneId).terminal, pane.agent ?? pane.model, key)
-    // An Enter into a screen that then shows nothing new: no output will come to read it.
+    menuHold.enterTyped(paneId, getTerminal(paneId).terminal, pane.agent ?? pane.model)
+    // Into a screen that then shows nothing new: no output will come to read it.
     watchScreen(paneId)
   }
 
@@ -3746,7 +3746,7 @@ export function Workbench() {
    */
   const turnSubmitted = (paneId: string) => {
     promptAnswered(paneId)
-    menuKey(paneId, "\r")
+    menuEnter(paneId)
     // An Enter ADE saw is evidence, not a guess from output: this turn does not expire (`OUTPUT_CLAIM_MAX_MS`).
     claims.evidence(paneId)
     markWorking(paneId)
@@ -8762,7 +8762,7 @@ export function Workbench() {
      * and told the user the session was running again — the interface said
      * answered, the agent was still waiting.
      */
-    menuKey(paneId, "\r")
+    menuEnter(paneId)
     session.write(asSubmittedLine(answer.send))
     appendLine(paneId, `> ${answerLabel(answer)}`, "shell")
 
@@ -9432,6 +9432,8 @@ export function Workbench() {
       modeTracker.forget(paneId)
       menuHold.forget(paneId)
       if (heldByMenuNoted.delete(paneId)) dropPaneNote(paneId, t("note.mailHeldByMenu"))
+      dropPaneNote(paneId, t("task.heldByMenu"))
+      dropPaneNote(paneId, t("task.notSent"))
       paneClasses.delete(paneId)
       // A conversation reopened is drawn again, requests and all: those were acted on.
       screenRequests.start(
@@ -9623,6 +9625,7 @@ export function Workbench() {
         // A menu in front of the task: said once, here and to whoever asked for the task. Its last moment on the screen
         // is where the wait for a drawn screen starts again: what comes after an answer is still being drawn.
         let menuTold = false
+        let silenceTold = false
         let menuAt: number | undefined
         const ownWorktree = launched?.worktree !== undefined && sameFolder(workDir, launched.worktree)
         const poll = setInterval(() => {
@@ -9675,51 +9678,57 @@ export function Workbench() {
             // Chunks xterm has not parsed: what they draw may be a menu.
             permissionPending: asked || unparsed.behind(paneId),
           })
-          if (decision === "wait") return
-
-          stopOpeningPoll(poll)
-          if (decision === "send") {
-            if (menuTold) dropPaneNote(paneId, t("task.heldByMenu"))
+          const step = openingStep(decision, silenceTold)
+          if (step === "wait") return
+          /*
+           * Said, not swallowed, and not given up: a session that comes late gets its task, and the sender, who would
+           * otherwise believe it went, hears why it has not. The poll ends above, when the process exits.
+           */
+          if (step === "tell") {
+            silenceTold = true
             setWb((w) =>
               updatePane(w, paneId, {
-                status: "working",
-                activity: "running",
+                status: "idle",
+                activity: "ready",
               }),
             )
-            // Opening tasks only — a line the user typed later is theirs alone.
-            // Text and Enter apart, for the reason `typeLine` gives.
-            // Into this poll's own session, the one checked above.
-            const opening = typeIntoResumed ? task : withIntro(agentId, task)
-            // Refused at the last moment, by a menu that came while it waited in the pane's line queue: said, not lost.
-            const typeOpening = async () => {
-              if ((await typeLineOutcome(session, opening)) !== "not-typed" || running.get(paneId) !== session) return
-              setWb((w) => updatePane(w, paneId, { status: "idle", activity: "ready" }))
-              tellPane(paneId, t("task.notTyped"))
-            }
-            // A task from `ade-msg spawn` is a request like any other: too long to type, it goes to the inbox.
+            tellPane(paneId, t("task.notSent"))
             if (request) {
-              const meta = { id: request.id, kind: "spawn" as const, from: request.from }
-              void getHost().then(async (host) => {
-                if (!host) return void typeOpening()
-                // A prompt at start-up: the task waits among the held lines instead of going missing.
-                if ((await deliverText(host, paneId, opening, meta)) === "held")
-                  heldLines.push({ paneId, text: opening, inbox: meta })
-              })
-            } else void typeOpening()
+              const reader = mailPanes().find((pane) => pane.id === paneId)
+              tellSender(request.from, formatSilentStart(request.id, reader))
+            }
             return
           }
-          /*
-           * Said, not swallowed. An opening task that was never delivered is
-           * the user's sentence going missing; they need to know it is still
-           * theirs to send, and the terminal is where they are looking.
-           */
+
+          stopOpeningPoll(poll)
+          if (menuTold) dropPaneNote(paneId, t("task.heldByMenu"))
+          if (silenceTold) dropPaneNote(paneId, t("task.notSent"))
           setWb((w) =>
             updatePane(w, paneId, {
-              status: "idle",
-              activity: "ready",
+              status: "working",
+              activity: "running",
             }),
           )
-          tellPane(paneId, t("task.notSent"))
+          // Opening tasks only — a line the user typed later is theirs alone.
+          // Text and Enter apart, for the reason `typeLine` gives.
+          // Into this poll's own session, the one checked above.
+          const opening = typeIntoResumed ? task : withIntro(agentId, task)
+          // Refused at the last moment, by a menu that came while it waited in the pane's line queue: said, not lost.
+          const typeOpening = async () => {
+            if ((await typeLineOutcome(session, opening)) !== "not-typed" || running.get(paneId) !== session) return
+            setWb((w) => updatePane(w, paneId, { status: "idle", activity: "ready" }))
+            tellPane(paneId, t("task.notTyped"))
+          }
+          // A task from `ade-msg spawn` is a request like any other: too long to type, it goes to the inbox.
+          if (request) {
+            const meta = { id: request.id, kind: "spawn" as const, from: request.from }
+            void getHost().then(async (host) => {
+              if (!host) return void typeOpening()
+              // A prompt at start-up: the task waits among the held lines instead of going missing.
+              if ((await deliverText(host, paneId, opening, meta)) === "held")
+                heldLines.push({ paneId, text: opening, inbox: meta })
+            })
+          } else void typeOpening()
         }, 100)
         openingPolls.add(poll)
       }
@@ -9876,6 +9885,7 @@ export function Workbench() {
           return
         }
         const text = steps[index]!
+        if (stepHeldTold) dropPaneNote(paneId, t("task.stepHeld", text))
         if (!shellOnly && index === 0) promptBefore = lastLineOf(tail)
         index += 1
         sinceStep = ""
@@ -10199,7 +10209,6 @@ export function Workbench() {
     turnSubmitted,
     promptAnswered,
     menuOpen: menuOnScreen,
-    menuKey,
     interrupted,
     restart: (pane, line) => void reopen(pane, line),
     suspendCheck: suspendCheckFor,

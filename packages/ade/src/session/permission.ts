@@ -339,7 +339,7 @@ const YN_PATTERN_RE = /(?:\[|\()([yYnN](?:\s*\/\s*[yYnN](?:\s*\/\s*[aAcCdD])?)?)
  * amend», opentui's «⇆ select  enter confirm». Codex's composer footer, «⏎ send  ⌃C quit», names no choice.
  */
 const HINT_KEY_RE = /^\s*(?:press\s+)?(?:enter|esc|tab|↑|↓|←|→|⇆|↵|⏎)(?![a-z])/i
-const HINT_DOES_RE = /\b(?:confirm|cancel|continue|select|exit|navigate|choose|reject)\b/i
+const HINT_DOES_RE = /\b(?:confirm|cancel|continue|select|exit|navigate|choose|reject|submit|dismiss|toggle|switch)\b/i
 const isMenuHint = (line: string) => line.trim().length <= 120 && HINT_KEY_RE.test(line) && HINT_DOES_RE.test(line)
 // A key and what it does, inside a hint: «enter submit», «Enter to confirm», «↑↓ select», «esc dismiss».
 const HINT_PAIR_RE =
@@ -347,13 +347,13 @@ const HINT_PAIR_RE =
 /**
  * A hint that names at least two keys, one of them Enter, says by itself that the numbers above it are choices: the
  * question dialog of OpenCode and of ragu has free labels and shows the active one by colour alone. A sentence does not
- * read that way: «Enter the folder, then tab to select» has a key and what it does only once.
+ * read that way: «Enter the folder, then tab to select» has a key and what it does only once. All the hint's rows
+ * together: in a narrow pane its footer wraps, down to one key on a row.
  */
-const hintNamesEnterAndMore = (rows: readonly string[]) =>
-  rows.some((row) => {
-    const keys = [...row.matchAll(HINT_PAIR_RE)].map((pair) => pair[1]!)
-    return keys.length >= 2 && keys.some((key) => /^(?:enter|return|[↵⏎])$/i.test(key))
-  })
+const hintNamesEnterAndMore = (rows: readonly string[]) => {
+  const keys = [...rows.join("  ").matchAll(HINT_PAIR_RE)].map((pair) => pair[1]!)
+  return keys.length >= 2 && keys.some((key) => /^(?:enter|return|[↵⏎])$/i.test(key))
+}
 /** An option's first word when the options are answers (the same words `numbered-choices` takes). */
 const CHOICE_START_RE =
   /^(?:yes|no|allow|deny|approve|reject|cancel|skip|proceed|always|once|sì|nega|rifiuta|annulla|salta|always allow|allow always)\b/i
@@ -834,7 +834,7 @@ export function confirmDialog(rows: readonly string[]): PermissionRequest | unde
 }
 
 /** A row with nothing on it but a prompt: under a menu, it says the program is taking a line and no longer waits on the menu. */
-export const BARE_PROMPT_RE = /^\s*[│┃║]?\s*[>›❯]\s*[│┃║]?\s*$/
+const BARE_PROMPT_RE = /^\s*[│┃║]?\s*[>›❯]\s*[│┃║]?\s*$/
 
 /**
  * A drawn menu with lines below its key hint, and how many: its rows, as `hinted-menu` reads them, anywhere on the screen.

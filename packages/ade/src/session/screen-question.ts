@@ -13,7 +13,6 @@
  */
 
 import {
-  BARE_PROMPT_RE,
   confirmDialog,
   detectPermission,
   menuAboveLines,
@@ -43,7 +42,7 @@ export function bottomRows(terminal: ScreenTerminal): string[] {
 export type ScreenMenu = PermissionRequest & { under: number }
 
 function menuOnRows(rows: readonly string[], agentId: string): ScreenMenu | undefined {
-  const dialog = confirmDialog(rows)
+  const dialog = agentId === "ragu" ? confirmDialog(rows) : undefined
   if (dialog) return { ...dialog, under: 0 }
   const last = detectPermission([...rows], agentId, { screen: true })
   if (last) return { ...last, under: 0 }
@@ -67,19 +66,16 @@ export function menuNames(menu: PermissionRequest, key: string): boolean {
   )
 }
 
-/** The key that may have answered a menu, and what stood on the screen when it was typed. */
-interface KeyedMenu {
+/** The menu an Enter was typed into, and how many rows of the screen asked its question. */
+interface AnsweredMenu {
   identity: string
-  /** How many rows of the screen ask this question: one more is a new menu, the same words printed again. */
+  /** One more is a new menu, the same words printed again. */
   copies: number
-  /** The rows under the menu when the key was typed, a composer's empty prompt among them. */
-  below: number
-  enter: boolean
 }
 
 export interface MenuHold {
-  /** The user typed a key that may answer what is on the screen: said before the key is written. */
-  keyTyped(paneId: string, terminal: ScreenTerminal, agentId: string, key: string): void
+  /** An Enter on its way to the pane: said before it is written. */
+  enterTyped(paneId: string, terminal: ScreenTerminal, agentId: string): void
   /** The menu that waits on the pane's screen now, if one does. */
   waiting(paneId: string, terminal: ScreenTerminal, agentId: string): ScreenMenu | undefined
   forget(paneId: string): void
@@ -92,21 +88,18 @@ export interface MenuHold {
  * answered by a program that prints lines and never redraws, so what tells them apart is what the user did:
  *
  * - an Enter into it is its answer, whatever the program does next;
- * - a key it names (`menuNames`) is its answer once the program has printed more under it. The echo of a key on a row
- *   already there, a status repainted, a highlight moved: none of those is more;
- * - a key it does not name says nothing, however much the screen moves: the programs this exists for go on printing;
+ * - any other key says nothing, a key the menu names included: a digit may answer it or only move the highlight, and a
+ *   program that goes on printing under it looks the same either way. The mail's Enter would confirm the highlight;
  * - the same question printed again below the first is a new menu.
  *
  * Time and more output say nothing: a program that waits can go on printing (`mla`), and a timer that let the mail go
  * would be typing into the menu. So a false positive, the words of a menu in a reply with its hint and all, holds mail
  * until the user presses Enter, until it scrolls away, or, where the CLI reports its turns, until the turn is over (the
- * caller's `screenAsks`). Until then the pane and the sender are told why.
- *
- * What it cannot tell: a digit that only moves the highlight of a menu whose program is also printing under it reads as
- * an answer. Whether real agents do that is for a live check.
+ * caller's `screenAsks`). So does a program that answers on a digit, never redraws and has not reached its bare prompt.
+ * Mail that waits with a note beats an Enter in a menu; the pane and the sender are told why.
  */
 export function createMenuHold(): MenuHold {
-  const keyed = new Map<string, KeyedMenu>()
+  const answered = new Map<string, AnsweredMenu>()
   const identityOf = (menu: ScreenMenu) =>
     `${permissionIdentity(menu)}\n${menu.answers.map((answer) => answer.label).join("\n")}`
   // A menu with no question over it goes by its first answer: an empty string is in every row.
@@ -114,45 +107,29 @@ export function createMenuHold(): MenuHold {
     const words = menu.what || menu.answers[0]?.label || ""
     return rows.filter((row) => row.includes(words)).length
   }
-  const rowsBelow = (rows: readonly string[], menu: ScreenMenu) => {
-    if (menu.under > 0) return menu.under
-    const filled = rows.filter((row) => row.trim())
-    return BARE_PROMPT_RE.test(filled[filled.length - 1] ?? "") ? 1 : 0
-  }
   return {
-    keyTyped(paneId, terminal, agentId, key) {
+    enterTyped(paneId, terminal, agentId) {
       const rows = bottomRows(terminal)
       const menu = menuOnRows(rows, agentId)
-      if (!menu) return
-      const enter = key.includes("\r")
-      if (!enter && !menuNames(menu, key)) return
-      const before = keyed.get(paneId)
-      const identity = identityOf(menu)
-      keyed.set(paneId, {
-        identity,
-        copies: copiesOf(rows, menu),
-        below: rowsBelow(rows, menu),
-        enter: enter || (before?.identity === identity && before.enter),
-      })
+      if (menu) answered.set(paneId, { identity: identityOf(menu), copies: copiesOf(rows, menu) })
     },
     waiting(paneId, terminal, agentId) {
       const rows = bottomRows(terminal)
       const menu = menuOnRows(rows, agentId)
-      const key = keyed.get(paneId)
+      const enter = answered.get(paneId)
       if (!menu) {
-        keyed.delete(paneId)
+        answered.delete(paneId)
         return undefined
       }
-      if (!key) return menu
-      if (key.identity !== identityOf(menu) || copiesOf(rows, menu) > key.copies) {
-        keyed.delete(paneId)
+      if (!enter) return menu
+      if (enter.identity !== identityOf(menu) || copiesOf(rows, menu) > enter.copies) {
+        answered.delete(paneId)
         return menu
       }
-      if (menu.under === 0) return menu
-      return key.enter || menu.under > key.below ? undefined : menu
+      return menu.under === 0 ? menu : undefined
     },
     forget(paneId) {
-      keyed.delete(paneId)
+      answered.delete(paneId)
     },
   }
 }

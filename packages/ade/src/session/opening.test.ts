@@ -6,6 +6,8 @@ import {
   bytesAfter,
   clockAfterMenu,
   decideOpening,
+  drawsText,
+  openingStep,
   screenDrawn,
   type OpeningBytes,
   type OpeningInput,
@@ -222,5 +224,74 @@ describe("when the screen counts as drawn", () => {
 
   test("nothing drawn yet", () => {
     expect(screenDrawn({}, 100_000)).toBe(false)
+  })
+})
+
+/*
+ * What is no text, though `stripAnsi` leaves something of it: opentui's queries before its first frame (`+q4d73` and
+ * `i=31337` are in its dll) and ncurses' sgr0. Read as text they started the clock, and the task went on a blank screen
+ * for the CLIs ADE owns (re-review of menu-posta, R1).
+ */
+describe("what counts as drawn", () => {
+  const CONPTY = "\x1b[?9001h\x1b[?1004h\x1b[m\x1b]0;C:\\Windows\\System32\\cmd.exe\x07\x1b[?25h"
+  test.each([
+    ["ragu's queries", "\x1b[?2026$p\x1bP+q4d73\x1b\\\x1b_Gi=31337,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\\x1b[?u\x1b[c"],
+    ["sgr0", "\x1b(B\x1b[m"],
+    ["keypad and save cursor", "\x1b=\x1b>\x1b7\x1b8"],
+    ["ConPTY's opening", CONPTY],
+    ["a start of string, ended by a BEL", "\x1bX payload\x07"],
+    ["a privacy message", "\x1b^ payload\x1b\\"],
+    ["another charset", "\x1b)0"],
+    ["a screen alignment", "\x1b#8"],
+  ])("nothing: %s", (_name, chunk) => {
+    expect(drawsText(chunk)).toBe(false)
+  })
+
+  test.each([
+    ["real text ending in a CR", "Loading...\r"],
+    ["real text", "FAKE AGENT ready"],
+    ["a box", "╭──╮"],
+    ["text after queries in one chunk", "\x1bP+q4d73\x1b\\Welcome"],
+  ])("something: %s", (_name, chunk) => {
+    expect(drawsText(chunk)).toBe(true)
+  })
+})
+
+/*
+ * With the clock at the first text the deadline can be reached, and a slow CLI lost its first task as it began to draw:
+ * the pane went idle, the sender heard nothing, the text was kept nowhere (re-review of menu-posta, R2). It is said once,
+ * in the pane and to the sender, and the poll goes on; it ends by itself when the process exits.
+ */
+describe("a session that says nothing past the deadline", () => {
+  /** The poll of a first task, pass by pass, with text from `textAt` to `until`. What it did, and when. */
+  function poll(textAt: number, until = textAt) {
+    let bytes: OpeningBytes = {}
+    let told = false
+    const done: string[] = []
+    for (let now = 100; now <= 300_000; now += 100) {
+      if (now >= textAt && now <= until) bytes = bytesAfter(bytes, "FAKE AGENT ready", now)
+      const step = openingStep(decideOpening({ startedAt: 0, ...bytes, now, permissionPending: false }), told)
+      if (step === "wait") continue
+      done.push(`${step} at ${now}`)
+      if (step !== "tell") break
+      told = true
+    }
+    return done
+  }
+
+  test("the text comes at 70 s: said once at the deadline, and the task goes", () => {
+    expect(poll(70_000)).toEqual(["tell at 60000", "send at 70400"])
+  })
+
+  test("the text comes at 30 s: nothing to say", () => {
+    expect(poll(30_000)).toEqual(["send at 30400"])
+  })
+
+  test("the program starts to draw just before the deadline, and goes on: the task goes at its settle", () => {
+    expect(poll(59_800, 90_000)).toEqual(["tell at 60000", `send at ${59_800 + OPENING_SETTLE_MS}`])
+  })
+
+  test("no text ever: said once, and no task is typed", () => {
+    expect(poll(400_000)).toEqual(["tell at 60000"])
   })
 })

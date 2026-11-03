@@ -542,12 +542,11 @@ export const it = {
   "editor.saveChanged.cancel": "Annulla",
   "editor.saveCancelled.changed": "Salvataggio annullato: il file è cambiato su disco.",
   "keys.unread": (problem: string) => `Chiavi API non lette, la sessione parte senza: ${problem}`,
-  "task.notSent":
-    "ADE non ha inviato il compito iniziale: la sessione non si è stabilizzata. Scrivilo tu quando è pronta.",
+  "task.notSent": "Il compito iniziale non è ancora partito: la sessione non ha scritto niente da un minuto. Parte appena scrive qualcosa.",
   "task.confirmTrust":
     "La sessione chiede la fiducia per questa cartella: confermala nel terminale e ADE scriverà il compito iniziale.",
   "task.heldByMenu":
-    "Il compito iniziale aspetta che si chiuda la domanda a schermo. Se non è vera, premi Invio; se non cambia nulla, parte quando la sessione va avanti.",
+    "Il compito iniziale aspetta la domanda a schermo. Se non è vera o hai già risposto, premi Invio; se non cambia nulla, parte quando la sessione va avanti.",
   "task.notTyped": "ADE non ha scritto il compito iniziale: si è aperto un menu proprio allora. Rispondi e scrivilo tu.",
   "task.trustAccepted": "Cartella di lavoro creata da ADE per questa sessione: fiducia confermata, poi il compito.",
   "task.stepHeld": (text: string) =>
@@ -1818,9 +1817,10 @@ export const it = {
   "note.updateFrom": (from: string, state: string, text: string) => `Aggiornamento da ${from}: ${state} — ${text}`,
   "note.memory": (line: string) => `Memoria: ${line}`,
   "note.subagent": (title: string) => `Subagent avviato: ${title}`,
-  "note.mailHeldByLine": "Un messaggio per questa sessione aspetta: hai una riga a metà. Invia o cancella la riga e arriva.",
+  "note.mailHeldByLine":
+    "Un messaggio per questa sessione aspetta: per ADE hai iniziato una riga. Inviala o cancellala e arriva; se non ne vedi nessuna, premi Invio.",
   "note.mailHeldByMenu":
-    "Un messaggio aspetta che si chiuda la domanda a schermo. Se non è vera, premi Invio; se non cambia nulla, si libera quando la sessione va avanti o riparte.",
+    "Un messaggio aspetta la domanda a schermo. Se non è vera o hai già risposto, premi Invio; se non cambia nulla, si libera quando la sessione va avanti o riparte.",
   "note.interruptedBy": (from: string) => `Interrotta da ${from}`,
   "note.restarted": (from: string, model: string) => `Riavviata da ${from}${model ? ` con il modello ${model}` : ""}`,
   "note.restartedFresh": (from: string, model: string) =>
