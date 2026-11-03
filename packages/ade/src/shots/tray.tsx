@@ -395,7 +395,14 @@ export function ShotTray(props: ShotTrayProps) {
       <Show when={opened()}>
         {(shot) => (
           <Sheet component="shot-viewer" surface={false} label={shot().name} onClose={closeViewer}>
-            <figure data-slot="shot-viewer-frame">
+            {/* A press on the frame's own ground, beside a narrow picture or between it and the caption, is a press outside
+                the picture: it closes, as one outside the frame does. The picture and the caption are not that ground. */}
+            <figure
+              data-slot="shot-viewer-frame"
+              onClick={(event) => {
+                if (event.target === event.currentTarget) closeViewer()
+              }}
+            >
               <Thumb shot={shot()} load={props.load} />
               <figcaption data-slot="shot-viewer-caption">
                 <span data-slot="shot-viewer-name">{shot().name}</span>
@@ -423,7 +430,7 @@ export function ShotTray(props: ShotTrayProps) {
                   <Button
                     size="sm"
                     variant="danger"
-                    data-slot="shot-viewer-close"
+                    data-slot="shot-viewer-delete"
                     onClick={() => {
                       setDeleteFailed(false)
                       setAsking(true)
@@ -437,7 +444,7 @@ export function ShotTray(props: ShotTrayProps) {
                   {/* «Tieni» takes the place «Elimina» had, under the cursor: a double click keeps the file. */}
                   <Button
                     size="sm"
-                    data-slot="shot-viewer-close"
+                    data-slot="shot-viewer-keep"
                     disabled={deleting()}
                     ref={(button) => queueMicrotask(() => button.focus())}
                     onClick={() => setAsking(false)}
@@ -447,7 +454,7 @@ export function ShotTray(props: ShotTrayProps) {
                   <Button
                     size="sm"
                     variant="danger"
-                    data-slot="shot-viewer-close"
+                    data-slot="shot-viewer-confirm"
                     disabled={deleting()}
                     onClick={async (event) => {
                       // The second click of a double click on «Elimina» lands here: it is not a yes.
