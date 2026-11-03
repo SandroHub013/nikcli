@@ -159,13 +159,12 @@ describe("il tema vetro vale per default", () => {
     expect(alpha).toBeGreaterThanOrEqual(0.9)
   })
 
-  test("il fondo dei menu lascia passare meno dell'1%: sotto non si leggono lettere", () => {
+  test("il fondo dei menu lascia passare al più l'1%: sotto le lettere quasi non si leggono", () => {
     /*
      * Prova dal vivo 4: a 0.98 the letters of a full terminal could be read
-     * under the new-pane menu, 1.16:1 over white and 1.13:1 over black, and
-     * the review's rule was «if it can be read, 0.99». At 0.99 the leak is
-     * half: white text under it is 1.03:1 from the plain ground (computed on
-     * the token's own rgb). A blur on the menus was weighed and left out, see
+     * under the new-pane menu, and the review's rule was «if it can be read,
+     * 0.99». At 0.99 the leak is half: white text under it is 1.03:1 from the
+     * plain ground (computed on the token's own rgb, 1.06:1 at 0.98). A blur on the menus was weighed and left out, see
      * the comment on the token; the alpha is what guards this without a
      * browser, and what needs an eye is the menu itself over a full terminal.
      */

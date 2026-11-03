@@ -132,11 +132,17 @@ export function primaryItem(items: readonly NewPaneItem[] = NEW_PANE_ITEMS): New
  * The grid shows only the maximised pane while one is set, so a pane opened
  * (or focused, when it was already there) behind it was out of sight and the
  * button seemed to do nothing; people pressed it twice (prova 4, item 13). The
- * same the new session's launch does: «Narrowed to nothing». Any other command,
+ * same the new session's launch does: «Narrowed to nothing». Not «Nuova sessione»
+ * (the launcher covers the grid, and a cancelled one leaves the pane maximised). Any other command,
  * and a grid with nothing maximised, come back as they are.
  */
 export function showsAllForNewPane(workbench: Workbench, commandId: string): Workbench {
-  if (workbench.expandedId === undefined || !NEW_PANE_ITEMS.some((item) => item.commandId === commandId))
+  // Not the launcher: it covers the grid while it is open, and the launch un-maximises when it starts a session.
+  if (
+    workbench.expandedId === undefined ||
+    commandId === "session.new" ||
+    !NEW_PANE_ITEMS.some((item) => item.commandId === commandId)
+  )
     return workbench
   return { ...workbench, expandedId: undefined }
 }

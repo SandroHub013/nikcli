@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
 import { NEW_PANE_ITEMS, showsAllForNewPane } from "./new-pane"
 import { createWorkbench, type Pane } from "./state"
 
@@ -21,13 +22,22 @@ describe("«Nuovo pannello» with a maximised pane", () => {
   const maximised = { ...createWorkbench(), panes: [pane("a"), pane("b")], focusedId: "a", expandedId: "a" }
 
   test("every entry of the menu brings the grid back, so the new pane is not hidden behind the maximised one", () => {
-    for (const item of NEW_PANE_ITEMS) {
+    for (const item of NEW_PANE_ITEMS.filter((entry) => entry.commandId !== "session.new")) {
       const next = showsAllForNewPane(maximised, item.commandId)
       expect(next.expandedId).toBeUndefined()
       // Nothing else changes: the panes, the focus.
       expect(next.panes).toEqual(maximised.panes)
       expect(next.focusedId).toBe("a")
     }
+  })
+
+  test("the launcher does not: cancel it and the pane is still maximised (the launch un-maximises when it starts one)", () => {
+    expect(showsAllForNewPane(maximised, "session.new")).toBe(maximised)
+  })
+
+  test("lint: runCommand calls it, before the commands run", () => {
+    const source = readFileSync(new URL("./workbench.tsx", import.meta.url), "utf8")
+    expect(source).toContain("setWb((w) => showsAllForNewPane(w, id))")
   })
 
   test("another command leaves a maximised pane as it is", () => {

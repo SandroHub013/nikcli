@@ -160,16 +160,18 @@
    * picture, the leak under a sheet was 1.09:1.
    *
    * Live test 4 read the letters of a full terminal under the new-pane menu at
-   * 0.98 all the same, 1.16:1 over white and 1.13:1 over black, and the review's
-   * rule was «if it can be read, 0.99»: the leak is half at 0.99 (1.03:1, white
-   * text, computed on this rgb), 0.995 would halve it again. A `backdrop-filter: blur`
-   * on menus and sheets would hide the letters at any alpha, and was weighed
-   * against this: it is not here because the blur's cost is the very one the
-   * block below records (a filter layer re-sampled while a pane repaints under
-   * it, which flickered in WebView2), on a sheet that covers half the window
-   * above a terminal that never stops, and because nothing here can look at it:
-   * it is for a live look, `glass.test.ts` keeps the glass free of blurs until
-   * one has been taken.
+   * 0.98 all the same, and the review's rule was «if it can be read, 0.99». The
+   * leak is the part of the letter that shows through, 1-alpha: half at 0.99
+   * (1.03:1, white text, computed on this rgb; the letters measured on the
+   * pictures sat at +4/+5 levels at 0.98 and +2/+3 at 0.99, about 1.06:1 down to
+   * 1.04:1, the 1.16:1 first reported was the menu's own text edges), and 0.995
+   * would halve it again. A `backdrop-filter: blur` on menus would hide the
+   * letters at any alpha, and was not tried: nothing here can look at it. The
+   * recorded cost of a blur is for a full-window layer or an empty backdrop (see
+   * the block below), which a small menu over a terminal is not, and the Design
+   * card already has one in glass (`design.css`, blur(12px)); so this is open,
+   * for a live look at a blur on `[role="menu"]` and at flicker. `glass.test.ts`
+   * only keeps `index.css` and the pane sheet free of blurs.
    */
   --ade-raised: rgba(255, 255, 255, 0.06);
   --ade-overlay: rgba(36, 30, 27, 0.99);

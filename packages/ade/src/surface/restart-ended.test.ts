@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
 import { resetLocaleForTests } from "../i18n"
 import { parseWorkspace, serializeWorkspace } from "../session/persist"
 import { createWorkbench, fromWorkspaceState, liveToReopen, sessionsToResume, toWorkspaceState, type Pane } from "./state"
@@ -73,6 +74,11 @@ describe("a restart starts what was alive, not what had ended", () => {
       expect([ended.id, restart([ended]).notes(ended.id).filter((text) => /ripristinata|riapro|riprendo/i.test(text))]).toEqual([ended.id, []])
     // A live one still carries it: it is the one being reopened.
     expect(restart([pane("live", { status: "working" })]).notes("live").join(" ")).toContain("ripristinata")
+  })
+
+  test("lint: the workbench gives the second round the saved state", () => {
+    const source = readFileSync(new URL("./workbench.tsx", import.meta.url), "utf8")
+    expect(source).toContain("liveToReopen(wb().panes, plannedIds, restored)")
   })
 
   test("suspended stays suspended, and a mix keeps each one's own end", () => {
