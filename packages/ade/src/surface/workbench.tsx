@@ -705,7 +705,7 @@ import {
 import { cleanTranscriptLine } from "../session/transcript-line"
 import { createLineWriter, withLines } from "./pane-lines"
 import { createRawWindows } from "../session/raw-window"
-import { NEW_PANE_ITEMS, showsNewPane, type NewPaneItem } from "./new-pane"
+import { NEW_PANE_ITEMS, showsAllForNewPane, showsNewPane, type NewPaneItem } from "./new-pane"
 import {
   addNotice,
   bellTone,
@@ -7704,6 +7704,9 @@ export function Workbench() {
       setPaletteOpen(false)
       return
     }
+
+    // A maximised pane would hide the one this opens: the grid comes back first (prova 4, item 13).
+    setWb((w) => showsAllForNewPane(w, id))
 
     if (id === "session.new") {
       // A pane is born because a process is starting, never before: the button
