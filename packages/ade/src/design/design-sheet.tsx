@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from "solid-js"
 import { Sheet, SheetTitle } from "../ui/sheet"
-import { enterReady, sheetKey } from "./answer"
+import { enterReady, isAnswerable, sheetKey } from "./answer"
 import { isFormField } from "../decisions/answer"
 import { submitControl } from "./card"
 import { DesignCard } from "./design-card"
@@ -177,6 +177,7 @@ export function DesignSheet(props: {
                   inline: props.hub.inlineRecipient(),
                   busy: props.hub.busy(k),
                   label: open().length > 1 ? t("design.submitNext") : t("design.submit"),
+                  chosen: isAnswerable(Boolean(proposal().multi), props.hub.draft(k).picked, props.hub.draft(k).note),
                 })}
                 onInline={(id) => props.hub.setInlineRecipient(id)}
                 onRecord={() => void submit("record")}

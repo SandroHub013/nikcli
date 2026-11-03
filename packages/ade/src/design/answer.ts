@@ -79,6 +79,15 @@ export function enterReady(multi: boolean, picked: Picked, note: string, chosenH
   return chosenHere && hasPick(picked)
 }
 
+/**
+ * Whether the card's answer buttons are on: a single question needs a pick
+ * (nothing is preselected, not even the recommended), a `multi` one a box or a
+ * note. «Altro giro» does not wait for this: its note is its own answer.
+ */
+export function isAnswerable(multi: boolean, picked: Picked, note: string): boolean {
+  return multi ? hasPick(picked) || note.trim().length > 0 : hasPick(picked)
+}
+
 export function answerEvent(
   proposal: Pick<DesignProposal, "k" | "variants"> & { multi?: true },
   picked: Picked,

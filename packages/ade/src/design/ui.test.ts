@@ -452,7 +452,7 @@ describe("answering with nobody to receive", () => {
     })
     hub.setDraft(proposal.k, { picked: 1, note: "" })
     const control = () =>
-      submitControl({ recipient: recipient(), sessions, inline: hub.inlineRecipient(), busy: false, label: "Registra" })
+      submitControl({ recipient: recipient(), sessions, inline: hub.inlineRecipient(), busy: false, label: "Registra", chosen: true })
     return { hub, calls, control }
   }
 
@@ -493,7 +493,7 @@ describe("answering with nobody to receive", () => {
 
   test("with a ready recipient the card is today's: no select, no second button", async () => {
     const { hub, calls, control } = setup(() => ({ state: "pronta", id: "p1", title: "Master" }))
-    expect(control()).toEqual({ gate: "invia", label: "Registra", disabled: false, recordOnly: false })
+    expect(control()).toEqual({ gate: "invia", label: "Registra", disabled: false, answerable: true, recordOnly: false })
     expect(await hub.submit(proposal, "primary")).toBe(true)
     expect(calls).toEqual(["answer:risposta"])
   })
