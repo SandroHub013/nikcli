@@ -231,8 +231,9 @@
    * The ground the page is read on: the main area's colour where it has one,
    * and under the glass theme, where that is transparent, the sheet's own
    * overlay, so the rows scrolling under the bar do not show through (S8).
-   * Twice: the glass overlay is 92% opaque, and two layers of it hide the rows
-   * (about 99%) where one let them show faintly (review S8, B1).
+   * Twice: the glass overlay was 92% opaque, and two layers of it hide the rows
+   * (about 99%) where one let them show faintly (review S8, B1). At 98% one layer
+   * is enough, and the second is harmless.
    */
   background-color: var(--ade-overlay);
   background-image:

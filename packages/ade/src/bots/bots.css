@@ -283,13 +283,16 @@
   line-height: var(--ade-leading);
 }
 
-/* The empty centre: a line, and what to press (D26). */
+/* The empty centre: a line, and what to press (D26). Centred as the Agent and the Chat views are (live test 3, FAIL 9). */
 [data-slot="bots-blank"] {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--ade-space-5);
+  max-width: 460px;
+  margin: 14vh auto 0;
   padding: var(--ade-space-7) var(--ade-space-8);
+  text-align: center;
 }
 
 [data-slot="bots-blank-text"] {
@@ -299,6 +302,7 @@
 [data-slot="bots-blank-list"] {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: var(--ade-space-3);
 }
 

@@ -151,10 +151,17 @@
    * the one value here that does NOT follow the slider. A menu is opened to be
    * read, over whatever happens to be underneath — a terminal mid-scroll, a
    * transcript — and dragging the glass to its most extreme must not take that
-   * away. 0.92 keeps a hint of translucency and still hides what is below.
+   * away. 0.98 keeps a hint of translucency and still hides what is below.
+   * Computed, white terminal text under it: a sheet (it has a scrim as well)
+   * 1.10:1 at 0.92, 1.02:1 at 0.98; a menu or a tooltip, with none, 1.29:1 at
+   * 0.92 and 1.06:1 at 0.98 (live test 3, FAIL 6: the letters of the terminals
+   * could be read through Settings and the Decisions sheet). 0.97 leaves a
+   * menu at 1.09:1, which is still readable, so 0.98 is the step for a token
+   * the menus share. Measured on the live test's own picture, the leak under a
+   * sheet was 1.09:1.
    */
   --ade-raised: rgba(255, 255, 255, 0.06);
-  --ade-overlay: rgba(36, 30, 27, 0.92);
+  --ade-overlay: rgba(36, 30, 27, 0.98);
 
   --ade-border-subtle: rgba(255, 255, 255, 0.08);
   --ade-border: rgba(255, 255, 255, 0.12);
@@ -286,6 +293,41 @@ body[data-theme="glass"] #root,
  */
 [data-component="ade-shell"][data-theme="glass"] [data-component="session-pane"] > [data-slot="pane-header"] {
   background: color-mix(in srgb, var(--ade-overlay) 92%, transparent);
+}
+
+/*
+ * Written exception: the Impara layer sits over the world's own HUD, and with no ground of its own the HUD's words ran
+ * under the buttons «Torna al mondo / Esporta / Importa» (live test 3, FAIL 6), and the page itself was transparent until
+ * its frame painted. The layer, bar and frame, takes the overlay level.
+ */
+[data-component="ade-shell"][data-theme="glass"] [data-slot="raguverse-learn"] {
+  background: var(--ade-overlay);
+}
+
+/*
+ * Written exception: the toasts (the sheets' last answer, and «copied» over a pane) were on the 6% lift, so terminal text
+ * ran straight through them. They are brief, but they are read at once.
+ */
+[data-component="ade-shell"][data-theme="glass"] [data-slot="ade-toast"],
+[data-component="ade-shell"][data-theme="glass"] [data-slot="pane-toast"] {
+  background: var(--ade-overlay);
+}
+
+/*
+ * Written exception: the voice notice lies across the foot of the bar, directly on the veil, with amber text on its own
+ * wash (1.2:1 over a white desktop). Like the notice strip, it takes the overlay level under its tone's wash.
+ */
+[data-component="ade-shell"][data-theme="glass"] [data-slot="ade-voice-notice"] {
+  background: linear-gradient(var(--ade-notice-bg), var(--ade-notice-bg)), var(--ade-overlay);
+}
+
+/*
+ * Written exception: the notice strip is a warning to be read, and its own wash is 12% amber, so over the floor its
+ * ground was alpha 40% and white text on it 2.05:1 over a white desktop. It takes the overlay level, which ignores the
+ * slider, under its wash: 11.9:1 over a white desktop, 12.7:1 over a black one.
+ */
+[data-component="ade-shell"][data-theme="glass"] [data-slot="ade-notice"] {
+  background: linear-gradient(var(--ade-working-bg), var(--ade-working-bg)), var(--ade-overlay);
 }
 
 :root {
