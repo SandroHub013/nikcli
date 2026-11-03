@@ -393,6 +393,7 @@
 }
 
 [data-slot="new-agent-missing"] {
+  align-self: flex-start;
   padding: 1px 5px;
   border-radius: var(--ade-radius-full);
   background: var(--ade-active);
