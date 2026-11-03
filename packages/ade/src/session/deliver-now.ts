@@ -9,12 +9,16 @@
  * Only with mail held for 30 s, on a box not recognised or a line in it that does not move, where the reading sees no menu
  * and no turn is going for what ADE knows. On a menu it reads, a trust dialog included, it never shows: there the answer is
  * the menu's. The bytes do not come into it: Claude Code at rest writes every 20 s, and silence would never come.
+ *
+ * Where the cursor says a dialog the reading does not know, a click would answer it: a plan approved, a question submitted.
+ * There the wait is five minutes, and not never: a CLI may come to hide its cursor at rest.
  */
 
 import { STALE_BUSY_MS, type Activity } from "./mailbox"
 import { OUTPUT_CLAIM_MAX_MS } from "./output-activity"
 
 export const DELIVER_NOW_AFTER_MS = 30_000
+export const DELIVER_NOW_OVER_DIALOG_MS = 5 * 60_000
 /** A click whose message did not go by then says nothing about the screen later. */
 const ARMED_FOR_MS = 10_000
 /** No round has found mail held for this long: the mail has gone, by whatever road. */
@@ -25,6 +29,8 @@ export interface BlindHold {
   blind: boolean
   /** The line in the box, as `composerLine` reads it: one that changes is being written. */
   line?: string
+  /** The cursor says a dialog is up, though no menu reads (`cursorSaysDialog`). */
+  dialog?: boolean
 }
 
 export type DeliverNowChange = "offered" | "withdrawn" | undefined
@@ -44,14 +50,39 @@ export function turnKnown(input: {
   return input.working && input.workingSince !== undefined && input.now - input.workingSince < OUTPUT_CLAIM_MAX_MS
 }
 
+interface HeldMail {
+  since: number
+  lastAt: number
+  line?: string
+  dialogSince?: number
+  from: Set<string>
+  /** Who has heard of it. Every line to a sender is a turn it pays for: once per message, however often the action comes back. */
+  told: Set<string>
+}
+
+const lineChanged = (entry: HeldMail, hold: BlindHold) =>
+  hold.line !== undefined && entry.line !== undefined && hold.line !== entry.line
+
+const waitedEnough = (entry: HeldMail, hold: BlindHold, now: number) =>
+  hold.dialog
+    ? entry.dialogSince !== undefined && now - entry.dialogSince >= DELIVER_NOW_OVER_DIALOG_MS
+    : now - entry.since >= DELIVER_NOW_AFTER_MS
+
 export function createDeliverNow() {
-  const held = new Map<string, { since: number; lastAt: number; line?: string; from: Set<string> }>()
+  const held = new Map<string, HeldMail>()
   const offered = new Set<string>()
   const armed = new Map<string, number>()
 
   const drop = (paneId: string): DeliverNowChange => {
     held.delete(paneId)
     return offered.delete(paneId) ? "withdrawn" : undefined
+  }
+  const withdraw = (paneId: string): DeliverNowChange => (offered.delete(paneId) ? "withdrawn" : undefined)
+  /** A menu or a turn: the wait starts again when it has gone, and the mail is still the same mail. */
+  const startAgain = (paneId: string, entry: HeldMail, now: number): DeliverNowChange => {
+    entry.since = now
+    delete entry.dialogSince
+    return withdraw(paneId)
   }
   const isArmed = (paneId: string, now: number) => {
     const at = armed.get(paneId)
@@ -61,37 +92,35 @@ export function createDeliverNow() {
   return {
     /** A round found mail held for this pane. `from`: who sent it, told when the action is offered. */
     mailHeld(paneId: string, hold: BlindHold, now: number, from?: string): DeliverNowChange {
-      if (!hold.blind) return drop(paneId)
       const known = held.get(paneId)
-      const entry =
-        known && now - known.lastAt <= HELD_LAPSE_MS ? known : { since: now, lastAt: now, from: new Set<string>() }
+      const entry: HeldMail =
+        known && now - known.lastAt <= HELD_LAPSE_MS
+          ? known
+          : { since: now, lastAt: now, from: new Set(), told: new Set() }
       held.set(paneId, entry)
       entry.lastAt = now
       if (from) entry.from.add(from)
-      const written = hold.line !== undefined && entry.line !== undefined && hold.line !== entry.line
+      if (!hold.blind) return startAgain(paneId, entry, now)
+      if (hold.dialog) entry.dialogSince ??= now
+      else delete entry.dialogSince
+      const written = lineChanged(entry, hold)
       if (hold.line !== undefined) entry.line = hold.line
-      if (written) {
-        entry.since = now
-        return offered.delete(paneId) ? "withdrawn" : undefined
-      }
-      if (offered.has(paneId) || isArmed(paneId, now) || now - entry.since < DELIVER_NOW_AFTER_MS) return undefined
+      if (written) entry.since = now
+      if (written || !waitedEnough(entry, hold, now)) return withdraw(paneId)
+      if (offered.has(paneId) || isArmed(paneId, now)) return undefined
       offered.add(paneId)
       return "offered"
     },
-    /** What stands on an offered pane now, each round: the action goes when the mail has gone or the line has moved. */
+    /** What stands on an offered pane now, each round: the action goes when the mail has gone, the line has moved or a dialog has opened. */
     review(paneId: string, hold: BlindHold, now: number): DeliverNowChange {
       const entry = held.get(paneId)
-      const written = hold.line !== undefined && entry?.line !== undefined && hold.line !== entry.line
-      if (!entry || !hold.blind || written || now - entry.lastAt > HELD_LAPSE_MS) return drop(paneId)
-      return undefined
+      if (!entry || now - entry.lastAt > HELD_LAPSE_MS) return drop(paneId)
+      if (!hold.blind) return startAgain(paneId, entry, now)
+      return lineChanged(entry, hold) || !waitedEnough(entry, hold, now) ? withdraw(paneId) : undefined
     },
     /** The click. True when one message may now go: a menu that has come since takes it back. */
     click(paneId: string, menuNow: boolean, now: number): boolean {
-      if (!offered.delete(paneId)) return false
-      if (menuNow) {
-        held.delete(paneId)
-        return false
-      }
+      if (!offered.delete(paneId) || menuNow) return false
       armed.set(paneId, now)
       return true
     },
@@ -111,7 +140,14 @@ export function createDeliverNow() {
     },
     offered: (paneId: string) => offered.has(paneId),
     offeredPanes: () => [...offered],
-    senders: (paneId: string) => [...(held.get(paneId)?.from ?? [])],
+    /** Who has not yet heard of the mail held for this pane, and from now on has. */
+    untold(paneId: string): string[] {
+      const entry = held.get(paneId)
+      if (!entry) return []
+      const fresh = [...entry.from].filter((from) => !entry.told.has(from))
+      for (const from of fresh) entry.told.add(from)
+      return fresh
+    },
     forget(paneId: string): DeliverNowChange {
       armed.delete(paneId)
       return drop(paneId)

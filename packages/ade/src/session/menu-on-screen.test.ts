@@ -629,7 +629,7 @@ describe("the question dialog of OpenCode, and of ragu without its plugin", () =
 
 describe("ragu's confirm dialog", () => {
   // `packages/tui/src/ui/dialog-confirm.tsx`: an overlay, so the session's own text may stand on the row either side.
-  const DIALOG = ["  Update available", "", "  Install now?", "", "      Cancel      Confirm", "", ""]
+  const DIALOG = ["  Update available", "", "  Install now?", "", "   │    Cancel    │  │    Confirm    │", "", ""]
 
   test("read by its hint: Y or N act at once, and a mail's first letter would be one", async () => {
     const terminal = new Terminal({ cols: 100, rows: 24, allowProposedApi: true })
@@ -650,8 +650,20 @@ describe("ragu's confirm dialog", () => {
 
   test("with the session's text either side of it", async () => {
     const terminal = new Terminal({ cols: 100, rows: 24, allowProposedApi: true })
-    await written(terminal, "old text    Y/N or ←→ to switch, enter to confirm    old text")
+    await written(terminal, "old text  │    Cancel    │  │    Confirm    │  old text\r\n\r\nold text    Y/N or ←→ to switch, enter to confirm    old text")
     expect(screenQuestion(terminal, "ragu")).toBeDefined()
+  })
+
+  test("its blank cells show what is under them, so its words are read with any character between them", async () => {
+    const terminal = new Terminal({ cols: 100, rows: 24, allowProposedApi: true })
+    await written(terminal, "old text  │    Cancel    │  │    Confirm    │  old text\r\n\r\nold textY/Neorc←→ptoiswitch,genter totconfirmold text")
+    expect(screenQuestion(terminal, "ragu")).toBeDefined()
+  })
+
+  test("its words quoted in a ragu reply, with no buttons above them, are no dialog: nothing would ever clear it", async () => {
+    const terminal = new Terminal({ cols: 100, rows: 24, allowProposedApi: true })
+    await written(terminal, "Its hint says: Y/N or ←→ to switch, enter to confirm\r\nmore of the reply")
+    expect(screenQuestion(terminal, "ragu")).toBeUndefined()
   })
 })
 

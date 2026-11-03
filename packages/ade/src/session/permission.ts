@@ -813,16 +813,25 @@ function boxedMenu(drawn: string[]): PermissionRequest | undefined {
   return drawnRequest(lines, options, first)
 }
 
-// ragu's confirm dialog: its own words, whole, wherever an overlay puts them on the row (`packages/tui/src/ui/dialog-confirm.tsx`).
+// ragu's confirm dialog (`packages/tui/src/ui/dialog-confirm.tsx`), an overlay wherever it falls on the row.
 const CONFIRM_DIALOG_HINT = "Y/N or ←→ to switch, enter to confirm"
+// opentui's blank cells keep the character under them, so the words are read with any character between them.
+const CONFIRM_HINT_RE = /Y\/N.or.←→.to.switch,/u
+const CONFIRM_BUTTONS_RE = /│.*│.*│.*│/
+const CONFIRM_BUTTONS_ABOVE = 4
 
 /**
  * ragu's `DialogConfirm`, if it stands on `rows`. Two boxed buttons and no number, and `Y` and `N` act at once, so the
- * first y or n of a message would answer it. Read only by its hint, the one row of it no session text shares; those same
- * words printed by something else hold mail until they scroll away.
+ * first y or n of a message would answer it. Read by its hint with those buttons above it: the hint alone, quoted in a reply
+ * or in a line being written, would hold mail with nothing that ever clears it.
  */
 export function confirmDialog(rows: readonly string[]): PermissionRequest | undefined {
-  if (!rows.some((row) => row.includes(CONFIRM_DIALOG_HINT))) return undefined
+  const stands = rows.some(
+    (row, y) =>
+      CONFIRM_HINT_RE.test(row) &&
+      rows.slice(Math.max(0, y - CONFIRM_BUTTONS_ABOVE), y).some((above) => CONFIRM_BUTTONS_RE.test(above)),
+  )
+  if (!stands) return undefined
   return {
     what: CONFIRM_DIALOG_HINT,
     kind: "unknown",

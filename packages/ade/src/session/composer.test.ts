@@ -6,6 +6,7 @@ import { codeOf } from "../test-support/source-text"
 import { AGENTS } from "../session-new/agents"
 import {
   composerOf,
+  cursorSaysDialog,
   enterBlocked,
   lineBegunNow,
   mayTypeNow,
@@ -24,6 +25,7 @@ import {
   QUIET_FREE_MS,
   type Activity,
 } from "./mailbox"
+import { confirmDialog } from "./permission"
 import { createMenuHold, folderTrust, bottomRows, screenQuestion } from "./screen-question"
 import { typedAfter, typedSince } from "./typed-line"
 
@@ -627,24 +629,131 @@ describe("Claude Code's cursor can stay hidden: a remote flag decides, and posit
   })
 })
 
-describe("ragu gives its box the cursor back on a focus-in, under a dialog still open (review B4)", () => {
+describe("ragu gives its box the cursor back on a focus-in, under a dialog still open (review B4, re-review R1)", () => {
   /** A dialog over the box, in a pane wide enough for the model's row and the input column to stand left of it. */
   const FOCUS_IN = "\x1b[?1000h\x1b[?1004h\x1b[?2004h\x1b[10;6H\x1b[?25h"
   const under = "\x1b[?1049h\x1b[2J\x1b[9;3H┃\x1b[10;3H┃\x1b[11;3H┃  Build · Grok 4.7 · xAI\x1b[12;3H┃"
-  const dialog = (cols: number) =>
-    `\x1b[7;${cols - 45}HDelete Skill\x1b[9;${cols - 45}HY/N or ←→ to switch, enter to confirm`
+  const dialog = (cols: number, hint: string) =>
+    `\x1b[7;${cols - 45}H│    Cancel    │  │    Confirm    │\x1b[9;${cols - 45}H${hint}`
+  const mayGo = (terminal: Terminal) =>
+    mayTypeNow({
+      composer: composerOf(terminal, "ragu"),
+      question: screenQuestion(terminal, "ragu") !== undefined,
+      nothingDrawn: false,
+    })
+
+  test("the real dialog is read, in every frame of its real bytes: until now it never was", async () => {
+    let frames = 0
+    await play(
+      "ragu-conferma-47",
+      (terminal) => {
+        if (!/│ +Cancel +│/.test(screenText(terminal))) return
+        frames++
+        expect(confirmDialog(bottomRows(terminal))).toBeDefined()
+        expect(composerOf(terminal, "ragu")).toBe("none")
+      },
+      { cols: 47, rows: 17 },
+    )
+    expect(frames).toBeGreaterThan(0)
+  })
 
   for (const cols of [101, 158]) {
-    test(`at ${cols} columns: no box, whatever the reading of menus says`, async () => {
-      const terminal = await drawn(`${under}${dialog(cols)}\x1b[14;46H\x1b[?25l${FOCUS_IN}`, cols, 17)
+    test(`at ${cols} columns, over blank rows: no box`, async () => {
+      const hint = "Y/N or ←→ to switch, enter to confirm"
+      const terminal = await drawn(`${under}${dialog(cols, hint)}\x1b[14;46H\x1b[?25l${FOCUS_IN}`, cols, 17)
       expect(composerOf(terminal, "ragu")).toBe("none")
-      expect(mayTypeNow({ composer: composerOf(terminal, "ragu"), question: false, nothingDrawn: false })).toBe(false)
+      expect(mayGo(terminal)).toBe(false)
+    })
+
+    test(`at ${cols} columns, over a reply: its blank cells show what is under them, and it is still no box`, async () => {
+      const hint = "Y/Neorc←→ptoiswitch,genter totconfirm"
+      const terminal = await drawn(`${under}${dialog(cols, hint)}\x1b[14;46H\x1b[?25l${FOCUS_IN}`, cols, 17)
+      expect(composerOf(terminal, "ragu")).toBe("none")
+      expect(mayGo(terminal)).toBe(false)
     })
   }
 
   test("the same frame with no dialog is the box", async () => {
     const terminal = await drawn(`${under}${FOCUS_IN}`, 158, 17)
     expect(composerOf(terminal, "ragu")).toBe("ready")
+  })
+
+  test("a reply that quotes the hint is no dialog: nothing there holds the mail", async () => {
+    const terminal = await drawn(
+      `${under}\x1b[3;3HIts hint says: Y/N or ←→ to switch, enter to confirm${FOCUS_IN}`,
+      158,
+      17,
+    )
+    expect(composerOf(terminal, "ragu")).toBe("ready")
+    expect(screenQuestion(terminal, "ragu")).toBeUndefined()
+    expect(mayGo(terminal)).toBe(true)
+  })
+
+  test("a line in the box that quotes it is a line", async () => {
+    const terminal = await drawn(`${under}\x1b[10;6HY/N or ←→ to switch, enter to confirm`, 158, 17)
+    expect(composerOf(terminal, "ragu")).toBe("draft")
+    expect(screenQuestion(terminal, "ragu")).toBeUndefined()
+  })
+})
+
+describe("the cursor says a dialog where the reading of menus misses one (re-review R4)", () => {
+  const MISSED: [string, string, number, { cols: number; rows: number } | undefined, string][] = [
+    ["claude-piano", "claude-code", 82_796, undefined, "Yes, and switch"],
+    ["opencode-stretta-lunga", "opencode", 13_782, { cols: 102, rows: 43 }, "enter submit"],
+    ["opencode-stretta-lunga", "opencode", 179_997, { cols: 102, rows: 43 }, "esc dismiss"],
+  ]
+
+  for (const [name, agent, moment, size, words] of MISSED) {
+    test(`${agent} at +${moment}: «${words}», no box, no menu read, and the cursor says so`, async () => {
+      let seen = 0
+      await play(
+        name,
+        (terminal, at) => {
+          if (at !== moment) return
+          seen++
+          expect(screenText(terminal)).toContain(words)
+          expect(composerOf(terminal, agent)).toBe("none")
+          expect(screenQuestion(terminal, agent)).toBeUndefined()
+          expect(cursorSaysDialog(terminal, agent)).toBe(true)
+        },
+        size,
+      )
+      expect(seen).toBe(1)
+    })
+  }
+
+  test("a box at rest never says it, on any agent's real bytes", async () => {
+    for (const [name, agent] of [
+      ["claude-piano", "claude-code"],
+      ["claude-fiducia-si", "claude-code"],
+      ["agy-invio-nel-box", "agy"],
+      ["ragu-avvio-normale", "ragu"],
+      ["opencode-stretta-lunga", "opencode"],
+    ] as const) {
+      let frames = 0
+      await play(name, (terminal) => {
+        if (composerOf(terminal, agent) !== "ready") return
+        frames++
+        expect(`${name}:${cursorSaysDialog(terminal, agent)}`).toBe(`${name}:false`)
+      })
+      expect(`${name}:${frames > 0}`).toBe(`${name}:true`)
+    }
+  })
+
+  test("Claude Code without its flag: hidden in the box is at rest, hidden in the last column is a dialog", async () => {
+    const RULE = "─".repeat(78)
+    const atRest = await drawn(`\x1b[?25l${rowsAt([RULE, "❯ ", RULE], [2, 1])}`)
+    expect(cursorSaysDialog(atRest, "claude-code")).toBe(false)
+    const parked = await drawn(`\x1b[?25l${rowsAt([" ❯ 1. Yes", "   2. No"], [79, 11])}`)
+    expect(cursorSaysDialog(parked, "claude-code")).toBe(true)
+    expect(cursorSaysDialog(await drawn(rowsAt([" ❯ 1. Yes"], [79, 11])), "claude-code")).toBe(false)
+  })
+
+  test("the others: hidden is all it takes", async () => {
+    const hidden = await drawn("\x1b[?25l")
+    for (const agent of ["agy", "ragu", "opencode"]) expect(cursorSaysDialog(hidden, agent)).toBe(true)
+    const shown = await drawn("")
+    for (const agent of ["agy", "ragu", "opencode"]) expect(cursorSaysDialog(shown, agent)).toBe(false)
   })
 })
 

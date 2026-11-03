@@ -23,7 +23,7 @@ test("a send or an ask to a shell is refused right after the target is resolved,
 test("the round never types a held line into a shell: it shows it as a notice and drops it", () => {
   const round = source.indexOf("for (const item of [...heldLines]) {")
   const shell = source.indexOf("!typesMailInto(agentOfPane(item.paneId))", round)
-  const typed = source.indexOf("await freeNow(host, item.paneId, !item.told)", round)
+  const typed = source.indexOf("await freeNow(host, item.paneId, !item.notice)", round)
   expect(round).toBeGreaterThan(0)
   expect(shell).toBeGreaterThan(round)
   expect(typed).toBeGreaterThan(shell)

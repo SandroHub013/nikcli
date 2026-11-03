@@ -28,6 +28,7 @@ interface ComposerLine {
 }
 
 export interface ComposerTerminal {
+  readonly cols: number
   readonly rows: number
   readonly buffer: {
     readonly active: {
@@ -99,6 +100,15 @@ export function composerOf(terminal: ComposerTerminal, agentId: string): Compose
   if (agentId === "ragu" && confirmDialog(rowsOf(terminal))) return "none"
   const glyph = RULED_PROMPT[agentId]
   return glyph ? ruledBox(terminal, glyph) : barBox(terminal)
+}
+
+/**
+ * Whether the cursor says a dialog is up, whatever the reading of menus makes of the screen. Hidden is the signal on agy and
+ * the agents of opentui. Claude Code may hide it at rest, in its box, and parks it in the last column under every dialog.
+ */
+export function cursorSaysDialog(terminal: ComposerTerminal, agentId: string): boolean {
+  if (!hiddenCursor.has(terminal)) return false
+  return !HIDES_ITS_CURSOR.has(agentId) || terminal.buffer.active.cursorX >= terminal.cols - 1
 }
 
 const lineAt = (terminal: ComposerTerminal, y: number) =>

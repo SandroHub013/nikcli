@@ -482,6 +482,7 @@ import { isTyping, questionOpened, submittedSince, typedAfter, typedSince } from
 import {
   composerLine,
   composerOf,
+  cursorSaysDialog,
   enterBlocked,
   lineBegunNow,
   mayTypeNow,
@@ -3020,7 +3021,10 @@ export function Workbench() {
     paneId: string
     text: string
     inbox?: InboxMeta
+    /** Its sender has heard that it waits. It is still a message. */
     told?: boolean
+    /** A notice from ADE, and no message of anyone's: «Consegna ora» is not for it. */
+    notice?: true
     full?: string
     suspended?: true
   }[] = []
@@ -3386,8 +3390,7 @@ export function Workbench() {
   const tellSender = (from: string | undefined, text: string) => {
     const target = noticeTarget(from, (paneId) => running.has(paneId))
     if (target === "window") report(text, "info")
-    // `told`: a notice from ADE, and no message of anyone's. «Consegna ora» is not for it.
-    else if (target) heldLines.push({ paneId: target.pane, text, told: true })
+    else if (target) heldLines.push({ paneId: target.pane, text, notice: true })
   }
 
   /** Rings again for unread inbox messages, and tells the sender of one never read. */
@@ -3574,15 +3577,19 @@ export function Workbench() {
   const [deliverNowPanes, setDeliverNowPanes] = createSignal<ReadonlySet<string>>(new Set())
   const blindHold = (paneId: string): BlindHold => {
     const box = composerNow(paneId)
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
     const turn = turnKnown({
       ...(activityOf.has(paneId) ? { activity: activityOf.get(paneId)! } : {}),
-      working: wb().panes.find((pane) => pane.id === paneId)?.status === "working",
+      working: pane?.status === "working",
       ...(workingSince.has(paneId) ? { workingSince: workingSince.get(paneId)! } : {}),
       now: Date.now(),
     })
     return {
       blind: (box === "none" || box === "draft") && !questionOpen(paneId) && !turn,
       ...(box === "draft" ? { line: composerLine(getTerminal(paneId).terminal) } : {}),
+      ...(hasTerminal(paneId) && cursorSaysDialog(getTerminal(paneId).terminal, pane?.agent ?? pane?.model ?? "")
+        ? { dialog: true }
+        : {}),
     }
   }
   const deliverNowNote = (paneId: string) =>
@@ -3596,7 +3603,7 @@ export function Workbench() {
     logComposer(paneId, "offered")
     const agent = agentLabel(wb().panes.find((candidate) => candidate.id === paneId)?.agent ?? "")
     const reader = mailPanes().find((candidate) => candidate.id === paneId)
-    for (const from of deliverNow.senders(paneId)) {
+    for (const from of deliverNow.untold(paneId)) {
       if (from !== paneId) tellSender(from, formatHeldByScreen(agent, reader))
     }
   }
@@ -4285,7 +4292,7 @@ export function Workbench() {
         if (item.suspended) saveSuspendedMail()
         tellPane(item.paneId, t("note.mailNotTyped", asOneLine(item.text).slice(0, 160)))
         // Read again after the await: a lane may have started a line for this pane in the meantime.
-      } else if ((await freeNow(host, item.paneId, !item.told)) && !linesInFlight.has(item.paneId)) {
+      } else if ((await freeNow(host, item.paneId, !item.notice)) && !linesInFlight.has(item.paneId)) {
         if (!dropFrom(heldLines, item)) continue
         if (item.suspended) saveSuspendedMail()
         if (heldByMenuNoted.delete(item.paneId)) dropPaneNote(item.paneId, t("note.mailHeldByMenu"))
@@ -4304,7 +4311,7 @@ export function Workbench() {
                 }
                 return result === "held"
               })
-            : typeLineOutcome(session, item.text, { mail: !item.told }).then(
+            : typeLineOutcome(session, item.text, { mail: !item.notice }).then(
                 (outcome) => deliveryResult(outcome, running.get(item.paneId) === session) === "held",
               )
         ).then((again) => {
@@ -4313,7 +4320,7 @@ export function Workbench() {
           if (item.suspended) saveSuspendedMail()
         })
       } else {
-        if (!item.told) noteMailHeld(item.paneId, item.inbox?.from)
+        if (!item.notice) noteMailHeld(item.paneId, item.inbox?.from)
         if (
           !item.told &&
           item.inbox?.from &&
@@ -4328,7 +4335,7 @@ export function Workbench() {
           if (running.has(item.inbox.from)) {
             const reader = mailPanes().find((pane) => pane.id === item.paneId)
             const text = byMenu ? formatHeldByMenu(item.inbox, reader) : formatHeld(item.inbox, reader)
-            heldLines.push({ paneId: item.inbox.from, text, told: true })
+            heldLines.push({ paneId: item.inbox.from, text, told: true, notice: true })
           }
         }
       }
@@ -4388,6 +4395,7 @@ export function Workbench() {
               panes.find((pane) => pane.id === request.to),
               now,
             ),
+            notice: true,
           })
         }
         tellPane(request.to, t("pane.maybeStuck", request.id))

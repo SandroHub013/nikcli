@@ -8,7 +8,7 @@ import { loadCapture } from "../test-support/live-bytes"
  * may carry, on the raw bytes and with the escapes taken out, for whichever capture is added next.
  */
 const PRIVATE =
-  /unsandboxed|wezterm|herdr|win32_|powercfg|antigravity-cli|favorites|ade-team|tmp-prova|team\.md|ade-msg-help|nikcli-ade|lavoro-\d|\.ade-test|claude max|cache-keeper|5h \d|wk \d|sub \d|197610|39349/i
+  /unsandboxed|wezterm|herdr|win32_|powercfg|antigravity-cli|favorites|ade-team|tmp-prova|team\.md|ade-msg-help|nikcli-ade|lavoro-\d|\.ade-test|claude max|google ai|cache-keeper|5h \d|wk \d|sub \d|197610|39349/i
 const ESCAPES = /\x1b\[[0-9;?>]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[=>()][0-9A-Za-z]?|\x1b./g
 
 describe("the captures keep nothing of the user's", () => {

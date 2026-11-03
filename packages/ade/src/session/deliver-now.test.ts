@@ -2,7 +2,13 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { codeOf } from "../test-support/source-text"
 import { composerLogEntry, logWith, maskRow } from "./composer-log"
-import { createDeliverNow, DELIVER_NOW_AFTER_MS, turnKnown, type BlindHold } from "./deliver-now"
+import {
+  createDeliverNow,
+  DELIVER_NOW_AFTER_MS,
+  DELIVER_NOW_OVER_DIALOG_MS,
+  turnKnown,
+  type BlindHold,
+} from "./deliver-now"
 import { typeThenEnter } from "./enter"
 import { STALE_BUSY_MS } from "./mailbox"
 import { OUTPUT_CLAIM_MAX_MS } from "./output-activity"
@@ -46,8 +52,8 @@ describe("when it shows", () => {
     const now = createDeliverNow()
     rounds(now, 0, 10_000)
     now.mailHeld("p", CLEAR, 11_000)
-    expect(rounds(now, 12_000, 12_000 + AFTER - 1_000)).toBeUndefined()
-    expect(now.mailHeld("p", BLIND, 12_000 + AFTER)).toBe("offered")
+    expect(rounds(now, 12_000, 11_000 + AFTER - 1_000)).toBeUndefined()
+    expect(now.mailHeld("p", BLIND, 11_000 + AFTER)).toBe("offered")
   })
 
   test("mail held once, long ago, does not count for the mail held now", () => {
@@ -72,7 +78,90 @@ describe("when it shows", () => {
   test("once, with who to tell", () => {
     const now = offered()
     expect(now.mailHeld("p", BLIND, AFTER + 700)).toBeUndefined()
-    expect(now.senders("p")).toEqual(["sender"])
+    expect(now.untold("p")).toEqual(["sender"])
+    expect(now.untold("p")).toEqual([])
+  })
+
+  test("the sender hears once per message held: every line is a turn it pays for, and the user may be typing in bursts", () => {
+    const now = createDeliverNow()
+    const told: string[] = []
+    let offers = 0
+    let at = 0
+    for (let burst = 0; burst < 10; burst++) {
+      for (let second = 0; second < 40; second++, at += 1_000) {
+        if (now.mailHeld("p", { blind: true, line: `riga ${burst}` }, at, "sender") !== "offered") continue
+        offers++
+        told.push(...now.untold("p"))
+      }
+    }
+    expect(offers).toBeGreaterThan(1)
+    expect(told).toEqual(["sender"])
+  })
+
+  test("nor when a click runs out, or a menu comes and goes", () => {
+    const now = offered()
+    expect(now.untold("p")).toEqual(["sender"])
+    now.click("p", false, AFTER)
+    rounds(now, AFTER + 1_000, AFTER + 9_000)
+    now.lapsed(AFTER + 10_000)
+    expect(now.mailHeld("p", BLIND, AFTER + 10_000)).toBe("offered")
+    expect(now.untold("p")).toEqual([])
+    now.mailHeld("p", CLEAR, AFTER + 11_000)
+    rounds(now, AFTER + 12_000, AFTER + 12_000 + AFTER)
+    expect(now.untold("p")).toEqual([])
+  })
+
+  test("another sender, or the next message after this one went, does hear", () => {
+    const now = offered()
+    now.untold("p")
+    now.mailHeld("p", BLIND, AFTER + 1_000, "other")
+    expect(now.untold("p")).toEqual(["other"])
+    now.click("p", false, AFTER + 2_000)
+    now.take("p", AFTER + 3_000)
+    rounds(now, AFTER + 4_000, AFTER + 4_000 + AFTER, BLIND, "sender")
+    expect(now.untold("p")).toEqual(["sender"])
+  })
+})
+
+describe("where the cursor says a dialog the reading misses (re-review R4)", () => {
+  const DIALOG: BlindHold = { blind: true, dialog: true }
+  const FIVE_MINUTES = DELIVER_NOW_OVER_DIALOG_MS
+
+  test("five minutes, and not 30 s: a click there would approve a plan or answer a question", () => {
+    const now = createDeliverNow()
+    expect(rounds(now, 0, FIVE_MINUTES - 1_000, DIALOG)).toBeUndefined()
+    expect(now.offered("p")).toBe(false)
+    expect(now.mailHeld("p", DIALOG, FIVE_MINUTES)).toBe("offered")
+  })
+
+  test("not never: a CLI that comes to hide its cursor at rest still has a way out", () => {
+    expect(FIVE_MINUTES).toBe(5 * 60_000)
+  })
+
+  test("a dialog that opens under the action takes it away, and its five minutes run from then", () => {
+    const now = offered()
+    expect(now.review("p", DIALOG, AFTER + 100)).toBe("withdrawn")
+    expect(rounds(now, AFTER + 1_000, AFTER + FIVE_MINUTES, DIALOG)).toBeUndefined()
+    expect(now.mailHeld("p", DIALOG, AFTER + 1_000 + FIVE_MINUTES)).toBe("offered")
+  })
+
+  test("the same, when a round sees it first", () => {
+    const now = offered()
+    expect(now.mailHeld("p", DIALOG, AFTER + 1_000)).toBe("withdrawn")
+    expect(now.offered("p")).toBe(false)
+  })
+
+  test("closed, the plain wait stands: the mail has been held all along", () => {
+    const now = createDeliverNow()
+    rounds(now, 0, AFTER + 10_000, DIALOG)
+    expect(now.mailHeld("p", BLIND, AFTER + 11_000)).toBe("offered")
+  })
+
+  test("reopened, its five minutes start again", () => {
+    const now = createDeliverNow()
+    rounds(now, 0, FIVE_MINUTES - 2_000, DIALOG)
+    rounds(now, FIVE_MINUTES - 1_000, FIVE_MINUTES - 1_000, CLEAR)
+    expect(rounds(now, FIVE_MINUTES, FIVE_MINUTES + FIVE_MINUTES - 1_000, DIALOG)).toBeUndefined()
   })
 })
 
@@ -229,9 +318,19 @@ describe("the click", () => {
     expect(workbench).toContain("typeLine(session,handled.reply,{unlessBusy:true})")
     expect(between("constfreeNow=", "constisHooked=")).toContain("if(mail&&deliverNow.armed(")
     // ADE's own notices wait among the held lines too, and are no message: they neither bring the action nor spend it.
-    expect(workbench).toContain("heldLines.push({paneId:target.pane,text,told:true})")
-    expect(workbench).toContain("freeNow(host,item.paneId,!item.told)")
-    expect(workbench).toContain("if(!item.told)noteMailHeld(item.paneId,item.inbox?.from)")
+    expect(workbench).toContain("heldLines.push({paneId:target.pane,text,notice:true})")
+    expect(workbench).toContain("heldLines.push({paneId:item.inbox.from,text,told:true,notice:true})")
+    expect(workbench).toContain("freeNow(host,item.paneId,!item.notice)")
+    expect(workbench).toContain("{mail:!item.notice}")
+    expect(workbench).toContain("if(!item.notice)noteMailHeld(item.paneId,item.inbox?.from)")
+    // `told` says the sender has heard of a message, and it stays a message: an update, a late reply, a first task.
+    expect(workbench).not.toContain("freeNow(host,item.paneId,!item.told)")
+    expect(workbench).not.toContain("if(!item.told)noteMailHeld")
+  })
+
+  test("lint: the sender hears through `untold`, and the wait asks the cursor", () => {
+    expect(between("constdeliverNowChanged=", "constnoteMailHeld=")).toContain("deliverNow.untold(paneId)")
+    expect(between("constblindHold=", "constdeliverNowNote=")).toContain("cursorSaysDialog(")
   })
 
   test("lint: a first task held on a line in the box is said too, after the same wait", () => {
