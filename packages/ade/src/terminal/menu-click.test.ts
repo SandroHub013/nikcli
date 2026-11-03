@@ -438,7 +438,7 @@ describe("Claude Code 2.1.284 full screen, its clicks off (ade/claude-mouse-clic
   test("pty.rs starts claude with its clicks off, and only claude", () => {
     const pty = readFileSync(join(import.meta.dir, "..", "..", "src-tauri", "src", "pty.rs"), "utf8")
     expect(pty).toMatch(
-      /else if stem\.eq_ignore_ascii_case\("claude"\) \{\s+&\[\("CLAUDE_CODE_DISABLE_MOUSE_CLICKS", "1"\)\]/,
+      /else if stem\.eq_ignore_ascii_case\("claude"\) \{\s+&\[\("CLAUDE_CODE_DISABLE_MOUSE_CLICKS", "1"\), \("CLAUDE_CODE_NATIVE_CURSOR", "1"\)\]/,
     )
   })
 })

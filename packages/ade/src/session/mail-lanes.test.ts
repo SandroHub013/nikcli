@@ -482,8 +482,8 @@ describe("lint: the workbench's round waits for nothing slow", () => {
   })
 
   test("what is typed checks again after the await, so two parts of the round cannot both type", () => {
-    expect(source).toContain("(await freeNow(host, item.paneId)) && !linesInFlight.has(item.paneId)")
-    expect(source).toContain("!(await freeNow(host, target.pane.id)) || linesInFlight.has(target.pane.id)")
+    expect(source).toContain("(await freeNow(host, item.paneId, !item.told)) && !linesInFlight.has(item.paneId)")
+    expect(source).toContain("!(await freeNow(host, target.pane.id, true)) || linesInFlight.has(target.pane.id)")
     expect(source).toContain("linesInFlight.track(paneId, deliverTextNow(")
   })
 })
