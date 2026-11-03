@@ -2076,7 +2076,7 @@ export const it = {
   "bots.roster.title": "bot",
   "bots.newBot": "Nuovo bot",
   "bots.roster.loading": "Lettura…",
-  "bots.roster.empty": "Nessun bot ancora. Creane uno.",
+  "bots.roster.empty": "Nessun bot ancora.",
   "bots.noDescription": "Nessuna descrizione.",
   "bots.blank.create": "Crea il primo bot",
   "bots.blank.createAnother": "Crea un bot",

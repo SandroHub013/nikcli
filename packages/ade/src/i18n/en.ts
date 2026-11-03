@@ -2020,7 +2020,7 @@ export const en: Messages = {
   "bots.roster.title": "bots",
   "bots.newBot": "New bot",
   "bots.roster.loading": "Loading…",
-  "bots.roster.empty": "No bots yet. Create one.",
+  "bots.roster.empty": "No bots yet.",
   "bots.noDescription": "No description.",
   "bots.blank.create": "Create the first bot",
   "bots.blank.createAnother": "Create a bot",

@@ -112,6 +112,11 @@ describe("D26: an empty place says what to press", () => {
     expect(rooms).toContain('t("bots.room.createFirst")')
     expect(rooms).toContain('t("bots.room.listEmpty")')
   })
+
+  test("the empty roster does not point at a link that is no longer there, in either language", () => {
+    expect(it["bots.roster.empty"]).toBe("Nessun bot ancora.")
+    expect(en["bots.roster.empty"]).toBe("No bots yet.")
+  })
 })
 
 describe("D22: the screen reader can follow", () => {
