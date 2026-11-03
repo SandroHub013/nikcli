@@ -151,17 +151,28 @@
    * the one value here that does NOT follow the slider. A menu is opened to be
    * read, over whatever happens to be underneath — a terminal mid-scroll, a
    * transcript — and dragging the glass to its most extreme must not take that
-   * away. 0.98 keeps a hint of translucency and still hides what is below.
+   * away. 0.99 keeps a hint of translucency and still hides what is below.
    * Computed, white terminal text under it: a sheet (it has a scrim as well)
    * 1.10:1 at 0.92, 1.02:1 at 0.98; a menu or a tooltip, with none, 1.29:1 at
    * 0.92 and 1.06:1 at 0.98 (live test 3, FAIL 6: the letters of the terminals
    * could be read through Settings and the Decisions sheet). 0.97 leaves a
-   * menu at 1.09:1, which is still readable, so 0.98 is the step for a token
-   * the menus share. Measured on the live test's own picture, the leak under a
-   * sheet was 1.09:1.
+   * menu at 1.09:1, which is still readable. Measured on the live test's own
+   * picture, the leak under a sheet was 1.09:1.
+   *
+   * Live test 4 read the letters of a full terminal under the new-pane menu at
+   * 0.98 all the same, 1.16:1 over white and 1.13:1 over black, and the review's
+   * rule was «if it can be read, 0.99»: the leak is half at 0.99 (1.03:1, white
+   * text, computed on this rgb), 0.995 would halve it again. A `backdrop-filter: blur`
+   * on menus and sheets would hide the letters at any alpha, and was weighed
+   * against this: it is not here because the blur's cost is the very one the
+   * block below records (a filter layer re-sampled while a pane repaints under
+   * it, which flickered in WebView2), on a sheet that covers half the window
+   * above a terminal that never stops, and because nothing here can look at it:
+   * it is for a live look, `glass.test.ts` keeps the glass free of blurs until
+   * one has been taken.
    */
   --ade-raised: rgba(255, 255, 255, 0.06);
-  --ade-overlay: rgba(36, 30, 27, 0.98);
+  --ade-overlay: rgba(36, 30, 27, 0.99);
 
   --ade-border-subtle: rgba(255, 255, 255, 0.08);
   --ade-border: rgba(255, 255, 255, 0.12);
