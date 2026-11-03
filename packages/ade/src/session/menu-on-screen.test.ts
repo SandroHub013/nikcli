@@ -5,11 +5,11 @@ import { createLineAccumulator } from "../host/line-stream"
 import { createLineWriter } from "../surface/pane-lines"
 import { codeOf } from "../test-support/source-text"
 import { typeThenEnter } from "./enter"
-import { formatHeldByMenu, formatHeldMenuReceipt, formatSilentStart } from "./mailbox"
+import { formatHeldByMenu, formatHeldMenuReceipt, formatHeldSilentReceipt, formatSilentStart } from "./mailbox"
 import { decideOpening, OPENING_TIMEOUT_MS } from "./opening"
 import { detectPermission, followPermission, type PermissionRequest } from "./permission"
 import { createMenuHold, createUnparsed, menuNames, screenQuestion, statusFromScreen } from "./screen-question"
-import { isAnswerKey, isTyping, typedAfter, type TypedLine } from "./typed-line"
+import { isAnswerKey, isEnterKey, isTyping, typedAfter, type TypedLine } from "./typed-line"
 
 /*
  * Live test of 2026-11-02, FAIL 1 and 2: ADE typed mail and first tasks, Enter included, into a menu that stood on the
@@ -71,7 +71,7 @@ function pane() {
     },
     /** A key of the user's on its way to the pane: an Enter is said before it is written (`menuEnter`). */
     async key(data: string, answer = "") {
-      if (data.includes("\r")) hold.enterTyped("p", terminal, AGENT)
+      if (isEnterKey(data)) hold.enterTyped("p", terminal, AGENT)
       if (answer) await this.feed(answer)
     },
     /** A key as `onInput` takes it: counted (`menuOnScreen`, F2), told to the hold if an Enter, then written. */
@@ -79,7 +79,7 @@ function pane() {
       const menu = hold.waiting("p", terminal, AGENT)
       const answers = menu !== undefined && isAnswerKey(data) && !isTyping(line) && menuNames(menu, data)
       line = typedAfter(line, data, Date.now(), answers)
-      if (data.includes("\r")) hold.enterTyped("p", terminal, AGENT)
+      if (isEnterKey(data)) hold.enterTyped("p", terminal, AGENT)
       if (echo) await this.feed(echo)
     },
     /** What keeps mail out of the pane: `questionOpen`, or a line the user has begun. */
@@ -375,6 +375,14 @@ describe("the sender hears it is held", () => {
     expect(told).not.toContain("consegnat")
   })
 
+  test("a session that has drawn nothing yet: «in coda», and why", () => {
+    const receipt = formatHeldSilentReceipt(reader)
+    expect(receipt.startsWith("ok: in coda")).toBe(true)
+    expect(receipt).toContain("fuoco1")
+    expect(receipt).toContain("non ha ancora scritto")
+    expect(receipt).not.toContain("consegnat")
+  })
+
   test("a first task, a reply or an update hears the same", () => {
     expect(formatHeldByMenu({ id: "r1", kind: "spawn" }, reader)).toContain("la richiesta r1")
     expect(formatHeldByMenu({ id: "r1", kind: "reply" }, reader)).toContain("la tua risposta alla richiesta r1")
@@ -449,6 +457,39 @@ describe("a key the menu does not name never releases it", () => {
     const menu = screenQuestion(terminal, "codex")!
     expect(["1", "2", "y", "Y"].filter((key) => menuNames(menu, key))).toEqual(["1", "2", "y", "Y"])
     expect(["3", "x", "h", "es"].filter((key) => menuNames(menu, key))).toEqual([])
+  })
+})
+
+/*
+ * Alt+Enter and a declared paste carry a `\r` and send nothing: read as the Enter that answers a menu, they released one
+ * that still waited, and once the line was cleared the mail's Enter went into it (re-review of menu-posta, F1).
+ */
+describe("what carries a return and is no Enter", () => {
+  test("Alt+Enter, then a Backspace: the menu still waits", async () => {
+    const p = pane()
+    await p.feed(FILL, "ml", ON_FULL_SCREEN + NOTES)
+    await p.type("\x1b\r")
+    await p.type("\x7f")
+    expect(p.mailWaits()).toBe(true)
+    expect(await typedInto(p)).toEqual([])
+  })
+
+  test("a paste of several lines, then cleared: the menu still waits", async () => {
+    const p = pane()
+    await p.feed(FILL, "ml", ON_FULL_SCREEN + NOTES)
+    await p.type("\x1b[200~one\rtwo\x1b[201~")
+    await p.type("\x03")
+    expect(p.mailWaits()).toBe(true)
+    expect(await typedInto(p)).toEqual([])
+  })
+
+  test("an Enter is an Enter, and so is a line pasted undeclared with its own", async () => {
+    for (const enter of ["\r", "yes\r"]) {
+      const p = pane()
+      await p.feed(FILL, "ml", ON_FULL_SCREEN + NOTES)
+      await p.type(enter)
+      expect(p.mailWaits()).toBe(false)
+    }
   })
 })
 
@@ -739,9 +780,14 @@ describe("lint: the workbench's wiring", () => {
   test("lint: every key on its way to a pane reaches the hold before it is written", () => {
     const renderer = readFileSync(new URL("../surface/pane-renderer.tsx", import.meta.url), "utf8")
     const onInput = renderer.slice(renderer.indexOf("onInput={(data) => {"))
-    expect(onInput.indexOf("deps.turnSubmitted(current().id)")).toBeGreaterThan(0)
-    expect(onInput.indexOf("deps.turnSubmitted(current().id)")).toBeLessThan(onInput.indexOf("session.write(data)"))
-    expect(between("const turnSubmitted = (", "claims.evidence(paneId)")).toContain(codeOf("menuEnter(paneId)"))
+    const told = onInput.indexOf("if (isEnterKey(data)) deps.menuEnter(current().id)")
+    expect(told).toBeGreaterThan(0)
+    expect(told).toBeLessThan(onInput.indexOf("session.write(data)"))
+    // The composer sends its line with an Enter of its own.
+    const composer = renderer.slice(renderer.indexOf("onSubmit={"))
+    expect(composer.indexOf("deps.menuEnter(current().id)")).toBeGreaterThan(0)
+    expect(composer.indexOf("deps.menuEnter(current().id)")).toBeLessThan(composer.indexOf("?.write(`${line}\\r`)"))
+    expect(between("const turnSubmitted = (", "claims.evidence(paneId)")).not.toContain(codeOf("menuEnter(paneId)"))
     expect(between("const answerPermission = (", "appendLine(paneId")).toContain(codeOf("menuEnter(paneId)"))
   })
 
@@ -769,13 +815,38 @@ describe("lint: the workbench's wiring", () => {
 
   test("lint: the deadline does not end a first task's poll: it is said once, to the pane and to the sender", () => {
     const poll = between("if (starting.typesTask) {", "openingPolls.add(poll)")
-    expect(poll).toContain(codeOf("const step = openingStep(decision, silenceTold)"))
+    expect(poll).toContain(codeOf("const step = openingStep(decision, silenceTold, openingBytes)"))
     const told = poll.slice(poll.indexOf(codeOf('if (step === "tell") {')), poll.indexOf(codeOf("stopOpeningPoll(poll)if (menuTold)")))
     expect(told).toContain(codeOf('tellPane(paneId, t("task.notSent"))'))
     expect(told).toContain(codeOf("tellSender(request.from, formatSilentStart(request.id, reader))"))
     // It ends in its own return, so the pass that says it does not stop the poll.
     expect(told.endsWith(codeOf("return }"))).toBe(true)
-    expect(poll).toContain(codeOf('if (silenceTold) dropPaneNote(paneId, t("task.notSent"))'))
+  })
+
+  test("lint: the note about the silence goes with the silence, even if a menu is what came, and with the process", () => {
+    const poll = between("if (starting.typesTask) {", "openingPolls.add(poll)")
+    const over = poll.slice(poll.indexOf(codeOf("if (silenceTold && openingBytes.firstByteAt !== undefined) {")))
+    expect(over.startsWith(codeOf('if (silenceTold && openingBytes.firstByteAt !== undefined) { silenceTold = false dropPaneNote(paneId, t("task.notSent")) }'))).toBe(true)
+    // Before the question is read: a menu drawn first has its own note.
+    expect(poll.indexOf(codeOf("if (silenceTold && openingBytes.firstByteAt"))).toBeLessThan(poll.indexOf(codeOf("const asked = questionOpen(paneId)")))
+    const stopped = poll.slice(poll.indexOf(codeOf("if (running.get(paneId) !== session) {")), poll.indexOf(codeOf("const drawn = screenDrawn")))
+    expect(stopped).toContain(codeOf('if (menuTold) dropPaneNote(paneId, t("task.heldByMenu"))'))
+    expect(stopped).toContain(codeOf('if (silenceTold) dropPaneNote(paneId, t("task.notSent"))'))
+  })
+
+  test("lint: mail waits for the first text too, and a silence past the deadline is said once", () => {
+    expect(source).toContain(codeOf("nothingDrawn: running.has(paneId) && undrawnSince.has(paneId),"))
+    const feed = between("const feedTerminal = (", "const addProject")
+    expect(feed).toContain(codeOf("if (undrawnSince.has(paneId) && drawsText(chunk)) {"))
+    expect(feed).toContain(codeOf('if (heldBySilenceNoted.delete(paneId)) dropPaneNote(paneId, t("note.mailHeldBySilence"))'))
+    for (const start of [between("const startProcess = async (", "const startRemoteProcess = async ("), between("const startRemoteProcess = async (", "openingPolls.add(poll)")]) {
+      expect(start).toContain(codeOf("undrawnSince.set(paneId, Date.now())"))
+    }
+    const held = between("const byLine = isTyping(records.typed.get(target.pane.id))", "if (message.kind")
+    expect(held).toContain(codeOf('tellPane(target.pane.id, t("note.mailHeldBySilence"))'))
+    expect(held).toContain(codeOf("(silentFor(target.pane.id) ?? 0) >= OPENING_TIMEOUT_MS"))
+    expect(held).toContain(codeOf("formatHeldSilentReceipt(target.pane)"))
+    expect(between("const forgetPane = (", "rawWindows.forget(id)")).toContain(codeOf("undrawnSince.delete(id)"))
   })
 
   test("lint: a first task refused at the last moment is said, on both of its paths", () => {

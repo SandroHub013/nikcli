@@ -421,6 +421,7 @@ import {
   formatBell,
   formatHeld,
   formatHeldByMenu,
+  formatHeldSilentReceipt,
   formatSilentStart,
   formatHeldDialogReceipt,
   formatHeldMenuReceipt,
@@ -691,6 +692,7 @@ import {
 import { createDiscardNotes } from "../terminal/discard-notes"
 import type { LinkRequest } from "../terminal/links"
 import {
+  OPENING_TIMEOUT_MS,
   REMOTE_STEP_NOTE_MS,
   bytesAfter,
   clockAfterMenu,
@@ -2808,6 +2810,17 @@ export function Workbench() {
     heldByMenuNoted.add(paneId)
     tellPane(paneId, t("note.mailHeldByMenu"))
   }
+  /*
+   * Panes whose process has drawn nothing yet, and since when. What is typed now is read by whatever it opens on, with no
+   * screen yet to read that from, so mail waits for the first text as the first task does (`isFree`). A program that never
+   * draws would hold it for good: past the opening's deadline the pane says so, once.
+   */
+  const undrawnSince = new Map<string, number>()
+  const heldBySilenceNoted = new Set<string>()
+  const silentFor = (paneId: string) => {
+    const since = undrawnSince.get(paneId)
+    return since !== undefined && running.has(paneId) && !activityOf.has(paneId) ? Date.now() - since : undefined
+  }
   /** The mail is on its way: the note about what it waited for goes too (re-review N12). */
   const dropPaneNote = (paneId: string, note: string) =>
     setWb((w) => {
@@ -3094,6 +3107,7 @@ export function Workbench() {
         // Where a menu drawn with the cursor would show (`screenAsks`): unread, a quiet pane without hooks is not free.
         // Nor with chunks xterm has not parsed: in a window hidden for minutes a menu can have arrived and not be on the screen.
         screenUnread: !hasTerminal(paneId) || unparsed.behind(paneId),
+        nothingDrawn: running.has(paneId) && undrawnSince.has(paneId),
         ...(activity ? { activity } : {}),
         ...(lastOutputAt.has(paneId) ? { lastOutputAt: lastOutputAt.get(paneId)! } : {}),
       },
@@ -3746,7 +3760,6 @@ export function Workbench() {
    */
   const turnSubmitted = (paneId: string) => {
     promptAnswered(paneId)
-    menuEnter(paneId)
     // An Enter ADE saw is evidence, not a guess from output: this turn does not expire (`OUTPUT_CLAIM_MAX_MS`).
     claims.evidence(paneId)
     markWorking(paneId)
@@ -5483,6 +5496,7 @@ export function Workbench() {
     // Read again after the await: the round's held lines may have started one for this pane in the meantime.
     if (!(await freeNow(host, target.pane.id)) || linesInFlight.has(target.pane.id)) {
       const byLine = isTyping(records.typed.get(target.pane.id))
+      const bySilence = !byLine && silentFor(target.pane.id) !== undefined
       /*
        * Said to the user too, once for as long as the line stands: the pane waits for the line and the user sees nothing
        * of why (review B6). The sender already has its receipt.
@@ -5491,12 +5505,19 @@ export function Workbench() {
         heldByLineNoted.add(target.pane.id)
         tellPane(target.pane.id, t("note.mailHeldByLine"))
       }
+      // A slow start is no news; past the opening's deadline it may be a program that never draws.
+      if (bySilence && (silentFor(target.pane.id) ?? 0) >= OPENING_TIMEOUT_MS && !heldBySilenceNoted.has(target.pane.id)) {
+        heldBySilenceNoted.add(target.pane.id)
+        tellPane(target.pane.id, t("note.mailHeldBySilence"))
+      }
       if (!held.has(id)) {
         held.add(id)
         await answer(
           byLine
             ? formatHeldReceipt(target.pane)
-            : `ok: in coda, arriva a "${target.pane.title}" quando finisce il turno`,
+            : bySilence
+              ? formatHeldSilentReceipt(target.pane)
+              : `ok: in coda, arriva a "${target.pane.title}" quando finisce il turno`,
         )
       }
       /*
@@ -5519,6 +5540,7 @@ export function Workbench() {
       dropPaneNote(target.pane.id, t("note.mailHeldByLine"))
     }
     if (heldByMenuNoted.delete(target.pane.id)) dropPaneNote(target.pane.id, t("note.mailHeldByMenu"))
+    if (heldBySilenceNoted.delete(target.pane.id)) dropPaneNote(target.pane.id, t("note.mailHeldBySilence"))
 
     const targetDepth = depthOf(target.pane.id, parentOf)
     const context = {
@@ -8082,6 +8104,11 @@ export function Workbench() {
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
     if (!pane) return paid?.()
 
+    if (undrawnSince.has(paneId) && drawsText(chunk)) {
+      undrawnSince.delete(paneId)
+      if (heldBySilenceNoted.delete(paneId)) dropPaneNote(paneId, t("note.mailHeldBySilence"))
+    }
+
     // A working agent keeps repainting (spinner, streamed text); every chunk
     // pushes back the moment the pane is declared idle again.
     if (pane.status === "working") settleWhenQuiet(paneId)
@@ -8225,6 +8252,8 @@ export function Workbench() {
     records.forget(id)
     menuHold.forget(id)
     unparsed.forget(id)
+    undrawnSince.delete(id)
+    heldBySilenceNoted.delete(id)
     screenWaiting.delete(id)
     heldByMenuNoted.delete(id)
     rawWindows.forget(id)
@@ -8373,6 +8402,8 @@ export function Workbench() {
       if (installExit(watched, { code, ...(failed ? { failed } : {}) })) void installFinished(id, watched)
     }
     forgetQuiet(id)
+    // The note speaks of a process that may yet start: this one will not.
+    if (heldBySilenceNoted.delete(id)) dropPaneNote(id, t("note.mailHeldBySilence"))
     // Whatever was half-written belonged to the process that has gone. Left
     // behind, it would hold mail back from the session that starts next.
     records.typed.forget(id)
@@ -9431,6 +9462,8 @@ export function Workbench() {
       discardNotes.started(paneId)
       modeTracker.forget(paneId)
       menuHold.forget(paneId)
+      undrawnSince.set(paneId, Date.now())
+      if (heldBySilenceNoted.delete(paneId)) dropPaneNote(paneId, t("note.mailHeldBySilence"))
       if (heldByMenuNoted.delete(paneId)) dropPaneNote(paneId, t("note.mailHeldByMenu"))
       dropPaneNote(paneId, t("task.heldByMenu"))
       dropPaneNote(paneId, t("task.notSent"))
@@ -9636,7 +9669,15 @@ export function Workbench() {
            */
           if (running.get(paneId) !== session) {
             stopOpeningPoll(poll)
+            // The session they spoke of has gone.
+            if (menuTold) dropPaneNote(paneId, t("task.heldByMenu"))
+            if (silenceTold) dropPaneNote(paneId, t("task.notSent"))
             return
+          }
+          // It has written something, whatever that is: a menu drawn first has a note of its own.
+          if (silenceTold && openingBytes.firstByteAt !== undefined) {
+            silenceTold = false
+            dropPaneNote(paneId, t("task.notSent"))
           }
 
           // Read once the screen is drawn: a dialog read half painted has no cursor yet. A ticking row never goes quiet.
@@ -9678,7 +9719,7 @@ export function Workbench() {
             // Chunks xterm has not parsed: what they draw may be a menu.
             permissionPending: asked || unparsed.behind(paneId),
           })
-          const step = openingStep(decision, silenceTold)
+          const step = openingStep(decision, silenceTold, openingBytes)
           if (step === "wait") return
           /*
            * Said, not swallowed, and not given up: a session that comes late gets its task, and the sender, who would
@@ -9702,7 +9743,6 @@ export function Workbench() {
 
           stopOpeningPoll(poll)
           if (menuTold) dropPaneNote(paneId, t("task.heldByMenu"))
-          if (silenceTold) dropPaneNote(paneId, t("task.notSent"))
           setWb((w) =>
             updatePane(w, paneId, {
               status: "working",
@@ -9792,6 +9832,8 @@ export function Workbench() {
       startOnCleanScreen(paneId)
       discardNotes.started(paneId)
       menuHold.forget(paneId)
+      undrawnSince.set(paneId, Date.now())
+      if (heldBySilenceNoted.delete(paneId)) dropPaneNote(paneId, t("note.mailHeldBySilence"))
       if (heldByMenuNoted.delete(paneId)) dropPaneNote(paneId, t("note.mailHeldByMenu"))
       // Born at the pane's size, not the host's 120x30 (S77); undefined for a pane not yet fitted.
       const bornAt = ptySize(paneId)
@@ -10209,6 +10251,7 @@ export function Workbench() {
     turnSubmitted,
     promptAnswered,
     menuOpen: menuOnScreen,
+    menuEnter,
     interrupted,
     restart: (pane, line) => void reopen(pane, line),
     suspendCheck: suspendCheckFor,

@@ -175,9 +175,9 @@ export const REMOTE_STEP_NOTE_MS = 180_000
  *
  * With the clock at the first text the deadline can be reached: a CLI slow to start, behind Defender or on a loaded
  * machine, lost its task just as it began to draw. A session that comes late gets its task. The poll ends by itself when
- * the process exits.
+ * the process exits. A program already drawing when the deadline comes has nothing to be told about: its settle is near.
  */
-export function openingStep(decision: OpeningDecision, told: boolean): "wait" | "tell" | "send" {
-  if (decision === "abandon") return told ? "wait" : "tell"
+export function openingStep(decision: OpeningDecision, told: boolean, bytes: OpeningBytes): "wait" | "tell" | "send" {
+  if (decision === "abandon") return told || bytes.firstByteAt !== undefined ? "wait" : "tell"
   return decision
 }

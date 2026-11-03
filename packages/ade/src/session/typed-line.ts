@@ -167,3 +167,11 @@ function keep(line: TypedLine | undefined, now: number): TypedLine | undefined {
 export function submittedSince(line: TypedLine | undefined, submittedAt: number): TypedLine | undefined {
   return line && submittedAt >= line.at ? undefined : line
 }
+
+/**
+ * Whether `data` is an Enter that may answer a menu. Alt+Enter and a declared paste carry a `\r` and send nothing: read as
+ * the answer they released a menu that still waited, and once the line was cleared the mail's Enter went into it.
+ */
+export function isEnterKey(data: string): boolean {
+  return data.includes("\r") && !data.startsWith(ESC)
+}

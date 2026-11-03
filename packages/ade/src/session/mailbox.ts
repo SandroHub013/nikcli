@@ -810,6 +810,11 @@ export function formatHeldByMenu(entry: Pick<InboxEntry, "id" | "kind">, reader:
   )
 }
 
+/** The receipt a sender gets for mail held back because the target's process has drawn nothing yet: it may open on a menu. */
+export function formatHeldSilentReceipt(target: MailPane | undefined): string {
+  return `ok: in coda, "${target?.title ?? "la sessione"}" non ha ancora scritto niente a schermo (può aprirsi su un menu): arriva appena scrive`
+}
+
 /** Told to the sender, once, of a first task not yet typed because its session has drawn nothing by the deadline. */
 export function formatSilentStart(id: string, reader: MailPane | undefined): string {
   return (
@@ -1136,11 +1141,18 @@ export function isFree(
      * the cursor shows (SES-3), so a pane whose screen is unread is not taken as free on its silence alone.
      */
     screenUnread?: boolean
+    /**
+     * The process has drawn nothing yet: ConPTY's own bytes at most. What is typed now is read by whatever it opens on,
+     * and there is no screen yet to read that from. A session that has reported through its hook is up, whatever it has
+     * drawn.
+     */
+    nothingDrawn?: boolean
   },
   now: number,
 ): boolean {
   if (target.permissionPending || target.typing) return false
   if (!target.hooked && target.screenUnread) return false
+  if (target.nothingDrawn && !target.activity) return false
   if (target.quarantined && !target.activity) return true
   const quietFor = target.lastOutputAt === undefined ? Infinity : now - target.lastOutputAt
   if (target.hooked) {

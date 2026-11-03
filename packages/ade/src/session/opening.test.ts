@@ -270,7 +270,7 @@ describe("a session that says nothing past the deadline", () => {
     const done: string[] = []
     for (let now = 100; now <= 300_000; now += 100) {
       if (now >= textAt && now <= until) bytes = bytesAfter(bytes, "FAKE AGENT ready", now)
-      const step = openingStep(decideOpening({ startedAt: 0, ...bytes, now, permissionPending: false }), told)
+      const step = openingStep(decideOpening({ startedAt: 0, ...bytes, now, permissionPending: false }), told, bytes)
       if (step === "wait") continue
       done.push(`${step} at ${now}`)
       if (step !== "tell") break
@@ -287,8 +287,12 @@ describe("a session that says nothing past the deadline", () => {
     expect(poll(30_000)).toEqual(["send at 30400"])
   })
 
-  test("the program starts to draw just before the deadline, and goes on: the task goes at its settle", () => {
-    expect(poll(59_800, 90_000)).toEqual(["tell at 60000", `send at ${59_800 + OPENING_SETTLE_MS}`])
+  test("the program starts to draw just before the deadline, and goes on: nothing to say, and the task goes at its settle", () => {
+    expect(poll(59_800, 90_000)).toEqual([`send at ${59_800 + OPENING_SETTLE_MS}`])
+  })
+
+  test("the program's first text comes just before the deadline, and stops: nothing to say", () => {
+    expect(poll(59_800)).toEqual([`send at ${59_800 + OPENING_QUIET_MS}`])
   })
 
   test("no text ever: said once, and no task is typed", () => {

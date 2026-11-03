@@ -1819,6 +1819,8 @@ export const it = {
   "note.subagent": (title: string) => `Subagent avviato: ${title}`,
   "note.mailHeldByLine":
     "Un messaggio per questa sessione aspetta: per ADE hai iniziato una riga. Inviala o cancellala e arriva; se non ne vedi nessuna, premi Invio.",
+  "note.mailHeldBySilence":
+    "Un messaggio aspetta: questa sessione non ha ancora scritto niente. Arriva appena scrive; se il programma non parte, riavviala.",
   "note.mailHeldByMenu":
     "Un messaggio aspetta la domanda a schermo. Se non è vera o hai già risposto, premi Invio; se non cambia nulla, si libera quando la sessione va avanti o riparte.",
   "note.interruptedBy": (from: string) => `Interrotta da ${from}`,

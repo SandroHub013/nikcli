@@ -1775,6 +1775,8 @@ export const en: Messages = {
   "note.subagent": (title) => `Subagent started: ${title}`,
   "note.mailHeldByLine":
     "A message for this session is waiting: ADE counts a line you started. Send or clear it and the message arrives; if you see no line, press Enter.",
+  "note.mailHeldBySilence":
+    "A message is waiting: this session hasn't written anything yet. It arrives as soon as it does; if the program doesn't start, restart it.",
   "note.mailHeldByMenu":
     "A message waits on the question on screen. If it's not real or you answered, press Enter; if nothing changes, it clears when the session moves on or restarts.",
   "note.interruptedBy": (from) => `Interrupted by ${from}`,

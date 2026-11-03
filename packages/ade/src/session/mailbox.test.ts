@@ -456,6 +456,36 @@ describe("when a session can be written to", () => {
     ).toBe(true)
   })
 
+  /*
+   * A session that takes 12 s to start and opens on a menu: its quiet was ConPTY's bytes and nothing else, and mail typed
+   * at 4 s was read by the menu when it opened (re-review of menu-posta, F3). The first task already waits for the first text.
+   */
+  describe("a session that has drawn nothing yet", () => {
+    test("without hooks: not free, however quiet", () => {
+      expect(isFree({ hooked: false, permissionPending: false, lastOutputAt: now - 60_000, nothingDrawn: true }, now)).toBe(false)
+    })
+
+    test("hooked and with nothing reported: not free, however quiet", () => {
+      expect(isFree({ hooked: true, permissionPending: false, lastOutputAt: now - 60_000, nothingDrawn: true }, now)).toBe(false)
+    })
+
+    test("a turn given up is no reason to type either", () => {
+      expect(
+        isFree({ hooked: false, permissionPending: false, lastOutputAt: now - 60_000, nothingDrawn: true, quarantined: true }, now),
+      ).toBe(false)
+    })
+
+    test("the hook's word is not a guess: a session that has reported is up", () => {
+      expect(
+        isFree({ hooked: true, permissionPending: false, activity: { state: "idle", at: now - 5 }, nothingDrawn: true }, now),
+      ).toBe(true)
+    })
+
+    test("once it has drawn, the quiet decides as ever", () => {
+      expect(isFree({ hooked: false, permissionPending: false, lastOutputAt: now - 60_000, nothingDrawn: false }, now)).toBe(true)
+    })
+  })
+
   test("a hooked session is free unless its turn is running", () => {
     expect(isFree({ hooked: true, permissionPending: false, activity: { state: "idle", at: now - 5 } }, now)).toBe(true)
     expect(
