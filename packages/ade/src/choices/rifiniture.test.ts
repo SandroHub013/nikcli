@@ -111,6 +111,7 @@ const designCard = (askedBy?: string) =>
         inline: undefined,
         busy: false,
         label: "I",
+        chosen: false,
       }),
     }),
   )

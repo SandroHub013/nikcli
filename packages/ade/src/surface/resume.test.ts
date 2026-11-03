@@ -119,11 +119,11 @@ describe("saving and restoring a session", () => {
     expect(restored.panes[0].lines.at(-1)?.text).toContain("riprendo il compito")
   })
 
-  test("a finished agent session is brought back too, and says so", () => {
-    // The workbench reopens every agent pane on launch, not only the live ones.
+  test("a finished agent session is kept as it ended, and does not say it is being reopened", () => {
+    // The workbench reopens only the panes that were alive (`liveToReopen`): a finished one waits for «Riprendi».
     const { restored } = roundTrip([session({ status: "done" })])
     expect(restored.panes[0].activity).toBe("restored")
-    expect(restored.panes[0].lines.at(-1)?.text).toContain("riprendo")
+    expect(restored.panes[0].lines.map((line) => line.text).join(" ")).not.toMatch(/riprendo|riapro/i)
   })
 
   test("the conversation survives the restart, and the one after it", () => {

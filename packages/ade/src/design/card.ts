@@ -21,6 +21,8 @@ export interface SubmitControl {
   /** The main button's words. */
   readonly label: string
   readonly disabled: boolean
+  /** A choice was made: the main button and «Registra senza inviare» stay off without one (prova 4, item 10). */
+  readonly answerable: boolean
   /** The inline "who receives" select, only when the gate is `scegli`. */
   readonly options?: readonly RecipientOption[]
   /** «Registra senza inviare» is offered next to the main button. */
@@ -37,11 +39,15 @@ export function submitControl(input: {
   inline: string | undefined
   busy: boolean
   label: string
+  /** Something to record: `isAnswerable` of the draft. «Altro giro» passes true, its note is the answer. */
+  chosen: boolean
 }): SubmitControl {
   const gate = submitGate(input.recipient)
-  if (gate === "invia") return { gate, label: input.label, disabled: input.busy, recordOnly: false }
+  const answerable = input.chosen
+  if (gate === "invia") return { gate, label: input.label, disabled: input.busy, answerable, recordOnly: false }
   return {
     gate,
+    answerable,
     label: t("design.submit.choose"),
     disabled: input.busy || !runningPick(input.sessions, input.inline),
     options: recipientOptions(input.sessions, input.recipient, input.inline ?? ""),
@@ -67,6 +73,7 @@ export function submitSteps(
   inline: string | undefined,
   press: "primary" | "record",
 ): SubmitStep[] {
+  if (!control.answerable) return []
   if (press === "record") return control.recordOnly ? [{ kind: "answer" }] : []
   if (control.disabled) return []
   if (control.gate === "invia") return [{ kind: "answer" }]

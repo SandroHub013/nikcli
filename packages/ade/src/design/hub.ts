@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js"
-import { againEvent, answerEvent, reopenEvent, sheetAnswerEvent, togglePick } from "./answer"
+import { againEvent, answerEvent, isAnswerable, reopenEvent, sheetAnswerEvent, togglePick } from "./answer"
 import { t } from "../i18n"
 import { runSubmit, submitControl, submitSteps } from "./card"
 // The same rule for both registers, written once (audit 0.7.7, MEDIO 7).
@@ -173,13 +173,20 @@ export function createDesignHub(deps: {
       )
     },
     submit: (proposal, press) => {
+      const current = draft(proposal.k)
       const control = submitControl({
         recipient: recipientFor(proposal.raisedFrom, deps.sessions(), deps.recipient()),
         sessions: deps.sessions(),
         inline: inline(),
         busy: busyKeys().has(proposal.k),
         label: "",
+        chosen: isAnswerable(current.picked, current.note),
       })
+      // Nothing chosen: nothing is written, and it says why (the buttons are off, Enter and a script reach here).
+      if (!control.answerable) {
+        setProblem(proposal.k, t("design.needChoice"))
+        return Promise.resolve(false)
+      }
       if (waitsForRecipient(control, deps.sessions(), inline(), press)) {
         setProblem(proposal.k, t("design.sheet.needRecipient"))
         return Promise.resolve(false)
@@ -203,6 +210,8 @@ export function createDesignHub(deps: {
         inline: inline(),
         busy: busyKeys().has(proposal.k),
         label: "",
+        // «Altro giro» has no pick: its note is what it sends.
+        chosen: true,
       })
       const steps = submitSteps(control, deps.sessions(), inline(), "primary")
       // Nobody would read it: not a silent write to the outbox (S75 point 1).

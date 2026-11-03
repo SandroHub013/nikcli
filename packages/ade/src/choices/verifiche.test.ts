@@ -187,6 +187,7 @@ describe("Verifiche, da-scegliere, 5: the head of the question on the cards", ()
           inline: undefined,
           busy: false,
           label: "Invia",
+          chosen: false,
         }),
       }),
     )
@@ -268,6 +269,7 @@ describe("Verifiche, da-scegliere, 5: the head of the question on the cards", ()
           inline: undefined,
           busy: false,
           label: "Invia",
+          chosen: false,
         }),
       }),
     )

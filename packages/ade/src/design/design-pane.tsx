@@ -1,7 +1,7 @@
 import { For, Show, createMemo, createSignal } from "solid-js"
 import { EmptyIcon } from "../ui/empty-icon"
 import { EmptyState } from "../ui/controls"
-import { designAnswerByline, formatDay, formatMoment } from "./answer"
+import { designAnswerByline, formatDay, formatMoment, isAnswerable } from "./answer"
 import { isUsersOwnAnswer } from "../decisions/answer"
 import { submitControl } from "./card"
 import { DesignCard } from "./design-card"
@@ -52,6 +52,7 @@ export function DesignPane(props: {
         inline: props.hub.inlineRecipient(),
         busy: props.hub.busy(proposal.k),
         label: t("design.submit"),
+        chosen: isAnswerable(props.hub.draft(proposal.k).picked, props.hub.draft(proposal.k).note),
       })}
       onInline={(id) => props.hub.setInlineRecipient(id)}
       onRecord={() => void props.hub.submit(proposal, "record")}

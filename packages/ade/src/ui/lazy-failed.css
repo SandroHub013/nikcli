@@ -1,0 +1,34 @@
+/*
+ * The box of a screen that did not load (`lazyComponent`).
+ *
+ * It stands where the pane or sheet would have been, and the pane's own header
+ * is inside the module that never arrived, so it has to be a box of its own: a
+ * frame, a heading, and the two ways out. `data-component` is what gives it a
+ * reading ground in glass, like any panel in a grid cell.
+ */
+[data-slot="lazy-failed"] {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--ade-space-4);
+  box-sizing: border-box;
+  max-width: 100%;
+  margin: var(--ade-space-4);
+  padding: var(--ade-space-5) var(--ade-space-6);
+  background: var(--ade-surface);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-lg);
+  color: var(--ade-text);
+}
+
+[data-slot="lazy-failed-title"] {
+  margin: 0;
+  font-size: var(--ade-font-lg);
+  font-weight: var(--ade-weight-semibold);
+}
+
+[data-slot="lazy-failed-actions"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ade-space-3);
+}
