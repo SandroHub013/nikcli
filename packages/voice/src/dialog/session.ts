@@ -93,7 +93,7 @@ export interface DialogState {
   /** `answerableAt`: out of the queue, a yes before it is said over the question (V1-ter, ALTO 4). */
   pendingSend?: { id: string; to: string; text: string; lead?: string; answerableAt?: number }
   /** A send that arrived while the dialogue was busy: promoted like a queued permission. */
-  queuedSend?: { id: string; to: string; text: string; lead?: string }
+  queuedSend?: { id: string; to: string; text: string; lead?: string; at?: number }
   /** Timestamp (epoch ms) when the current confirmation timer expires. */
   timeoutAt?: number
   /** Last spoken Italian phrase emitted by the system, for dialog.repeat. */
@@ -324,6 +324,9 @@ export function readingMs(text: string): number {
   return Math.min(12_000, Math.max(1_500, text.length * 60))
 }
 
+/** How long a `send` may wait in line behind another question before it is refused instead of asked (MOD-20). */
+export const QUEUED_SEND_MAX_MS = 10 * 60_000
+
 /** The question spoken for a voice-agent `send` waiting on a spoken yes (rilievo 20). */
 function sendConfirmationPrompt(to: string, text: string, lead?: string): string {
   if (!lead) return `La voce vuole inviare a «${to}»: «${text}». Confermi l'invio?`
@@ -338,6 +341,16 @@ function sendConfirmationPrompt(to: string, text: string, lead?: string): string
 function promoteQueuedSend(state: DialogState, now: number, effects: DialogEffect[]): TransitionResult | null {
   const req = state.queuedSend
   if (!req) return null
+
+  // A send that waited too long is not asked: a yes to a message the user forgot would send it (MOD-20).
+  if (now - (req.at ?? now) > QUEUED_SEND_MAX_MS) {
+    effects.push({ type: "confirm_send", id: req.id, approved: false })
+    return withSpokenLocal(
+      { ...state, queuedSend: undefined },
+      `Il messaggio per «${req.to}» è rimasto in coda troppo a lungo: non l'ho inviato.`,
+      effects,
+    )
+  }
 
   effects.push({ type: "cancel_timer" })
   const timeoutAt = now + DEFAULT_CONFIRMATION_TIMEOUT_MS
@@ -594,6 +607,7 @@ export function transition(
         to: event.to,
         text: event.text,
         lead: event.lead,
+        at: now,
       }
       return withSpokenLocal(
         { ...state, queuedSend },
