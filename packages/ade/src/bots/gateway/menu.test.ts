@@ -184,6 +184,34 @@ describe("the menu is put on the bot when its gateway is up", () => {
     expect(h.sets).toHaveLength(2)
   })
 
+  test("a gateway that reconnects while the menu is still being put is asked at once, and the old attempt failing does not delay it", async () => {
+    const h = harness([link()])
+    const attempts: { resolve: () => void; reject: (error: Error) => void }[] = []
+    const deps: MenuDeps = {
+      ...h.deps,
+      set: (bot, platform, commands) => {
+        h.sets.push({ bot, platform, commands })
+        return new Promise<void>((resolve, reject) => void attempts.push({ resolve, reject }))
+      },
+    }
+    await startMenuSync(deps)
+    await settle()
+    expect(h.sets).toHaveLength(1)
+    // The gateway drops and comes back while the first attempt has not answered: a new adapter, with no menu.
+    h.emit(link({ running: false, connected: false }))
+    h.emit(link())
+    await settle()
+    expect(h.sets).toHaveLength(2)
+    // The old attempt fails late: that is the old adapter's, and the new one is not made to wait a minute for it.
+    attempts[0]!.reject(new Error("rete"))
+    await settle()
+    attempts[1]!.resolve()
+    await settle()
+    h.emit(link())
+    await settle()
+    expect(h.sets).toHaveLength(2)
+  })
+
   test("stopping stops listening to both", async () => {
     const h = harness()
     const stop = await startMenuSync(h.deps)

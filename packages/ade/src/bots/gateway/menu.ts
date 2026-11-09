@@ -46,6 +46,8 @@ interface Known {
   given?: string
   /** The list being put now: a status heard meanwhile does not put it a second time. */
   inFlight?: string
+  /** Counts the times the gateway came up: an attempt that was made for an earlier adapter does not touch what is known now. */
+  epoch?: number
   /** A list that failed, and when the next status may try it again: a changed list is tried at once. */
   failed?: { key: string; retryAt: number }
 }
@@ -65,15 +67,18 @@ export async function startMenuSync(deps: MenuDeps): Promise<() => void> {
     // given only once the app took it, so a network that was down does not leave the bot without a menu until a restart.
     if (state.failed?.key === key && now() < state.failed.retryAt) return
     state.inFlight = key
+    const epoch = state.epoch
     try {
       await deps.set(bot, platform, list)
+      if (state.epoch !== epoch) return
       state.given = key
       delete state.failed
     } catch (error) {
-      state.failed = { key, retryAt: now() + RETRY_AFTER_MS }
       warn(`ADE: menu dei comandi non messo (${platform}): ${error instanceof Error ? error.message : String(error)}`)
+      if (state.epoch !== epoch) return
+      state.failed = { key, retryAt: now() + RETRY_AFTER_MS }
     } finally {
-      if (state.inFlight === key) delete state.inFlight
+      if (state.epoch === epoch && state.inFlight === key) delete state.inFlight
     }
   }
 
@@ -87,6 +92,9 @@ export async function startMenuSync(deps: MenuDeps): Promise<() => void> {
     if (ready && !state.ready) {
       delete state.given
       delete state.failed
+      // A list still being put went to the adapter that is gone: the new one is asked at once, not when that one answers.
+      delete state.inFlight
+      state.epoch = (state.epoch ?? 0) + 1
     }
     state.ready = ready
     void push(link.bot, link.platform, state)
