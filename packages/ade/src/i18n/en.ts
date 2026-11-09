@@ -820,6 +820,9 @@ export const en: Messages = {
   "tray.hide.keepSessions": "Hide, sessions go on",
   "tray.hide.closeSessions": "Close the sessions and hide",
   "tray.hide.cancel": "Cancel",
+  "tray.menu.open": "Open",
+  "tray.menu.quit": "Exit",
+  "tray.menu.hiddenNote": "chat connection on",
   "tray.hide.notice":
     "ADE stays in the notification area while a chat connection is on, so the chats still reach their bots. The microphone closes while the window is hidden. To bring it back: click the icon; to close ADE: Exit, in the icon's menu.",
   "bell.title": "Notifications",

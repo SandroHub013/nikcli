@@ -140,7 +140,7 @@ impl GraphicsCaptureApiHandler for Take {
     fn on_closed(&mut self) -> Result<(), Self::Error> {
         if let Some(encoder) = self.encoder.take() {
             if let Err(error) = encoder.finish() {
-                *self.problem.lock().unwrap() = Some(error.to_string());
+                *self.problem.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(error.to_string());
             }
         }
         Ok(())

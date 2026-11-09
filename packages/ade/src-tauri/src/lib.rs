@@ -2512,8 +2512,6 @@ fn follow_window_visibility(window: &tauri::WebviewWindow) {
         if applied.swap(state, Ordering::SeqCst) == state {
             return;
         }
-        // Off screen the page's timers are throttled, so the mail takes its pace from the native side.
-        mailbox::set_page_hidden(!on_screen);
         let result = target.with_webview(move |webview| unsafe {
             if let Err(error) = webview.controller().SetIsVisible(on_screen) {
                 eprintln!("ADE: visibilità della webview non cambiata: {error}");
@@ -2738,6 +2736,7 @@ pub fn run() {
             stats::system_stats,
             usage::transcript_usage,
             mailbox::mailbox_take,
+            mailbox::mailbox_taken,
             tts::tts_piper_status,
             tts::tts_piper_delete,
             tts::tts_piper_install,
@@ -2834,6 +2833,7 @@ pub fn run() {
             ade_cancel_close,
             ade_close_ack,
             tray::ade_tray_take,
+            tray::ade_tray_labels,
             tray::ade_hide_to_tray,
             write_clipboard,
             secrets::secret_list,
@@ -2878,6 +2878,8 @@ pub(crate) fn page_gone(app: &tauri::AppHandle) {
     app.state::<gateway::Gateway>().page_loading();
     // Nor the chat's streams to `ragu serve`: their channels are gone with the old page.
     app.state::<serve_proxy::Requests>().abort_all();
+    // And what was handed to it and never confirmed goes back, for the page that comes next.
+    mailbox::give_back_handed(app);
 }
 
 /// What ADE ends on its way out: on `RunEvent::Exit`, and before an update's installer takes over (`update.rs`), where
@@ -4180,6 +4182,193 @@ mod voice_chord_tests {
             let shortcut = Shortcut::from_str(registered).unwrap_or_else(|e| panic!("{registered}: {e}"));
             assert_eq!(shortcut.to_string(), reported, "{registered}");
         }
+    }
+
+    /// `text` with its comments, strings, raw strings and character literals blanked, and its lines kept: what is left is code.
+    fn code_only(text: &str) -> String {
+        let source: Vec<char> = text.chars().collect();
+        let len = source.len();
+        let mut out = source.clone();
+        let blank = |out: &mut Vec<char>, from: usize, to: usize| {
+            for cell in &mut out[from..to.min(len)] {
+                if *cell != '\n' {
+                    *cell = ' ';
+                }
+            }
+        };
+        let at = |i: usize| source.get(i).copied();
+        let mut i = 0;
+        while i < len {
+            if at(i) == Some('/') && at(i + 1) == Some('/') {
+                let end = (i..len).find(|&j| source[j] == '\n').unwrap_or(len);
+                blank(&mut out, i, end);
+                i = end;
+                continue;
+            }
+            if at(i) == Some('/') && at(i + 1) == Some('*') {
+                let (mut depth, mut j) = (1, i + 2);
+                while j < len && depth > 0 {
+                    if at(j) == Some('/') && at(j + 1) == Some('*') {
+                        depth += 1;
+                        j += 2;
+                    } else if at(j) == Some('*') && at(j + 1) == Some('/') {
+                        depth -= 1;
+                        j += 2;
+                    } else {
+                        j += 1;
+                    }
+                }
+                blank(&mut out, i, j);
+                i = j;
+                continue;
+            }
+            let word_start = i == 0 || !(source[i - 1].is_alphanumeric() || source[i - 1] == '_');
+            let raw = match at(i) {
+                Some('r') => Some(i + 1),
+                Some('b') if at(i + 1) == Some('r') => Some(i + 2),
+                _ => None,
+            };
+            if let Some(mut j) = raw.filter(|_| word_start) {
+                let mut hashes = 0;
+                while at(j) == Some('#') {
+                    hashes += 1;
+                    j += 1;
+                }
+                if at(j) == Some('"') {
+                    let mut k = j + 1;
+                    let close = loop {
+                        if k >= len {
+                            break len;
+                        }
+                        if source[k] == '"' && (0..hashes).all(|h| at(k + 1 + h) == Some('#')) {
+                            break k + 1 + hashes;
+                        }
+                        k += 1;
+                    };
+                    blank(&mut out, i, close);
+                    i = close;
+                    continue;
+                }
+            }
+            if at(i) == Some('"') {
+                let mut j = i + 1;
+                while j < len && source[j] != '"' {
+                    j += if source[j] == '\\' { 2 } else { 1 };
+                }
+                blank(&mut out, i, j + 1);
+                i = j + 1;
+                continue;
+            }
+            if at(i) == Some('\'') {
+                if at(i + 1) == Some('\\') {
+                    if let Some(end) = (i + 3..(i + 14).min(len)).find(|&j| source[j] == '\'') {
+                        blank(&mut out, i, end + 1);
+                        i = end + 1;
+                        continue;
+                    }
+                } else if at(i + 2) == Some('\'') && at(i + 1) != Some('\'') {
+                    blank(&mut out, i, i + 3);
+                    i += 3;
+                    continue;
+                }
+            }
+            i += 1;
+        }
+        out.into_iter().collect()
+    }
+
+    /// `code` with every item under `#[cfg(test)]` blanked, its braces counted: they are not all at the end of their file.
+    fn without_test_items(code: &str) -> String {
+        let mut chars: Vec<char> = code.chars().collect();
+        let marker: Vec<char> = "#[cfg(test)]".chars().collect();
+        let mut at = 0;
+        while at + marker.len() <= chars.len() {
+            if chars[at..at + marker.len()] != marker[..] {
+                at += 1;
+                continue;
+            }
+            let after = at + marker.len();
+            let open = chars[after..].iter().position(|c| *c == '{').map(|p| after + p);
+            let semicolon = chars[after..].iter().position(|c| *c == ';').map(|p| after + p);
+            let Some(open) = open else { break };
+            if semicolon.is_some_and(|s| s < open) {
+                at = after;
+                continue;
+            }
+            let (mut depth, mut end) = (0, chars.len());
+            for (k, c) in chars.iter().enumerate().skip(open) {
+                match c {
+                    '{' => depth += 1,
+                    '}' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            end = k + 1;
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            for cell in &mut chars[at..end] {
+                if *cell != '\n' {
+                    *cell = ' ';
+                }
+            }
+            at = end;
+        }
+        chars.into_iter().collect()
+    }
+
+    /// The lines, from 1, where production code in `text` unwraps a lock.
+    fn unwrapped_locks(text: &str) -> Vec<usize> {
+        let code = without_test_items(&code_only(text));
+        code.lines()
+            .enumerate()
+            .filter(|(_, line)| {
+                let tight: String = line.chars().filter(|c| !c.is_whitespace()).collect();
+                ["lock", "read", "write"]
+                    .iter()
+                    .any(|take| ["unwrap()", "expect("].iter().any(|end| tight.contains(&format!(".{take}().{end}"))))
+            })
+            .map(|(n, _)| n + 1)
+            .collect()
+    }
+
+    fn rust_files(dir: &std::path::Path, found: &mut Vec<std::path::PathBuf>) {
+        for entry in std::fs::read_dir(dir).expect("a folder of the crate").flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                rust_files(&path, found);
+            } else if path.extension().is_some_and(|ext| ext == "rs") {
+                found.push(path);
+            }
+        }
+    }
+
+    #[test]
+    fn no_lock_is_unwrapped_outside_the_tests() {
+        // The scan itself, on a sample: if it stopped seeing, the list below would be empty for nothing.
+        let sample = concat!(
+            "fn a() { m.lock().unwrap(); }\n",
+            "fn b() { m.read().expect(\"x\"); }\n",
+            "// m.lock().unwrap();\n",
+            "fn c() { let s = \"m.lock().unwrap()\"; let r = r#\"m.lock().unwrap()\"#; }\n",
+            "fn d() { m.lock().unwrap_or_else(|e| e.into_inner()); }\n",
+            "#[cfg(test)]\n",
+            "mod t { fn e() { let c = '}'; m.lock().unwrap(); } }\n",
+            "fn f() { m.write().unwrap(); }\n",
+        );
+        assert_eq!(unwrapped_locks(sample), vec![1, 2, 8]);
+
+        let mut files = Vec::new();
+        rust_files(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &mut files);
+        assert!(files.len() > 20, "the crate's sources were found: {}", files.len());
+        let mut sites = Vec::new();
+        for file in files {
+            let text = std::fs::read_to_string(&file).expect("a source file");
+            sites.extend(unwrapped_locks(&text).into_iter().map(|line| format!("{}:{line}", file.display())));
+        }
+        assert!(sites.is_empty(), "a poisoned lock must not take the thread with it, use `unwrap_or_else(|poisoned| poisoned.into_inner())`: {sites:#?}");
     }
 
     #[test]

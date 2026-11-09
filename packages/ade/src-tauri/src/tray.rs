@@ -49,6 +49,8 @@ pub struct Tray {
     count: AtomicU64,
     /// The window's name, the tray's tooltip while the window is on screen.
     title: Mutex<String>,
+    /// What the tooltip adds while the window is hidden, in the app's language; empty until the page says.
+    hidden_note: Mutex<String>,
 }
 
 impl Tray {
@@ -83,12 +85,21 @@ pub(crate) fn hides_on_close(gateway_on: bool, quitting: bool) -> bool {
 
 /// The tray's tooltip: the window's name, and while the window is hidden what
 /// keeps ADE open, since a tray icon is all there is to see.
-pub(crate) fn tray_tooltip(title: &str, hidden: bool) -> String {
+pub(crate) fn tray_tooltip(title: &str, hidden: bool, note: &str) -> String {
     if hidden {
-        format!("{title} · gateway acceso")
+        format!("{title} · {note}")
     } else {
         title.to_owned()
     }
+}
+
+/// The note before the page has said its language.
+const DEFAULT_HIDDEN_NOTE: &str = "collegamento chat acceso";
+const TRAY_LABEL_MAX: usize = 40;
+
+/// Whether a label the page sent can go in the menu: short, in characters, and one line.
+pub(crate) fn valid_tray_label(label: &str) -> bool {
+    !label.is_empty() && label.chars().count() <= TRAY_LABEL_MAX && !label.chars().any(char::is_control)
 }
 
 /// The tray's id: one per product, so ADE Test's is never the official one's.
@@ -108,8 +119,10 @@ pub(crate) fn single_instance(identifier: &str, asked: Option<&str>) -> bool {
 
 fn set_tooltip(app: &AppHandle, hidden: bool) {
     let title = app.state::<Tray>().title.lock().map(|title| title.clone()).unwrap_or_default();
+    let note = app.state::<Tray>().hidden_note.lock().map(|note| note.clone()).unwrap_or_default();
+    let note = if note.is_empty() { DEFAULT_HIDDEN_NOTE.to_owned() } else { note };
     if let Some(tray) = app.tray_by_id(&tray_id(&app.config().identifier)) {
-        let _ = tray.set_tooltip(Some(tray_tooltip(&title, hidden)));
+        let _ = tray.set_tooltip(Some(tray_tooltip(&title, hidden, &note)));
     }
 }
 
@@ -192,14 +205,38 @@ fn quit(app: &AppHandle) {
     }
 }
 
+fn tray_menu(app: &AppHandle, open: &str, quit: &str) -> tauri::Result<Menu<tauri::Wry>> {
+    let open = MenuItem::with_id(app, MENU_OPEN, open, true, None::<&str>)?;
+    let exit = MenuItem::with_id(app, MENU_QUIT, quit, true, None::<&str>)?;
+    Menu::with_items(app, &[&open, &exit])
+}
+
+/// What the tray says, in the app's language: from the page, which knows it. Until then, the Italian of `install`.
+///
+/// Sync on purpose: a sync command runs on the main thread, which building a menu needs.
+#[tauri::command]
+pub fn ade_tray_labels(app: AppHandle, open: String, quit: String, hidden: String) -> Result<(), String> {
+    if ![&open, &quit, &hidden].iter().all(|label| valid_tray_label(label)) {
+        return Err("etichetta del vassoio non valida".into());
+    }
+    let tray = app.tray_by_id(&tray_id(&app.config().identifier)).ok_or("vassoio non disponibile")?;
+    let menu = tray_menu(&app, &open, &quit).map_err(|e| e.to_string())?;
+    tray.set_menu(Some(menu)).map_err(|e| e.to_string())?;
+    if let Ok(mut note) = app.state::<Tray>().hidden_note.lock() {
+        *note = hidden;
+    }
+    let is_hidden =
+        app.get_webview_window("main").and_then(|window| window.is_visible().ok()).is_some_and(|visible| !visible);
+    set_tooltip(&app, is_hidden);
+    Ok(())
+}
+
 /// The tray icon, with its name as tooltip (`title`, the window's).
 pub(crate) fn install(app: &AppHandle, title: &str) -> tauri::Result<()> {
     if let Ok(mut kept) = app.state::<Tray>().title.lock() {
         *kept = title.to_owned();
     }
-    let open = MenuItem::with_id(app, MENU_OPEN, "Apri", true, None::<&str>)?;
-    let exit = MenuItem::with_id(app, MENU_QUIT, "Esci", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &exit])?;
+    let menu = tray_menu(app, "Apri", "Esci")?;
     let mut builder = TrayIconBuilder::with_id(tray_id(&app.config().identifier))
         .tooltip(title)
         .menu(&menu)
@@ -265,9 +302,18 @@ mod tests {
 
     #[test]
     fn the_tray_says_a_gateway_keeps_ade_open_only_while_hidden() {
-        assert_eq!(tray_tooltip("ADE", false), "ADE");
-        assert_eq!(tray_tooltip("ADE", true), "ADE · gateway acceso");
-        assert_eq!(tray_tooltip("ADE Test · lavoro-1", true), "ADE Test · lavoro-1 · gateway acceso");
+        assert_eq!(tray_tooltip("ADE", false, "chat connection on"), "ADE");
+        assert_eq!(tray_tooltip("ADE", true, "chat connection on"), "ADE · chat connection on");
+        assert_eq!(tray_tooltip("ADE Test · lavoro-1", true, "collegamento chat acceso"), "ADE Test · lavoro-1 · collegamento chat acceso");
+    }
+
+    #[test]
+    fn a_label_from_the_page_is_short_and_plain() {
+        assert!(valid_tray_label("Apri"));
+        assert!(valid_tray_label(&"é".repeat(40)), "characters, not bytes");
+        assert!(!valid_tray_label(""));
+        assert!(!valid_tray_label(&"a".repeat(41)));
+        assert!(!valid_tray_label("Apri\nEsci"));
     }
 
     /*

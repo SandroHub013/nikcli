@@ -87,7 +87,7 @@ describe("lint: the workbench writes the queue and reads it back", () => {
 
   test("written before any delivery starts and again when one ends, and nothing before it was read back", () => {
     // WB-6: the take deleted it from the outbox, so a crash during a long `close` must not lose what was told «in coda».
-    const taken = source.indexOf("mailQueue.push({ id, message, at: Date.now() })")
+    const taken = source.indexOf("mailQueue.push(...arrived)")
     const written = source.indexOf("persistMail()", taken)
     const started = source.indexOf("mailLanes.start(mailQueue)", taken)
     expect(taken).toBeGreaterThan(0)
@@ -106,6 +106,60 @@ describe("lint: the workbench writes the queue and reads it back", () => {
     expect(restored).toBeGreaterThan(layout)
     expect(source).toContain("è stato consegnato`")
     expect(source).toContain("si è chiusa prima di ricevere il messaggio")
+  })
+})
+
+describe("a message is confirmed only once the page has it on disk (RS2-5 B)", () => {
+  const source = workbenchSource()
+  const take = source.slice(source.indexOf("const takeMail = async ("), source.indexOf("const moveMail = async ("))
+
+  test("no take before the saved queue has been read back: a confirm then would lose what cannot be written yet", () => {
+    const gate = take.indexOf("if (!mailRestored) return")
+    expect(gate).toBeGreaterThan(-1)
+    expect(gate).toBeLessThan(take.indexOf("mailboxTake"))
+  })
+
+  test("every id taken is confirmed, only after a save that worked, and before any delivery starts", () => {
+    const saved = take.indexOf("idsToConfirm(persistMail(), taken, settled)")
+    const confirmed = take.indexOf("host.mailboxTaken?.(confirmed)")
+    const started = take.indexOf("mailLanes.start(mailQueue)")
+    expect(saved).toBeGreaterThan(-1)
+    expect(confirmed).toBeGreaterThan(saved)
+    expect(started).toBeGreaterThan(confirmed)
+  })
+
+  test("a held line counts as waiting for as long as it is being typed", () => {
+    const add = source.indexOf("if (typingId) heldBeingTyped.add(typingId)")
+    expect(add).toBeGreaterThan(-1)
+    expect(add).toBeLessThan(source.indexOf("deliverText(host, item.paneId, item.text, item.inbox, item.full)", add))
+    expect(source).toContain("if (typingId) heldBeingTyped.delete(typingId)")
+    expect(source).toContain("waitingIn(mailQueue, heldLines, heldBeingTyped)")
+  })
+
+  test("persistMail says whether it wrote", () => {
+    expect(source).toContain("return mailWriter.save(now, () => writeStored(QUEUE_KEY, queue) && saveSuspendedMail())")
+    expect(source).toContain("const persistMail = (): boolean => {")
+  })
+
+  test("a copy goes before anything is done with it, and what the saved queue held counts as taken", () => {
+    const copy = take.indexOf("takenMail.sort(taken, waitingHere)")
+    expect(copy).toBeGreaterThan(-1)
+    expect(copy).toBeLessThan(take.indexOf("splitSealed(body)"))
+    expect(source).toContain("takenMail.restored(item.id)")
+  })
+
+  test("a delivery that ended confirms its id too: with storage refusing, no save ever will", () => {
+    const done = source.indexOf("done: (item) => {")
+    expect(source.indexOf("confirmTaken(item.id)", done)).toBeGreaterThan(done)
+    expect(source.indexOf("confirmTaken(item.id)", done)).toBeLessThan(source.indexOf("hung: (item, afterMs)", done))
+    expect(source.slice(done)).toContain("if (mayConfirmEnded(persistMail(), waitingHere(item.id))) confirmTaken(item.id)")
+  })
+
+  test("the messages of one take join the queue together, after the last proof: a round cannot type the first before the save", () => {
+    const joined = take.indexOf("mailQueue.push(...arrived)")
+    expect(take).toContain("if (message) arrived.push({ id, message, at: Date.now() })")
+    expect(joined).toBeGreaterThan(take.lastIndexOf("await sealedBy("))
+    expect(joined).toBeLessThan(take.indexOf("idsToConfirm(persistMail(), taken, settled)"))
   })
 })
 

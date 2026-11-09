@@ -18,9 +18,11 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
+use tauri::Manager;
 
 #[derive(Serialize, Clone, Copy, Default, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -41,8 +43,14 @@ struct FileState {
     offset: u64,
     usage: Usage,
     seen: HashSet<String>,
+}
+
+/// A transcript in the cache: when it was last wanted, and what has been read of it.
+#[derive(Default)]
+struct Slot {
     /// The `Files::clock` of the last call that asked about this file.
     last_used: u64,
+    state: Arc<Mutex<FileState>>,
 }
 
 /*
@@ -62,7 +70,7 @@ const MAX_FILES: usize = 256;
 
 #[derive(Default)]
 struct Files {
-    by_path: HashMap<PathBuf, FileState>,
+    by_path: HashMap<PathBuf, Slot>,
     /// Ticks once per call; orders the files by when they were last wanted.
     clock: u64,
 }
@@ -71,14 +79,21 @@ struct Files {
 pub struct UsageCache {
     files: Mutex<Files>,
     codex_paths: Mutex<HashMap<String, PathBuf>>,
+    /// When each Codex session was last looked for and not found.
+    codex_misses: Mutex<HashMap<String, Instant>>,
 }
 
+/// How long a Codex session not found is not looked for again: the walk reads every folder of the sessions.
+const CODEX_MISS_TTL: Duration = Duration::from_secs(60);
+/// Past this many, the misses are forgotten: ids do not come back once their session is over.
+const CODEX_MISSES_MAX: usize = 1024;
+
 /// Lets go of the least recently wanted files until at most `cap` are left.
-fn evict_stale(files: &mut HashMap<PathBuf, FileState>, cap: usize) {
+fn evict_stale(files: &mut HashMap<PathBuf, Slot>, cap: usize) {
     while files.len() > cap {
         let Some(oldest) = files
             .iter()
-            .min_by_key(|(_, state)| state.last_used)
+            .min_by_key(|(_, slot)| slot.last_used)
             .map(|(path, _)| path.clone())
         else {
             return;
@@ -173,9 +188,8 @@ fn read_new(agent: &str, path: &Path, state: &mut FileState) -> Result<(), Strin
     let mut file = fs::File::open(path).map_err(|e| e.to_string())?;
     let len = file.metadata().map_err(|e| e.to_string())?.len();
     if len < state.offset {
-        // Rewritten or truncated: start over. Still the file this call wants,
-        // so it keeps its place in the eviction order.
-        *state = FileState { last_used: state.last_used, ..FileState::default() };
+        // Rewritten or truncated: start over.
+        *state = FileState::default();
     }
     if len == state.offset {
         return Ok(());
@@ -194,7 +208,7 @@ fn read_new(agent: &str, path: &Path, state: &mut FileState) -> Result<(), Strin
 /// The usage of one session so far, or `None` when its transcript is not found.
 #[tauri::command]
 pub async fn transcript_usage(
-    cache: tauri::State<'_, UsageCache>,
+    app: tauri::AppHandle,
     agent: String,
     session_id: String,
     cwd: String,
@@ -203,24 +217,55 @@ pub async fn transcript_usage(
         return Err("id sessione non valido".into());
     }
     let home = home().ok_or("cartella utente non trovata")?;
-    let path = match agent.as_str() {
+    tauri::async_runtime::spawn_blocking(move || {
+        let cache = app.state::<UsageCache>();
+        usage_now(&cache, &home, &agent, &session_id, &cwd, Instant::now())
+    })
+    .await
+    .map_err(|e| format!("lettura dei consumi interrotta: {e}"))?
+}
+
+/// What `transcript_usage` answers, off the async workers: transcripts grow to megabytes.
+fn usage_now(
+    cache: &UsageCache,
+    home: &Path,
+    agent: &str,
+    session_id: &str,
+    cwd: &str,
+    now: Instant,
+) -> Result<Option<Usage>, String> {
+    let path = match agent {
         "claude-code" => {
-            let Some(folder) = claude_folder(&cwd) else { return Ok(None) };
+            let Some(folder) = claude_folder(cwd) else { return Ok(None) };
             home.join(".claude").join("projects").join(folder).join(format!("{session_id}.jsonl"))
         }
         "codex" => {
-            let known = cache.codex_paths.lock().map_err(|_| "cache bloccata")?.get(&session_id).cloned();
+            let known = cache.codex_paths.lock().map_err(|_| "cache bloccata")?.get(session_id).cloned();
             match known.filter(|p| p.is_file()) {
                 Some(path) => path,
                 None => {
-                    let Some(found) = find_codex(&home.join(".codex").join("sessions"), &session_id, 3) else {
+                    let missed = cache
+                        .codex_misses
+                        .lock()
+                        .map_err(|_| "cache bloccata")?
+                        .get(session_id)
+                        .is_some_and(|at| now.saturating_duration_since(*at) < CODEX_MISS_TTL);
+                    if missed {
+                        return Ok(None);
+                    }
+                    let Some(found) = find_codex(&home.join(".codex").join("sessions"), session_id, 3) else {
+                        let mut misses = cache.codex_misses.lock().map_err(|_| "cache bloccata")?;
+                        if misses.len() >= CODEX_MISSES_MAX {
+                            misses.clear();
+                        }
+                        misses.insert(session_id.to_string(), now);
                         return Ok(None);
                     };
                     cache
                         .codex_paths
                         .lock()
                         .map_err(|_| "cache bloccata")?
-                        .insert(session_id.clone(), found.clone());
+                        .insert(session_id.to_string(), found.clone());
                     found
                 }
             }
@@ -230,18 +275,23 @@ pub async fn transcript_usage(
     if !path.is_file() {
         return Ok(None);
     }
-    let mut files = cache.files.lock().map_err(|_| "cache bloccata")?;
-    let files = &mut *files;
-    files.clock += 1;
-    let clock = files.clock;
-    // Before the lookup, and with room for it: the file this call is about
-    // has not been stamped yet, so it must not be counted against the cap.
-    if !files.by_path.contains_key(&path) {
-        evict_stale(&mut files.by_path, MAX_FILES - 1);
-    }
-    let state = files.by_path.entry(path.clone()).or_default();
-    state.last_used = clock;
-    read_new(&agent, &path, state)?;
+    // The map only to find the file: a read of megabytes holds its own transcript, and no other.
+    let slot = {
+        let mut files = cache.files.lock().map_err(|_| "cache bloccata")?;
+        let files = &mut *files;
+        files.clock += 1;
+        let clock = files.clock;
+        // Before the lookup, and with room for it: the file this call is about
+        // has not been stamped yet, so it must not be counted against the cap.
+        if !files.by_path.contains_key(&path) {
+            evict_stale(&mut files.by_path, MAX_FILES - 1);
+        }
+        let slot = files.by_path.entry(path.clone()).or_default();
+        slot.last_used = clock;
+        slot.state.clone()
+    };
+    let mut state = slot.lock().map_err(|_| "cache bloccata")?;
+    read_new(agent, &path, &mut state)?;
     Ok(Some(state.usage))
 }
 
@@ -302,8 +352,8 @@ mod tests {
 
     #[test]
     fn the_files_let_go_are_the_ones_nobody_asked_about_lately() {
-        let mut files: HashMap<PathBuf, FileState> = (0..5)
-            .map(|n| (PathBuf::from(format!("{n}.jsonl")), FileState { last_used: n, ..FileState::default() }))
+        let mut files: HashMap<PathBuf, Slot> = (0..5)
+            .map(|n| (PathBuf::from(format!("{n}.jsonl")), Slot { last_used: n, ..Slot::default() }))
             .collect();
         // Asked about again just now, so the oldest by position is not the oldest by use.
         files.get_mut(Path::new("0.jsonl")).unwrap().last_used = 10;
@@ -317,10 +367,75 @@ mod tests {
 
     #[test]
     fn a_cache_within_its_cap_is_left_alone() {
-        let mut files: HashMap<PathBuf, FileState> =
-            (0..3).map(|n| (PathBuf::from(format!("{n}.jsonl")), FileState::default())).collect();
+        let mut files: HashMap<PathBuf, Slot> =
+            (0..3).map(|n| (PathBuf::from(format!("{n}.jsonl")), Slot::default())).collect();
         evict_stale(&mut files, 3);
         assert_eq!(files.len(), 3);
+    }
+
+    fn home_of_test(tag: &str) -> PathBuf {
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join("test-tmp")
+            .join(format!("usage-{tag}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn a_codex_session_not_found_is_not_walked_again_for_a_minute() {
+        use std::time::Duration;
+        let home = home_of_test("codex-miss");
+        let cache = UsageCache::default();
+        let id = "01a0a0fa-d7cb-7571-8836-4606f8b4eb68";
+        let now = Instant::now();
+        assert_eq!(usage_now(&cache, &home, "codex", id, "", now).unwrap(), None);
+
+        let day = home.join(".codex").join("sessions").join("2026").join("11").join("09");
+        fs::create_dir_all(&day).unwrap();
+        fs::write(day.join(format!("rollout-2026-11-09-{id}.jsonl")), "").unwrap();
+
+        assert_eq!(usage_now(&cache, &home, "codex", id, "", now + Duration::from_secs(30)).unwrap(), None, "not walked again yet");
+        assert!(usage_now(&cache, &home, "codex", id, "", now + Duration::from_secs(61)).unwrap().is_some());
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn one_long_read_does_not_hold_the_other_transcripts() {
+        use std::time::Duration;
+        let home = home_of_test("one-read");
+        let folder = claude_folder("C:\\w").unwrap();
+        let dir = home.join(".claude").join("projects").join(folder);
+        fs::create_dir_all(&dir).unwrap();
+        let (a, b) = ("aaaaaaaa-0000", "bbbbbbbb-0000");
+        fs::write(dir.join(format!("{a}.jsonl")), "").unwrap();
+        fs::write(dir.join(format!("{b}.jsonl")), "").unwrap();
+        let cache = Arc::new(UsageCache::default());
+        let now = Instant::now();
+        assert!(usage_now(&cache, &home, "claude-code", a, "C:\\w", now).unwrap().is_some());
+
+        // A's read, still going: its lock held here, and a call for A waiting on it.
+        let slot = cache.files.lock().unwrap().by_path.get(&dir.join(format!("{a}.jsonl"))).unwrap().state.clone();
+        let held = slot.lock().unwrap();
+        let waiting = {
+            let (cache, home) = (cache.clone(), home.clone());
+            std::thread::spawn(move || usage_now(&cache, &home, "claude-code", a, "C:\\w", now))
+        };
+        std::thread::sleep(Duration::from_millis(100));
+
+        let (sent, got) = std::sync::mpsc::channel();
+        {
+            let (cache, home) = (cache.clone(), home.clone());
+            std::thread::spawn(move || {
+                let _ = sent.send(usage_now(&cache, &home, "claude-code", b, "C:\\w", now));
+            });
+        }
+        let other = got.recv_timeout(Duration::from_secs(1));
+        drop(held);
+        waiting.join().unwrap().unwrap();
+        assert!(other.is_ok(), "the other transcript waited behind this one");
+        let _ = fs::remove_dir_all(&home);
     }
 
     #[test]

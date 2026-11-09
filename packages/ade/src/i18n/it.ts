@@ -837,6 +837,9 @@ export const it = {
   "tray.hide.keepSessions": "Nascondi, le sessioni continuano",
   "tray.hide.closeSessions": "Chiudi le sessioni e nascondi",
   "tray.hide.cancel": "Annulla",
+  "tray.menu.open": "Apri",
+  "tray.menu.quit": "Esci",
+  "tray.menu.hiddenNote": "collegamento chat acceso",
   "tray.hide.notice":
     "ADE resta nell'area di notifica finché un collegamento chat è acceso, così le chat continuano a raggiungere i bot. Il microfono si chiude finché la finestra è nascosta. Per riaprirla: clic sull'icona; per chiudere ADE: Esci, nel menu dell'icona.",
   "bell.title": "Notifiche",

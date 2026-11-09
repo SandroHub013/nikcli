@@ -30,6 +30,7 @@ import {
   isWorkingAgentPane,
 } from "./before-unload"
 import { hideButtons, hideChoice, markTrayNoticed, planHide, trayNoticed } from "./tray-hide"
+import { trayLabels } from "./tray-labels"
 import { RAGU_VERSION_EVERY_MS, parseRaguVersion } from "../host/ragu-version"
 import {
   agentMissing,
@@ -301,6 +302,7 @@ import type { Runner } from "../bots/runners"
 import { senderToken } from "../session/senders"
 import { followInboxRound, inboxEntriesOf, rearmInbox } from "../session/mail-inbox"
 import { bodyHash, firstTime, resealUnread, sealedBy, splitSealed, useMailKeys } from "../session/mail-seal"
+import { createTakenMail, idsToConfirm, mayConfirmEnded, waitingIn } from "../session/mail-taken"
 import { createActivityReads, type ActivityReads } from "../session/activity-reads"
 import { boardCandidates, parseOwners, whoOwns } from "../session/owners"
 import { mayReroute, pickProvider, setProviderPicker } from "../session/provider-pick"
@@ -509,6 +511,7 @@ import {
   clientStoppedReading,
   createMailLanes,
   createMailRound,
+  pulseRuns,
   dropFrom,
   hangNotice,
   lockCameTooLate,
@@ -3343,11 +3346,12 @@ export function Workbench() {
   const replayedMail = new Set<string>()
   // Nothing is written until what was saved has been read back: an empty queue at boot must not erase it.
   let mailRestored = false
-  const persistMail = () => {
-    if (!mailRestored) return
+  /** Whether the queue is on disk now: what the native side was told to let go depends on it (`takeMail`). */
+  const persistMail = (): boolean => {
+    if (!mailRestored) return false
     const queue = queueToSave(mailQueue)
     const now = JSON.stringify([queue, suspendedMailToSave(heldLines, paneExists)])
-    mailWriter.save(now, () => writeStored(QUEUE_KEY, queue) && saveSuspendedMail())
+    return mailWriter.save(now, () => writeStored(QUEUE_KEY, queue) && saveSuspendedMail())
   }
   /**
    * The held mail back, once the panes are: the messages go on waiting for a free session, and a sender is told
@@ -3359,6 +3363,8 @@ export function Workbench() {
       // Its sender was told «in coda» before the restart: the outcome is reported where it listens now (`deliverOne`).
       held.add(item.id)
       replayedMail.add(item.id)
+      // The native side gives back what the old page had not confirmed: this is that message.
+      takenMail.restored(item.id)
       rememberMailSender(item.id, item.message.from)
       mailQueue.push(item)
     }
@@ -3878,6 +3884,16 @@ export function Workbench() {
   }
   /** The ids of the messages taken lately: a copy of one posted again is not carried out twice (`firstTime`). */
   const mailSeen = new Map<string, number>()
+  /** What the page has had from the outbox: a message handed over again is not carried out twice (`session/mail-taken.ts`). */
+  const takenMail = createTakenMail()
+  /** A message that has ended is confirmed by that: with storage refusing the queue, no save ever would. */
+  const confirmTaken = (id: string) =>
+    void getHost()
+      .then((host) => host?.mailboxTaken?.([id]))
+      .catch(() => {})
+  /** The held lines being typed: out of `heldLines` for the moment, and back there if a prompt holds them. */
+  const heldBeingTyped = new Set<string>()
+  const waitingHere = waitingIn(mailQueue, heldLines, heldBeingTyped)
   // The asker first: a message's id is the sender's to choose, and one posted with the id of an open request must not get its answer.
   const paneOfMail = (id: string) =>
     openRequests.get(id)?.from || mailSenders.get(id) || designWaiters().find((waiter) => waiter.id === id)?.from
@@ -4289,17 +4305,21 @@ export function Workbench() {
       voiceSendDecisions.delete(item.id)
       voiceSendRequested.delete(item.id)
       dropFrom(mailQueue, item)
-      persistMail()
+      // A line held for a suspended session has been told «in coda» and exists only here if the save failed: its copy stays until it leaves.
+      // One case is accepted, with nowhere durable to note it: storage refusing, the message typed, and a reload before it is confirmed types it again.
+      if (mayConfirmEnded(persistMail(), waitingHere(item.id))) confirmTaken(item.id)
     },
     hung: (item, afterMs) => {
       voiceSendDecisions.delete(item.id)
       voiceSendRequested.delete(item.id)
       giveUpOnMail(item, hungReceipt(item.message.kind, item.id, afterMs))
+      confirmTaken(item.id)
     },
     failed: (item, error) => {
       voiceSendDecisions.delete(item.id)
       voiceSendRequested.delete(item.id)
       giveUpOnMail(item, failedReceipt(error))
+      confirmTaken(item.id)
     },
   })
 
@@ -4324,9 +4344,14 @@ export function Workbench() {
 
   /** What came in: out of the outbox, on disk, and started, before anything else is awaited. */
   const takeMail = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>) => {
+    // Before the saved queue is read back nothing can be written, and a message confirmed then would be lost.
+    if (!mailRestored) return
     const taken = (await host.mailboxTake?.().catch(() => [])) ?? []
     if (taken.length === 0) return
-    for (const { id, body } of taken) {
+    const { fresh, settled } = takenMail.sort(taken, waitingHere)
+    // Into the queue together, after the last proof: during those awaits a round could start the lanes and type a message not yet saved.
+    const arrived: typeof mailQueue = []
+    for (const { id, body } of fresh) {
       const sealed = splitSealed(body)
       if (!sealed) {
         void host.mailboxReceipt?.(id, UNSEALED_MAIL).catch(() => {})
@@ -4347,11 +4372,15 @@ export function Workbench() {
       }
       const parsed = parseMessage(sealed.body)
       const message = parsed && verifySender(parsed, proven)
-      if (message) mailQueue.push({ id, message, at: Date.now() })
+      if (message) arrived.push({ id, message, at: Date.now() })
       else void host.mailboxReceipt?.(id, "errore: messaggio non valido").catch(() => {})
     }
-    // The take deleted them from the outbox: this is now the only copy, and a crash must not lose what was told «in coda».
-    persistMail()
+    mailQueue.push(...arrived)
+    // The native side has kept them until it hears this: every one, the refused and the copies too, or they come back in 30 s.
+    // Only with them saved, or a crash loses what was told «in coda», and before any delivery: what has run must not come back.
+    // Saved means `send` and `ask` (`queueToSave`): the other kinds are lost if the page goes first, as a `spawn` run twice would be worse.
+    const confirmed = idsToConfirm(persistMail(), taken, settled)
+    if (confirmed.length > 0) await host.mailboxTaken?.(confirmed).catch(() => {})
     mailLanes.start(mailQueue)
   }
 
@@ -4416,6 +4445,8 @@ export function Workbench() {
         if (!dropFrom(heldLines, item)) continue
         if (item.suspended) saveSuspendedMail()
         dropHeldByMenu(item.paneId)
+        const typingId = item.inbox?.id
+        if (typingId) heldBeingTyped.add(typingId)
         // Not typed while the session is still there (a prompt opened): back among the held lines.
         void (
           item.inbox
@@ -4434,11 +4465,15 @@ export function Workbench() {
             : typeLineOutcome(session, item.text, { mail: true }).then(
                 (outcome) => deliveryResult(outcome, running.get(item.paneId) === session) === "held",
               )
-        ).then((again) => {
-          if (!again) return
-          heldLines.push(item)
-          if (item.suspended) saveSuspendedMail()
-        })
+        )
+          .then((again) => {
+            if (!again) return
+            heldLines.push(item)
+            if (item.suspended) saveSuspendedMail()
+          })
+          .finally(() => {
+            if (typingId) heldBeingTyped.delete(typingId)
+          })
       } else {
         if (!item.notice) noteMailHeld(item.paneId, item.inbox?.from)
         if (
@@ -6202,6 +6237,14 @@ export function Workbench() {
     }
   }
 
+  // The tray's words, from the first render and again at every change of language: `t()` reads the locale.
+  createEffect(() => {
+    const labels = trayLabels()
+    void getHost()
+      .then((h) => h?.setTrayLabels?.(labels))
+      .catch(() => {})
+  })
+
   onMount(() => {
     /*
      * Mail has to keep moving while ADE is minimised — agents message each
@@ -6213,8 +6256,9 @@ export function Workbench() {
      * A page timer alone cannot keep that pace: hidden for more than 5 minutes,
      * Chromium wakes a chained timer once a minute, and every `ade-msg kv` times
      * out at 10 s. So the native side signals too, when mail reaches the outbox
-     * and about once a second while the window is hidden (`watch_outbox` in
-     * `mailbox.rs`). This timer stays as the fallback.
+     * and about once a second (`watch_outbox` in `mailbox.rs`). Only here is it
+     * known whether another window covers this one: a visible page drops the
+     * pulse (`pulseRuns`). This timer stays as the fallback.
      */
     onCleanup(every(700, () => mailRound(false), { whenHidden: 700 }))
     let stopMailSignal: (() => void) | undefined
@@ -6224,7 +6268,11 @@ export function Workbench() {
       stopMailSignal?.()
     })
     void getHost()
-      .then((host) => host?.onMailboxPending?.(mailRound))
+      .then((host) =>
+        host?.onMailboxPending?.((waiting) => {
+          if (pulseRuns(waiting, pageHidden())) mailRound(waiting)
+        }),
+      )
       .then((stop) => {
         if (mailSignalGone) stop?.()
         else stopMailSignal = stop

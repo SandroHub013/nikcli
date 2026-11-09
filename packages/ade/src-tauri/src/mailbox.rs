@@ -30,7 +30,6 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant, SystemTime};
 
 use serde::Serialize;
@@ -98,7 +97,7 @@ pub fn bin_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
 
 /// Writes the `ade-msg` scripts and clears old leftovers. Called at startup.
 ///
-/// Rewritten every launch rather than only when missing, so a session always
+/// Checked every launch rather than only when missing, so a session always
 /// runs the version that matches the ADE that will read its messages.
 pub fn install(app: &tauri::AppHandle) {
     let Some(dir) = mailbox_path(app) else { return };
@@ -109,9 +108,11 @@ pub fn install(app: &tauri::AppHandle) {
     for name in PUBLISHED {
         let _ = fs::remove_file(dir.join(format!("{name}.txt")));
     }
-    let _ = fs::write(bin.join("ade-msg.ps1"), PS1);
-    let _ = fs::write(bin.join("ade-msg.cmd"), CMD);
-    let _ = fs::write(bin.join("ade-msg"), SH);
+    for (name, text) in [("ade-msg.ps1", PS1), ("ade-msg.cmd", CMD), ("ade-msg", SH)] {
+        if let Err(error) = put_script(&bin, name, text) {
+            eprintln!("ADE: {name} non aggiornato: {error}");
+        }
+    }
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -152,29 +153,21 @@ const WATCH_EVERY: Duration = Duration::from_millis(200);
 /// The least time between two signals, unless new mail has just appeared.
 const SIGNAL_GAP: Duration = Duration::from_secs(1);
 
-/// Whether WebView2 was told the window is off screen (`follow_window_visibility`).
-static PAGE_HIDDEN: AtomicBool = AtomicBool::new(false);
-
-#[cfg(windows)]
-pub fn set_page_hidden(hidden: bool) {
-    PAGE_HIDDEN.store(hidden, Ordering::Relaxed);
-}
-
 fn outbox_has_mail(outbox: &Path) -> bool {
     fs::read_dir(outbox).is_ok_and(|mut entries| {
         entries.any(|entry| entry.is_ok_and(|entry| entry.path().extension().is_some_and(|ext| ext == "json")))
     })
 }
 
-/// Whether to signal the page now, and with what: `true` for mail in the outbox, `false` for a hidden page's pulse.
-fn pending_signal(mail: bool, mail_before: bool, hidden: bool, since_last: Duration) -> Option<bool> {
+/// Whether to signal the page now, and with what: `true` for mail in the outbox, `false` for the pulse a second.
+///
+/// The pulse goes out whatever the window looks like, and the page drops it while it is visible (`pulseRuns`). Only the
+/// page can tell a window that another one covers: it was left on a timer Chromium had slowed to one a minute.
+fn pending_signal(mail: bool, mail_before: bool, since_last: Duration) -> Option<bool> {
     if mail && (!mail_before || since_last >= SIGNAL_GAP) {
         return Some(true);
     }
-    if hidden && since_last >= SIGNAL_GAP {
-        return Some(false);
-    }
-    None
+    (since_last >= SIGNAL_GAP).then_some(false)
 }
 
 /// Tells the page when to run its mail round, from a thread no page throttling can reach.
@@ -195,7 +188,7 @@ pub fn watch_outbox(app: tauri::AppHandle) {
         loop {
             std::thread::sleep(WATCH_EVERY);
             let mail = outbox_has_mail(&outbox);
-            if let Some(waiting) = pending_signal(mail, mail_before, PAGE_HIDDEN.load(Ordering::Relaxed), last.elapsed()) {
+            if let Some(waiting) = pending_signal(mail, mail_before, last.elapsed()) {
                 let _ = app.emit(PENDING_EVENT, waiting);
                 last = Instant::now();
             }
@@ -212,11 +205,36 @@ fn valid_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 80 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
+/// Puts a script in the folder, whole, and only if it changed: whether it did. A session may be running it.
+fn put_script(dir: &Path, name: &str, text: &str) -> Result<bool, String> {
+    if fs::read(dir.join(name)).is_ok_and(|now| now == text.as_bytes()) {
+        return Ok(false);
+    }
+    write_whole(dir.to_path_buf(), name, text)?;
+    Ok(true)
+}
+
+/// How many times more a replace is tried, and how far apart: a reader or a scanner holds a file for milliseconds.
+const REPLACE_RETRIES: usize = 4;
+const REPLACE_RETRY_GAP: Duration = Duration::from_millis(20);
+
 /// Writes `dir/<name>` whole: a reader polling for the final name never sees half of it.
 fn write_whole(dir: PathBuf, name: &str, text: &str) -> Result<(), String> {
     let part = dir.join(format!("{name}.part"));
     fs::write(&part, text).map_err(|e| format!("scrittura fallita: {e}"))?;
-    fs::rename(&part, dir.join(name)).map_err(|e| format!("scrittura fallita: {e}"))
+    let target = dir.join(name);
+    let mut replaced = fs::rename(&part, &target);
+    for _ in 0..REPLACE_RETRIES {
+        if replaced.is_ok() {
+            break;
+        }
+        std::thread::sleep(REPLACE_RETRY_GAP);
+        replaced = fs::rename(&part, &target);
+    }
+    replaced.map_err(|e| {
+        let _ = fs::remove_file(&part);
+        format!("scrittura fallita: {e}")
+    })
 }
 
 #[derive(Serialize)]
@@ -230,12 +248,27 @@ pub struct Outgoing {
 ///
 /// Only `*.json`: the scripts write `*.part` and rename, so a file with the
 /// final name is always whole. Each one is claimed by a rename before it is
-/// read, and removed once read, which is what makes a message delivered at
-/// most once; a read that failed for a passing reason leaves it for the next pass.
+/// read, and removed once the page says it holds it (`mailbox_taken`); a read
+/// that failed for a passing reason leaves it for the next pass.
 #[tauri::command]
 pub async fn mailbox_take(app: tauri::AppHandle) -> Result<Vec<Outgoing>, String> {
     let dir = mailbox_path(&app).ok_or("casella non disponibile")?;
-    take_outbox(&dir.join("outbox"), &dir.join("receipts"))
+    take_outbox(&dir.join("outbox"), &dir.join("receipts"), Instant::now())
+}
+
+/// The page's word: it holds these messages on disk, and they can go.
+#[tauri::command]
+pub async fn mailbox_taken(app: tauri::AppHandle, ids: Vec<String>) -> Result<(), String> {
+    let dir = mailbox_path(&app).ok_or("casella non disponibile")?;
+    confirm_taken(&dir.join("outbox"), &ids);
+    Ok(())
+}
+
+/// A page has gone, with what it was handed and had not confirmed: the next one gets it.
+pub fn give_back_handed(app: &tauri::AppHandle) {
+    if let Some(dir) = mailbox_path(app) {
+        give_back_all(&dir.join("outbox"));
+    }
 }
 
 /// The outbox read, and a receipt for every message refused for its size.
@@ -261,6 +294,56 @@ fn undeleted() -> std::sync::MutexGuard<'static, std::collections::HashSet<Strin
     SET.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner())
 }
 
+/// How far a claimed message has got, for as long as its `.taking` stands in this process.
+#[derive(Clone, Copy)]
+enum Claim {
+    /// A take has claimed it and has not finished with it.
+    Reading,
+    /// Read and returned to the page, at this moment; the page has not said it holds it yet.
+    Handed(Instant),
+}
+
+/// The claims of this process. One map for every take, as `undeleted`, so that two takes at once know of each other.
+fn claims() -> std::sync::MutexGuard<'static, std::collections::HashMap<String, Claim>> {
+    static MAP: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, Claim>>> = std::sync::OnceLock::new();
+    MAP.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// How long a message handed to the page may wait for the page's word before it goes back in the outbox.
+const UNCONFIRMED_AFTER: Duration = Duration::from_secs(30);
+
+/// Deletes what the page says it now holds, and only what was handed to it.
+fn confirm_taken(outbox: &Path, ids: &[String]) {
+    for id in ids {
+        if !valid_id(id) {
+            continue;
+        }
+        let handed = matches!(claims().get(id), Some(Claim::Handed(_)));
+        if handed {
+            finish_claim(&outbox.join(format!("{id}.taking")), id);
+            claims().remove(id);
+        }
+    }
+}
+
+/// Every message handed to a page that never confirmed it, back in the outbox.
+fn give_back_all(outbox: &Path) {
+    let Ok(entries) = fs::read_dir(outbox) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("taking") {
+            continue;
+        }
+        let Some(id) = path.file_stem().and_then(|s| s.to_str()).map(str::to_string) else {
+            continue;
+        };
+        let handed = matches!(claims().get(&id), Some(Claim::Handed(_)));
+        if handed && fs::rename(&path, path.with_extension("json")).is_ok() {
+            claims().remove(&id);
+        }
+    }
+}
+
 /// Deletes a claim that has been dealt with; if that fails, remembers it so it is never delivered again.
 fn finish_claim(claim: &std::path::Path, id: &str) {
     if fs::remove_file(claim).is_err() {
@@ -275,7 +358,12 @@ fn finish_claim(claim: &std::path::Path, id: &str) {
 /// That is what lets a failed delete leave a harmless file instead of a message
 /// delivered twice, and a transient read error leave the message for the next
 /// pass instead of being answered as if it were damaged (RS-10).
-fn take_outbox(outbox: &std::path::Path, receipts: &std::path::Path) -> Result<Vec<Outgoing>, String> {
+///
+/// A message read stays as its `.taking` until the page says it has it
+/// (`mailbox_taken`): one taken by a page that then went was lost. It comes back
+/// if that word does not come, at the next page load or after `UNCONFIRMED_AFTER`,
+/// and the page knows a copy when it sees one (`session/mail-taken.ts`).
+fn take_outbox(outbox: &std::path::Path, receipts: &std::path::Path, now: Instant) -> Result<Vec<Outgoing>, String> {
     let mut out = Vec::new();
     // What this call claimed itself: a claim given back must not be taken twice in the same pass.
     let mut claimed_here = std::collections::HashSet::new();
@@ -291,6 +379,20 @@ fn take_outbox(outbox: &std::path::Path, receipts: &std::path::Path) -> Result<V
                 };
                 if claimed_here.contains(&id) {
                     continue;
+                }
+                // Its own statement: the guard must be gone before the arms take it again.
+                let state = claims().get(&id).copied();
+                match state {
+                    // Another take is reading it: what becomes of it is decided there, and a rename now would pull it from under that read.
+                    Some(Claim::Reading) => continue,
+                    Some(Claim::Handed(at)) if now.saturating_duration_since(at) < UNCONFIRMED_AFTER => continue,
+                    Some(Claim::Handed(_)) => {
+                        if fs::rename(&path, path.with_extension("json")).is_ok() {
+                            claims().remove(&id);
+                        }
+                        continue;
+                    }
+                    None => {}
                 }
                 if !valid_id(&id) || undeleted().contains(&id) {
                     if fs::remove_file(&path).is_ok() {
@@ -316,13 +418,23 @@ fn take_outbox(outbox: &std::path::Path, receipts: &std::path::Path) -> Result<V
         }
         // Held open by a scanner or the indexer: it is still there, so the next pass takes it.
         let claim = path.with_extension("taking");
+        // Before the rename: a take that finds the `.taking` must already know it is being read.
+        {
+            let mut map = claims();
+            if map.contains_key(&id) {
+                continue;
+            }
+            map.insert(id.clone(), Claim::Reading);
+        }
         if fs::rename(&path, &claim).is_err() {
+            claims().remove(&id);
             continue;
         }
         claimed_here.insert(id.clone());
         // Nothing below deletes the message unless it has been read, or can never be.
         let give_back = || {
             let _ = fs::rename(&claim, &path);
+            claims().remove(&id);
         };
         let Ok(meta) = fs::metadata(&claim) else {
             give_back();
@@ -332,18 +444,20 @@ fn take_outbox(outbox: &std::path::Path, receipts: &std::path::Path) -> Result<V
             let said = too_big_receipt(meta.len());
             let _ = write_whole(receipts.to_path_buf(), &format!("{id}.txt"), &said);
             finish_claim(&claim, &id);
+            claims().remove(&id);
             continue;
         }
         match fs::read_to_string(&claim) {
             Ok(body) => {
-                // If the delete fails the claim stays, and is not a `.json`: the message is not delivered again.
-                finish_claim(&claim, &id);
-                out.push(Outgoing { id, body });
+                // Not deleted: that waits for the page's word, once it holds the message.
+                claims().insert(id.clone(), Claim::Handed(now));
+                out.push(Outgoing { id: id.clone(), body });
             }
             // Bytes that are not UTF-8 will never be: the sender is told. Any other error may pass.
             Err(e) if e.kind() == std::io::ErrorKind::InvalidData => {
                 let _ = write_whole(receipts.to_path_buf(), &format!("{id}.txt"), "errore: messaggio non leggibile (non è UTF-8)");
                 finish_claim(&claim, &id);
+                claims().remove(&id);
             }
             Err(_) => give_back(),
         }
@@ -548,12 +662,14 @@ const PS1: &str = r#"# ade-msg — talk to the other ADE sessions. Written by AD
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 $utf8 = New-Object Text.UTF8Encoding $false
+# Every file ADE republishes: it replaces them by renaming, which a reader that does not share delete would make fail.
+function ReadShared($p) { $s = [IO.File]::Open($p, 'Open', 'Read', 'ReadWrite, Delete'); try { (New-Object IO.StreamReader($s, $utf8)).ReadToEnd() } finally { $s.Dispose() } }
 $box = $env:ADE_MAILBOX
 if (-not $box -or -not (Test-Path $box)) { [Console]::Error.WriteLine('ade-msg: questa shell non e'' una sessione avviata da ADE (ADE_MAILBOX mancante).'); exit 2 }
 
 function Usage {
   $f = Join-Path $PSScriptRoot 'usage.txt'
-  if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami | registro | design proponi' }
+  if (Test-Path $f) { ReadShared $f } else { Write-Output 'uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami | registro | design proponi' }
   exit 1
 }
 function Fail($message) { [Console]::Error.WriteLine("ade-msg: $message"); exit 1 }
@@ -590,7 +706,7 @@ function NeedToken {
   exit 2
 }
 # The text of a file, $null when it has gone or is held open: another process may have just taken it.
-function ReadFile($path) { try { return [IO.File]::ReadAllText($path, $utf8) } catch { return $null } }
+function ReadFile($path) { try { return ReadShared $path } catch { return $null } }
 # Sealed, and said once if the file is still there and fails. Nothing that fails is moved or removed: it may be the real
 # one for the session it is signed for.
 function Checks($kind, $id, $path, $what) {
@@ -869,7 +985,7 @@ function AwaitIds([string[]]$ids) {
       }
       if (Has $stateFile) {
         $s = $null
-        try { $s = Sealed 'state' $id ([IO.File]::ReadAllText($stateFile, $utf8)) } catch {}
+        try { $s = Sealed 'state' $id (ReadShared $stateFile) } catch {}
         if ($s) { $s = $s.Trim() }
         if ($s -and $seen[$id] -ne $s) { $seen[$id] = $s; [Console]::Error.WriteLine("ade-msg: richiesta $id - $s") }
       }
@@ -882,16 +998,16 @@ function AwaitIds([string[]]$ids) {
 }
 
 switch ($cmd) {
-  'list' { $f = Join-Path $PSScriptRoot 'sessions.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessuna sessione pubblicata' }; exit 0 }
-  'agents' { $f = Join-Path $PSScriptRoot 'agents.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessun agente pubblicato' }; exit 0 }
+  'list' { $f = Join-Path $PSScriptRoot 'sessions.txt'; if (Test-Path $f) { ReadShared $f } else { Write-Output 'nessuna sessione pubblicata' }; exit 0 }
+  'agents' { $f = Join-Path $PSScriptRoot 'agents.txt'; if (Test-Path $f) { ReadShared $f } else { Write-Output 'nessun agente pubblicato' }; exit 0 }
   'help' {
     # help design, help decisioni: the formats, kept out of the general help that every session reads.
     $name = if ($head -eq 'design' -or $head -eq 'decisioni') { "usage-$head.txt" } else { 'usage.txt' }
     $f = Join-Path $PSScriptRoot $name
-    if (Has $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami | registro | design proponi' }
+    if (Has $f) { ReadShared $f } else { Write-Output 'uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami | registro | design proponi' }
     exit 0
   }
-  'status' { $f = Join-Path $PSScriptRoot 'requests.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessuna richiesta in corso' }; exit 0 }
+  'status' { $f = Join-Path $PSScriptRoot 'requests.txt'; if (Test-Path $f) { ReadShared $f } else { Write-Output 'nessuna richiesta in corso' }; exit 0 }
   'whoami' { Write-Output $env:ADE_PANE_ID; exit 0 }
   'inbox' {
     # Prints the long messages left for this session, oldest first, and moves each to handled/: that move tells ADE it was read.
@@ -917,7 +1033,7 @@ switch ($cmd) {
     exit 0
   }
   'who-owns' { if (-not $head) { Usage }; PostAndPrint ([ordered]@{ kind = 'whoowns'; text = (@($pos) -join ' ') }) }
-  'stats' { $f = Join-Path $PSScriptRoot 'stats.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessun dato di consumo ancora' }; exit 0 }
+  'stats' { $f = Join-Path $PSScriptRoot 'stats.txt'; if (Test-Path $f) { ReadShared $f } else { Write-Output 'nessun dato di consumo ancora' }; exit 0 }
   'kv' {
     $op = $head
     switch ($op) {
@@ -1565,20 +1681,151 @@ mod tests {
     fn new_mail_is_signalled_at_once_and_a_stuck_outbox_only_once_a_second() {
         let soon = Duration::from_millis(200);
         let later = SIGNAL_GAP;
-        assert_eq!(pending_signal(true, false, false, soon), Some(true));
-        assert_eq!(pending_signal(true, true, false, soon), None);
-        assert_eq!(pending_signal(true, true, false, later), Some(true));
+        assert_eq!(pending_signal(true, false, soon), Some(true));
+        assert_eq!(pending_signal(true, true, soon), None);
+        assert_eq!(pending_signal(true, true, later), Some(true));
     }
 
     #[test]
-    fn a_hidden_page_gets_a_pulse_and_a_visible_one_keeps_its_own_timer() {
+    fn every_page_gets_a_pulse_a_second() {
         let soon = Duration::from_millis(200);
         let later = SIGNAL_GAP;
-        assert_eq!(pending_signal(false, false, true, later), Some(false));
-        assert_eq!(pending_signal(false, false, true, soon), None);
-        assert_eq!(pending_signal(false, false, false, later), None);
+        assert_eq!(pending_signal(false, false, later), Some(false));
+        assert_eq!(pending_signal(false, false, soon), None);
         // Mail says so even in a pulse's place.
-        assert_eq!(pending_signal(true, true, true, later), Some(true));
+        assert_eq!(pending_signal(true, true, later), Some(true));
+        // And a pulse does not come in its gap.
+        assert_eq!(pending_signal(true, true, soon), None);
+    }
+
+    /// An outbox and a receipts folder of their own: the claims are one map for the whole process, so each test has its own ids too.
+    fn take_dirs(tag: &str) -> (PathBuf, PathBuf, PathBuf) {
+        let base = std::env::current_dir().unwrap().join("target").join(format!("mailbox-claims-{tag}"));
+        let _ = fs::remove_dir_all(&base);
+        let (outbox, receipts) = (base.join("outbox"), base.join("receipts"));
+        fs::create_dir_all(&outbox).unwrap();
+        fs::create_dir_all(&receipts).unwrap();
+        (base, outbox, receipts)
+    }
+
+    #[test]
+    fn a_claim_another_take_is_reading_is_not_given_back() {
+        let (base, outbox, receipts) = take_dirs("reading");
+        let id = "1757860000001-read";
+        fs::write(outbox.join(format!("{id}.taking")), "{}").unwrap();
+        claims().insert(id.to_string(), Claim::Reading);
+
+        assert!(take_outbox(&outbox, &receipts, Instant::now()).unwrap().is_empty());
+        assert!(outbox.join(format!("{id}.taking")).exists(), "the other take is reading it");
+        assert!(!outbox.join(format!("{id}.json")).exists(), "and it does not go back under its feet");
+        claims().remove(id);
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_message_is_kept_until_the_page_has_it() {
+        let (base, outbox, receipts) = take_dirs("kept");
+        let id = "1757860000002-kept";
+        fs::write(outbox.join(format!("{id}.json")), "{\"kind\":\"send\"}").unwrap();
+
+        let taken = take_outbox(&outbox, &receipts, Instant::now()).unwrap();
+        assert_eq!(taken.len(), 1);
+        assert!(outbox.join(format!("{id}.taking")).exists(), "the page does not hold it yet");
+
+        confirm_taken(&outbox, &[id.to_string()]);
+        assert!(!outbox.join(format!("{id}.taking")).exists());
+        assert!(!outbox.join(format!("{id}.json")).exists());
+        assert!(take_outbox(&outbox, &receipts, Instant::now()).unwrap().is_empty(), "nothing comes back after the page's word");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_page_load_gives_back_what_the_old_page_never_confirmed() {
+        let (base, outbox, receipts) = take_dirs("reload");
+        let id = "1757860000003-load";
+        fs::write(outbox.join(format!("{id}.json")), "{\"kind\":\"send\"}").unwrap();
+        assert_eq!(take_outbox(&outbox, &receipts, Instant::now()).unwrap().len(), 1);
+
+        give_back_all(&outbox);
+        assert!(outbox.join(format!("{id}.json")).exists(), "the new page gets it");
+        assert!(!outbox.join(format!("{id}.taking")).exists());
+        let again = take_outbox(&outbox, &receipts, Instant::now()).unwrap();
+        assert_eq!(again.len(), 1);
+        confirm_taken(&outbox, &[id.to_string()]);
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn an_unconfirmed_claim_comes_back_after_half_a_minute() {
+        let (base, outbox, receipts) = take_dirs("late");
+        let id = "1757860000004-late";
+        fs::write(outbox.join(format!("{id}.json")), "{\"kind\":\"send\"}").unwrap();
+        let now = Instant::now();
+        assert_eq!(take_outbox(&outbox, &receipts, now).unwrap().len(), 1);
+
+        assert!(take_outbox(&outbox, &receipts, now + Duration::from_secs(29)).unwrap().is_empty());
+        assert!(outbox.join(format!("{id}.taking")).exists(), "the page still has time");
+
+        let later = now + Duration::from_secs(31);
+        let mut delivered = take_outbox(&outbox, &receipts, later).unwrap();
+        delivered.extend(take_outbox(&outbox, &receipts, later).unwrap());
+        assert_eq!(delivered.len(), 1, "back once, and read once");
+        confirm_taken(&outbox, &[id.to_string()]);
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn scripts_are_replaced_whole_and_only_when_changed() {
+        let dir = std::env::current_dir().unwrap().join("target").join("mailbox-put-script");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        assert!(put_script(&dir, "ade-msg.cmd", "uno").unwrap());
+        assert!(!put_script(&dir, "ade-msg.cmd", "uno").unwrap(), "the same bytes are left alone");
+        assert!(put_script(&dir, "ade-msg.cmd", "due").unwrap());
+        assert_eq!(fs::read_to_string(dir.join("ade-msg.cmd")).unwrap(), "due");
+        assert!(!dir.join("ade-msg.cmd.part").exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_file_open_for_reading_is_still_replaced() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let scratch = Scratch::new("replace-open");
+        let target = scratch.0.join("requests.txt");
+        fs::write(&target, "old").unwrap();
+        // Read sharing only: how `[IO.File]::ReadAllText` opens a file.
+        let held = fs::OpenOptions::new().read(true).share_mode(1).open(&target).unwrap();
+        let release = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(30));
+            drop(held);
+        });
+
+        write_whole(scratch.0.clone(), "requests.txt", "new").unwrap();
+        release.join().unwrap();
+        assert_eq!(fs::read_to_string(&target).unwrap(), "new");
+        assert!(!scratch.0.join("requests.txt.part").exists());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn ade_msg_reads_with_delete_sharing() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let scratch = mailbox_scratch("replace-shared");
+        let target = scratch.0.join("bin").join("requests.txt");
+        fs::write(&target, "una richiesta").unwrap();
+        {
+            // What `ReadShared` opens it with: read, write and delete sharing.
+            let _reader = fs::OpenOptions::new().read(true).share_mode(7).open(&target).unwrap();
+            let part = scratch.0.join("bin").join("requests.txt.part");
+            fs::write(&part, "un'altra richiesta").unwrap();
+            fs::rename(&part, &target).expect("a reader that shares delete does not stop the replace");
+        }
+        let reads: Vec<&str> = PS1.lines().filter(|line| line.contains("ReadAllText(")).collect();
+        assert_eq!(reads.len(), 1, "only the file an agent names: {reads:?}");
+        assert!(reads[0].contains("$item.FullName"), "{reads:?}");
+        assert_eq!(run_ps1_status(&scratch.0, &["status"]).0.trim(), "un'altra richiesta");
     }
 
     #[test]
@@ -1651,7 +1898,7 @@ mod tests {
         fs::write(outbox.join("1757860000000-aaaa.json"), format!("{{\"kind\":\"send\",\"to\":\"1\",\"text\":\"{text}\"}}")).unwrap();
         fs::write(outbox.join("1757860000000-bbbb.json"), "x".repeat(MAX_MESSAGE_BYTES as usize + 1)).unwrap();
 
-        let taken = take_outbox(&outbox, &receipts).unwrap();
+        let taken = take_outbox(&outbox, &receipts, Instant::now()).unwrap();
         assert_eq!(taken.len(), 1);
         assert_eq!(taken[0].id, "1757860000000-aaaa");
         assert!(taken[0].body.contains(&text));
@@ -1671,7 +1918,7 @@ mod tests {
         // A folder with the name of a message cannot be read as text, and is not invalid UTF-8: a read error of the other kind.
         fs::create_dir_all(outbox.join("1757860000000-cccc.json")).unwrap();
 
-        assert!(take_outbox(&outbox, &receipts).unwrap().is_empty());
+        assert!(take_outbox(&outbox, &receipts, Instant::now()).unwrap().is_empty());
         assert!(outbox.join("1757860000000-cccc.json").exists(), "given back for the next pass");
         assert!(!outbox.join("1757860000000-cccc.taking").exists());
         assert!(!receipts.join("1757860000000-cccc.txt").exists(), "no error receipt over a message that may pass");
@@ -1690,12 +1937,12 @@ mod tests {
         fs::write(outbox.join("1757860000000-eeee.taking"), "{\"kind\":\"send\"}").unwrap();
         undeleted().insert("1757860000000-eeee".to_string());
 
-        assert!(take_outbox(&outbox, &receipts).unwrap().is_empty());
+        assert!(take_outbox(&outbox, &receipts, Instant::now()).unwrap().is_empty());
         let receipt = fs::read_to_string(receipts.join("1757860000000-dddd.txt")).unwrap();
         assert!(receipt.contains("non è UTF-8"));
         assert!(!outbox.join("1757860000000-dddd.json").exists());
         assert!(!outbox.join("1757860000000-dddd.taking").exists());
-        assert!(take_outbox(&outbox, &receipts).unwrap().is_empty(), "the leftover claim is not delivered on a later pass");
+        assert!(take_outbox(&outbox, &receipts, Instant::now()).unwrap().is_empty(), "the leftover claim is not delivered on a later pass");
         assert!(!outbox.join("1757860000000-eeee.taking").exists(), "and it is cleared away");
         let _ = fs::remove_dir_all(&base);
     }
@@ -1715,10 +1962,11 @@ mod tests {
 
         let mut delivered = Vec::new();
         for _ in 0..2 {
-            delivered.extend(take_outbox(&outbox, &receipts).unwrap());
+            delivered.extend(take_outbox(&outbox, &receipts, Instant::now()).unwrap());
         }
         assert_eq!(delivered.len(), 1, "delivered, and once");
         assert_eq!(delivered[0].id, "1757860000000-ffff");
+        confirm_taken(&outbox, &["1757860000000-ffff".to_string()]);
         assert!(!claim.exists() && !outbox.join("1757860000000-ffff.json").exists());
         let _ = fs::remove_dir_all(&base);
     }

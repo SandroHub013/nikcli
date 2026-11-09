@@ -471,6 +471,12 @@
           "markdownDescription": "Enables the ade_prune command without any pre-configured scope."
         },
         {
+          "description": "Enables the ade_tray_labels command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-ade-tray-labels",
+          "markdownDescription": "Enables the ade_tray_labels command without any pre-configured scope."
+        },
+        {
           "description": "Enables the ade_tray_take command without any pre-configured scope.",
           "type": "string",
           "const": "allow-ade-tray-take",
@@ -871,6 +877,12 @@
           "type": "string",
           "const": "allow-mailbox-take",
           "markdownDescription": "Enables the mailbox_take command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the mailbox_taken command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-mailbox-taken",
+          "markdownDescription": "Enables the mailbox_taken command without any pre-configured scope."
         },
         {
           "description": "Enables the path_exists command without any pre-configured scope.",
@@ -1359,6 +1371,12 @@
           "markdownDescription": "Denies the ade_prune command without any pre-configured scope."
         },
         {
+          "description": "Denies the ade_tray_labels command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-ade-tray-labels",
+          "markdownDescription": "Denies the ade_tray_labels command without any pre-configured scope."
+        },
+        {
           "description": "Denies the ade_tray_take command without any pre-configured scope.",
           "type": "string",
           "const": "deny-ade-tray-take",
@@ -1759,6 +1777,12 @@
           "type": "string",
           "const": "deny-mailbox-take",
           "markdownDescription": "Denies the mailbox_take command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the mailbox_taken command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-mailbox-taken",
+          "markdownDescription": "Denies the mailbox_taken command without any pre-configured scope."
         },
         {
           "description": "Denies the path_exists command without any pre-configured scope.",
