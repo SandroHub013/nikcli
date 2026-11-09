@@ -6,17 +6,20 @@
 
 import type { GatewayMessage } from "./controller"
 
+/** The message of a turn running now and, once ragu's server has one for it, its session: the next page stops it there. */
+export type TurnUnderWay = GatewayMessage & { readonly session?: { readonly project: string; readonly sessionId: string } }
+
 export interface TurnsUnderWay {
-  note: (key: string, message: GatewayMessage) => void
+  note: (key: string, turn: TurnUnderWay) => void
   done: (key: string) => void
   /** What was left by the page before, and forgotten here: each is told once. */
-  take: () => (readonly [string, GatewayMessage])[]
+  take: () => (readonly [string, TurnUnderWay])[]
 }
 
 export function memoryTurnsUnderWay(): TurnsUnderWay {
-  const running = new Map<string, GatewayMessage>()
+  const running = new Map<string, TurnUnderWay>()
   return {
-    note: (key, message) => void running.set(key, message),
+    note: (key, turn) => void running.set(key, turn),
     done: (key) => void running.delete(key),
     take: () => {
       const left = [...running]
@@ -29,7 +32,7 @@ export function memoryTurnsUnderWay(): TurnsUnderWay {
 /** The renderer's key: one object, a key per `bot:platform:chat`, as the sessions. `forget.ts` takes a deleted bot's out. */
 export const TURNS_UNDER_WAY_KEY = "ade.gateway.underWay"
 
-function isMessage(value: unknown): value is GatewayMessage {
+function isTurn(value: unknown): value is TurnUnderWay {
   if (!value || typeof value !== "object") return false
   const { bot, platform, chat, id, text, sender } = value as Record<string, unknown>
   return (
@@ -56,13 +59,13 @@ export function localTurnsUnderWay(key: string = TURNS_UNDER_WAY_KEY): TurnsUnde
     }
   }
   return {
-    note: (chat, message) => write({ ...read(), [chat]: message }),
+    note: (chat, turn) => write({ ...read(), [chat]: turn }),
     done: (chat) => {
       const { [chat]: _gone, ...rest } = read()
       write(rest)
     },
     take: () => {
-      const left = Object.entries(read()).filter((entry): entry is [string, GatewayMessage] => isMessage(entry[1]))
+      const left = Object.entries(read()).filter((entry): entry is [string, TurnUnderWay] => isTurn(entry[1]))
       write({})
       return left
     },

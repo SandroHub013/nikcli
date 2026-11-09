@@ -790,6 +790,20 @@ export function serveClientOf(client: RaguClient, catalogTimeoutMs = CATALOG_TIM
 /** The bots' catalogs, one per folder, for the whole window. */
 const botCatalogs = catalogCache()
 
+/**
+ * Stops a session that a page now gone left working (BOT-5): `/riprova` would otherwise be a second agent in the same
+ * folder. Only on a server already up, since a new one has nothing running and is not worth starting for this.
+ */
+export async function abortLeftSession(
+  directory: string,
+  sessionID: string,
+  deps: { readonly serverIsUp: () => Promise<boolean>; readonly connect: ServeTurnDeps["connect"] },
+): Promise<void> {
+  if (!(await deps.serverIsUp())) return
+  const connection = await deps.connect(directory, false)
+  if (connection.ok) await connection.client.abort(sessionID)
+}
+
 export function appServeTurnDeps(
   connection: () => ChatConnectionDeps = appChatConnectionDeps,
   trust: (directory: string) => Omit<AdmitProjectDeps, "confirm"> = appProjectTrust,

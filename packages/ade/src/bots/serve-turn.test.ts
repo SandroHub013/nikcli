@@ -7,6 +7,7 @@ import { t } from "../i18n"
 import type { AgentFile } from "./ragu"
 import { BOT_SESSION_MARK, botPermission } from "./serve-rules"
 import {
+  abortLeftSession,
   agentProblem,
   catalogCache,
   modelRef,
@@ -1057,5 +1058,27 @@ describe("a bot's effort is one its model has", () => {
       config: { get: async () => ({ data: {} }), providers: async () => ({ data: providers }) },
     } as unknown as RaguClient
     expect((await serveClientOf(client, 1_000).catalog()).configProviders).toBe(providers)
+  })
+})
+
+describe("a session left working by a page that is gone (BOT-5)", () => {
+  test("is stopped on the server that is up, without asking anyone", async () => {
+    const { calls, deps } = server({})
+    await abortLeftSession("C:/p", "ses_1", { serverIsUp: async () => true, connect: deps.connect })
+    expect(calls.connect).toEqual([{ directory: "C:/p", interactive: false }])
+    expect(calls.aborted).toEqual(["ses_1"])
+  })
+
+  test("with no server up, none is started for it", async () => {
+    const { calls, deps } = server({})
+    await abortLeftSession("C:/p", "ses_1", { serverIsUp: async () => false, connect: deps.connect })
+    expect(calls.connect).toEqual([])
+    expect(calls.aborted).toEqual([])
+  })
+
+  test("a project no longer admitted is left alone", async () => {
+    const { calls, deps } = server({ refuse: "no" })
+    await abortLeftSession("C:/p", "ses_1", { serverIsUp: async () => true, connect: deps.connect })
+    expect(calls.aborted).toEqual([])
   })
 })

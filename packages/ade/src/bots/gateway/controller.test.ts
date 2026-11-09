@@ -2339,6 +2339,94 @@ describe("a turn cut by a reload, a crash or the update is not lost silently (BO
     expect(left.map(([, message]) => message.text)).toEqual(["lavoro lungo"])
   })
 
+  describe("a ragu turn left running", () => {
+    const ragu = async () => ({ ok: true as const, bot: { ...BOT, runner: "ragu" } })
+    const page = (
+      b: ReturnType<typeof bridge>,
+      turns: ReturnType<typeof fakeTurns>,
+      underWay: ReturnType<typeof memoryTurnsUnderWay>,
+      abortCut?: (project: string, sessionId: string) => Promise<void>,
+      sessions = memorySessionStore(),
+    ) => startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: ragu, sessions, underWay, ...(abortCut ? { abortCut } : {}) })
+
+    test("is stopped on the server by the next page, so /riprova is not a second agent in the folder", async () => {
+      const underWay = memoryTurnsUnderWay()
+      const before = bridge()
+      const beforeTurns = fakeTurns()
+      await page(before, beforeTurns, underWay)
+      before.emit("lavoro lungo", { id: "m1" })
+      await until("il turno", () => beforeTurns.started.length === 1)
+      beforeTurns.started[0]!.request.onUpdate!({ ...emptyTalk(), sessionId: "ses_nuova" })
+
+      const stopped: string[][] = []
+      const after = bridge()
+      await page(after, fakeTurns(), underWay, async (project, session) => void stopped.push([project, session]))
+      await until("detto", () => after.sent.length === 1)
+      expect(stopped).toEqual([[PROJECT, "ses_nuova"]])
+    })
+
+    test("a session resumed from the chat is stopped too, and a server that refuses does not keep the chat from being told", async () => {
+      const underWay = memoryTurnsUnderWay()
+      const sessions = memorySessionStore()
+      sessions.set(sessionKey(BOT.path, "telegram", "c42"), { project: PROJECT, runner: "ragu", sessionId: "s-vecchia" })
+      const before = bridge()
+      const beforeTurns = fakeTurns()
+      await page(before, beforeTurns, underWay, undefined, sessions)
+      before.emit("continua", { id: "m1" })
+      await until("il turno", () => beforeTurns.started.length === 1)
+
+      const stopped: string[] = []
+      const after = bridge()
+      await page(after, fakeTurns(), underWay, async (_project, session) => {
+        stopped.push(session)
+        throw new Error("il server non risponde")
+      })
+      await until("detto", () => after.sent.length === 1)
+      expect(stopped).toEqual(["s-vecchia"])
+    })
+
+    test("/riprova after it starts clean: the stopped session is not noted again for the new turn", async () => {
+      const underWay = memoryTurnsUnderWay()
+      const before = bridge()
+      const beforeTurns = fakeTurns()
+      await page(before, beforeTurns, underWay)
+      before.emit("lavoro lungo", { id: "m1" })
+      await until("il turno", () => beforeTurns.started.length === 1)
+      beforeTurns.started[0]!.request.onUpdate!({ ...emptyTalk(), sessionId: "ses_nuova" })
+
+      const after = bridge()
+      const afterTurns = fakeTurns()
+      await page(after, afterTurns, underWay, async () => {})
+      await until("detto", () => after.sent.length === 1)
+      after.emit("/riprova", { id: "m2" })
+      await until("rifatto", () => afterTurns.started.length === 1)
+      expect(underWay.take().map(([, turn]) => turn.session)).toEqual([undefined])
+    })
+  })
+
+  test("another runner has no server to ask: nothing is stopped for it", async () => {
+    const underWay = memoryTurnsUnderWay()
+    const before = bridge()
+    const beforeTurns = fakeTurns()
+    await start(before, beforeTurns, underWay)
+    before.emit("lavoro", { id: "m1" })
+    await until("il turno", () => beforeTurns.started.length === 1)
+    beforeTurns.started[0]!.request.onUpdate!({ ...emptyTalk(), sessionId: "claude-1" })
+
+    const stopped: string[] = []
+    const after = bridge()
+    await startGatewayController({
+      bridge: after.fake,
+      runTurn: fakeTurns().runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+      underWay,
+      abortCut: async (_project, session) => void stopped.push(session),
+    })
+    await until("detto", () => after.sent.length === 1)
+    expect(stopped).toEqual([])
+  })
+
   test("«off» is not a cut: the turn was stopped on purpose", async () => {
     const underWay = memoryTurnsUnderWay()
     const b = bridge()

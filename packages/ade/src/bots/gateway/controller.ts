@@ -135,6 +135,8 @@ export interface GatewayControllerDeps {
   readonly history?: HistoryStore
   /** The turns running now, kept across a reload or a crash so the chat can be told one was cut (BOT-5). */
   readonly underWay?: TurnsUnderWay
+  /** Stops on ragu's server a session the last page left working (BOT-5). Absent, it goes on by itself. */
+  readonly abortCut?: (project: string, sessionId: string) => Promise<void>
   /** The chat's thread on disk, apart from the panel's. Absent in a test that does not keep one. */
   readonly threads?: GatewayThreads
   /** The bot's remote commands as saved (`remote.ts`); off when absent. */
@@ -656,6 +658,14 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       // `/ferma` while the bot was being read: nothing starts.
       if (closed || state.cancelled) return
       const sessionId = resumable(deps.sessions.get(key), project, runner)
+      // Written down as soon as it is known: the next page stops it on the server. Only ragu has a server to ask (BOT-5).
+      let noted: string | undefined
+      const noteSession = (id: string | undefined) => {
+        if (runner !== "ragu" || !id || id === noted) return
+        noted = id
+        deps.underWay?.note(key, { ...message, session: { project, sessionId: id } })
+      }
+      noteSession(sessionId)
       const sendTyping = () => void deps.bridge.typing(message.bot, message.platform, message.chat).catch(() => {})
       sendTyping()
       typing = setInterval(sendTyping, deps.typingEveryMs ?? TYPING_EVERY_MS)
@@ -779,6 +789,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
         account: deps.account?.(message.bot) ?? { mode: "plan" },
         partial: true,
         onUpdate: (talk) => {
+          noteSession(talk.sessionId)
           const raw = answerSoFar(talk)
           if (raw) {
             const text = safePreviewText(takeMemoryOps(raw).text)
@@ -921,8 +932,12 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
   }
 
   /** What the last page left running, by chat: each is told, once, when it can be. */
-  const cut = new Map(deps.underWay?.take() ?? [])
-  for (const [key, message] of cut) stateOf(key).last = message
+  const cut = new Map<string, GatewayMessage>()
+  for (const [key, { session, ...message }] of deps.underWay?.take() ?? []) {
+    cut.set(key, message)
+    stateOf(key).last = message
+    if (session) void deps.abortCut?.(session.project, session.sessionId)?.catch?.(() => {})
+  }
 
   const tellCut = async (key: string) => {
     const message = cut.get(key)
