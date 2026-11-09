@@ -13,7 +13,7 @@
 /// registry that lets `write`, `resize` and `kill` find their master again.
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -152,13 +152,31 @@ impl Drop for PaneJob {
     }
 }
 
+/// The sessions, and how many times they were all taken: see `insert_current`.
 #[derive(Default)]
-pub struct Registry(Mutex<HashMap<String, Session>>);
+pub struct Registry(Mutex<HashMap<String, Session>>, AtomicU64);
 
 impl Registry {
+    /// Read by a spawn before it does anything: see `insert_current`.
+    fn generation(&self) -> u64 {
+        self.1.load(Ordering::SeqCst)
+    }
+
+    /// Registers a session, unless every session was taken since `born`: then its page is gone, and it comes back.
+    fn insert_current(&self, born: u64, id: String, session: Session) -> Result<(), Session> {
+        let mut sessions = self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if self.1.load(Ordering::SeqCst) != born {
+            return Err(session);
+        }
+        sessions.insert(id, session);
+        Ok(())
+    }
+
     /// Takes every session out, so nothing can reach them any more.
     fn take_all(&self) -> Vec<Session> {
         let mut sessions = self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        // Under the lock: a spawn is either among what this takes or sees the new count when it inserts.
+        self.1.fetch_add(1, Ordering::SeqCst);
         sessions.drain().map(|(_, session)| session).collect()
     }
 
@@ -178,12 +196,7 @@ impl Registry {
      * outlive a kill of the agent alone.
      */
     pub fn end_all(&self) -> usize {
-        let sessions = self.take_all();
-        let count = sessions.len();
-        for session in sessions {
-            end_session(session);
-        }
-        count
+        end_sessions(self.take_all(), END_WAIT)
     }
 
     /*
@@ -192,29 +205,58 @@ impl Registry {
      * The sessions are taken at once, on the caller's thread: a page-load
      * handler that only started a thread could have that thread take a
      * session the new page had already spawned. Walking the process table
-     * for each tree is what takes time, and that is what moves off.
+     * and waiting for the trees is what takes time, and that moves off.
      */
     pub fn end_all_in_background(&self) -> usize {
         let sessions = self.take_all();
         let count = sessions.len();
         if count > 0 {
-            std::thread::spawn(move || {
-                for session in sessions {
-                    end_session(session);
-                }
-            });
+            std::thread::spawn(move || end_sessions(sessions, END_WAIT));
         }
         count
     }
 }
 
-fn end_session(mut session: Session) {
-    if let Some(pid) = session.child.process_id() {
-        kill_tree(pid);
+/// How long ending sessions waits for them.
+const END_WAIT: Duration = Duration::from_secs(5);
+
+/*
+ * Ends these sessions and their trees, within `limit`, and says how many there were.
+ *
+ * One look at the process table for all of them: it is a walk of the whole system, and one per pane added up (RS-12).
+ * Then each waits on a thread of its own, because `wait()` has no limit and closing a pseudo console waits for its
+ * console host. On `RunEvent::Exit` that is the main thread, and before an update it is what the setup is waiting for,
+ * so one stuck session held ADE's end and every other session's (RS2-3).
+ *
+ * A thread still stuck past the limit keeps its session, and with it the job, the last of the fields: when ADE exits
+ * the kernel closes the job and the tree dies.
+ */
+fn end_sessions(sessions: Vec<Session>, limit: Duration) -> usize {
+    let count = sessions.len();
+    if count == 0 {
+        return 0;
     }
-    let _ = session.child.kill();
-    // Reaped here: the reader thread's lookup now misses, and nobody else will wait on it.
-    let _ = session.child.wait();
+    let roots: Vec<u32> = sessions.iter().filter_map(|session| session.child.process_id()).collect();
+    kill_trees_keeping(&roots, true);
+    let (answer, answers) = std::sync::mpsc::channel::<()>();
+    for mut session in sessions {
+        let answer = answer.clone();
+        std::thread::spawn(move || {
+            let _ = session.child.kill();
+            // Reaped here: the reader thread's lookup now misses, and nobody else will wait on it.
+            let _ = session.child.wait();
+            drop(session);
+            let _ = answer.send(());
+        });
+    }
+    drop(answer);
+    let deadline = Instant::now() + limit;
+    for _ in 0..count {
+        if answers.recv_timeout(deadline.saturating_duration_since(Instant::now())).is_err() {
+            break;
+        }
+    }
+    count
 }
 
 /*
@@ -1088,6 +1130,7 @@ pub async fn pty_spawn(
     /* Where this session's output and exit go: see `PtyEvent`. */
     events: Channel<PtyEvent>,
 ) -> Result<(), String> {
+    let born = registry.generation();
     if !is_allowed_command(&command) {
         return Err(format!("comando non consentito: {command}"));
     }
@@ -1262,20 +1305,22 @@ pub async fn pty_spawn(
     let flow = Arc::new(Flow::new());
     let sender_flow = Arc::clone(&flow);
 
-    {
-        let mut sessions = match registry.0.lock() {
-            Ok(sessions) => sessions,
-            Err(_) => abort_with!("registro bloccato".to_string()),
-        };
-        sessions.insert(
-            id.clone(),
-            Session {
-                master: master.map(|master| Arc::new(Mutex::new(master))),
-                writer,
-                child,
-                job,
-            },
-        );
+    /*
+     * The page that asked may be gone by now: the keychain, the PATH and the spawn above take seconds, and the load that
+     * replaced it found nothing of this spawn to end. The agent ran on, hidden, until ADE exited (RS2-1).
+     *
+     * What this does not catch: an invoke of the old page that tokio had not started when the load landed reads the new
+     * count. That is microseconds, against the seconds this closes.
+     */
+    let session = Session {
+        master: master.map(|master| Arc::new(Mutex::new(master))),
+        writer,
+        child,
+        job,
+    };
+    if let Err(late) = registry.insert_current(born, id.clone(), session) {
+        std::thread::spawn(move || end_sessions(vec![late], END_WAIT));
+        return Err("pagina ricaricata durante l'avvio".into());
     }
 
     // Not in the registry: the waiter holds its lock across `ClosePseudoConsole` (RS-8), and an acknowledgement that
@@ -1444,9 +1489,6 @@ pub async fn pty_spawn(
                 Err(_) => (None, sessions.remove(&waited_id)),
             }
         };
-        // Past the lock: dropping it closes the pseudo console, which waits for conhost, and every spawn, write,
-        // resize and kill of every other pane would wait behind it (RS-8).
-        drop(gone);
         // Not said from here: the sender may still have output queued, and the page stops listening at the exit.
         let _ = exit_tx.send(code);
         // The sender may be waiting for output that will never come (no EOF): it looks at the code when it is woken.
@@ -1456,6 +1498,10 @@ pub async fn pty_spawn(
                 let _ = tx.try_send(String::new());
             }
         }
+        // Past the lock: dropping it closes the pseudo console, which waits for conhost, and every spawn, write,
+        // resize and kill of every other pane would wait behind it (RS-8). After the exit is out: a slow close then
+        // costs the sender its grace and no more.
+        drop(gone);
         break;
     });
 
@@ -1730,7 +1776,7 @@ fn tree_of(root: u32, rows: &[ProcRow]) -> Vec<u32> {
 /// `ade-msg ask` waiting, a node process — and killing only the CLI leaves them
 /// running, holding the turn's mailbox identity and its files.
 pub(crate) fn kill_tree(pid: u32) {
-    kill_tree_keeping(pid, true);
+    kill_trees_keeping(&[pid], true);
 }
 
 /// The processes to kill for `root`: its tree, children first, with or without `root` itself.
@@ -1742,12 +1788,25 @@ fn victims(root: u32, rows: &[ProcRow], include_root: bool) -> Vec<u32> {
     members
 }
 
-/// `kill_tree`, with the choice of leaving the root to its owner.
+/// What `victims` gives for each of `roots`, over one table, with no process listed twice.
+fn trees_of(roots: &[u32], rows: &[ProcRow], include_root: bool) -> Vec<u32> {
+    let mut members = Vec::new();
+    for root in roots {
+        for pid in victims(*root, rows, include_root) {
+            if !members.contains(&pid) {
+                members.push(pid);
+            }
+        }
+    }
+    members
+}
+
+/// `kill_tree`, for several trees over one look at the process table, with the choice of leaving the roots to their owner.
 ///
 /// A pane's own child is ended afterwards by `portable-pty`, which on unix sends SIGHUP and waits up to
 /// 200 ms before SIGKILL: the agent gets to close its files. Killing the whole tree first, root included,
 /// took that away (Dario's review of F3, N1), so there only the descendants go here.
-fn kill_tree_keeping(pid: u32, include_root: bool) {
+fn kill_trees_keeping(roots: &[u32], include_root: bool) {
     use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
     let mut sys = System::new();
     sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
@@ -1760,7 +1819,7 @@ fn kill_tree_keeping(pid: u32, include_root: bool) {
             started: process.start_time(),
         })
         .collect();
-    for member in victims(pid, &rows, include_root) {
+    for member in trees_of(roots, &rows, include_root) {
         if let Some(process) = sys.process(Pid::from_u32(member)) {
             #[cfg(windows)]
             {
@@ -1815,7 +1874,7 @@ pub async fn pty_kill(registry: tauri::State<'_, Registry>, id: String, tree: Op
         if tree == Some(true) {
             if let Some(pid) = session.child.process_id() {
                 // On unix the root is left to `child.kill()` below (SIGHUP, a short wait, SIGKILL).
-                kill_tree_keeping(pid, cfg!(windows));
+                kill_trees_keeping(&[pid], cfg!(windows));
             }
         }
         let _ = session.child.kill();
@@ -2208,6 +2267,45 @@ mod tests {
         (Session { master: Some(Arc::new(Mutex::new(pair.master))), writer, child, job: None }, pid)
     }
 
+    /// A child that never ends: its `wait` does not return, and it has no process to find in the table.
+    #[derive(Debug)]
+    struct Stuck;
+
+    impl portable_pty::ChildKiller for Stuck {
+        fn kill(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+
+        fn clone_killer(&self) -> Box<dyn portable_pty::ChildKiller + Send + Sync> {
+            Box::new(Stuck)
+        }
+    }
+
+    impl Child for Stuck {
+        fn try_wait(&mut self) -> std::io::Result<Option<portable_pty::ExitStatus>> {
+            Ok(None)
+        }
+
+        fn wait(&mut self) -> std::io::Result<portable_pty::ExitStatus> {
+            loop {
+                std::thread::park();
+            }
+        }
+
+        fn process_id(&self) -> Option<u32> {
+            None
+        }
+
+        #[cfg(windows)]
+        fn as_raw_handle(&self) -> Option<std::os::windows::io::RawHandle> {
+            None
+        }
+    }
+
+    fn stuck_session() -> Session {
+        Session { master: None, writer: Arc::new(WriteQueue::new(Box::new(std::io::sink()))), child: Box::new(Stuck), job: None }
+    }
+
     /// A pipe end that takes nothing until it is told to, then hands over what it got.
     struct StalledPipe {
         release: Receiver<()>,
@@ -2349,6 +2447,16 @@ mod tests {
         let (held, talks) = resize.split_once("session.master.clone()").expect("the master taken out");
         assert!(!held.contains(".resize("));
         assert!(talks.split("pub ").next().unwrap().contains(".resize("));
+    }
+
+    // RS2-3: said first, so that a slow `ClosePseudoConsole` costs the sender its grace and the pane does not wait behind it.
+    #[test]
+    fn the_exit_is_said_before_the_console_host_is_closed() {
+        let source = include_str!("pty.rs");
+        let waiter = source.split("let (code, gone) = {").nth(1).expect("the waiter");
+        let said = waiter.find("let _ = exit_tx.send(code);").expect("the exit");
+        let closed = waiter.find("drop(gone);").expect("the drop");
+        assert!(said < closed);
     }
 
     // RS-7: the sender waits for the page once too much is in flight, and a page that never answers cannot freeze it.
@@ -2552,7 +2660,7 @@ mod tests {
         drop(job);
         std::thread::sleep(Duration::from_millis(500));
         assert!(tree_alive(pid), "dropping the job killed the pane");
-        end_session(session);
+        end_sessions(vec![session], END_WAIT);
         wait_until("the tree outlived its session", || !tree_alive(pid));
     }
 
@@ -2669,6 +2777,70 @@ mod tests {
         while tree_alive(pid) && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(100));
         }
+        assert!(!tree_alive(pid));
+    }
+
+    // RS2-3: on `RunEvent::Exit` this is the main thread, and before an update it is what the setup waits for.
+    #[test]
+    fn ending_every_session_has_a_time_limit() {
+        let registry = Arc::new(Registry::default());
+        let (session, pid) = sleeping_session();
+        registry.0.lock().unwrap().insert("pty-asleep".into(), session);
+        registry.0.lock().unwrap().insert("pty-stuck".into(), stuck_session());
+        std::thread::sleep(Duration::from_millis(500));
+        assert!(tree_alive(pid));
+
+        let (returned, answer) = std::sync::mpsc::channel();
+        let ending = Arc::clone(&registry);
+        std::thread::spawn(move || {
+            let _ = returned.send(ending.end_all());
+        });
+        assert_eq!(answer.recv_timeout(Duration::from_secs(15)), Ok(2), "one stuck session held every other one's end");
+        assert!(!tree_alive(pid), "the healthy tree is still running");
+    }
+
+    #[test]
+    fn ending_does_not_wait_out_the_limit_when_every_session_has_answered() {
+        let (session, pid) = sleeping_session();
+        std::thread::sleep(Duration::from_millis(500));
+        let started = Instant::now();
+        assert_eq!(end_sessions(vec![session], Duration::from_secs(60)), 1);
+        assert!(started.elapsed() < Duration::from_secs(30), "every close of ADE would take the whole limit");
+        assert!(!tree_alive(pid));
+    }
+
+    // RS2-1: the test below proves the registry, this that a spawn uses it.
+    #[test]
+    fn a_spawn_reads_the_count_before_its_slow_work_and_registers_against_it() {
+        let source = include_str!("pty.rs");
+        let spawn = source.split("pub async fn pty_spawn(").nth(1).expect("the command").split("
+}").next().unwrap();
+        let born = spawn.find("registry.generation()").expect("the count");
+        let slow = spawn.find("crate::secrets::env_for(").expect("the keychain");
+        assert!(born < slow, "a reload during the keychain or the spawn would go unseen");
+        assert!(spawn.contains("insert_current(born,"));
+        assert!(!spawn.contains("sessions.insert("), "registered without looking at the count");
+    }
+
+    // RS2-1: a reload lands while a pane is still starting.
+    #[test]
+    fn a_spawn_that_outlives_its_page_is_ended_not_registered() {
+        let registry = Registry::default();
+        let born = registry.generation();
+        registry.end_all_in_background();
+
+        let (session, pid) = sleeping_session();
+        std::thread::sleep(Duration::from_millis(500));
+        let late = registry.insert_current(born, "pty-late".into(), session).expect_err("the old page's spawn was registered");
+        assert!(registry.0.lock().unwrap().is_empty());
+        assert_eq!(end_sessions(vec![late], END_WAIT), 1);
+        assert!(!tree_alive(pid), "the old page's agent is still running");
+
+        // A spawn of the new page is what the registry is for.
+        let (session, pid) = sleeping_session();
+        std::thread::sleep(Duration::from_millis(500));
+        assert!(registry.insert_current(registry.generation(), "pty-new".into(), session).is_ok());
+        assert_eq!(registry.end_all(), 1);
         assert!(!tree_alive(pid));
     }
 
@@ -3219,6 +3391,24 @@ mod tests {
         // A root that is not in the table has nothing to kill, with or without it.
         assert!(victims(999, &rows, false).is_empty());
         assert!(victims(999, &rows, true).is_empty());
+    }
+
+    // RS-12: each tree used to be a look of its own at the whole process table.
+    #[test]
+    fn one_snapshot_kills_every_tree() {
+        let row = |pid, parent, started| ProcRow { pid, parent, started };
+        let rows = [
+            row(100, Some(1), 1_000),
+            row(110, Some(100), 1_001),
+            // Claims 100 as its parent but started before it: the id was reused.
+            row(130, Some(100), 900),
+            row(200, Some(1), 1_000),
+            row(210, Some(200), 1_001),
+            row(211, Some(210), 1_002),
+        ];
+        assert_eq!(trees_of(&[100, 200, 100], &rows, true), vec![110, 100, 211, 210, 200]);
+        assert_eq!(trees_of(&[100, 200], &rows, false), vec![110, 211, 210]);
+        assert!(trees_of(&[999], &rows, true).is_empty());
     }
 
     /// B8d: ragu's bot turns run on ADE's server; no spawn sets a variable by name any more.

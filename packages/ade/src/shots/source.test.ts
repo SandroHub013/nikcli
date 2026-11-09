@@ -98,3 +98,16 @@ describe("createShotSource without a host", () => {
     })
   })
 })
+
+describe("createShotSource with a host", () => {
+  test("a thumbnail comes as the host's raw bytes (audit RS-18)", async () => {
+    await createRoot(async (dispose) => {
+      const picture = new Uint8Array([1, 2, 3])
+      const ask = (async (command: string) => (command === "shot_bytes" ? picture.buffer : undefined)) as never
+      const loading = createShotSource(true, ask).load("C:/Pictures/Screenshots/a.png")
+      // Before the await: the source's listener would otherwise reach for a host this test does not have.
+      dispose()
+      expect(await loading).toEqual(picture)
+    })
+  })
+})
