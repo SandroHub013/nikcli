@@ -756,6 +756,13 @@ describe("what lands in the terminal", () => {
     const line = formatRequest("x", "t", panes[0])
     expect(line).toContain("--stdin <<'EOF'")
     expect(line).toContain("’")
+    // PowerShell reads ’ (U+2019) as a single quote, so there it closes a '...' string and the rest runs: the advice names
+    // the shell for each way, and PowerShell is told to double the apostrophe (review B1).
+    expect(USAGE).toContain("in sh ’")
+    expect(USAGE).toContain("in PowerShell raddoppia ''")
+    expect(USAGE).not.toContain("usa ’")
+    expect(line).toContain("da bash ’")
+    expect(line).toContain("da PowerShell ''")
     // Still a line, and no double quote after the command the agent is told to type.
     expect(line.length).toBeLessThan(460)
     expect(line).not.toMatch(/ade-msg[^\n]*"/)
