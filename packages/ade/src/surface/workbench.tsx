@@ -424,6 +424,7 @@ import {
   formatHeld,
   formatHeldByMenu,
   formatHeldSilentReceipt,
+  formatEnterLost,
   formatEnterStuck,
   formatExitedUnsent,
   formatHeldByScreen,
@@ -471,6 +472,7 @@ import {
   deliveryResult,
   enterAgain,
   lineGiven,
+  lineStays,
   ringAgain,
   textInBox,
   typeThenEnter,
@@ -2740,6 +2742,8 @@ export function Workbench() {
     let stuck = false
     let textGone = false
     enterStuck.delete(session)
+    lineSender.delete(session)
+    latestLine.set(session, typedAt)
     /*
      * The Enter is pressed only if no permission prompt opened during the
      * wait (B1 bis): it would confirm the selected choice. The text stays in
@@ -2786,6 +2790,7 @@ export function Workbench() {
       claims.evidence(paneId)
       markWorking(paneId)
       void confirmSubmitted(paneId, session, typedAt)
+      void watchLineStays(paneId, session, typedAt)
     }
     // The click was spent on this line: if it did not go, that is said, and the mail is still queued.
     if (paneId !== undefined && armed) {
@@ -2801,6 +2806,27 @@ export function Workbench() {
       tellPane(paneId, t("note.enterStuck"))
     } else if (paneId !== undefined && outcome === "typed-no-enter") appendLine(paneId, t("note.enterHeld"), "note", "ade")
     return outcome
+  }
+
+  /** Who sent the last line typed in a session, for when it stays in the box. */
+  const lineSender = new WeakMap<SpawnedSession, { from: string; id: string }>()
+  const latestLine = new WeakMap<SpawnedSession, number>()
+  /**
+   * A line ADE typed and pressed Enter on that is still in the box a while later has not gone, and nothing else would say so
+   * (`note.enterStuck` is for an Enter never pressed). The pane and the sender are told, and the Enter is left to the user.
+   */
+  const watchLineStays = async (paneId: string, session: SpawnedSession, typedAt: number) => {
+    const read = () =>
+      composerNow(paneId) === "draft" && hasTerminal(paneId) ? composerLine(getTerminal(paneId).terminal) : undefined
+    const alive = () => running.get(paneId) === session
+    const stop = () => !alive() || latestLine.get(session) !== typedAt || typedSince(records.typed.get(paneId), typedAt)
+    if (!(await lineStays({ read, stop }))) return
+    tellPane(paneId, t("note.enterLost"))
+    const sender = lineSender.get(session)
+    if (sender) tellSender(sender.from, formatEnterLost(sender.id, mailPanes().find((pane) => pane.id === paneId)))
+    // Until the line has gone, whoever sent it: the user's Enter, or the user's clearing it.
+    while (alive() && read() !== undefined) await new Promise((resolve) => setTimeout(resolve, 1000))
+    dropPaneNote(paneId, t("note.enterLost"))
   }
 
   /** Lines whose Enter waited as long as it may, by session: read once, by the delivery that tells the sender. */
@@ -3362,6 +3388,7 @@ export function Workbench() {
           "ade",
         )
       }
+      if (outcome === "sent" && meta.from) lineSender.set(session, { from: meta.from, id: meta.id })
       // The Enter gave up waiting for the box: said to the session that sent it, which a note in its pane does not reach.
       if (enterStuck.delete(session) && meta.from) {
         tellSender(meta.from, formatEnterStuck(meta.id, mailPanes().find((pane) => pane.id === paneId)))

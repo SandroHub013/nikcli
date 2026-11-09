@@ -5,7 +5,7 @@ import { createLineAccumulator } from "../host/line-stream"
 import { createLineWriter } from "../surface/pane-lines"
 import { codeOf } from "../test-support/source-text"
 import { typeThenEnter } from "./enter"
-import { formatHeldByMenu, formatHeldMenuReceipt, formatHeldSilentReceipt, formatSilentStart } from "./mailbox"
+import { formatEnterLost, formatHeldByMenu, formatHeldMenuReceipt, formatHeldSilentReceipt, formatSilentStart } from "./mailbox"
 import { en as enText } from "../i18n/en"
 import { it as itText } from "../i18n/it"
 import { decideOpening, OPENING_TIMEOUT_MS } from "./opening"
@@ -847,6 +847,32 @@ describe("lint: the workbench's wiring", () => {
     expect(source).toContain(codeOf("const byLine = lineBegun(target.pane.id) && !linesInFlight.has(target.pane.id)"))
     const held = between("const byLine =", "if (message.kind")
     expect(held).toContain(codeOf('if (!byLine && heldByLineNoted.delete(target.pane.id)) dropPaneNote(target.pane.id, t("note.mailHeldByLine"))'))
+  })
+
+  test("lint: a line that stays after its Enter is said to the pane and to the sender, and no Enter goes by itself", () => {
+    const typed = between("const typeLineNow = async (", "const enterStuck = new WeakSet")
+    expect(typed).toContain(codeOf("void watchLineStays(paneId, session, typedAt)"))
+    const watch = between("const watchLineStays = async (", "const enterStuck = new WeakSet")
+    expect(watch).toContain(codeOf('tellPane(paneId, t("note.enterLost"))'))
+    expect(watch).toContain(codeOf("tellSender(sender.from, formatEnterLost(sender.id,"))
+    expect(watch).toContain(codeOf('dropPaneNote(paneId, t("note.enterLost"))'))
+    expect(watch).not.toContain("pressAgain")
+    expect(watch).not.toContain(".write(")
+    expect(source).toContain(codeOf('if (outcome === "sent" && meta.from) lineSender.set(session, { from: meta.from, id: meta.id })'))
+  })
+
+  test("the sender hears the message has not gone, and whose box it is in", () => {
+    const said = formatEnterLost("r7", { id: "p", title: "oc2", agent: "ragu" } as never)
+    expect(said).toContain("r7")
+    expect(said).toContain("oc2")
+    expect(said).toContain("non è partito")
+  })
+
+  test.each([
+    ["it", itText, "Invio"],
+    ["en", enText, "Enter"],
+  ])("the note says what to do with the line: %s", (_language, text, key) => {
+    expect(text["note.enterLost"]).toContain(key)
   })
 
   test("lint: the first task asks the screen on every pass, and says what it waits for", () => {

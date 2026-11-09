@@ -1760,6 +1760,7 @@ export const en: Messages = {
   "resume.gone": (agent: string) => `The previous conversation no longer exists in ${agent}: opening a new one`,
   "resume.none": "This conversation cannot be found again: on a restart the session starts over, with the task retyped",
   "note.resent": "Pressed Enter again: the message hadn't been sent",
+  "note.enterLost": "ADE's text is still in the box after its Enter and has not gone. Press Enter yourself, or clear it.",
   "note.enterHeld": "Typed, Enter not pressed: a permission prompt is open",
   "note.panelReplyHeld": (why: string) => `Panel reply waiting (${why}): I will try again when the pane is free`,
   "note.panelReplyStale": (n: number) =>

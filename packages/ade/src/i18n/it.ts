@@ -1802,6 +1802,7 @@ export const it = {
   "resume.none":
     "Questa conversazione non può essere ritrovata: al riavvio la sessione riparte da zero, con il compito riscritto",
   "note.resent": "Invio ripetuto: il messaggio non era partito",
+  "note.enterLost": "Il testo di ADE è ancora nella casella dopo il suo Invio e non è partito. Premi Invio tu, o cancellalo.",
   "note.enterHeld": "Digitata, Invio non premuto: c'è un permesso aperto",
   "note.panelReplyHeld": (why: string) =>
     `Risposta del pannello in attesa (${why}): la riprovo quando il pannello si libera`,

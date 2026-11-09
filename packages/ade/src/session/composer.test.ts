@@ -7,6 +7,7 @@ import { disagreement } from "./composer-log"
 import { blindNow } from "./deliver-now"
 import { AGENTS } from "../session-new/agents"
 import {
+  composerLine,
   composerOf,
   cursorSaysDialog,
   dialogOver,
@@ -20,7 +21,7 @@ import {
   watchCursor,
   type ComposerState,
 } from "./composer"
-import { typeThenEnter, textInBox, BOX_READ_MS, ENTER_PATIENCE_MS, TEXT_SHOWS_WITHIN_MS } from "./enter"
+import { typeThenEnter, textInBox, lineStays, BOX_READ_MS, ENTER_PATIENCE_MS, LINE_STAYS_MS, TEXT_SHOWS_WITHIN_MS } from "./enter"
 import {
   BOX_QUIET_MS,
   formatEnterStuck,
@@ -852,6 +853,57 @@ describe("ragu 0.2.14 in a pane too short for its home (live test 6, FAIL 3)", (
   test("a bar with neither a model's row nor the footer under it is still not the box", async () => {
     const rows = ["  ┃", '  ┃  Chiedi... "x"', "  ┃", "  altro testo", "  ┃"]
     expect(composerOf(await paint(rows, 5, 1), "ragu")).toBe("none")
+  })
+})
+
+describe("a line of ADE's that stays in the box after its Enter (live test 6, FAIL 2)", () => {
+  const clock = () => {
+    let at = 0
+    return { now: () => at, sleep: async (ms: number) => void (at += ms) }
+  }
+  /** Real bytes up to the first frame with a line in the box: the paste, and no Enter taken. */
+  const toTheLine = async () => {
+    const capture = loadCapture("ragu-avvio-normale")
+    const terminal = terminalFor(capture)
+    let next = 0
+    while (next < capture.chunks.length && composerOf(terminal, "ragu") !== "draft") await writtenTo(terminal, capture.chunks[next++]![1])
+    expect(composerOf(terminal, "ragu")).toBe("draft")
+    const read = () => (composerOf(terminal, "ragu") === "draft" ? composerLine(terminal) : undefined)
+    return { capture, terminal, next, read }
+  }
+
+  test("the paste with no Enter taken: the line stays, and that is said", async () => {
+    const { read } = await toTheLine()
+    expect(await lineStays({ read, stop: () => false, ...clock() })).toBe(true)
+  })
+
+  test("the Enter taken: the box empties, and nothing is said", async () => {
+    const { capture, terminal, next, read } = await toTheLine()
+    for (const [, chunk] of capture.chunks.slice(next)) await writtenTo(terminal, chunk)
+    expect(await lineStays({ read, stop: () => false, ...clock() })).toBe(false)
+  })
+
+  test("not before its time", async () => {
+    const reads = Array.from({ length: Math.floor(LINE_STAYS_MS / BOX_READ_MS) - 2 }, () => "4,6:› ciao" as string | undefined)
+    reads.push(undefined, undefined, undefined, undefined, undefined, undefined)
+    expect(await lineStays({ read: () => reads.shift(), stop: () => false, ...clock() })).toBe(false)
+  })
+
+  test("a line that moves is being written: the wait starts again", async () => {
+    const time = clock()
+    let n = 0
+    const read = () => (time.now() < LINE_STAYS_MS * 2 ? `4,6:riga ${n++}` : undefined)
+    expect(await lineStays({ read, stop: () => false, ...time })).toBe(false)
+  })
+
+  test("a box covered for a moment, the note going back resizing the pane, does not count as the line gone", async () => {
+    const reads: (string | undefined)[] = ["l", undefined, "l"]
+    const read = () => (reads.length > 1 ? reads.shift() : reads[0])
+    expect(await lineStays({ read, stop: () => false, ...clock() })).toBe(true)
+  })
+
+  test("stopped, by a key of the user's or the session gone: nothing to say", async () => {
+    expect(await lineStays({ read: () => "l", stop: () => true, ...clock() })).toBe(false)
   })
 })
 
