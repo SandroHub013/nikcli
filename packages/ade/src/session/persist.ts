@@ -190,6 +190,10 @@ function asOptionalNumber(v: unknown): number | undefined {
   return typeof v === "number" && Number.isFinite(v) ? v : undefined
 }
 
+function wholeColumns(n: number | undefined): number | undefined {
+  return n !== undefined && Number.isInteger(n) && n >= 1 ? n : undefined
+}
+
 /**
  * The kinds a transcript line may claim to be.
  *
@@ -315,7 +319,16 @@ function sanitiseBrowsers(raw: unknown): BrowserPaneState[] {
 
 function sanitisePanes(raw: unknown): PaneState[] {
   if (!Array.isArray(raw)) return []
-  return raw.map(sanitisePane)
+  // Only an object with a real id is a pane (SES-15): an invented one, or two with an id in common, the grid draws
+  // and closes as one. The first of an id wins.
+  const seen = new Set<string>()
+  return raw
+    .filter((entry): entry is Record<string, unknown> => {
+      if (!isObject(entry) || typeof entry.id !== "string" || entry.id === "" || seen.has(entry.id)) return false
+      seen.add(entry.id)
+      return true
+    })
+    .map(sanitisePane)
 }
 
 // ---------------------------------------------------------------------------
@@ -447,7 +460,8 @@ export function parseWorkspace(json: string): WorkspaceState | undefined {
     browsers: sanitiseBrowsers(data.browsers),
     // A layout saved before the lessons moved inside RaguVerse carries `learns`: it is not read, so it is not kept.
     focusedPaneId: asOptionalString(data.focusedPaneId),
-    pinnedColumns: asOptionalNumber(data.pinnedColumns),
+    // A whole number of 1 or more: the layout clamps the top (`grid/layout.ts`), not 2.5, 0 or -1.
+    pinnedColumns: wholeColumns(asOptionalNumber(data.pinnedColumns)),
     currentView: asString(data.currentView, def.currentView),
     sidebarWidth: asNumber(data.sidebarWidth, def.sidebarWidth),
     projectPath: asOptionalString(data.projectPath),
