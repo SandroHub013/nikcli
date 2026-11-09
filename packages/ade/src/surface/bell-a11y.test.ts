@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from "node:fs"
 import { join } from "node:path"
 import postcss from "postcss"
 import { translate } from "../i18n"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /**
  * The bell's panel for assistive technology (UX-20), and the close controls that were drawn as a glyph (DS-21).
@@ -10,7 +11,7 @@ import { translate } from "../i18n"
  * The workbench is too large to mount, so these read the source: what is pinned is the markup's contract — a role
  * that is true of what the panel holds, a name for each discard, an alert for a failure — not a rendering.
  */
-const source = readFileSync(new URL("./workbench.tsx", import.meta.url), "utf8").replace(/\r\n/g, "\n")
+const source = workbenchSource().replace(/\r\n/g, "\n")
 
 /** The JSX of the notifications panel: from the bell's trigger to the end of the notices list. */
 const panel = source.slice(source.indexOf('data-action="notifications"'), source.indexOf('data-slot="ade-notice-dismiss"') + 400)

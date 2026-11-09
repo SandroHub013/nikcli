@@ -10,6 +10,7 @@ import {
   type PermissionAnswer,
   type PermissionRequest,
 } from "./permission"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /** What a button shows, with the interface in Italian: the label, the keystroke and the tone. */
 const view = (answers: readonly PermissionAnswer[], language: "it" | "en" = "it") =>
@@ -515,10 +516,7 @@ describe("followPermission", () => {
 })
 
 test("lint: the pane follows a pending request with followPermission", () => {
-  const source = require("node:fs").readFileSync(
-    require("node:path").join(import.meta.dir, "../surface/workbench.tsx"),
-    "utf8",
-  )
+  const source = workbenchSource()
   expect(source).toContain("const still = followPermission(pending, recent, agent)")
 })
 
@@ -528,10 +526,7 @@ test("a request is told by its heading and its target, and the workbench hands t
     permissionIdentity({ what: "Do you want to proceed?", target: "cat README" }),
   )
   expect(permissionIdentity({ what: "run command" })).toBe("run command")
-  const source = require("node:fs").readFileSync(
-    require("node:path").join(import.meta.dir, "../surface/workbench.tsx"),
-    "utf8",
-  )
+  const source = workbenchSource()
   expect(source).toContain("handlePermissionRequest(paneId, permissionIdentity(request)")
   expect(source).toContain("permissionIdentity(request), request.kind)")
   expect(source).not.toContain("handlePermissionRequest(paneId, request.what")

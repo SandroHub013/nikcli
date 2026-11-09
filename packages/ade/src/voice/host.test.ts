@@ -9,6 +9,7 @@ import { AGENTS } from "../session-new/agents"
 import { createWorkbench, type Pane, type Workbench } from "../surface/state"
 import { classifyAnswer, type PermissionAnswer, type PermissionRequest } from "../session/permission"
 import type { Project } from "../host/project"
+import { workbenchSource } from "../test-support/workbench-source"
 
 function createMockDeps(overrides: Partial<AdeVoiceHostDeps> = {}): {
   deps: AdeVoiceHostDeps
@@ -1291,7 +1292,7 @@ describe("no voice text into a pane asking a permission", () => {
 })
 
 describe("the workbench's voice host", () => {
-  const source = codeOf(readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8"))
+  const source = codeOf(workbenchSource())
   const call = source.slice(source.indexOf(codeOf("const voiceHost = createAdeVoiceHost({")))
 
   test("is told when the user has a line pending, by the rule the mail queue uses (MOD-2)", () => {

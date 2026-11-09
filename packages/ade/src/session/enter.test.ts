@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createLineQueue } from "./line-queue"
 import { deliveryResult, enterAgain, ringAgain, typeThenEnter } from "./enter"
+import { workbenchSource } from "../test-support/workbench-source"
 
 describe("no text over a permission prompt (audit 0.7.7, MEDIO 1)", () => {
   test("a prompt already open: nothing is written, and the line is not typed", async () => {
@@ -65,10 +66,7 @@ describe("no Enter over what the user started writing during the wait (review ar
   })
 
   test("lint: the workbench says when the user typed during the wait", () => {
-    const source = require("node:fs").readFileSync(
-      require("node:path").join(import.meta.dir, "../surface/workbench.tsx"),
-      "utf8",
-    )
+    const source = workbenchSource()
     expect(source).toContain("const typedDuring = () => paneId !== undefined && typedSince(records.typed.get(paneId), typedAt)")
     const call = source.slice(source.indexOf("const outcome = await typeThenEnter({"))
     expect(call.slice(0, 1_400)).toContain("typedDuring,")

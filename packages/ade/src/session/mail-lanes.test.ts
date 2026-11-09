@@ -22,6 +22,7 @@ import {
   sentAt,
 } from "./mail-lanes"
 import { failedReceipt, hungReceipt, lateLockReceipt, type Message } from "./mailbox"
+import { workbenchSource } from "../test-support/workbench-source"
 
 beforeEach(() => jest.useFakeTimers())
 afterEach(() => jest.useRealTimers())
@@ -429,7 +430,7 @@ describe("a stale lock", () => {
 
 /* `workbench.tsx` cannot be loaded under bun (Solid JSX), so its wiring is read from the source, as elsewhere here. */
 describe("lint: the workbench's round waits for nothing slow", () => {
-  const source = readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8")
+  const source = workbenchSource()
 
   test("no delivery is awaited in the round: the lanes run them", () => {
     expect(source).not.toContain("await deliverOne(")
@@ -562,7 +563,7 @@ describe("who hears of a message ADE gave up on", () => {
   })
 
   test("lint: a delivery the lane gave up on reopens nothing", () => {
-    const workbench = readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8")
+    const workbench = workbenchSource()
     const after = workbench.slice(workbench.indexOf("const delivered = await deliverText("))
     expect(after.indexOf("if (mailLanes.abandoned(id)) return true")).toBeGreaterThan(-1)
     expect(after.indexOf("if (mailLanes.abandoned(id)) return true")).toBeLessThan(after.indexOf("openRequests.set(id, {"))

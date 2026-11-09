@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { addPane, closePane, createWorkbench, focusedInOpenProject, focusInProject, type Pane } from "./state"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * Full review 2026-10-06, sessioni 4: focus left on a pane of another project, one that is not drawn,
@@ -114,7 +115,7 @@ describe("adding a pane to a project that is not open", () => {
   })
 
   test("the sessions the workbench starts hand the open project to addPane", () => {
-    const source = readFileSync(join(import.meta.dir, "workbench.tsx"), "utf-8")
+    const source = workbenchSource()
     const start = source.indexOf("// Another project's session (a subagent spawned from there)")
     const body = source.slice(start, start + 3500)
     expect(body).toMatch(/\n\s+open,\n\s+\),\n\s+\)\n\s+setStarting\(false\)/)
@@ -150,7 +151,7 @@ describe("close, suspend and kill act only on a pane of the open project", () =>
   })
 
   test("the commands use it", () => {
-    const source = readFileSync(join(import.meta.dir, "workbench.tsx"), "utf8")
+    const source = workbenchSource()
     const body = (id: string) => source.slice(source.indexOf(`id === "${id}"`)).split("} else if (id ===")[0]!
     for (const id of ["pane.close", "session.suspend", "process.kill"]) {
       expect(body(id)).toContain("focusedHere()")

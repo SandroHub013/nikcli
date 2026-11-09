@@ -16,6 +16,7 @@ import {
   retryUnreadableCopy,
   unreadableCopies,
 } from "./unreadable"
+import { workbenchSource } from "../test-support/workbench-source"
 
 class FakeStore {
   data = new Map<string, string>()
@@ -297,7 +298,7 @@ describe("why a saved workspace does not read", () => {
   })
 
   test("lint: the boot picks the notice by the reason", () => {
-    const source = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf-8").replace(/\r\n/g, "\n")
+    const source = workbenchSource().replace(/\r\n/g, "\n")
     expect(source).toContain('savedWorkspace.reason === "broken" && savedWorkspace.copyKey')
     expect(source).toContain('t("workspace.unreadableBroken", savedWorkspace.copyKey)')
   })
@@ -342,7 +343,7 @@ describe("dropIgnoredCopies (WB2-3)", () => {
 
 describe("the autosave drops them and tries once more (WB2-3)", () => {
   // The workbench cannot be loaded under bun: read from the source. Booleans, so a failure does not print the file.
-  const source = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
+  const source = workbenchSource()
 
   test("the write serialises once, and its catch frees the ignored copies and retries before it reports", () => {
     const at = source.indexOf('localStorage.setItem("ade.workspace", text)')

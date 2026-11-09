@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
+import { workbenchSource } from "../test-support/workbench-source"
 
-const source = readFileSync(join(__dirname, "workbench.tsx"), "utf-8")
+const source = workbenchSource()
 
 describe("workbench, low findings of the full review 2026-10-06", () => {
   // sessions 19: the settings switch compared Piper's voice with the MAI one, which are never equal, and reset the state of

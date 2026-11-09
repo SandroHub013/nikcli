@@ -24,6 +24,7 @@ import {
   fromWorkspaceState,
   type Pane,
 } from "./state"
+import { workbenchSource } from "../test-support/workbench-source"
 
 describe("surface state", () => {
   const mockPane: Pane = {
@@ -193,7 +194,7 @@ describe("the bots' gateway controller (A6)", () => {
   })
 
   test("the workbench asks it before starting the controller", () => {
-    const source = readFileSync(join(__dirname, "workbench.tsx"), "utf-8")
+    const source = workbenchSource()
     expect(source).toContain("if (gatewayControllerOn(isTauriDesktop())) {")
     expect(source).not.toMatch(/if \(isTauriDesktop\(\)\) \{\s*let gateway/)
   })

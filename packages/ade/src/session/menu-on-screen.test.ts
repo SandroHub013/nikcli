@@ -12,6 +12,7 @@ import { decideOpening, OPENING_TIMEOUT_MS } from "./opening"
 import { detectPermission, followPermission, type PermissionRequest } from "./permission"
 import { createMenuHold, createUnparsed, menuNames, screenQuestion, statusFromScreen } from "./screen-question"
 import { isAnswerKey, isEnterKey, isTyping, typedAfter, type TypedLine } from "./typed-line"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * Live test of 2026-11-02, FAIL 1 and 2: ADE typed mail and first tasks, Enter included, into a menu that stood on the
@@ -763,7 +764,7 @@ describe("a menu with no question above it", () => {
 })
 
 describe("lint: the workbench's wiring", () => {
-  const source = codeOf(readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8"))
+  const source = codeOf(workbenchSource())
   const between = (from: string, to: string) => {
     const start = source.indexOf(codeOf(from))
     expect(start).toBeGreaterThanOrEqual(0)

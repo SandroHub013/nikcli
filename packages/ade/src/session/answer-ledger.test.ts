@@ -10,6 +10,7 @@ import { foldProposals } from "../design/state"
 import { answeredInAde } from "../design/propose"
 import { answerLedger, ANSWER_LEDGER_KEY, UNVOUCHED_BY, type AnswerStore } from "./answer-ledger"
 import { askerLedger } from "./asker-ledger"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * SEC-3 (audit 2026-11-09): a register line that says `"by":"utente"` was believed to be the user's click. An agent that
@@ -319,7 +320,7 @@ describe("the design register read straight from the file (SEC-3)", () => {
 
 describe("the workbench wires it (SEC-3)", () => {
   // The workbench cannot be loaded under bun: read from the source. Booleans, so a failure does not print the file.
-  const source = require("node:fs").readFileSync(require("node:path").join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8") as string
+  const source = workbenchSource()
 
   test("both registers vouch through it after the pane vouch and remember their own appends; attendi asks it; the outbox seeds it", () => {
     const vouch = "vouch: (path, events) => answers.vouch(path, askers.vouch(path, events)),"

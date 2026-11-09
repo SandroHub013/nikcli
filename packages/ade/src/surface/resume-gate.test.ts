@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * Review of ade/sessioni-salvataggi, B1 (UX-5): with the last project's folder gone, ADE opens on the empty project
@@ -11,7 +12,7 @@ import { join } from "node:path"
  */
 describe("the saved sessions are restarted whether or not a project is open (UX-5, review B1)", () => {
   // The workbench cannot be loaded under bun: read from the source. Booleans, so a failure does not print the file.
-  const source = readFileSync(join(import.meta.dir, "workbench.tsx"), "utf8")
+  const source = workbenchSource()
 
   test("the resume block is gated on the saved workspace only", () => {
     expect(source.includes("      if (restored) {\n")).toBe(true)

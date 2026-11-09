@@ -5,6 +5,7 @@ import { LIST_MS, MINT_MS, MINT_SLOW_LEFT_S, MINT_SLOW_MS, mintTrace, waitForAns
 import { mintedRaguId } from "./resume"
 import { en } from "../i18n/en"
 import { it as italian } from "../i18n/it"
+import { workbenchSource } from "../test-support/workbench-source"
 
 const ID = '{\n  "id": "ses_f2187fa39ffea42ThcJIS6p5l5",\n'
 
@@ -162,7 +163,7 @@ describe("the mint's time", () => {
   })
 
   test("lint: the workbench passes the mint and list times to askCli as the exported constants", () => {
-    const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+    const workbench = workbenchSource()
     expect(workbench).toContain('say: () => tellPane(paneId, t("resume.slowMint", label, MINT_SLOW_LEFT_S))')
     expect(workbench).toContain("askCli(command, plan.args, cwd, read, timing)")
     expect(workbench).toContain("askCli(command, plan.args, cwd, read, { timeoutMs: LIST_MS })")
@@ -242,7 +243,7 @@ describe("the mint's trace", () => {
   })
 
   test("lint: the workbench logs a mint trace for every mint", () => {
-    const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+    const workbench = workbenchSource()
     expect(workbench).toContain(
       "console.info(mintTrace({ agent: agentId, ms: performance.now() - began, outcome, first, title }))",
     )

@@ -13,6 +13,7 @@ import {
   type OutputRun,
 } from "./output-activity"
 import { isFree } from "./mailbox"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * `output-activity.fixture.json`: the times, and nothing else, of the chunks six
@@ -96,7 +97,7 @@ describe("output that says an agent without hooks is working (fix 5)", () => {
   })
 
   test("lint: an idle pane's output goes through the detector, and every spawn stamps its input", () => {
-    const source = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
+    const source = workbenchSource()
     expect(source).toContain('else if (pane.status === "idle") noticeWorkFromOutput(pane)')
     // The local spawn and the ssh one: without the stamp every echo would count.
     expect(source.match(/stampingInput\(session, \(\) => lastInputAt\.set\(paneId, Date\.now\(\)\)\)/g)).toHaveLength(2)
@@ -197,7 +198,7 @@ describe("output alone is believed to be a turn only for so long (resumed TUI th
   })
 
   test("lint: the workbench expires claims on every pass and quarantines on an interruption", () => {
-    const source = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
+    const source = workbenchSource()
     expect(source).toContain("claims.expire(paneId, now)")
     expect(source).toContain("claims.quarantine(target.pane.id)")
     expect(source).toContain("claims.evidence(paneId)")

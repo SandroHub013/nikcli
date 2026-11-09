@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
+import { workbenchSource } from "../test-support/workbench-source"
 
 const src = join(import.meta.dir, "..")
 const read = (name: string) => readFileSync(join(src, name), "utf8")
@@ -9,7 +10,7 @@ describe("record/badge", () => {
   // Dario, filming the promo: laid over the top-right corner, the badge covered
   // minimise, maximise and close.
   test("the REC badge sits in the bar, before the window controls", () => {
-    const workbench = read("surface/workbench.tsx")
+    const workbench = workbenchSource()
     const bar = workbench.slice(workbench.indexOf('data-slot="ade-bar"'), workbench.indexOf("</header>"))
     const badge = bar.indexOf('data-slot="ade-rec"')
     expect(badge).toBeGreaterThan(-1)

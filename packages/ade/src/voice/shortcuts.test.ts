@@ -9,6 +9,7 @@ import {
   // The logic-only entry point: the main barrel re-exports Solid components,
   // which need Solid's compiler and so cannot load under a plain test runtime.
 } from "@ragu/voice/core"
+import { workbenchSource } from "../test-support/workbench-source"
 
 describe("resolveVoiceOrAdeKey", () => {
   const adeBindings: Binding[] = [
@@ -646,10 +647,7 @@ describe("the app's own paths reach a waiting press (MOD-7, review B1)", () => {
 
   test("the workbench's key-up and blur ask holds(), not isPressed()", () => {
     // The workbench cannot be loaded under bun: read from the source. Booleans, so a failure does not print the file.
-    const source = require("node:fs").readFileSync(
-      require("node:path").join(import.meta.dir, "..", "surface", "workbench.tsx"),
-      "utf8",
-    ) as string
+    const source = workbenchSource()
     expect(source.includes("if (pttHandler.holds() && pttHandler.shouldReleaseKey(e.key, e.code))")).toBe(true)
     expect(source.includes("      if (pttHandler.holds()) {\n        void pttHandler.onBlur()")).toBe(true)
     expect(source.includes("pttHandler.isPressed() && pttHandler.shouldReleaseKey")).toBe(false)

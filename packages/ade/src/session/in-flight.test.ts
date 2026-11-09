@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { createInFlight } from "./in-flight"
+import { workbenchSource } from "../test-support/workbench-source"
 
 test("a pane has a line in flight until every line for it settles, failed ones too", async () => {
   const flight = createInFlight()
@@ -24,7 +25,7 @@ test("a pane has a line in flight until every line for it settles, failed ones t
  * `freeNow` reads the count first. Both live inside the workbench.
  */
 test("lint: every line ADE types is counted, and freeNow asks first", () => {
-  const source = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+  const source = workbenchSource()
   expect(source).toContain("return paneId === undefined ? job() : linesInFlight.track(paneId, lineQueue(paneId, job))")
   const free = source.slice(source.indexOf("const freeNow = async"), source.indexOf("const freeNow = async") + 300)
   expect(free).toContain("if (linesInFlight.has(paneId)) return false")

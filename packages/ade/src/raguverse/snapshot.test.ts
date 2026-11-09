@@ -18,6 +18,7 @@ import {
   type PaneFacts,
 } from "./snapshot"
 import type { Snapshot } from "./protocol"
+import { workbenchSource } from "../test-support/workbench-source"
 
 type P = Parameters<typeof worldSnapshot>[0]["panes"][number]
 
@@ -133,7 +134,7 @@ describe("worldSnapshot: the real projects and sessions become shops and agents"
   })
 
   test("the workbench hands the picture the quota the pane header reads, from the shared store", () => {
-    const source = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
+    const source = workbenchSource()
     const start = source.indexOf("const worldPicture = createMemo")
     const body = source.slice(start, source.indexOf("const rootOfShop", start))
     expect(body).toContain("quota: quotaForAgent(pane.agent ?? pane.model, quotas.snapshot(), quotas.now())")

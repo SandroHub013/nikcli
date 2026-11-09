@@ -4,6 +4,7 @@ import { join } from "node:path"
 import { en } from "../i18n/en"
 import { it } from "../i18n/it"
 import { EVENTS_MAX_BYTES } from "./recording"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * MOD2-4: the export read the pointer log with the host's default limit of 1 MB. A take longer than a few minutes has
@@ -17,7 +18,7 @@ describe("the events file is read whole, or the cut is said (MOD2-4)", () => {
   })
 
   // The workbench cannot be loaded under bun: read from the source. Booleans, so a failure does not print the file.
-  const source = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
+  const source = workbenchSource()
   const at = source.indexOf("const exportLastTake = async () => {")
   const body = source.slice(at, source.indexOf("exportPromo({", at))
 

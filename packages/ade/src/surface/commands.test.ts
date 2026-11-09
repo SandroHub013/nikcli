@@ -4,6 +4,7 @@ import { buildCommands, keepsPaletteOpen, waitsForSheet, type CommandContext } f
 import { resetLocaleForTests } from "../i18n"
 import { filterCommands } from "../command/registry"
 import { addPane, createWorkbench, VISIBLE_VIEWS, visibleViews, type Pane, type Workbench } from "./state"
+import { workbenchSource } from "../test-support/workbench-source"
 
 describe("«Consegna ora» from the keyboard (UX2-2)", () => {
   const withPane = addPane(createWorkbench(), {
@@ -27,7 +28,7 @@ describe("«Consegna ora» from the keyboard (UX2-2)", () => {
   })
 
   test("lint: it goes down the click's road, which holds the one message and the question on screen", () => {
-    const workbench = readFileSync(new URL("./workbench.tsx", import.meta.url), "utf8")
+    const workbench = workbenchSource()
     expect(workbench).toContain('"pane.deliverNow",')
     const branch = workbench.slice(workbench.indexOf('id === "pane.deliverNow"'), workbench.indexOf('id === "pane.rename"'))
     expect(branch).toContain("pressDeliverNow(target)")

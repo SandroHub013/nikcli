@@ -12,6 +12,7 @@ import {
   type LegacyVoiceKey,
   type VoiceKeyHost,
 } from "./voice-key"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * The voice's OpenRouter key leaves browser storage for the keychain (S6).
@@ -150,7 +151,7 @@ describe("the voice's key moves into the keychain", () => {
 })
 
 describe("lint: the wiring", () => {
-  const workbench = codeOf(readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8"))
+  const workbench = codeOf(workbenchSource())
   const shell = codeOf(readFileSync(join(import.meta.dir, "../host/shell.ts"), "utf8"))
 
   test("ragu's key is copied into the keychain, not into the voice's settings", () => {

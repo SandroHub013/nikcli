@@ -17,6 +17,7 @@ import {
   textTarget,
   type SheetNote,
 } from "./notes"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * The design sheet, piece 2: what goes back to the session that wrote the
@@ -204,7 +205,7 @@ describe("who can send", () => {
   })
 
   test("lint: the recipient is the sheet's session or the one the user picked", () => {
-    const workbench = read("surface/workbench.tsx")
+    const workbench = workbenchSource()
     const start = workbench.indexOf("const sendSheetNotes = async (")
     const body = workbench.slice(start, workbench.indexOf("\n  }\n", start))
     expect(body).toContain("const target = to ?? sheet.from")

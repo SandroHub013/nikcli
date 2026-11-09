@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import { resetLocaleForTests } from "../i18n"
 import { parseWorkspace, serializeWorkspace } from "../session/persist"
 import { createWorkbench, fromWorkspaceState, liveToReopen, sessionsToResume, toWorkspaceState, type Pane } from "./state"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * prova 4, item 12: a Claude session closed with /exit, «Riprendi» showing, ran
@@ -77,7 +78,7 @@ describe("a restart starts what was alive, not what had ended", () => {
   })
 
   test("lint: the workbench gives the second round the saved state", () => {
-    const source = readFileSync(new URL("./workbench.tsx", import.meta.url), "utf8")
+    const source = workbenchSource()
     expect(source).toContain("liveToReopen(wb().panes, plannedIds, restored)")
   })
 

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { NEW_PANE_ITEMS, showsAllForNewPane } from "./new-pane"
 import { createWorkbench, type Pane } from "./state"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * prova 4, item 13: «Nuovo pannello» with a maximised pane opened the new pane
@@ -36,7 +37,7 @@ describe("«Nuovo pannello» with a maximised pane", () => {
   })
 
   test("lint: runCommand calls it, before the commands run", () => {
-    const source = readFileSync(new URL("./workbench.tsx", import.meta.url), "utf8")
+    const source = workbenchSource()
     expect(source).toContain("setWb((w) => showsAllForNewPane(w, id))")
   })
 

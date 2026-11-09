@@ -14,6 +14,7 @@ import { readFileSync } from "node:fs"
 import type { DiscoveryIO } from "./discovery"
 import { FILE_PLUGIN_DISABLED_REASON, importPluginModule } from "./loader"
 import { createAdePluginRuntime, type RuntimeHost } from "./runtime"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /** Every path `convertFileSrc` was asked for: none may be there. */
 const converted: string[] = []
@@ -101,7 +102,7 @@ describe("the way a plugin file could be opened stays shut", () => {
   })
 
   test("the consent dialog is not asked for code that never runs", () => {
-    const source = readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8")
+    const source = workbenchSource()
     const trust = source.indexOf("async trust(")
     const guard = source.indexOf("if (FILE_PLUGINS_DISABLED)", trust)
     const ask = source.indexOf("consentQuestion(", trust)

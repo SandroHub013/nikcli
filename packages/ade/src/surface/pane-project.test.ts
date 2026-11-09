@@ -6,6 +6,7 @@ import { t } from "../i18n"
 import { belongsTo, goneFolder, paneProject, sameProject } from "./pane-project"
 import { parseWorkspace, serializeWorkspace } from "../session/persist"
 import { fromWorkspaceState, toWorkspaceState, type Pane, type Workbench } from "./state"
+import { workbenchSource } from "../test-support/workbench-source"
 
 const mine = { name: "app", root: "C:/lavoro/app" }
 const other = { name: "app", root: "D:/clienti/app" }
@@ -161,7 +162,7 @@ test("lint: Enter in the terminal and the composer start the turn through turnSu
   const source = readFileSync(join(import.meta.dir, "pane-renderer.tsx"), "utf-8")
   expect(source.match(/deps\.turnSubmitted\(current\(\)\.id\)/g)).toHaveLength(2)
   expect(source).not.toContain('data.includes("\\r") && current().status === "idle"')
-  const workbench = readFileSync(join(import.meta.dir, "workbench.tsx"), "utf-8")
+  const workbench = workbenchSource()
   expect(workbench).toMatch(/const turnSubmitted = \(paneId: string\) => \{[\s\S]*?markWorking\(paneId\)\r?\n  \}/)
 })
 
@@ -169,7 +170,7 @@ test("lint: a key that answers a prompt only the hook reported takes the pane of
   // A «1» in Claude Code's menu is the answer, and nothing else tells ADE until the Stop.
   const source = readFileSync(join(import.meta.dir, "pane-renderer.tsx"), "utf-8")
   expect(source).toContain("if (answersPrompt(data)) deps.promptAnswered(current().id)")
-  const workbench = readFileSync(join(import.meta.dir, "workbench.tsx"), "utf-8")
+  const workbench = workbenchSource()
   expect(workbench).toMatch(/const promptAnswered = \(paneId: string\) => \{[\s\S]*?questionSeenAt\.set\(paneId/)
   expect(workbench).toMatch(/const turnSubmitted = \(paneId: string\) => \{\s+promptAnswered\(paneId\)/)
 })

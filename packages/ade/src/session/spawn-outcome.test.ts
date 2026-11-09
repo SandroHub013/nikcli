@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { codeOf } from "../test-support/source-text"
 import { formatSpawnFailed, spawnOutcome } from "./spawn-outcome"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * Live test 2026-11-02: `ade-msg spawn crush "x"` printed «ok: avviata» although the host could not find the program;
@@ -53,7 +54,7 @@ describe("what spawn hears about the start", () => {
 })
 
 describe("the workbench's spawn", () => {
-  const source = codeOf(readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf-8"))
+  const source = codeOf(workbenchSource())
 
   test("answers after the start, and a refused one is an error, not «ok: avviata»", () => {
     const branch = source.slice(source.indexOf(codeOf("const outcome = await spawnOutcome(")))
@@ -80,7 +81,7 @@ describe("the workbench's spawn", () => {
  * waiting on it said «ok», and a relaunch that failed closed its requests with «si è chiusa» and no reason.
  */
 describe("every way a start can fail is recorded, and heard by whoever waits", () => {
-  const source = codeOf(readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf-8"))
+  const source = codeOf(workbenchSource())
 
   test("the catch of a local and of a remote start record the reason as the refusals do", () => {
     expect(source).toContain(

@@ -12,6 +12,7 @@ import {
   reportsTurns,
   takesActivityExtension,
 } from "./agent-hooks"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * The turn reporter for Prime Agent and pi, as they load it: the file Rust
@@ -173,7 +174,7 @@ describe("which agents get it, here and in Rust", () => {
     expect(check).toBeGreaterThan(0)
     expect(added).toBeGreaterThan(check)
     expect(plan).toBeGreaterThan(added)
-    const workbench = readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8")
+    const workbench = workbenchSource()
     expect(workbench).toContain("|| takesActivityExtension(agentId)")
   })
 })

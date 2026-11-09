@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { updateInSteps } from "./steps"
+import { workbenchSource } from "../test-support/workbench-source"
 
 function recording(overrides: { download?: () => Promise<unknown>; install?: () => Promise<unknown> } = {}) {
   const steps: string[] = []
@@ -43,7 +44,7 @@ describe("updateInSteps", () => {
 })
 
 describe("the wiring in the workbench", () => {
-  const source = readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8")
+  const source = workbenchSource()
 
   test("the mail round waits for the install, not for the whole update", () => {
     expect(source).toContain("paused: () => installingUpdate(),")

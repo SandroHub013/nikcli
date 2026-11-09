@@ -13,6 +13,7 @@ import {
   withPaneNotice,
   type Pane,
 } from "./state"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * Prove dal vivo 2, difetto A: the restore's notes («già aperta», «aperta
@@ -44,7 +45,7 @@ describe("the notes over a terminal", () => {
   })
 
   test("carry every note of the restore, and none of them only in the transcript", () => {
-    const workbench = read("surface", "workbench.tsx")
+    const workbench = workbenchSource()
     for (const key of [
       "resume.shared",
       "resume.alsoOpen",
@@ -92,7 +93,7 @@ describe("ADE's own notes are not the agent's report", () => {
   })
 
   test("the restore's notes and the pane notices are written as ADE's", () => {
-    const workbench = read("surface", "workbench.tsx")
+    const workbench = workbenchSource()
     expect(workbench).toContain('if (from === "ade") return')
     expect(workbench).toContain('appendLine(paneId, t("resume.lookingHere", agent.label || agentId), "note", "ade")')
     expect(workbench).toContain('appendLine(paneId, t("resume.asking", agent.label || agentId), "note", "ade")')
@@ -107,7 +108,7 @@ describe("ADE's own notes are not the agent's report", () => {
   })
 
   test("a note that carries another session's words is still ADE's", () => {
-    const workbench = read("surface", "workbench.tsx")
+    const workbench = workbenchSource()
     // A message, a reply, an update, a memory line: another session's text, in a note ADE writes.
     for (const key of ["note.messageFrom", "note.replyFrom", "note.updateFrom", "note.memory"]) {
       // Whole calls, not lines: prettier spreads a long call over several.
@@ -132,7 +133,7 @@ describe("ADE's own notes are not the agent's report", () => {
  * line written into xterm is wiped by the agent's next redraw.
  */
 describe("the notes that go over the terminal", () => {
-  const workbench = read("surface", "workbench.tsx")
+  const workbench = workbenchSource()
   // Whole calls, not lines: prettier spreads a long call over several.
   const told = (key: string) =>
     [...callsTo(workbench, "tellPane"), ...callsTo(workbench, "say")].filter((call) => call.includes(`"${key}"`))
@@ -238,13 +239,13 @@ describe("the strip's length and a start that never happened", () => {
     expect(withPaneNotice(undefined, "breve")).toEqual(["breve"])
     // The same long note twice is still one.
     expect(withPaneNotice(withPaneNotice(undefined, long), long)).toHaveLength(1)
-    const workbench = read("surface", "workbench.tsx")
+    const workbench = workbenchSource()
     const tell = workbench.slice(workbench.indexOf("const tellPane = "), workbench.indexOf("const dismissNotices = "))
     expect(tell).toContain('appendLine(id, text, "note", "ade")')
   })
 
   test("ADE's own sentences leave every field at least 120 characters", () => {
-    const sources = [read("surface", "workbench.tsx"), read("surface", "pane-renderer.tsx"), read("voice", "host.ts")]
+    const sources = [workbenchSource(), read("surface", "pane-renderer.tsx"), read("voice", "host.ts")]
     const keys = new Set<string>()
     for (const source of sources) {
       for (const line of source.split("\n")) {
@@ -262,7 +263,7 @@ describe("the strip's length and a start that never happened", () => {
   })
 
   test("a start the host refused shows as failed, not as «Uscito con ?»", () => {
-    const workbench = read("surface", "workbench.tsx")
+    const workbench = workbenchSource()
     expect(workbench).toContain('activity: failed ?? (code === 0 ? "done" : exitedActivity(code))')
     expect(workbench).toContain('finish(paneId, code, refused ? "startFailed" : undefined)')
     expect(workbench).toContain('finish(paneId, code, refused ? "connectFailed" : undefined)')

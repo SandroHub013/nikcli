@@ -34,6 +34,7 @@ import {
 import { confirmDialog } from "./permission"
 import { createMenuHold, folderTrust, bottomRows, screenQuestion } from "./screen-question"
 import { typedAfter, typedSince } from "./typed-line"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * The live test of 2026-11-03 with real agents: everything ADE typed where it should not came from a shape its reading of
@@ -918,7 +919,7 @@ describe("a line of ADE's that stays in the box after its Enter (live test 6, FA
 })
 
 describe("a click means nothing on a pane that has drawn nothing (audit SES2-3)", () => {
-  const workbench = codeOf(readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8"))
+  const workbench = codeOf(workbenchSource())
   const between = (from: string, to: string) => workbench.slice(workbench.indexOf(from), workbench.indexOf(to))
 
   test("armed or not, the text does not go before the first frame", () => {
@@ -1275,7 +1276,7 @@ describe("the gate and what it does not touch", () => {
     expect(mayTypeNow({ composer: "none", question: false, nothingDrawn: false })).toBe(false)
   })
 
-  const workbench = codeOf(readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8"))
+  const workbench = codeOf(workbenchSource())
   const between = (from: string, to: string) => {
     const start = workbench.indexOf(from)
     expect(start).toBeGreaterThan(0)
