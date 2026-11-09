@@ -253,7 +253,9 @@ export const en: Messages = {
   "pane.input.none": "no process listening",
   "pane.notDelivered": (text) => `No process is listening, so ${text} wasn't delivered.`,
   "pane.startFailed": (error) =>
-    `The session didn't start: ${error}. Press Retry; if it happens again, check your sign-in in Settings → Agents and accounts.`,
+    `The session didn't start: ${error}. Press Retry; if it happens again, check your sign-in to the agent in Settings › Agents and accounts.`,
+  "pane.startFailed.refused": (error) =>
+    `The session didn't start: ${error}. Retrying won't help: remove that option or argument from the command that started it.`,
   "pane.startFailed.notFound": (agent, command) =>
     `${agent} didn't start: the command “${command}” is not installed on this computer. Install it from its card in New session, then press Retry.`,
   "pane.connectFailed.notFound": (reason) => `The connection failed: ${reason}. Install it, then try again.`,
@@ -1099,7 +1101,7 @@ export const en: Messages = {
   "gateway.panel.reconnecting": "On · reconnecting",
   "gateway.panel.attentionTimeout": "Could not connect for over 10 minutes",
   "gateway.panel.attentionQueueFull":
-    "Chat messages are piling up faster than ADE handles them, and new ones are being dropped. Reload ADE's window; if it comes back, switch the gateway off and on.",
+    "Chat messages are piling up faster than ADE handles them, and new ones are being dropped. Switch the chat connection off and on; if it happens again, close and reopen ADE (sessions restart).",
   "gateway.panel.retry": "Retry",
   "gateway.panel.changeCode": "Change code",
   "gateway.panel.openPlatforms": "Open platforms",

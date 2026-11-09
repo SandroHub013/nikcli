@@ -261,7 +261,9 @@ export const it = {
   "pane.input.none": "nessun processo in ascolto",
   "pane.notDelivered": (text: string) => `Nessun processo in ascolto: ${text} non è stato consegnato.`,
   "pane.startFailed": (error: string) =>
-    `La sessione non è partita: ${error}. Premi Riprova; se succede di nuovo, controlla l'accesso in Impostazioni → Agenti e account.`,
+    `La sessione non è partita: ${error}. Premi Riprova; se succede di nuovo, controlla di aver fatto l'accesso all'agente in Impostazioni › Agenti e account.`,
+  "pane.startFailed.refused": (error: string) =>
+    `La sessione non è partita: ${error}. Riprovare non serve: togli quell'opzione o quell'argomento dal comando che l'ha avviata.`,
   "pane.startFailed.notFound": (agent: string, command: string) =>
     `${agent} non è partito: il comando «${command}» non è installato su questo computer. Installalo dalla sua scheda in Nuova sessione, poi premi Riprova.`,
   "pane.connectFailed.notFound": (reason: string) => `La connessione non è riuscita: ${reason}. Installalo, poi riprova.`,
@@ -1121,7 +1123,7 @@ export const it = {
   "gateway.panel.reconnecting": "Acceso · riconnessione in corso",
   "gateway.panel.attentionTimeout": "Impossibile connettersi da oltre 10 minuti",
   "gateway.panel.attentionQueueFull":
-    "I messaggi della chat si accumulano più in fretta di quanto ADE li gestisca, e i nuovi vengono scartati. Ricarica la finestra di ADE; se ricapita, spegni e riaccendi il collegamento chat.",
+    "I messaggi della chat si accumulano più in fretta di quanto ADE li gestisca, e i nuovi vengono scartati. Spegni e riaccendi il collegamento chat; se ricapita, chiudi e riapri ADE (le sessioni ripartono).",
   "gateway.panel.retry": "Riprova",
   "gateway.panel.changeCode": "Cambia il codice",
   "gateway.panel.openPlatforms": "Apri piattaforme",
