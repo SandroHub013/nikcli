@@ -480,6 +480,7 @@ import {
 import { watchLongTasks } from "../session/long-task-log"
 import { formatSpawnFailed, spawnOutcome } from "../session/spawn-outcome"
 import { isTyping, questionOpened, submittedSince, typedAfter, typedSince } from "../session/typed-line"
+import { createPasteModes } from "../session/paste-mode"
 import {
   composerLine,
   composerOf,
@@ -2722,7 +2723,7 @@ export function Workbench() {
      * after a wait that grows with the line — a thousand characters with the
      * reply contract were still being taken in when a fixed 400 ms Enter came.
      */
-    const bracketed = paneId !== undefined && bracketedPaste.get(paneId) === true
+    const bracketed = paneId !== undefined && pasteModes.on(paneId)
     // A message that quotes an `@ade` line must not run it when the TUI echoes it.
     if (paneId !== undefined) {
       panels.newTurn(paneId)
@@ -2808,12 +2809,7 @@ export function Workbench() {
   const ESC = String.fromCharCode(27)
 
   /** Whether each pane's program has bracketed paste on, from the mode switches in its own output. */
-  const bracketedPaste = new Map<string, boolean>()
-  const noteBracketedPaste = (paneId: string, chunk: string) => {
-    const on = chunk.lastIndexOf(`${ESC}[?2004h`)
-    const off = chunk.lastIndexOf(`${ESC}[?2004l`)
-    if (on >= 0 || off >= 0) bracketedPaste.set(paneId, on > off)
-  }
+  const pasteModes = createPasteModes()
 
   /**
    * Makes sure a typed line became a turn, where the CLI's hooks can say so.
@@ -8520,7 +8516,7 @@ export function Workbench() {
     workingSince.delete(id)
     interruptedAt.delete(id)
     interruptSettled.delete(id)
-    bracketedPaste.delete(id)
+    pasteModes.forget(id)
     sheetWatch.forget(id)
   }
 
@@ -9619,7 +9615,7 @@ export function Workbench() {
       formerNonces.set(paneId, formerNonce)
     } else formerNonces.delete(paneId)
     activityOf.delete(paneId)
-    bracketedPaste.delete(paneId)
+    pasteModes.forget(paneId)
     let spawned: SpawnedSession | undefined
     // The host refused to start it: said by `onRefused`, then the exit that follows.
     let refused = false
@@ -9730,7 +9726,7 @@ export function Workbench() {
           const now = Date.now()
           openingBytes = bytesAfter(openingBytes, chunk, now)
           lastOutputAt.set(paneId, now)
-          noteBracketedPaste(paneId, chunk)
+          pasteModes.note(paneId, chunk)
           // The mode bar is repainted on every Shift+Tab, in a chunk with no newline: read from the raw bytes, the last one seen is the pane's class (native mail is picked on it).
           if (agentId === "claude-code") {
             const seen = modeTracker.push(paneId, chunk)
@@ -10085,7 +10081,7 @@ export function Workbench() {
     const shellOnly = agentId === "terminal"
     paneNonces.delete(paneId)
     activityOf.delete(paneId)
-    bracketedPaste.delete(paneId)
+    pasteModes.forget(paneId)
     records.typed.forget(paneId)
     setWb((w) =>
       updatePane(w, paneId, {
@@ -10130,7 +10126,7 @@ export function Workbench() {
           lastOutputAt.set(paneId, Date.now())
           // ConPTY's own bytes are not ssh having said anything (`bytesAfter`).
           if (drawsText(chunk)) textAt = Date.now()
-          noteBracketedPaste(paneId, chunk)
+          pasteModes.note(paneId, chunk)
           tail = (tail + stripAnsi(chunk)).slice(-400)
           // Whole, up to a generous cap: a PowerShell 5.1 error is 400+ characters, and what says it comes first.
           sinceStep = (sinceStep + stripAnsi(chunk)).slice(-8000)
