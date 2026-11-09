@@ -169,6 +169,8 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
                       data-slot="new-agent"
                       data-agent-id={status.agent.id}
                       data-active={isSelected() ? "true" : undefined}
+                      // A card to pick, so it says whether it is picked; one still to install opens a panel instead.
+                      aria-pressed={isAbsent() ? undefined : isSelected()}
                       data-availability={status.availability}
                       data-installing={installing() === status.agent.id ? "true" : undefined}
                       title={status.path ?? (isAbsent() ? t("install.cardHint") : undefined)}
@@ -230,6 +232,7 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
                     type="button"
                     data-slot="new-count"
                     data-active={count() === value ? "true" : undefined}
+                    aria-pressed={count() === value}
                     onClick={() => setCount(clampSessions(value))}
                   >
                     {value}

@@ -177,3 +177,39 @@ describe("the workbench wiring", () => {
     expect(document.activeElement).toBe(section)
   })
 })
+
+describe("the launcher's choices say which one is chosen (UX-14)", () => {
+  test("the chosen agent card and the chosen count are aria-pressed true, the others false", async () => {
+    const { root } = await mount([...SHELLS, "claude", "codex"], { initialAgent: "codex" })
+    const cards = [...root.querySelectorAll<HTMLButtonElement>('[data-slot="new-agent"]')].filter(
+      (card) => card.dataset.availability !== "assente",
+    )
+    expect(cards.length).toBeGreaterThan(1)
+    expect(cards.map((card) => [card.dataset.agentId, card.getAttribute("aria-pressed")])).toEqual(
+      cards.map((card) => [card.dataset.agentId, card.dataset.agentId === "codex" ? "true" : "false"]),
+    )
+    const counts = [...root.querySelectorAll<HTMLButtonElement>('[data-slot="new-count"]')]
+    expect(counts.length).toBeGreaterThan(1)
+    expect(counts.map((button) => [button.textContent, button.getAttribute("aria-pressed")])).toEqual(
+      counts.map((button) => [button.textContent, button.dataset.active === "true" ? "true" : "false"]),
+    )
+    expect(counts.filter((button) => button.getAttribute("aria-pressed") === "true")).toHaveLength(1)
+  })
+
+  test("the cards of agents still to install are not toggles: they open the install panel", async () => {
+    const { root } = await mount([...SHELLS, "claude"], { initialAgent: "claude-code" })
+    const missing = [...root.querySelectorAll<HTMLButtonElement>('[data-slot="new-agent"][data-availability="assente"]')]
+    expect(missing.length).toBeGreaterThan(0)
+    for (const card of missing) expect(card.hasAttribute("aria-pressed")).toBe(false)
+  })
+
+  test("pressing another count moves the pressed state", async () => {
+    const { root } = await mount([...SHELLS, "claude"], { initialAgent: "claude-code" })
+    const counts = () => [...root.querySelectorAll<HTMLButtonElement>('[data-slot="new-count"]')]
+    const other = counts().find((button) => button.getAttribute("aria-pressed") === "false")!
+    other.click()
+    await settle()
+    expect(counts().find((button) => button.textContent === other.textContent)!.getAttribute("aria-pressed")).toBe("true")
+    expect(counts().filter((button) => button.getAttribute("aria-pressed") === "true")).toHaveLength(1)
+  })
+})
