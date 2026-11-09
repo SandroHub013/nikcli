@@ -3956,6 +3956,129 @@ mod tests {
         assert!(env.log.lock().unwrap().iter().all(|line| !line.contains("spento")));
     }
 
+    /* Section 3 of the audit: the checks B1 added, each proven on its own. */
+    #[tokio::test]
+    async fn the_rest_of_a_batch_stops_at_the_loop_when_the_gateway_goes_off() {
+        let s = setup("off-loop-check");
+        authorize(&s, "42");
+        let (adapter, feed) = start(&s);
+        s.hub.pairing_open(BOT, Platform::Fake).unwrap();
+        adapter.hold_sends.store(true, std::sync::atomic::Ordering::SeqCst);
+        feed.send(Ok(vec![message("1", "c7", "7", "uno sconosciuto"), message("2", "c42", "42", "autorizzato")])).unwrap();
+        eventually("l'invio allo sconosciuto è in corso", || adapter.send_attempts.load(std::sync::atomic::Ordering::SeqCst) == 1).await;
+
+        s.hub.stop(BOT, Platform::Fake).unwrap();
+        adapter.hold_sends.store(false, std::sync::atomic::Ordering::SeqCst);
+        tokio::time::sleep(Duration::from_millis(80)).await;
+
+        assert!(s.env.messages.lock().unwrap().is_empty());
+        // Stopped by the loop, before `deliver` looked at it: that one says so in the log.
+        assert!(s.env.log.lock().unwrap().iter().all(|line| !line.contains("il gateway è stato spento")), "the loop let it through");
+    }
+
+    #[tokio::test]
+    async fn off_landing_inside_deliver_still_hands_nothing_on() {
+        let s = setup("off-in-deliver");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        let env = s.env.clone();
+        let path = s.path.clone();
+        let hub = Arc::new(s.hub);
+        let stopping = hub.clone();
+        *env.on_log.lock().unwrap() =
+            Some(("messaggio da un mittente autorizzato".into(), Box::new(move || stopping.stop(BOT, Platform::Fake).unwrap()) as Box<dyn FnOnce() + Send + Sync>));
+
+        feed.send(Ok(vec![message("1", "c42", "42", "proprio ora")])).unwrap();
+        eventually("il controllo in deliver", || env.log.lock().unwrap().iter().any(|line| line.contains("il gateway è stato spento"))).await;
+
+        assert!(env.messages.lock().unwrap().is_empty());
+        assert!(!pending_file_path(&path, BOT, Platform::Fake).exists());
+    }
+
+    /* BOT-3: the re-check on the other way a message is handed on again. */
+    #[tokio::test]
+    async fn a_message_kept_on_disk_from_a_sender_no_longer_authorized_is_dropped_when_the_link_starts() {
+        let s = setup("recheck-at-launch");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        feed.send(Ok(vec![with_cursor("810", message("1", "c42", "42", "uno"))])).unwrap();
+        eventually("il messaggio", || s.env.messages.lock().unwrap().len() == 1).await;
+        s.hub.shutdown();
+        s.hub
+            .store
+            .update(BOT, Platform::Fake, |link, _| {
+                link.authorized.clear();
+                Ok(())
+            })
+            .unwrap();
+
+        let again = setup_vault(s.path.clone(), s.vault.clone());
+        again.hub.resume();
+        tokio::time::sleep(Duration::from_millis(40)).await;
+
+        assert!(again.env.messages.lock().unwrap().is_empty(), "a revoked sender's message came back at launch");
+        assert!(!pending_file_path(again.hub.store.path(), BOT, Platform::Fake).exists());
+        assert_eq!(again.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref(), Some("810"));
+        assert!(again.env.log.lock().unwrap().iter().any(|line| line.contains("non riconsegnati")));
+    }
+
+    #[tokio::test]
+    async fn revoking_a_sender_while_the_gateway_is_off_takes_their_messages_out_of_the_file() {
+        let s = setup("revoke-with-no-link");
+        authorize(&s, "42");
+        authorize(&s, "43");
+        let (_adapter, feed) = start(&s);
+        feed.send(Ok(vec![message("1", "c42", "42", "del revocato"), message("2", "c43", "43", "di un altro")])).unwrap();
+        eventually("i messaggi", || s.env.messages.lock().unwrap().len() == 2).await;
+        s.hub.shutdown();
+
+        s.hub.pairing_revoke(BOT, Platform::Fake, "42").unwrap();
+
+        let on_disk = read_pending_file(&pending_file_path(s.hub.store.path(), BOT, Platform::Fake));
+        assert_eq!(on_disk.iter().map(|entry| entry.msg.id.as_str().to_string()).collect::<Vec<_>>(), vec!["2".to_string()]);
+    }
+
+    /* BOT-4: the panel stops saying the queue is full once a message is accepted again. */
+    #[tokio::test]
+    async fn the_full_queue_attention_goes_when_a_message_is_accepted_again() {
+        let s = setup("pending-full-clears");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        {
+            let links = s.hub.links();
+            let running = links.get(&(BOT.to_string(), Platform::Fake)).unwrap();
+            let mut pending = running.pending.lock().unwrap();
+            for i in 0..PENDING_CAP {
+                pending.push_back(PendingEntry {
+                    msg: GatewayMessage {
+                        bot: BOT.to_string(),
+                        platform: Platform::Fake,
+                        chat: "c42".into(),
+                        sender: MessageSender { id: "42".into(), name: "utente".into() },
+                        text: format!("msg {i}"),
+                        id: format!("m{i}"),
+                        redacted: false,
+                        button: false,
+                        private: true,
+                        recovered: false,
+                        owner: true,
+                        sent_ms: None,
+                    },
+                    cursor: None,
+                    acked: false,
+                });
+            }
+        }
+        let full = || s.env.statuses.lock().unwrap().last().is_some_and(|status| status.attention_reason.as_deref() == Some(QUEUE_FULL));
+        feed.send(Ok(vec![message("troppo", "c42", "42", "troppo")])).unwrap();
+        eventually("la coda piena è segnalata", full).await;
+
+        s.hub.ack(BOT, Platform::Fake, "c42", "m0").unwrap();
+        feed.send(Ok(vec![message("dopo", "c42", "42", "c'è posto")])).unwrap();
+        eventually("accettato", || s.env.messages.lock().unwrap().iter().any(|m| m.id == "dopo")).await;
+        eventually("l'avviso se ne va", || !full()).await;
+    }
+
     /* BOT-10: the page decides by age, so the age must reach it, and survive the pending file. */
     #[tokio::test]
     async fn every_message_says_when_it_was_written_and_one_kept_by_an_older_ade_says_nothing() {
