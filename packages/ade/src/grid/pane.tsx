@@ -1020,7 +1020,7 @@ export function SessionPane(props: SessionPaneProps) {
         row for them, so those two cases keep it.
       */}
       <Show when={showDock()}>
-        <div data-slot="pane-dock">
+        <div data-slot="pane-dock" data-offer={props.deliverNowOffered ? "" : undefined}>
           {/* A pane with actions of its own (resume, retry, close-gone) shows
               them in place of the prompt. */}
           <Show

@@ -29,8 +29,9 @@ describe("a short pane keeps its rows", () => {
     expect(short![2]).toMatch(/\[data-slot="pane-notice"\] \{[^}]*position: absolute/)
   })
 
-  test("so is the action, and only when there is a terminal: a pane with none types in the dock", () => {
-    expect(short![2]).toMatch(/\[data-slot="pane-terminal"\] ~ \[data-slot="pane-dock"\] \{[^}]*position: absolute/)
+  test("so is «Consegna ora», and only over a terminal: a pane with none types in the dock, and Riprova or Riprendi keep their row", () => {
+    expect(short![2]).toMatch(/\[data-slot="pane-terminal"\] ~ \[data-slot="pane-dock"\]\[data-offer\] \{[^}]*position: absolute/)
+    expect(short![2]).not.toMatch(/\[data-slot="pane-terminal"\] ~ \[data-slot="pane-dock"\] \{/)
     expect(short![2]).not.toMatch(/^\s*\[data-slot="pane-dock"\]/m)
   })
 })

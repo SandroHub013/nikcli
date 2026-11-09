@@ -1514,7 +1514,7 @@
     overflow-y: auto;
   }
 
-  [data-slot="pane-terminal"] ~ [data-slot="pane-dock"] {
+  [data-slot="pane-terminal"] ~ [data-slot="pane-dock"][data-offer] {
     position: absolute;
     right: 6px;
     bottom: 6px;

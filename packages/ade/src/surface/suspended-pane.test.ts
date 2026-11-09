@@ -129,3 +129,18 @@ test("the header's Sospendi, off, stays visible and says why", async () => {
   expect(button!.getAttribute("aria-disabled")).toBe("true")
   expect(button!.title).toBe("Sospendi non disponibile: non ha un processo vivo")
 })
+
+test("the dock says when it holds «Consegna ora», the one action a short pane floats over its terminal", async () => {
+  const dock = async (offered: boolean) => {
+    const { host } = mountSession({ status: "done", activity: "done" }, offered)
+    await frames()
+    const found = host.querySelector('[data-slot="pane-dock"]')
+    expect(found).not.toBeNull()
+    const marked = found!.hasAttribute("data-offer")
+    cleanup?.()
+    cleanup = undefined
+    return marked
+  }
+  expect(await dock(false)).toBe(false)
+  expect(await dock(true)).toBe(true)
+})
