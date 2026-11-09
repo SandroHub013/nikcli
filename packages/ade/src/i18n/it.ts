@@ -837,6 +837,7 @@ export const it = {
   // Export, stuck note
   "record.export.busy": "Un'esportazione è già in corso.",
   "record.export.desktopOnly": "L'esportazione funziona solo nell'app desktop.",
+  "record.export.eventsCut": "Il registro del puntatore supera 64 MB: zoom e clic coprono solo la prima parte.",
   "record.export.done": (path: string) => `Video pronto: ${path}`,
   "record.export.failed": (problem: string) =>
     `Esportazione non riuscita: ${problem}. La registrazione originale non è stata toccata: riprova da Impostazioni › Registrazione.`,

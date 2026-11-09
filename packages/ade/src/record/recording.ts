@@ -219,6 +219,12 @@ export function bitrateFor(level: QualityLevel): number {
 
 export const DEFAULT_QUALITY: RecordQuality = "alta"
 
+/**
+ * The most of the pointer log the export reads (MOD2-4). The host's default is 1 MB, which a take of a few minutes
+ * already passes; the export itself stops near 21 minutes, whose log is far under this.
+ */
+export const EVENTS_MAX_BYTES = 64 * 1024 * 1024
+
 export function qualityLevel(id: RecordQuality | undefined): QualityLevel {
   return QUALITY_LEVELS.find((level) => level.id === id) ?? QUALITY_LEVELS[0]!
 }

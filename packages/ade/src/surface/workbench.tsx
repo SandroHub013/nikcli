@@ -326,6 +326,7 @@ import { BRAND } from "../brand"
 import { coverSecrets } from "../record/sensitive"
 import {
   DEFAULT_QUALITY,
+  EVENTS_MAX_BYTES,
   qualityLabel,
   qualityLevel,
   QUALITY_LEVELS,
@@ -1523,10 +1524,9 @@ export function Workbench() {
     exportAbort = new AbortController()
     report(t("record.exporting"), "info")
     try {
-      const events = await host
-        .readTextFile(eventsPathFor(video))
-        .then((file) => file.text)
-        .catch(() => "")
+      const file = await host.readTextFile(eventsPathFor(video), EVENTS_MAX_BYTES).catch(() => undefined)
+      if (file?.truncated) report(t("record.export.eventsCut"), "info")
+      const events = file?.text ?? ""
       const exists = async (path: string) => ((await host.exists?.(path).catch(() => false)) ? path : undefined)
       const mic = (await exists(micPathFor(video, "webm"))) ?? (await exists(micPathFor(video, "m4a")))
       const voice = await exists(voicePathFor(video))
