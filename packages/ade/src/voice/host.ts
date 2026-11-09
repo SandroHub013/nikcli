@@ -23,6 +23,7 @@ import {
   type AdeView,
   type Workbench as WorkbenchState,
 } from "../surface/state"
+import { belongsTo } from "../surface/pane-project"
 import { awaitPaneReply } from "./await-reply"
 import { createVoiceAgent, VOICE_PLAN_IDLE_MS, type VoiceAgent } from "./agent"
 import { listProjectsFrom, resolveAgentId, resolveProject } from "./resolve"
@@ -262,7 +263,9 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
     },
 
     listPanes(): PaneSummary[] {
-      return deps.wb().panes.map((pane, index) => ({
+      const open = deps.project()
+      const projectPanes = open ? deps.wb().panes.filter((pane) => belongsTo(pane, open)) : deps.wb().panes
+      return projectPanes.map((pane, index) => ({
         id: pane.id,
         title: pane.title,
         status: pane.status,
@@ -608,10 +611,11 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
        * and two panels open. `isPanelPane` is the same question the sidebar
        * and the restore ask, and it knows about the panel modes as well.
        */
+      const open = deps.project()
+      const projectPanes = open ? deps.wb().panes.filter((pane) => belongsTo(pane, open)) : deps.wb().panes
       const sessionIds = new Set(
-        deps
-          .wb()
-          .panes.filter((pane) => !isPanelPane(pane))
+        projectPanes
+          .filter((pane) => !isPanelPane(pane))
           .map((pane) => pane.id),
       )
       const sessionPanes = panes.filter((p) => sessionIds.has(p.id))

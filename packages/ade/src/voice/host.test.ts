@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
+import { dispatch, VOCABULARY, type ParseResult, type VoiceIntentSpec } from "@ragu/voice"
 import { codeOf } from "../test-support/source-text"
 import { resetLocaleForTests } from "../i18n/locale"
 import { createAdeVoiceHost, type AdeVoiceHostDeps } from "./host"
@@ -142,6 +143,64 @@ describe("createAdeVoiceHost", () => {
       isBrowser: false,
       isFile: true,
     })
+  })
+
+  test("MOD2-1: two projects, each with «Sessione 1 — Claude Code»; «invia a sessione 1» and «pannello 1» reach the open project's pane", async () => {
+    const writtenA: string[] = []
+    const writtenB: string[] = []
+    const sessionA = { write: (line: string) => void writtenA.push(line) }
+    const sessionB = { write: (line: string) => void writtenB.push(line) }
+
+    const projA: Project = { name: "progetto-a", root: "C:/projects/a", git: true }
+    const projB: Project = { name: "progetto-b", root: "C:/projects/b", git: true }
+
+    const { deps } = createMockDeps({
+      project: () => projB,
+      isRunning: () => true,
+      getRunningSession: (id) => (id === "p-a1" ? sessionA : id === "p-b1" ? sessionB : undefined),
+    })
+
+    deps.setWb((w) => ({
+      ...w,
+      panes: [
+        makePane({ id: "p-a1", title: "Sessione 1 — Claude Code", projectRoot: "C:/projects/a", workspaceId: "progetto-a", status: "working" }),
+        makePane({ id: "p-b1", title: "Sessione 1 — Claude Code", projectRoot: "C:/projects/b", workspaceId: "progetto-b", status: "waiting" }),
+      ],
+    }))
+
+    const host = createAdeVoiceHost(deps)
+    const panes = host.listPanes()
+    expect(panes).toHaveLength(1)
+    expect(panes[0]!.id).toBe("p-b1")
+    expect(panes[0]!.index).toBe(1)
+
+    const state = host.describeState()
+    expect(state.totalSessions).toBe(1)
+    expect(state.waitingSessions).toBe(1)
+    expect(state.workingSessions).toBe(0)
+
+    const spec = VOCABULARY.find((v) => v.intent === "prompt.send")!
+    const makeParse = (slots: Record<string, any>): ParseResult => ({
+      outcome: "matched",
+      intent: spec,
+      slots,
+      confidence: 1,
+      candidates: [],
+      rawUtterance: "",
+      normalizedUtterance: "",
+    })
+
+    // «pannello 1» reaches the open project's pane
+    const resIndex = await dispatch(makeParse({ paneIndex: 1, text: "test index" }), host)
+    expect(resIndex.success).toBe(true)
+    expect(writtenB).toContain("test index\r")
+    expect(writtenA).toHaveLength(0)
+
+    // «invia a sessione 1» (title match) reaches the open project's pane
+    const resTitle = await dispatch(makeParse({ paneTitle: "Sessione 1 — Claude Code", text: "test title" }), host)
+    expect(resTitle.success).toBe(true)
+    expect(writtenB).toContain("test title\r")
+    expect(writtenA).toHaveLength(0)
   })
 
   test("sendPrompt rejects with a descriptive message on pane without live process", async () => {
