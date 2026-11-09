@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { AGENTS } from "./agents"
-import { defaultAgentId, detectAgents, isProbeable, recheckAgents, startable } from "./availability"
+import { defaultAgentId, detectAgents, isProbeable, PROBE_TIMEOUT_MS, recheckAgents, startable } from "./availability"
 
 const answeringFor = (installed: string[]) => async (command: string) =>
   installed.includes(command) ? `C:\\bin\\${command}.exe\n` : null
@@ -31,6 +31,24 @@ describe("detectAgents", () => {
     const statuses = await detectAgents(undefined)
     expect(statuses.some((s) => s.availability === "assente")).toBe(false)
     expect(statuses.filter((s) => isProbeable(s.agent)).every((s) => s.availability === "sconosciuto")).toBe(true)
+  })
+
+  test("a probe that hangs times out and is reported as sconosciuto rather than hanging forever (UX2-16)", async () => {
+    expect(PROBE_TIMEOUT_MS).toBe(5000)
+    const statuses = await detectAgents(
+      async (command) => {
+        if (command === "claude") {
+          return new Promise<string>(() => {})
+        }
+        return answeringFor(["kimi"])(command)
+      },
+      50,
+    )
+    const claude = statuses.find((s) => s.agent.command === "claude")
+    expect(claude?.availability).toBe("sconosciuto")
+
+    const kimi = statuses.find((s) => s.agent.command === "kimi")
+    expect(kimi?.availability).toBe("presente")
   })
 
   /*

@@ -43,6 +43,34 @@ export interface AgentStatus {
 export type Probe = (command: string, arg: string) => Promise<string | null>
 
 /**
+ * Per-probe timeout (UX2-16). If a command hangs (e.g. a dead network share on PATH),
+ * give up after ~5 seconds and report the agent as "sconosciuto" so the launcher can
+ * finish and "Avvia" is enabled.
+ */
+export const PROBE_TIMEOUT_MS = 5000
+
+const TIMED_OUT = Symbol("TIMED_OUT")
+
+async function probeWithTimeout(
+  probe: Probe,
+  command: string,
+  arg: string,
+  timeoutMs: number,
+): Promise<string | null | typeof TIMED_OUT> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      probe(command, arg).catch(() => null),
+      new Promise<typeof TIMED_OUT>((resolve) => {
+        timer = setTimeout(() => resolve(TIMED_OUT), timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
+/**
  * Whether this entry has a command worth looking up.
  *
  * `terminal` now names a real shell (`agents.ts`), so it is probed like the
@@ -55,7 +83,10 @@ export function isProbeable(agent: AgentOption): boolean {
   return agent.command.length > 0
 }
 
-export async function detectAgents(probe: Probe | undefined): Promise<AgentStatus[]> {
+export async function detectAgents(
+  probe: Probe | undefined,
+  timeoutMs: number = PROBE_TIMEOUT_MS,
+): Promise<AgentStatus[]> {
   if (!probe) {
     // No way to ask: claim nothing. "sconosciuto" reads differently from
     // "assente" in the interface, and pretending otherwise would tell the user
@@ -71,7 +102,10 @@ export async function detectAgents(probe: Probe | undefined): Promise<AgentStatu
       if (!isProbeable(agent)) return { agent, availability: "presente" as const }
       // The command first, then the other names it goes by, in order: the first that exists is the one.
       for (const name of [agent.command, ...(agent.alternatives ?? [])]) {
-        const answer = await probe(name, "--version").catch(() => null)
+        const answer = await probeWithTimeout(probe, name, "--version", timeoutMs)
+        if (answer === TIMED_OUT) {
+          return { agent, availability: "sconosciuto" as const }
+        }
         if (answer === null) continue
         return {
           agent,
@@ -128,7 +162,11 @@ export interface RecheckHost {
  * `reread` false skips it: the form uses it only where it is cheap (a registry read on Windows, not a login shell).
  * A host that cannot reread, or one that fails, is looked up as it is.
  */
-export async function recheckAgents(host: RecheckHost | undefined, reread = true): Promise<AgentStatus[]> {
+export async function recheckAgents(
+  host: RecheckHost | undefined,
+  reread = true,
+  timeoutMs: number = PROBE_TIMEOUT_MS,
+): Promise<AgentStatus[]> {
   if (reread) await host?.refreshPath?.().catch(() => false)
-  return detectAgents(host?.probe)
+  return detectAgents(host?.probe, timeoutMs)
 }
