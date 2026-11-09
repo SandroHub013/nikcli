@@ -110,6 +110,8 @@ export function RaguversePane(props: {
   const [waiting, setWaiting] = createSignal(props.assets !== undefined)
   const [assetsView, setAssetsView] = createSignal<AssetsView>({ kind: "ready" })
   let assetsFlow: AssetsFlow | undefined
+  /** A `slow` arrived while the world was not running: the reload it asks for waits until the panel is seen (MOD-5). */
+  let reloadWhenSeen = false
   const reloadFrame = () => {
     // The old document's port goes now: nothing it still says (an `opened`, say) may speak for the new one.
     link?.close()
@@ -226,10 +228,14 @@ export function RaguversePane(props: {
       slow: () => {
         lowering.lower()
         setLowered(!tuned())
-        reloadFrame()
+        // Hidden or under a lesson, a reload would start a world nobody can see: it waits to be seen.
+        if (lifecycle.phase() === "running") reloadFrame()
+        else reloadWhenSeen = true
       },
     })
     link = current
+    // A world that is paused stays paused: a new link starts running, so it is told at once.
+    if (lifecycle.phase() !== "running") current.pause()
     channel.port1.onmessage = (event) => current.receive(event.data)
     // "*" because the frame's origin is opaque and no target origin can name it. What decides who gets the
     // port is the nonce the world just sent back from this frame's window (`handshake.hello`), not the address.
@@ -249,7 +255,14 @@ export function RaguversePane(props: {
 
   const lifecycle = createLifecycle({
     pause: () => link?.pause(),
-    resume: () => link?.resume(),
+    resume: () => {
+      if (reloadWhenSeen) {
+        reloadWhenSeen = false
+        reloadFrame()
+        return
+      }
+      link?.resume()
+    },
     unload: () => {
       link?.close()
       link = undefined
@@ -261,6 +274,7 @@ export function RaguversePane(props: {
     },
     load: () => {
       // A new frame, a new secret: nothing said to the old one can be replayed to it.
+      reloadWhenSeen = false
       nonce = newNonce()
       setFrameSrc(sourceFor(nonce))
       setLoaded(true)
