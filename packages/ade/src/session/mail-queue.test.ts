@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
+import { RELAUNCH_MAX_MS } from "../surface/running"
 import { QUEUE_MAX_AGE_MS, RESTORE_GRACE_MS, parseQueue, queueToSave, waitsForRestore, waitsForStart, type QueuedMessage } from "./mail-queue"
 import { suspendedMailToSave } from "./suspend"
 import { codeOf } from "../test-support/source-text"
@@ -168,7 +169,7 @@ describe("the data-safety wiring in the workbench", () => {
 })
 
 describe("mail for a session on its way back (audit WB2-2)", () => {
-  const input = { paneExists: true, reopening: false, plannedAtBoot: false, sinceBoot: 1_000 }
+  const input = { paneExists: true, reopening: false, plannedAtBoot: false, sinceBoot: 1_000, sinceStart: 0 }
 
   test("«Riprendi» under way: it waits, where it used to be refused as not active", () => {
     expect(waitsForStart({ ...input, reopening: true })).toBe(true)
@@ -182,8 +183,12 @@ describe("mail for a session on its way back (audit WB2-2)", () => {
     expect(waitsForStart({ ...input, plannedAtBoot: true, sinceBoot: RESTORE_GRACE_MS })).toBe(false)
   })
 
-  test("a start under way has no grace to run out: it ends by itself", () => {
-    expect(waitsForStart({ ...input, reopening: true, sinceBoot: RESTORE_GRACE_MS * 2 })).toBe(true)
+  test("a start under way counts from when it began, not from the boot", () => {
+    expect(waitsForStart({ ...input, reopening: true, sinceBoot: RESTORE_GRACE_MS * 2, sinceStart: RELAUNCH_MAX_MS - 1 })).toBe(true)
+  })
+
+  test("a start under way past RELAUNCH_MAX_MS is refused: nothing on its path has a limit of its own", () => {
+    expect(waitsForStart({ ...input, reopening: true, sinceStart: RELAUNCH_MAX_MS })).toBe(false)
   })
 
   test("a pane the user has closed is refused, as before", () => {
@@ -197,7 +202,7 @@ describe("mail for a session on its way back (audit WB2-2)", () => {
   test("lint: deliverOne asks about the start, with the receipt of a relaunch, and the boot says what it plans", () => {
     const source = codeOf(readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8"))
     expect(source).toContain(
-      codeOf("if (!session && (running.relaunching(target.pane.id) || waitsForStart({ paneExists: paneExists(target.pane.id), reopening: reopening.busy(target.pane.id), plannedAtBoot: restorePlanned.has(target.pane.id), sinceBoot: Date.now() - loadedAt }))) {"),
+      codeOf("if (!session && (running.relaunching(target.pane.id) || waitsForStart({ paneExists: paneExists(target.pane.id), reopening: reopening.busy(target.pane.id), sinceStart: Date.now() - (reopening.startedAt(target.pane.id) ?? Date.now()), plannedAtBoot: restorePlanned.has(target.pane.id), sinceBoot: Date.now() - loadedAt }))) {"),
     )
     expect(source).toContain(codeOf("for (const pane of sessionsToResume(state)) restorePlanned.add(pane.id)"))
     expect(source).toContain(codeOf("for (const pane of liveToReopen(wb().panes, restorePlanned, state)) restorePlanned.add(pane.id)"))

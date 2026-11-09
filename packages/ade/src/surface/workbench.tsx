@@ -5657,6 +5657,7 @@ export function Workbench() {
         waitsForStart({
           paneExists: paneExists(target.pane.id),
           reopening: reopening.busy(target.pane.id),
+          sinceStart: Date.now() - (reopening.startedAt(target.pane.id) ?? Date.now()),
           plannedAtBoot: restorePlanned.has(target.pane.id),
           sinceBoot: Date.now() - loadedAt,
         }))

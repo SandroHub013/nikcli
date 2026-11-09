@@ -9,6 +9,7 @@
  * ordinary pass. A message that is too old is not delivered late: its sender is told it was not (`parseQueue`).
  */
 
+import { RELAUNCH_MAX_MS } from "../surface/running"
 import { isRequestId, type Message } from "./mailbox"
 
 /** A message taken from the outbox and not delivered yet. */
@@ -40,15 +41,21 @@ export function waitsForRestore(input: { replayed: boolean; paneExists: boolean;
 /**
  * Whether mail for a pane with no process waits for one that is on its way: «Riprendi» under way, or a start the boot has
  * planned and not reached yet. It used to be refused as «non è attiva» (WB2-2). A plan that never starts ends with the grace,
- * and a start under way ends by itself. A pane the user closes meanwhile is refused, as ever.
+ * and a start under way with `RELAUNCH_MAX_MS`: nothing on its path has a time limit of its own, and the sender has been told
+ * it is coming. A pane the user closes meanwhile is refused, as ever.
  */
 export function waitsForStart(input: {
   paneExists: boolean
   reopening: boolean
+  /** How long the start under way has been going. */
+  sinceStart: number
   plannedAtBoot: boolean
   sinceBoot: number
 }): boolean {
-  return input.paneExists && (input.reopening || (input.plannedAtBoot && input.sinceBoot < RESTORE_GRACE_MS))
+  return (
+    input.paneExists &&
+    ((input.reopening && input.sinceStart < RELAUNCH_MAX_MS) || (input.plannedAtBoot && input.sinceBoot < RESTORE_GRACE_MS))
+  )
 }
 
 /** The kinds that wait for a free session: the ones answered «in coda». */
