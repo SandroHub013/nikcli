@@ -21,13 +21,15 @@ interface HeldLine {
   text: string
   notice?: true
   at?: number
+  /** It tells of a message that did not arrive, in whatever words: neither the limit of a line nor the age takes it. */
+  lost?: true
 }
 
 const PREFIX = "[ade-msg] "
 const SEPARATOR = " | "
-const isError = (text: string) => text.startsWith(`${PREFIX}errore:`)
+const mustArrive = (notice: { text: string; lost?: true }) => notice.lost === true || notice.text.startsWith(`${PREFIX}errore:`)
 
-/** The notices past their time on a pane `blind` says ADE cannot read, by pane. Neither mail nor an error is ever among them. */
+/** The notices past their time on a pane `blind` says ADE cannot read, by pane. Neither mail nor a loss is ever among them. */
 export function expiredNotices<T extends HeldLine>(
   held: readonly T[],
   now: number,
@@ -36,7 +38,7 @@ export function expiredNotices<T extends HeldLine>(
   const expired = new Map<string, T[]>()
   for (const item of held) {
     if (!item.notice || item.at === undefined || now - item.at < NOTICE_TTL_MS) continue
-    if (isError(item.text) || !blind(item.paneId)) continue
+    if (mustArrive(item) || !blind(item.paneId)) continue
     expired.set(item.paneId, [...(expired.get(item.paneId) ?? []), item])
   }
   return expired
@@ -48,14 +50,14 @@ export function gatherNotices<T extends HeldLine>(held: readonly T[], paneId: st
 }
 
 /**
- * One notice as it is; several as one line, because a newline typed in a box is an Enter. Every error goes in, and the newest
+ * One notice as it is; several as one line, because a newline typed in a box is an Enter. Every loss goes in, and the newest
  * of the others up to `MOST_JOINED`: thirty notices were 7.5k typed in one go.
  */
-export function joinNotices(texts: readonly string[]): string {
-  if (texts.length === 1) return texts[0]!
-  let room = Math.max(0, MOST_JOINED - texts.filter(isError).length)
-  const kept = [...texts].reverse().filter((text) => isError(text) || room-- > 0).reverse()
-  const bare = kept.map((text) => (text.startsWith(PREFIX) ? text.slice(PREFIX.length) : text).replace(/\s*\n\s*/g, " "))
-  const left = texts.length - kept.length
-  return `${PREFIX}${texts.length} avvisi di ADE: ${[...bare, ...(left > 0 ? [`e altri ${left} più vecchi`] : [])].join(SEPARATOR)}`
+export function joinNotices(notices: readonly { text: string; lost?: true }[]): string {
+  if (notices.length === 1) return notices[0]!.text
+  let room = Math.max(0, MOST_JOINED - notices.filter(mustArrive).length)
+  const kept = [...notices].reverse().filter((notice) => mustArrive(notice) || room-- > 0).reverse()
+  const bare = kept.map(({ text }) => (text.startsWith(PREFIX) ? text.slice(PREFIX.length) : text).replace(/\s*\n\s*/g, " "))
+  const left = notices.length - kept.length
+  return `${PREFIX}${notices.length} avvisi di ADE: ${[...bare, ...(left > 0 ? [`e altri ${left} più vecchi`] : [])].join(SEPARATOR)}`
 }

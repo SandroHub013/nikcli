@@ -2841,7 +2841,7 @@ export function Workbench() {
     if (!(await lineStays({ read, before, stop }))) return
     tellPane(paneId, t("note.enterLost"))
     const sender = lineSender.get(session)
-    if (sender) tellSender(sender.from, formatEnterLost(sender.id, mailPanes().find((pane) => pane.id === paneId)))
+    if (sender) tellSender(sender.from, formatEnterLost(sender.id, mailPanes().find((pane) => pane.id === paneId)), { lost: true })
     // Until the line has gone, whoever sent it: the user's Enter, or the user's clearing it.
     while (alive() && read() !== undefined) await new Promise((resolve) => setTimeout(resolve, 1000))
     dropPaneNote(paneId, t("note.enterLost"))
@@ -3083,6 +3083,8 @@ export function Workbench() {
     notice?: true
     /** When a notice was written: it expires (`session/held-notices.ts`). */
     at?: number
+    /** A notice that tells of a message not delivered: it never expires, nor is it cut. */
+    lost?: true
     full?: string
     suspended?: true
   }[] = []
@@ -3407,7 +3409,7 @@ export function Workbench() {
       if (outcome === "sent" && meta.from) lineSender.set(session, { from: meta.from, id: meta.id })
       // The Enter gave up waiting for the box: said to the session that sent it, which a note in its pane does not reach.
       if (enterStuck.delete(session) && meta.from) {
-        tellSender(meta.from, formatEnterStuck(meta.id, mailPanes().find((pane) => pane.id === paneId)))
+        tellSender(meta.from, formatEnterStuck(meta.id, mailPanes().find((pane) => pane.id === paneId)), { lost: true })
       }
       return deliveryResult(outcome, running.get(paneId) === session, stored)
     }
@@ -3448,10 +3450,10 @@ export function Workbench() {
   }
 
   /** A notice for whoever sent a message: its session, or the window's notices when none is behind it (`noticeTarget`). */
-  const tellSender = (from: string | undefined, text: string) => {
+  const tellSender = (from: string | undefined, text: string, mark?: { lost: true }) => {
     const target = noticeTarget(from, (paneId) => running.has(paneId))
     if (target === "window") report(text, "info")
-    else if (target) heldLines.push({ paneId: target.pane, text, notice: true, at: Date.now() })
+    else if (target) heldLines.push({ paneId: target.pane, text, notice: true, at: Date.now(), ...mark })
   }
 
   /** Rings again for unread inbox messages, and tells the sender of one never read. */
@@ -4399,7 +4401,7 @@ export function Workbench() {
           if (notices.length === 0) continue
           for (const notice of notices) dropFrom(heldLines, notice)
           dropHeldByMenu(item.paneId)
-          void typeLineOutcome(session, joinNotices(notices.map((notice) => notice.text)), { mail: false }).then((outcome) => {
+          void typeLineOutcome(session, joinNotices(notices), { mail: false }).then((outcome) => {
             if (deliveryResult(outcome, running.get(item.paneId) === session) === "held") heldLines.push(...notices)
           })
           continue
@@ -10054,7 +10056,7 @@ export function Workbench() {
               const asked = [...openRequests.values()].find((other) => other.kind === "spawn" && other.to === paneId)
               if (asked) {
                 const reader = mailPanes().find((pane) => pane.id === paneId)
-                tellSender(asked.from, formatExitedUnsent(asked.id, reader, trustSeen))
+                tellSender(asked.from, formatExitedUnsent(asked.id, reader, trustSeen), { lost: true })
                 // Nothing will answer it now: `ade-msg wait` stops saying it is starting.
                 const said = formatExitedUnsent(asked.id, reader, trustSeen)
                 void getHost().then((host) => {
