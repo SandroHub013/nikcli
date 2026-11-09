@@ -15,8 +15,8 @@ export const USER = "utente"
 /**
  * Whether an answer is the user's own, given from ADE's buttons, and not one a session recorded with
  * `ade-msg registro` (Master writes down what the user said in chat). Both answer the decision; whatever acts on an
- * answer as the user's word has to ask this. A line an agent wrote into the file by hand can still pass as the user's:
- * `answeredInAde` also looks at ADE's own record.
+ * answer as the user's word has to ask this. The fold of a register reads `by` through `answer-ledger`, which gives a
+ * line of the user's that ADE did not write the word «registro» (SEC-3), so a hand-written line does not pass.
  */
 export function isUsersOwnAnswer(answer: { readonly by: string; readonly fromPane?: string }): boolean {
   return answer.by === USER && !answer.fromPane

@@ -14,6 +14,8 @@ export interface DesignRegisterDeps {
   io: () => Promise<(DesignIo & { readDir?: (path: string) => Promise<DirEntry[]> }) | undefined>
   /** Drops a `fromPane` ADE did not write (`asker-ledger`). */
   vouch?: <E extends DesignEvent>(path: string, events: readonly E[]) => E[]
+  /** ADE's own append is about to write this event: remembered first, so it never shows as reported (`answer-ledger`). */
+  remember?: (path: string, k: string, at: string) => void
 }
 
 export interface DesignRegister {
@@ -85,6 +87,8 @@ export function createDesignRegister(deps: DesignRegisterDeps): DesignRegister {
     const path = deps.path()
     const io = await deps.io()
     if (!path || !io) throw new Error(t("design.noProject.short"))
+    // Before the write: the fold is a memo, and a record made after it would show the user's own fresh answer as reported.
+    deps.remember?.(path, event.k, event.at)
     await appendDesignEvent(io, path, event)
     await refresh()
   }
