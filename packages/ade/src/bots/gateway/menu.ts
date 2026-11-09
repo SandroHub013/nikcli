@@ -32,31 +32,48 @@ export interface MenuDeps {
   readonly watchLanguage: (changed: () => void) => () => void
   /** Where a refused or unreachable menu is noted; never a token. */
   readonly warn?: (line: string) => void
+  /** The time in milliseconds, for the minute a refused menu waits; `Date.now` unless a test sets it. */
+  readonly now?: () => number
 }
+
+/** How long a list that could not be put waits before the next status asks again. */
+const RETRY_AFTER_MS = 60_000
 
 interface Known {
   /** The gateway is up and reading. */
   ready: boolean
-  /** The list last given (or tried) since it came up. */
+  /** The list the app accepted since it came up. */
   given?: string
+  /** The list being put now: a status heard meanwhile does not put it a second time. */
+  inFlight?: string
+  /** A list that failed, and when the next status may try it again: a changed list is tried at once. */
+  failed?: { key: string; retryAt: number }
 }
 
 /** Starts keeping the menus; resolves with the way to stop. */
 export async function startMenuSync(deps: MenuDeps): Promise<() => void> {
   const warn = deps.warn ?? ((line: string) => console.warn(line))
+  const now = deps.now ?? Date.now
   const known = new Map<string, Known>()
   let stopped = false
 
   const push = async (bot: string, platform: string, state: Known) => {
     const list = chatMenu(deps.language())
     const key = JSON.stringify(list)
-    if (!state.ready || state.given === key) return
-    // Tried counts as given: a refusal is not repeated at every status until the list or the gateway changes.
-    state.given = key
+    if (!state.ready || state.given === key || state.inFlight === key) return
+    // A refusal is not repeated at every status: the same list waits a minute, a changed one is tried at once. It is
+    // given only once the app took it, so a network that was down does not leave the bot without a menu until a restart.
+    if (state.failed?.key === key && now() < state.failed.retryAt) return
+    state.inFlight = key
     try {
       await deps.set(bot, platform, list)
+      state.given = key
+      delete state.failed
     } catch (error) {
+      state.failed = { key, retryAt: now() + RETRY_AFTER_MS }
       warn(`ADE: menu dei comandi non messo (${platform}): ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      if (state.inFlight === key) delete state.inFlight
     }
   }
 
@@ -67,7 +84,10 @@ export async function startMenuSync(deps: MenuDeps): Promise<() => void> {
     known.set(id, state)
     const ready = link.running && link.connected
     // A gateway that came up is a new adapter: it has no menu yet.
-    if (ready && !state.ready) delete state.given
+    if (ready && !state.ready) {
+      delete state.given
+      delete state.failed
+    }
     state.ready = ready
     void push(link.bot, link.platform, state)
   }
