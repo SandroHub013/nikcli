@@ -717,7 +717,8 @@ describe("what lands in the terminal", () => {
     }
     walk(join(import.meta.dir, ".."))
     expect(offenders).toEqual([])
-  })
+    // It reads every .ts and .tsx under src: 5.7 s in the whole suite against bun's 5 s default, with no offender.
+  }, 30_000)
 
   /** SEC2-1: a command split across `+` would slip past the source scan, so render what an agent is given. */
   test("no builder hands an agent's text to the shell in double quotes", () => {
