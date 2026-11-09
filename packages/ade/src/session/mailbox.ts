@@ -565,6 +565,21 @@ function cleanText(text: string): string {
   return clean.length > MAX_TEXT ? `${clean.slice(0, MAX_TEXT)}… [troncato]` : clean
 }
 
+/**
+ * The body of a message whose line breaks are kept, for the inbox copy.
+ *
+ * Every line after the first is prefixed. ADE delivers the user's own answers
+ * as lines that begin with `[Decisione da utente]` or `[Design da utente]`,
+ * and without the prefix a sender could write one of its own below a blank
+ * line and have it read as a separate message from the user.
+ */
+function keptBody(text: string): string {
+  return cleanText(text)
+    .split("\n")
+    .map((line, index) => (index === 0 ? line : `│ ${line}`))
+    .join("\n")
+}
+
 function who(sender: MailPane | undefined): string {
   return sender ? `"${sender.title}"` : "una sessione ADE"
 }
@@ -582,7 +597,7 @@ export function formatDelivery(
   options: { keepLines?: boolean } = {},
 ): string {
   const reply = sender ? ` — rispondi: ade-msg send ${sender.id} '<testo>'` : ""
-  return `[Messaggio da ${who(sender)}]: ${options.keepLines ? cleanText(message.text) : oneLine(message.text)}${reply}`
+  return `[Messaggio da ${who(sender)}]: ${options.keepLines ? keptBody(message.text) : oneLine(message.text)}${reply}`
 }
 
 /**
@@ -615,7 +630,7 @@ export function formatRequest(
       : ""
   const budget = context.budget ? ` · budget ${context.budget}s` : ""
   return (
-    `[Richiesta ${id} da ${who(sender)}${budget}]: ${context.keepLines ? cleanText(text) : oneLine(text)} —${where}${delegate} ` +
+    `[Richiesta ${id} da ${who(sender)}${budget}]: ${context.keepLines ? keptBody(text) : oneLine(text)} —${where}${delegate} ` +
     `Rispondi solo con ade-msg reply ${id} '<sintesi>' (max 15 righe: ESITO, FILE, PROBLEMI, PROSSIMO PASSO` +
     (results ? `; dettagli in ${results}` : "") +
     `); se bloccata: ade-msg update ${id} bloccata|decisione '<motivo>'.` +
@@ -1760,7 +1775,7 @@ export function formatLateReply(
   replier: MailPane | undefined,
   options: { keepLines?: boolean } = {},
 ): string {
-  return `[Risposta a ${ref} da ${who(replier)}]: ${options.keepLines ? cleanText(text) : oneLine(text)}`
+  return `[Risposta a ${ref} da ${who(replier)}]: ${options.keepLines ? keptBody(text) : oneLine(text)}`
 }
 
 /**
