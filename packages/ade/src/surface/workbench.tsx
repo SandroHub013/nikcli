@@ -7555,7 +7555,7 @@ export function Workbench() {
           },
           ({ session, plan, sharedWith }) => {
             // The panes are on the screen while their checks run: the user may have closed this one, or pressed «Riprendi».
-            if (!paneExists(session.pane.id) || running.has(session.pane.id)) {
+            if (!paneExists(session.pane.id) || running.has(session.pane.id) || reopening.busy(session.pane.id)) {
               restorePlanned.delete(session.pane.id)
               return
             }
