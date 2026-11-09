@@ -51,7 +51,8 @@ describe("no test reads workbench.tsx directly", () => {
         ),
     )
     expect(offenders).toEqual([])
-  })
+    // Cold, it reads every test file of both packages for the first time (Defender scans each): 5.9 s once, 289 ms after.
+  }, 30_000)
 
   test("the rule sees what it forbids, and not a comment or a word that only looks like it", () => {
     const line = (text: string) => NAMES_THE_FILE.test(text)
