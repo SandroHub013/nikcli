@@ -1838,7 +1838,8 @@ export const USAGE =
   "uso:\n" +
   "  ade-msg --help | ade-msg <comando> --help  l'aiuto (del comando, se c'è) e non manda niente; dopo -- è testo\n" +
   "  testo tra apici singoli in sh e PowerShell, senza apostrofi dentro, o --file <perc>; mai virgolette doppie:\n" +
-  "  $ e i backtick vengono eseguiti. Con gli apostrofi: in sh ’ (tipografico), in PowerShell raddoppia '' (lì ’ chiude la stringa); oppure da bash:\n" +
+  "  $ e i backtick vengono eseguiti. Con gli apostrofi: in sh ’ (tipografico),\n" +
+  "  in PowerShell raddoppia '' (lì ’ chiude la stringa); oppure da bash:\n" +
   "    ade-msg reply <id> --stdin <<'EOF'   (anche send, ask, spawn, update, kv, memory, registro)\n" +
   "    il testo, con ' e `backtick` e $(...), che non viene eseguito\n" +
   "    EOF\n" +
