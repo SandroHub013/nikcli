@@ -3630,6 +3630,8 @@ export function Workbench() {
   const pressDeliverNow = (paneId: string) => {
     const go = deliverNow.click(paneId, questionOpen(paneId), Date.now())
     setDeliverNowPanes(new Set(deliverNow.standing()))
+    // The user has looked at the pane and chosen: the mark of a focus-in (`followKeys`) would make every message ask again.
+    if (go && hasTerminal(paneId)) forgetRefocus(getTerminal(paneId).terminal)
     // A click that goes keeps note and button until its line has gone (`typeLineNow`).
     if (go) void mailRound(false)
     else if (!deliverNow.standing().includes(paneId)) dropPaneNote(paneId, deliverNowNote(paneId))

@@ -333,6 +333,13 @@ describe("the click", () => {
     expect(workbench).toContain("deliverNow:pressDeliverNow")
   })
 
+  test("lint: a click that goes takes off the mark of a focus-in, or every message on that pane would want its own click", () => {
+    const body = between("constpressDeliverNow=", "constlogComposer=")
+    const forget = body.indexOf("if(go&&hasTerminal(paneId))forgetRefocus(getTerminal(paneId).terminal)")
+    expect(forget).toBeGreaterThan(0)
+    expect(forget).toBeLessThan(body.indexOf("if(go)voidmailRound(false)"))
+  })
+
   test("lint: the byte that ticks does not count: Claude Code at rest writes every 20 s", () => {
     const body = between("constblindHold=", "constdeliverNowNote=")
     expect(body).toContain("turnKnown(")
