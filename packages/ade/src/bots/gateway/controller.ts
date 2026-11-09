@@ -399,13 +399,14 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     message: GatewayMessage,
     text: string,
     options?: { final?: boolean; previewFallback?: string },
-  ) => {
+  ): Promise<string | undefined> => {
     try {
       await deps.bridge.send(message.bot, message.platform, message.chat, text, options)
+      return undefined
     } catch (error) {
-      warn(
-        `ADE: risposta del gateway non mandata (${message.platform}): ${error instanceof Error ? error.message : String(error)}`,
-      )
+      const why = error instanceof Error ? error.message : String(error)
+      warn(`ADE: risposta del gateway non mandata (${message.platform}): ${why}`)
+      return why
     }
   }
 
@@ -834,10 +835,15 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       }
       // The bot works: what the panel kept of an earlier failure goes (N7).
       forgetTurnFailuresOf(message.bot)
-      await reply(message, text.trim() ? text : t("gateway.empty"), {
+      const notSent = await reply(message, text.trim() ? text : t("gateway.empty"), {
         final: true,
         previewFallback: t("gateway.preview.sentBelow"),
       })
+      // The first pieces of a long answer may be in the chat already, and the rest is not (BOT-8).
+      if (notSent) {
+        failure(message, notSent)
+        await reply(message, t("gateway.replyCut"))
+      }
     } catch (error) {
       failure(message, error instanceof Error ? error.message : String(error))
       await reply(message, t("gateway.failed"), {

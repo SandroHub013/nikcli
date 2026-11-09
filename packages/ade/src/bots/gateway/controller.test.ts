@@ -2373,3 +2373,38 @@ describe("a turn cut by a reload, a crash or the update is not lost silently (BO
     localStorage.removeItem(TURNS_UNDER_WAY_KEY)
   })
 })
+
+describe("a reply cut halfway is said in the chat (BOT-8)", () => {
+  const failingFinal = (b: ReturnType<typeof bridge>) => {
+    const send = b.fake.send
+    b.fake.send = (bot, platform, chat, text, options) =>
+      options?.final ? Promise.reject(new Error("Telegram: pezzo 2 rifiutato")) : send(bot, platform, chat, text, options)
+  }
+
+  test("the chat reads that the answer did not arrive whole, and the panel keeps why", async () => {
+    forgetTurnFailures()
+    const b = bridge()
+    failingFinal(b)
+    const turns = fakeTurns()
+    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: trusted, sessions: memorySessionStore(), warn: () => {} })
+    b.emit("fammi un riassunto lungo", { id: "m1" })
+    await until("il turno", () => turns.started.length === 1)
+    turns.started[0]!.finish({ text: "una risposta molto lunga" })
+    await until("detto", () => b.sent.length === 1)
+    expect(b.sent[0]!.text).toBe(t("gateway.replyCut"))
+    expect(turnFailureOf(BOT.path, "telegram")?.detail).toContain("pezzo 2 rifiutato")
+    forgetTurnFailures()
+  })
+
+  test("an answer that went out adds nothing", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: trusted, sessions: memorySessionStore() })
+    b.emit("ciao", { id: "m1" })
+    await until("il turno", () => turns.started.length === 1)
+    turns.started[0]!.finish({ text: "risposta" })
+    await until("la risposta", () => b.sent.length === 1)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(b.sent.map((each) => each.text)).toEqual(["risposta"])
+  })
+})
