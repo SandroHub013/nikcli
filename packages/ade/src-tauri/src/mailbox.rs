@@ -308,6 +308,10 @@ fn take_outbox(outbox: &std::path::Path, receipts: &std::path::Path, _now: Insta
                 if claimed_here.contains(&id) {
                     continue;
                 }
+                // Another take is reading it: what becomes of it is decided there, and a rename now would pull it from under that read.
+                if matches!(claims().get(&id), Some(Claim::Reading)) {
+                    continue;
+                }
                 if !valid_id(&id) || undeleted().contains(&id) {
                     if fs::remove_file(&path).is_ok() {
                         undeleted().remove(&id);
@@ -332,13 +336,23 @@ fn take_outbox(outbox: &std::path::Path, receipts: &std::path::Path, _now: Insta
         }
         // Held open by a scanner or the indexer: it is still there, so the next pass takes it.
         let claim = path.with_extension("taking");
+        // Before the rename: a take that finds the `.taking` must already know it is being read.
+        {
+            let mut map = claims();
+            if map.contains_key(&id) {
+                continue;
+            }
+            map.insert(id.clone(), Claim::Reading);
+        }
         if fs::rename(&path, &claim).is_err() {
+            claims().remove(&id);
             continue;
         }
         claimed_here.insert(id.clone());
         // Nothing below deletes the message unless it has been read, or can never be.
         let give_back = || {
             let _ = fs::rename(&claim, &path);
+            claims().remove(&id);
         };
         let Ok(meta) = fs::metadata(&claim) else {
             give_back();
@@ -348,18 +362,21 @@ fn take_outbox(outbox: &std::path::Path, receipts: &std::path::Path, _now: Insta
             let said = too_big_receipt(meta.len());
             let _ = write_whole(receipts.to_path_buf(), &format!("{id}.txt"), &said);
             finish_claim(&claim, &id);
+            claims().remove(&id);
             continue;
         }
         match fs::read_to_string(&claim) {
             Ok(body) => {
                 // If the delete fails the claim stays, and is not a `.json`: the message is not delivered again.
                 finish_claim(&claim, &id);
-                out.push(Outgoing { id, body });
+                claims().remove(&id);
+                out.push(Outgoing { id: id.clone(), body });
             }
             // Bytes that are not UTF-8 will never be: the sender is told. Any other error may pass.
             Err(e) if e.kind() == std::io::ErrorKind::InvalidData => {
                 let _ = write_whole(receipts.to_path_buf(), &format!("{id}.txt"), "errore: messaggio non leggibile (non è UTF-8)");
                 finish_claim(&claim, &id);
+                claims().remove(&id);
             }
             Err(_) => give_back(),
         }
