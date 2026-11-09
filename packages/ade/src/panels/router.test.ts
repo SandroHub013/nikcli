@@ -14,6 +14,7 @@ import {
 } from "./router"
 import { isQuestionOpen } from "../session/mailbox"
 import { REPLY_PREFIX } from "./protocol"
+import { workbenchSource } from "../test-support/workbench-source"
 
 const replyOf = (handled: HandledRequest | undefined) => (handled && "reply" in handled ? handled.reply : undefined)
 
@@ -203,7 +204,7 @@ describe("createPanelRouter", () => {
   })
 
   test("lint: opening a panel types nothing into the sessions", () => {
-    const source = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
+    const source = workbenchSource()
     const start = source.indexOf("const announcePanels = ")
     expect(start).toBeGreaterThan(-1)
     const body = source.slice(start, source.indexOf("\n  }\n", start))

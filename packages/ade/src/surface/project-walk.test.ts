@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { createProjectWalk, type WalkedEntry } from "./project-walk"
+import { workbenchSource } from "../test-support/workbench-source"
 
 const file = (path: string): WalkedEntry => ({ path, kind: "file" })
 
@@ -93,7 +94,7 @@ describe("the project's file list", () => {
   })
 
   test("the workbench uses it, not a walk of its own", () => {
-    const source = readFileSync(join(__dirname, "workbench.tsx"), "utf-8")
+    const source = workbenchSource()
     expect(source).toContain("createProjectWalk(")
     expect(source).not.toContain("let walkingPromise")
   })

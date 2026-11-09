@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { createCloser } from "./closer"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * F-confirm-bis. The unsaved-file question is answered later, so a close
@@ -133,7 +134,7 @@ describe("chiudere un pannello con un file non salvato", () => {
   })
 
   test("lint: the workbench goes through closeAll, asks before it closes, and never closes a vanished pane directly for an ade-msg", () => {
-    const source = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+    const source = workbenchSource()
     expect(source).toContain("await closer.closeAll(")
     expect(source).not.toMatch(/pane\.gone && !running\.has\(pane\.id\)\) close\(pane\.id\)/)
     const tree = source.slice(source.indexOf("const closeTree = async"), source.indexOf("const excludeAdeResults"))
@@ -148,7 +149,7 @@ describe("chiudere un pannello con un file non salvato", () => {
    * chiede prima (review sidebar-clic, ALTO 1 e MEDIO 2).
    */
   test("chiudere le sessioni di un progetto e la ✕ della riga chiedono prima di fermare un agente in esecuzione", () => {
-    const source = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+    const source = workbenchSource()
 
     const closeAll = source.slice(source.indexOf("const closeProjectSessions"), source.indexOf("const projectOfPane"))
     expect(closeAll).toContain("confirmRunning: true")
@@ -294,7 +295,7 @@ describe("chiudere una sessione con una worktree", () => {
 })
 
 describe("la worktree torna indietro da qualunque strada si chiuda la sessione (lint sul workbench)", () => {
-  const source = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+  const source = workbenchSource()
 
   test("closeNow, dove passano ✕, scorciatoia, progetto e ade-msg close, restituisce la worktree", () => {
     const closeNow = source.slice(source.indexOf("const closeNow = (id: string)"), source.indexOf("const finish = "))

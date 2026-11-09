@@ -20,6 +20,7 @@ import {
   sshAsking,
   targetOf,
 } from "./ssh"
+import { workbenchSource } from "../test-support/workbench-source"
 
 describe("ssh config", () => {
   test("concrete hosts with their options; patterns and Match blocks are skipped", () => {
@@ -200,7 +201,7 @@ describe("an agent that is not on the server", () => {
   })
 
   test("the workbench does not type the task when the agent is missing", () => {
-    const source = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
+    const source = workbenchSource()
     const body = source.slice(source.indexOf("const startRemoteProcess"), source.indexOf("/** Adds a remote Space"))
     expect(body).toContain("agentMissing(")
     expect(body).toContain("shellReturned(")

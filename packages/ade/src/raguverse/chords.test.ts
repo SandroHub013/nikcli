@@ -6,6 +6,7 @@ import { DEFAULT_BINDINGS, resolveDefaultBindings } from "../keyboard/bindings"
 import { parseChord, type Platform } from "../keyboard/keymap"
 import { resolveVoiceOrAdeKey } from "../voice/shortcuts"
 import { FORWARDABLE, forwardedCommand, type ForwardedChord } from "./chords"
+import { workbenchSource } from "../test-support/workbench-source"
 
 const platforms: Platform[] = ["mac", "other"]
 
@@ -104,7 +105,7 @@ describe("a chord from the world runs only navigation", () => {
     expect(pane).not.toMatch(/dispatchEvent|new KeyboardEvent|chordEvent/)
     const protocol = readFileSync(join(import.meta.dir, "protocol.ts"), "utf8")
     expect(protocol).not.toMatch(/dispatchEvent|new KeyboardEvent|chordEvent/)
-    const workbench = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
+    const workbench = workbenchSource()
     const start = workbench.indexOf("forwardedCommand(bindings")
     expect(start).toBeGreaterThan(0)
     // The id ADE resolved goes to `runCommand`, and only when there is one; no other command is run for a chord.

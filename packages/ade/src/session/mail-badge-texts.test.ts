@@ -2,8 +2,9 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { resetLocaleForTests, t } from "../i18n"
+import { workbenchSource } from "../test-support/workbench-source"
 
-const wbSource = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
+const wbSource = workbenchSource()
 
 describe("UX2-11: mail badge, waiting note and stuck message texts", () => {
   afterEach(() => resetLocaleForTests("it"))

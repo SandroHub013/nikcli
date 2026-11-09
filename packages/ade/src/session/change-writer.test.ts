@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { createChangeWriter } from "./change-writer"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * WB-13: the held mail's fingerprint was remembered before the write was tried, so a write that failed was never tried
@@ -53,7 +54,7 @@ describe("a change writer (WB-13)", () => {
 
 describe("the workbench saves its held mail through one (WB-13)", () => {
   // The workbench cannot be loaded under bun: read from the source. Booleans, so a failure does not print the file.
-  const source = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
+  const source = workbenchSource()
 
   test("writeStored says whether it wrote, and persistMail goes through the writer", () => {
     expect(source.includes("const mailWriter = createChangeWriter(() => report(t(\"workspace.saveFailed\")))")).toBe(true)

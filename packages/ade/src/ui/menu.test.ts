@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { bindMenu } from "./menu"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * Review area 2, MEDIO: «Nuovo pannello» and «Notifiche» are `role="menu"`
@@ -68,7 +69,7 @@ test("a press outside closes; on the menu or its button it does not", () => {
 })
 
 test("lint: both menus of the bar are bound", () => {
-  const source = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+  const source = workbenchSource()
   expect(source).toContain("bindMenu(menu, { close: () => setNewPaneOpen(false), anchor: newPaneButton })")
   expect(source).toContain("bindMenu(menu, { close: () => setNoticesOpen(false), anchor: noticesButton })")
 })

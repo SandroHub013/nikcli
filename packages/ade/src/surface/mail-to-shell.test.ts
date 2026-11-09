@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * A line of mail typed into a plain terminal pane is run by its shell as a
@@ -8,7 +9,7 @@ import { join } from "node:path"
  * the workbench can show is where it is applied, and the delivery lives
  * inside it and cannot be called from a test.
  */
-const source = readFileSync(join(import.meta.dir, "workbench.tsx"), "utf8")
+const source = workbenchSource()
 
 test("a send or an ask to a shell is refused right after the target is resolved, before anything is typed or booked", () => {
   const start = source.indexOf("const target = resolveTarget(panes, message.to, message.from)")

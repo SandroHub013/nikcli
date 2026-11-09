@@ -6,6 +6,7 @@ import { recipientFor as designRecipientFor } from "../design/delivery"
 import { parseDesignLog } from "../design/log"
 import { foldProposals } from "../design/state"
 import { registerWrite, type RegisterWriteDeps } from "./register-write"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * notifiche-design: the answer goes back to whoever asked. The register kept
@@ -104,10 +105,7 @@ test("an asker that closed does not send the answer to another pane with its tit
 })
 
 test("lint: the workbench writes the sender's pane and queues answers with answerItem", () => {
-  const source = require("node:fs").readFileSync(
-    require("node:path").join(import.meta.dir, "../surface/workbench.tsx"),
-    "utf8",
-  )
+  const source = workbenchSource()
   expect(source).toContain("fromPane: sender ? message.from : undefined,")
   expect(source).toContain("enqueue(decisionsOutbox(), answerItem(path, decision, event.at, Date.now()))")
   expect(source).toContain("enqueueDesign(designOutbox(), designAnswerItem(path, proposal, event.at, Date.now()))")

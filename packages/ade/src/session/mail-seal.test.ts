@@ -17,6 +17,7 @@ import {
   splitSealed,
   useMailKeys,
 } from "./mail-seal"
+import { workbenchSource } from "../test-support/workbench-source"
 
 const TOKEN = "0123456789abcdef01234567"
 const OLD_TOKEN = "fedcba9876543210fedcba98"
@@ -299,7 +300,7 @@ describe("a mail round when the bells have run out", () => {
 })
 
 describe("lint: the workbench keeps the mail's keys in order", () => {
-  const workbench = fs.readFileSync(path.join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+  const workbench = workbenchSource()
 
   test("the round is told when the panes are back, and the seal reads the list the round keeps", () => {
     expect(workbench).toContain("restored: () => mailRestored,")

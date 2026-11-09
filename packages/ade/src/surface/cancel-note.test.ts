@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * Review area 2, MEDIO: the note of an `ade-msg cancel` was typed at once,
@@ -11,7 +12,7 @@ import { join } from "node:path"
  * The handler lives inside the workbench and cannot be called from a test.
  */
 test("the cancel note is held for the round, not typed on the spot", () => {
-  const source = readFileSync(join(import.meta.dir, "workbench.tsx"), "utf8")
+  const source = workbenchSource()
   const start = source.indexOf('if (message.kind === "cancel") {')
   const branch = source.slice(start, source.indexOf('if (message.kind === "kv") {', start))
   expect(branch).toContain("heldLines.push({ paneId: request.to, text: formatCancel(request.id, sender) })")

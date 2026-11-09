@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createPasteModes } from "./paste-mode"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * SES-14: the workbench read each chunk of a pane's output alone for `ESC [ ? 2004 h/l`, so a switch cut between two
@@ -87,7 +88,7 @@ describe("bracketed paste, read across chunks (SES-14)", () => {
 
 describe("the workbench uses it (SES-14)", () => {
   // The workbench cannot be loaded under bun: read from the source. Booleans, so a failure does not print the file.
-  const source = require("node:fs").readFileSync(require("node:path").join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8") as string
+  const source = workbenchSource()
 
   test("one createPasteModes, read with `.on`, fed with `.note` by both pane kinds and cleared with `.forget` three times", () => {
     expect(source.includes("const pasteModes = createPasteModes()")).toBe(true)

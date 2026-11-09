@@ -17,6 +17,7 @@ import {
   sheetUrl,
   watchSheetStay,
 } from "./sheet"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * The design sheet, piece 1 (`ade-msg design`): what the pane does with a file
@@ -275,7 +276,7 @@ describe("the workbench and the pane", () => {
   const read = (path: string) => readFileSync(join(src, path), "utf8")
 
   test("lint: design is handled before a target is resolved, and the same file reuses its pane", () => {
-    const workbench = read("surface/workbench.tsx")
+    const workbench = workbenchSource()
     const design = workbench.indexOf('if (message.kind === "design") {')
     const resolve = workbench.indexOf("const target = resolveTarget(panes, message.to, message.from)")
     expect(design).toBeGreaterThan(0)
@@ -292,7 +293,7 @@ describe("the workbench and the pane", () => {
   })
 
   test("lint: the sheets' reload rides the registers' pass", () => {
-    expect(read("surface/workbench.tsx")).toContain("watchRegisters([decisionsRegister, designRegister, sheetWatch]")
+    expect(workbenchSource()).toContain("watchRegisters([decisionsRegister, designRegister, sheetWatch]")
   })
 
   /* DS2-2: the overlay's 12vh top padding plus a 94vh surface is 106vh, so the bottom was cut on every screen. */

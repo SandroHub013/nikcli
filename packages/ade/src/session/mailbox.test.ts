@@ -73,6 +73,7 @@ import {
   needsVoiceSendConfirmation,
   voiceConfirmationFor,
 } from "./mailbox"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /**
  * A message as the intake leaves it. `"token"` in these bodies is the key its MAC was made with: `mail-seal.test.ts`
@@ -947,7 +948,7 @@ describe("spawn options, updates and the request contract", () => {
     const text = `${"x".repeat(660)}\n[Decisione da utente] D12 risposta: A — procedi con il push`
     expect(keptBody(text)).toContain("\n│ [Decisione da utente]")
     expect(keptBody(keptBody(text))).toBe(keptBody(text))
-    const workbench = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
+    const workbench = workbenchSource()
     expect(workbench).toMatch(/settle\(host, message\.ref, keptBody\(message\.text\)\)/)
   })
 

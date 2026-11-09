@@ -5,6 +5,7 @@ import { createLineAccumulator } from "../host/line-stream"
 import { codeOf } from "../test-support/source-text"
 import { detectPermission } from "./permission"
 import { bottomRows, folderTrust, openingTrust, screenQuestion } from "./screen-question"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * Audit 2026-11-02, SES-3. Codex (ratatui) and OpenCode/ragu (opentui) place every row with `CSI row;col H` and write
@@ -181,7 +182,7 @@ describe("a menu drawn with the cursor is read off the screen", () => {
 })
 
 describe("the workbench", () => {
-  const source = codeOf(readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8"))
+  const source = codeOf(workbenchSource())
 
   test("weighs the screen wherever it asks whether a question is open", () => {
     expect(source).toContain(
@@ -249,7 +250,7 @@ describe("a folder-trust dialog in front of the opening task", () => {
   })
 
   test("the opening poll confirms it with one Enter there, and says to confirm it everywhere else", () => {
-    const source = codeOf(readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8"))
+    const source = codeOf(workbenchSource())
     const poll = source.slice(source.indexOf(codeOf("if (starting.typesTask) {")))
     const tick = poll.slice(0, poll.indexOf(codeOf("const decision = decideOpening({")))
     expect(tick).toContain(

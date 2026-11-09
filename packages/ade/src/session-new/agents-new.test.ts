@@ -7,6 +7,7 @@ import { detectAgents } from "./availability"
 import { RESUME, lostConversation, resumePromise } from "./resume"
 import { startArgsFor } from "../surface/start-args"
 import { normalizeAgentId } from "../sidebar/workspace-tree"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * The agents asked for on 2026-09-27 (`ade-team/results/agenti-mancanti.md`):
@@ -125,7 +126,7 @@ describe("the marks", () => {
 })
 
 describe("the workbench", () => {
-  const source = codeOf(readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8"))
+  const source = codeOf(workbenchSource())
 
   test("types no task into an app's server, and no agent can spawn one", () => {
     expect(source).toContain(codeOf('if (agent?.kind === "app") task = ""'))

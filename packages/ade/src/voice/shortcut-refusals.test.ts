@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { codeOf } from "../test-support/source-text"
 import { refusalsOf, registerVoiceShortcuts } from "./global-shortcut"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * A chord another application already holds cannot be registered, and the only
@@ -78,7 +79,7 @@ describe("a chord on punctuation", () => {
 })
 
 describe("lint: the refusal reaches the voice settings", () => {
-  const workbench = codeOf(readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8"))
+  const workbench = codeOf(workbenchSource())
   // Since S5 the chord's problems are worked out in the voice settings' state, which the panel and ADE share.
   const panel = codeOf(readFileSync(new URL("../../../voice/src/ui/settings-state.ts", import.meta.url), "utf8"))
 

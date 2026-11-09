@@ -5,10 +5,11 @@ import { emptyChatData, type ChatData } from "../chat/events"
 import { CHAT_PERMISSION } from "../chat/rules"
 import type { ChatState } from "../chat/store"
 import { barSessionCount, type BarPane } from "./bar-sessions"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /* chat-bot-facili, prove: «0 sessioni» in the bar with a conversation in the Chat. */
 
-const WORKBENCH = readFileSync(join(import.meta.dir, "workbench.tsx"), "utf8")
+const WORKBENCH = workbenchSource()
 
 const PROJECT = { name: "proj", root: "C:\\lavoro\\proj" }
 

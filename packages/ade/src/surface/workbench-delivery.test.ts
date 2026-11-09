@@ -1,13 +1,14 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * The workbench cannot be mounted under `bun test`, so the lines that deliver two fixes of the third live test live
  * here as lints on its source, and each is declared one. The helpers have tests of their own (`pane-title.test.ts`,
  * `sidebar/no-project.test.ts`); what no helper test can see is the caller that stops using them.
  */
-const workbench = readFileSync(join(import.meta.dir, "workbench.tsx"), "utf-8").replace(/\r\n/g, "\n")
+const workbench = workbenchSource().replace(/\r\n/g, "\n")
 const compact = (text: string) => text.replace(/\s+/g, " ")
 
 describe("lint: FAIL 10, the default name of a pane is numbered within its project", () => {

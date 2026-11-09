@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { codeOf } from "../test-support/source-text"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * kobalte-overlay: the sheets moved onto `Sheet` (`sheet.ts`), one per
@@ -48,7 +49,7 @@ describe("lint: the sheets are Kobalte dialogs", () => {
   })
 
   test("lint: runCommand is guarded by the open sheets, and sheetOpen covers every sheet the workbench renders", () => {
-    const workbench = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
+    const workbench = workbenchSource()
     expect(
       codeOf(workbench).includes(codeOf("const runCommand = guardedBySheet(sheetOpen, async (id: string) => {")),
     ).toBe(true)

@@ -2,8 +2,9 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { describe, expect, test } from "bun:test"
 import { createDiscardNotes } from "./discard-notes"
+import { workbenchSource } from "../test-support/workbench-source"
 
-const WORKBENCH = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+const WORKBENCH = workbenchSource()
 
 /*
  * Review of ade/flood-pagina, point 6. The notice that xterm threw output away was said once per pane for the life of

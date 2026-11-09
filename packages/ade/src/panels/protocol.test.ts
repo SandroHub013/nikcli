@@ -14,6 +14,7 @@ import {
 import { VIDEO_VERBS } from "../video/video"
 import { MODEL_VERBS } from "../model3d/model"
 import { SIMULATOR_VERBS } from "../simulator/simulator"
+import { workbenchSource } from "../test-support/workbench-source"
 
 describe("parseRequest", () => {
   test("reads a panel, a verb and no arguments", () => {
@@ -201,7 +202,7 @@ describe("a request cannot become a shell command (review, ALTO 1)", () => {
   })
 
   test("lint: the workbench hands a line to the panels only behind acceptsRequests (ALTO 1)", () => {
-    const source = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
+    const source = workbenchSource()
     const calls = source.split("\n").filter((line) => line.includes("handlePanelRequest(paneId, line)"))
     // From `onLine`, and from the screen of an agent that draws one (`screenRequests`).
     expect(calls.length).toBe(2)

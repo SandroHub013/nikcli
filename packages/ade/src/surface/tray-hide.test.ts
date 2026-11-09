@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { hideButtons, hideChoice, markTrayNoticed, planHide, TRAY_NOTICE_KEY, trayNoticed } from "./tray-hide"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /* G11 review, M1: hiding to the tray is said, and with sessions at work asked. */
 describe("the X with a gateway on", () => {
@@ -48,7 +49,7 @@ describe("the X with a gateway on", () => {
   })
 
   test("lint: the hide handler asks, closes the sessions on that answer, and only then hides", () => {
-    const view = readFileSync(new URL("./workbench.tsx", import.meta.url), "utf8")
+    const view = workbenchSource()
     const start = view.indexOf('listen<{ requestId?: number }>("ade-window-hide-requested"')
     expect(start).toBeGreaterThan(0)
     const block = view.slice(start, view.indexOf('listen("ade-window-shown"', start))

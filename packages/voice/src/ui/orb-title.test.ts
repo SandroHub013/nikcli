@@ -5,6 +5,7 @@ import { localePreference, setLocalePreference } from "@ragu/ade/i18n"
 import { DEFAULT_VOICE_SETTINGS } from "../settings/model"
 import { dictationHint, orbTitle } from "./orb-title"
 import { voiceSettingsSource } from "../test-support/voice-settings-source"
+import { workbenchSource } from "../../../ade/src/test-support/workbench-source"
 
 describe("ui/orb-title", () => {
   test("«Microfono · <chord>», with the chord of the mode the orb opens", () => {
@@ -55,7 +56,7 @@ describe("ui/orb-title: how the dictation chord opens", () => {
   })
 
   test("lint: a tap on a held dictation chord is said in ADE's notices, with the chord", () => {
-    const workbench = readFileSync(join(import.meta.dir, "../../../ade/src/surface/workbench.tsx"), "utf8")
+    const workbench = workbenchSource()
     expect(workbench).toContain("onDictationTap: () =>")
     expect(workbench).toContain(
       't("vui.dictation.tapHint", describeShortcut(voiceSettings().transcriptionChord, platform))',

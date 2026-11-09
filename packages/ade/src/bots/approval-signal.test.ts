@@ -6,6 +6,7 @@ import { addNotice, dismissClosedApprovals, unreadCount } from "../surface/notif
 import { approvalAction, approvalBadge, approvalLine, freshApprovals, shouldNotifySystem, sourcesText } from "./approval-signal"
 import { mergeApprovals, type ApprovalRequest } from "./approvals"
 import { forgetSystemNotice, notifySystem, resetSystemNotices, windowInFront, type SystemHost } from "./system-notify"
+import { workbenchSource } from "../test-support/workbench-source"
 
 setLocalePreference("it")
 
@@ -207,7 +208,7 @@ describe("the Rust side", () => {
 })
 
 describe("the shell draws it", () => {
-  const shell = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+  const shell = workbenchSource()
 
   test("lint: the Bot tab has the badge, the bell gets a line per new request and loses it with the request", () => {
     expect(shell).toContain('...(view === "bot" ? approvalBadge(waitingApprovals()) : {})')

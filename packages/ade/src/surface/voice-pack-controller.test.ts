@@ -4,6 +4,7 @@ import { join } from "node:path"
 import type { InstallProgress, PackState } from "@ragu/voice"
 import { createPackController, followInstall, installCancelled, type VoicePackHost } from "./voice-pack-controller"
 import { codeOf } from "../test-support/source-text"
+import { workbenchSource } from "../test-support/workbench-source"
 
 const MB = 1024 * 1024
 
@@ -209,7 +210,7 @@ describe("K3's progress and cancel have a caller", () => {
   })
 
   test("the panel is given the progress, the cancel and the Kokoro pack", () => {
-    const workbench = read("src", "surface", "workbench.tsx")
+    const workbench = workbenchSource()
     expect(workbench).toContain('stopFollowing = followInstall(host, "piper", setPiperProgress)')
     expect(workbench).toContain("onCancelInstall={(provider) =>")
     expect(workbench).toContain("kokoroPack={kokoroPack()}")

@@ -5,9 +5,10 @@ import { createComputed, createRoot, mapArray } from "solid-js"
 import { createStore, produce, unwrap } from "solid-js/store"
 import type { TranscriptLine } from "../grid/pane"
 import { WATCHED_TAIL, createLineWriter, withLines } from "./pane-lines"
+import { workbenchSource } from "../test-support/workbench-source"
 
 const MAX = 200
-const WORKBENCH = readFileSync(join(import.meta.dir, "workbench.tsx"), "utf8")
+const WORKBENCH = workbenchSource()
 
 /** The transcript's store, wired as the workbench wires it, with what the pane's `<For>` and the autosave react to. */
 function transcript(start: number) {

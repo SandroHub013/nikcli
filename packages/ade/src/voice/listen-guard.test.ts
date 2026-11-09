@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, jest, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { createListenGuard, pollListenGuard, SLEEP_GAP_MS, LOCK_POLL_MS } from "./listen-guard"
+import { workbenchSource } from "../test-support/workbench-source"
 
 function world() {
   const state = {
@@ -219,7 +220,7 @@ describe("a microphone the user opens while ADE is in the tray", () => {
   })
 
   test("the workbench says which microphone is a dictation, and which a tap left open", () => {
-    const source = readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8")
+    const source = workbenchSource()
     expect(source).toContain('isDictating: () => voiceEngine.activeMode() === "transcription"')
     expect(source).toContain("isLatched: () => voiceEngine.isLatched()")
   })

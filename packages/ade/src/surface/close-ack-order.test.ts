@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * Architect's review of F6a, O1: Rust asks the same close question again when a click finds it acknowledged and
@@ -8,7 +9,7 @@ import { join } from "node:path"
  * comes before the guard that ignores a request while one is being handled.
  */
 test("the close acknowledgement is sent before the 'already handling' guard", () => {
-  const source = readFileSync(join(import.meta.dir, "workbench.tsx"), "utf8")
+  const source = workbenchSource()
   const listener = source.slice(source.indexOf('listen<{ requestId?: number }>("ade-window-close-requested"'))
   const body = listener.slice(0, listener.indexOf('listen<{ requestId?: number }>("ade-window-hide-requested"'))
   const ack = body.indexOf('invoke("ade_close_ack"')

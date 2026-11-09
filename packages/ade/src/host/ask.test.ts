@@ -4,6 +4,7 @@ import { join } from "node:path"
 import { askDialog, askYesNo, remindQuestion, type AskDeps, type AskOptions, type NativeAskOptions } from "./ask"
 import { BRAND } from "../brand"
 import { t } from "../i18n"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * F-confirm (found live in B7): in ADE `confirm()` is the dialog plugin's
@@ -190,7 +191,7 @@ describe("una domanda sì/no in ADE", () => {
   })
 
   test("lint: every close question of the workbench goes through askYesNo, and a second ✕ is reminded", () => {
-    const source = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+    const source = workbenchSource()
     const block = source.slice(source.indexOf("const closer = createCloser({"), source.indexOf("const close = (id: string)"))
     for (const field of ["ask:", "askRunning:", "askWorktree:"]) {
       expect(block).toMatch(new RegExp(`${field}[^\\n]*askYesNo\\(`))
@@ -202,7 +203,7 @@ describe("una domanda sì/no in ADE", () => {
   })
 
   test("lint: no confirm() left in the workbench: every question goes through askYesNo", () => {
-    const source = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+    const source = workbenchSource()
     const calls = source
       .split("\n")
       .filter((line) => /(?<![\w$])(?:window\.)?confirm\s*\(/.test(line) && !/^\s*(?:\/\/|\*)/.test(line))
