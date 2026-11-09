@@ -62,7 +62,7 @@
   --text: var(--ade-text);
   --dim: var(--ade-text-weak);
   --accent: var(--ade-accent);
-  --work: var(--ade-state-work);
+  --ok: var(--ade-done);
   --perm: var(--ade-state-perm);
   --err: var(--ade-state-err);
   --radius: 6px;
@@ -172,7 +172,7 @@ h2 {
 }
 
 .lesson[data-fatto="1"] .n {
-  background: color-mix(in srgb, var(--work) 28%, transparent);
+  background: color-mix(in srgb, var(--ok) 28%, transparent);
 }
 
 .lesson .testo {
@@ -234,7 +234,7 @@ button[disabled] {
 }
 
 [data-verdetto="giusta"] {
-  border-color: var(--work);
+  border-color: var(--ok);
 }
 
 [data-verdetto="sbagliata"] {
@@ -347,7 +347,7 @@ button[disabled] {
 }
 
 .verdetto[data-esito="giusta"] {
-  border-left-color: var(--work);
+  border-left-color: var(--ok);
 }
 
 .verdetto[data-esito="sbagliata"] {
@@ -546,8 +546,8 @@ button[disabled] {
 }
 
 .spiegazione-riga[data-esito="trovata"] {
-  background: color-mix(in srgb, var(--work) 12%, transparent);
-  border: 1px solid var(--work);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+  border: 1px solid var(--ok);
 }
 
 .spiegazione-riga[data-esito="persa"] {
