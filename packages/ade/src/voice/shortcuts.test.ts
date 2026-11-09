@@ -473,3 +473,106 @@ describe("push-to-talk watchdog", () => {
     await handler.onKeyUp(" ", "Space")
   })
 })
+
+/*
+ * MOD-7: the key is let go while the press is still waiting for the earlier release to settle.
+ * Press, let go (the release starts and takes a while), press again (it waits for that release), let go again: that
+ * second key-up found `isPressed` false and was dropped, and when the release settled the microphone opened for a key
+ * nobody was holding, until the watchdog's minutes ran out.
+ */
+describe("a press that waits for a release still hears its key go up (MOD-7)", () => {
+  function slowRelease() {
+    let finish: () => void = () => {}
+    const calls: string[] = []
+    const engine: PushToTalkTarget = {
+      pressToTalk: async () => {
+        calls.push("press")
+      },
+      releaseToTalk: () => {
+        calls.push("release")
+        return new Promise<void>((resolve) => {
+          finish = resolve
+        })
+      },
+    }
+    return { engine, calls, settle: () => finish() }
+  }
+
+  test("a key-up during the wait cancels the waiting press: the microphone does not open", async () => {
+    const it = slowRelease()
+    const handler = createPushToTalkHandler(it.engine)
+    const chord = parseChord("mod+shift+k", "other")
+
+    await handler.onKeyDown(chord, {}, "agent")
+    const releasing = handler.onKeyUp("k") // the release starts and waits on the engine
+    const again = handler.onKeyDown(chord, {}, "agent") // waits for that release
+    expect(await handler.onKeyUp("k")).toBe(true) // the chord's key goes up while it waits
+    it.settle()
+    await releasing
+    expect(await again).toBe(false)
+
+    expect(it.calls.filter((call) => call === "press")).toHaveLength(1)
+    expect(handler.isPressed()).toBe(false)
+  })
+
+  test("a press that is not let go of still opens once the release has settled", async () => {
+    const it = slowRelease()
+    const handler = createPushToTalkHandler(it.engine)
+    const chord = parseChord("mod+shift+k", "other")
+
+    await handler.onKeyDown(chord, {}, "agent")
+    const releasing = handler.onKeyUp("k")
+    const again = handler.onKeyDown(chord, {}, "agent")
+    it.settle()
+    await releasing
+    expect(await again).toBe(true)
+
+    expect(it.calls.filter((call) => call === "press")).toHaveLength(2)
+    expect(handler.isPressed()).toBe(true)
+  })
+
+  test("a key that is not the chord's does not cancel the waiting press, and a blur does", async () => {
+    const it = slowRelease()
+    const handler = createPushToTalkHandler(it.engine)
+    const chord = parseChord("mod+shift+k", "other")
+
+    await handler.onKeyDown(chord, {}, "agent")
+    const releasing = handler.onKeyUp("k")
+    const again = handler.onKeyDown(chord, {}, "agent")
+    expect(await handler.onKeyUp("a")).toBe(false)
+    await handler.onBlur()
+    it.settle()
+    await releasing
+    expect(await again).toBe(false)
+    expect(handler.isPressed()).toBe(false)
+  })
+
+  test("two presses waiting on the same release open once, with one watchdog", async () => {
+    const it = slowRelease()
+    const timers: { cleared: boolean }[] = []
+    const handler = createPushToTalkHandler(it.engine, {
+      setTimer: () => {
+        const timer = { cleared: false }
+        timers.push(timer)
+        return timer
+      },
+      clearTimer: (handle) => {
+        ;(handle as { cleared: boolean }).cleared = true
+      },
+    })
+    const chord = parseChord("mod+shift+k", "other")
+
+    await handler.onKeyDown(chord, {}, "agent")
+    const releasing = handler.onKeyUp("k")
+    const first = handler.onKeyDown(chord, {}, "agent")
+    const second = handler.onKeyDown(chord, {}, "agent")
+    it.settle()
+    await releasing
+    const answers = [await first, await second]
+
+    expect(answers.filter(Boolean)).toHaveLength(1)
+    expect(it.calls.filter((call) => call === "press")).toHaveLength(2)
+    // The first press's watchdog was stopped by its release; the one that is live is the only one left running.
+    expect(timers.filter((timer) => !timer.cleared)).toHaveLength(1)
+  })
+})
