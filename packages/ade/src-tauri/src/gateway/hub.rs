@@ -51,6 +51,10 @@ pub struct GatewayMessage {
     /// disk before this field was made by such an account, so it reads as true; the page reads the lack of it as false.
     #[serde(default = "owner_by_default")]
     pub owner: bool,
+    /// When it was written (on the platform's clock), or else when ADE first got it: the page does not run a message
+    /// that waited too long (BOT-10). None on one kept on disk by an older ADE, and the page does not run that either.
+    #[serde(default)]
+    pub sent_ms: Option<u64>,
 }
 
 fn owner_by_default() -> bool {
@@ -1707,6 +1711,7 @@ impl Task {
             private: message.private,
             recovered,
             owner,
+            sent_ms: Some(message.timestamp_ms.unwrap_or(at)),
         };
         let cursor = message.cursor.clone().or_else(|| self.adapter.cursor());
         let mut pending = self.pending.lock().unwrap();
@@ -3495,6 +3500,7 @@ mod tests {
                         private: true,
                         recovered: false,
                         owner: true,
+                        sent_ms: None,
                     },
                     cursor: None,
                     acked: false,
@@ -3664,6 +3670,7 @@ mod tests {
                         private: true,
                         recovered: false,
                         owner: true,
+                        sent_ms: None,
                     },
                     cursor: None,
                     acked: false,
@@ -3675,6 +3682,31 @@ mod tests {
             s.env.statuses.lock().unwrap().last().is_some_and(|status| status.needs_attention && status.attention_reason.as_deref() == Some(QUEUE_FULL))
         })
         .await;
+    }
+
+    /* BOT-10: the page decides by age, so the age must reach it, and survive the pending file. */
+    #[tokio::test]
+    async fn every_message_says_when_it_was_written_and_one_kept_by_an_older_ade_says_nothing() {
+        let s = setup("sent-ms");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        feed.send(Ok(vec![
+            Inbound { timestamp_ms: Some(777), ..message("1", "c42", "42", "datato") },
+            message("2", "c42", "42", "senza data"),
+        ]))
+        .unwrap();
+        eventually("i messaggi", || s.env.messages.lock().unwrap().len() == 2).await;
+        let seen = s.env.messages.lock().unwrap().clone();
+        assert_eq!(seen[0].sent_ms, Some(777));
+        assert!(seen[1].sent_ms.is_some(), "a platform with no date counts from when ADE got it");
+        let on_disk = read_pending_file(&pending_file_path(s.hub.store.path(), BOT, Platform::Fake));
+        assert_eq!(on_disk[0].msg.sent_ms, Some(777), "the age is lost at a restart");
+        assert!(serde_json::to_string(&seen[0]).unwrap().contains("\"sentMs\":777"));
+        let old: GatewayMessage = serde_json::from_str(
+            r#"{"bot":"b","platform":"fake","chat":"c","sender":{"id":"1","name":"n"},"text":"t","id":"9","redacted":false,"button":false,"private":true}"#,
+        )
+        .unwrap();
+        assert_eq!(old.sent_ms, None);
     }
 
     /* B1 (review of bot-ack): «off» while a batch is in hand. The rest of the batch is not handed on after it. */

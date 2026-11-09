@@ -19,6 +19,17 @@ import { admitProject, configGrant, isConfigFile, type AdmitProjectDeps } from "
 import { admit, fileFingerprint, selfApproval, type TrustStore } from "../trust"
 import { runnerById } from "../runners"
 
+/**
+ * How long a message may wait and still become a turn (BOT-10). Past this, ADE was closed or the computer asleep, the
+ * person has moved on, and a turn with tools from what they wrote then would surprise them.
+ */
+export const MAX_MESSAGE_AGE_MS = 10 * 60_000
+
+/** Whether a message waited too long to run. One stored by an older ADE says no age: it is not run either. */
+export function tooOldToRun(message: { readonly sentMs?: number | null; readonly recovered?: boolean }, now: number): boolean {
+  return typeof message.sentMs === "number" ? now - message.sentMs > MAX_MESSAGE_AGE_MS : message.recovered === true
+}
+
 export type ChatCommand = "new" | "stop" | "status" | "help" | "retry" | "cost" | "model" | "sessions"
 
 const COMMANDS: Record<string, ChatCommand> = {

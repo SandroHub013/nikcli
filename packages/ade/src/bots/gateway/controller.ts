@@ -46,7 +46,7 @@ import type { ApprovalRegistry } from "../approvals"
 import { permissionAnswerer, type AskDetail } from "./approval"
 import { forgetTurnFailuresOf, noteTurnFailure } from "./failures"
 import { botForChat, modelChoices, type ChatModelStore } from "./chat-model"
-import { chatCommand, countMessage, CHAT_MESSAGES_PER_HOUR, framedMessage, mayRun } from "./policy"
+import { chatCommand, countMessage, CHAT_MESSAGES_PER_HOUR, framedMessage, MAX_MESSAGE_AGE_MS, mayRun, tooOldToRun } from "./policy"
 import type { BotAccount } from "../account"
 import { offersRemoteCommands, REMOTE_OFF, remoteTools, type RemoteSetting } from "./remote"
 import { resumable, sessionKey, sessionTitle, type ChatSession, type HistoryStore, type SessionStore } from "./session"
@@ -73,6 +73,8 @@ export interface GatewayMessage {
   readonly owner?: boolean
   /** The message was recovered after an ADE restart or reload. */
   readonly recovered?: boolean
+  /** When it was written, or else when ADE first got it, in epoch ms. Absent on one stored by an older ADE. */
+  readonly sentMs?: number | null
 }
 
 /**
@@ -237,6 +239,8 @@ interface ChatState {
   times: number[]
   /** The limit was already said in this chat: said once, then silence. */
   limited: boolean
+  /** That a message was too old to run was already said here: once for a burst of them, again after one that runs. */
+  tooOldSaid: boolean
   /** The last message that became a turn: what `/riprova` asks again. */
   last?: GatewayMessage
   /**
@@ -382,7 +386,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
   const stateOf = (key: string): ChatState => {
     let state = chats.get(key)
     if (!state) {
-      state = { queue: [], starting: false, cancelled: false, times: [], limited: false, fresh: 0, retries: 0 }
+      state = { queue: [], starting: false, cancelled: false, times: [], limited: false, tooOldSaid: false, fresh: 0, retries: 0 }
       chats.set(key, state)
     }
     return state
@@ -913,6 +917,17 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       return press(message)
     }
     const key = sessionKey(message.bot, message.platform, message.chat)
+    // Before anything acts on it: a command written an hour ago is as stale as a request (BOT-10).
+    if (tooOldToRun(message, now())) {
+      ack()
+      warn(`gateway ${message.platform}: message ${message.id} not run: older than the limit`)
+      const state = stateOf(key)
+      if (!state.tooOldSaid) {
+        state.tooOldSaid = true
+        void reply(message, t("gateway.tooOld", MAX_MESSAGE_AGE_MS / 60_000))
+      }
+      return
+    }
     const which = chatCommand(message.text)
     if (which) {
       ack()
@@ -951,6 +966,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       return
     }
     state.limited = false
+    state.tooOldSaid = false
     if (message.redacted) void reply(message, t("gateway.redacted"))
     state.queue.push(message)
     const busy = state.turn !== undefined || state.starting

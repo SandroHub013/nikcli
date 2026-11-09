@@ -7,7 +7,7 @@ import { runTurn, type Turn, type TurnDeps, type TurnRequest, type TurnResult } 
 import { createApprovalRegistry, decideApproval, mergeApprovals } from "../approvals"
 import { ASK_TIMEOUT_MS, startGatewayController, safePreviewText, RECOVERED_NOTICE, recoveredNotice, type GatewayBridge, type GatewayMessage } from "./controller"
 import { forgetTurnFailures, noteTurnFailure, turnFailureOf } from "./failures"
-import { chatCommand, chatHeader } from "./policy"
+import { chatCommand, chatHeader, MAX_MESSAGE_AGE_MS } from "./policy"
 import { localRemoteStore, memoryRemoteStore, offersRemoteCommands, REMOTE_OFF, remoteKey, remoteTools } from "./remote"
 import { localSessionStore, memorySessionStore, sessionKey } from "./session"
 import { createGatewayThreads, gatewayThreadKey, type ThreadDisk } from "./threads"
@@ -219,7 +219,7 @@ describe("the gateways' controller", () => {
       loadBot: trusted,
       sessions: memorySessionStore(),
     })
-    b.emit("domanda salvata", { id: "m42", bot: BOT.path, platform: "telegram", chat: "c42", recovered: true })
+    b.emit("domanda salvata", { id: "m42", bot: BOT.path, platform: "telegram", chat: "c42", recovered: true, sentMs: Date.now() })
     await until("il turno è partito", () => turns.started.length === 1)
     const request = turns.started[0]!.request
     expect(request.message).toContain(recoveredNotice())
@@ -1204,7 +1204,7 @@ describe("the gateways' controller", () => {
       loadBot: trusted,
       sessions: memorySessionStore(),
     })
-    b.emit("messaggio recuperato", { recovered: true, id: "msg-rec-1" })
+    b.emit("messaggio recuperato", { recovered: true, id: "msg-rec-1", sentMs: Date.now() })
     await until("il turno è partito", () => turns.started.length === 1)
     const turn = turns.started[0]!
 
@@ -2174,3 +2174,84 @@ describe("the failure shown in the panel goes away when the bot works again (N7)
   })
 })
 
+
+describe("a message that waited too long is not run (BOT-10)", () => {
+  const NOW = 1_800_000_000_000
+  const OLD = NOW - MAX_MESSAGE_AGE_MS - 1
+  const minutes = MAX_MESSAGE_AGE_MS / 60_000
+  const started = async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: trusted, sessions: memorySessionStore(), now: () => NOW })
+    return { b, turns }
+  }
+
+  test("older than the limit: no turn, acknowledged so it does not come back, and the chat is told once", async () => {
+    const { b, turns } = await started()
+    b.emit("cancella il branch vecchio", { id: "m1", recovered: true, sentMs: OLD })
+    b.emit("e fai il deploy", { id: "m2", sentMs: OLD })
+    await until("i due ack", () => b.acks.length === 2)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(turns.started).toHaveLength(0)
+    expect(b.acks.map((ack) => ack.id)).toEqual(["m1", "m2"])
+    expect(b.sent.map((each) => each.text)).toEqual([t("gateway.tooOld", minutes)])
+  })
+
+  test("inside the limit a recovered message still runs", async () => {
+    const { b, turns } = await started()
+    b.emit("appena scritto", { id: "m1", recovered: true, sentMs: NOW - MAX_MESSAGE_AGE_MS })
+    await until("il turno", () => turns.started.length === 1)
+    expect(b.sent).toHaveLength(0)
+  })
+
+  test("a stored message with no age (kept by an older ADE) is not run: nobody can say how old it is", async () => {
+    const { b, turns } = await started()
+    b.emit("senza età", { id: "m1", recovered: true })
+    await until("l'ack", () => b.acks.length === 1)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(turns.started).toHaveLength(0)
+    expect(b.sent.map((each) => each.text)).toEqual([t("gateway.tooOld", minutes)])
+  })
+
+  test("a live message with no age runs", async () => {
+    const { b, turns } = await started()
+    b.emit("adesso", { id: "m1" })
+    await until("il turno", () => turns.started.length === 1)
+  })
+
+  test("an old command does nothing: /nuova written an hour ago does not drop today's conversation", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    const sessions = memorySessionStore()
+    const key = sessionKey(BOT.path, "telegram", "c42")
+    sessions.set(key, { project: PROJECT, runner: "claude", sessionId: "s1" })
+    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: trusted, sessions, now: () => NOW })
+    b.emit("/nuova", { id: "m1", recovered: true, sentMs: OLD })
+    await until("l'ack", () => b.acks.length === 1)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(sessions.get(key)?.sessionId).toBe("s1")
+    expect(b.sent.map((each) => each.text)).toEqual([t("gateway.tooOld", minutes)])
+  })
+
+  test("a button press is not judged by age: its date is the date of the question it sits under", async () => {
+    const b = bridge()
+    await startGatewayController({ bridge: b.fake, runTurn: fakeTurns().runTurn, loadBot: trusted, sessions: memorySessionStore(), now: () => NOW })
+    b.emit("x:0", { id: "p1", button: true, sentMs: OLD })
+    await until("l'ack", () => b.acks.length === 1)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(b.sent).toHaveLength(0)
+  })
+
+  test("after a message that runs, a later old one is told again", async () => {
+    const { b, turns } = await started()
+    b.emit("vecchio", { id: "m1", sentMs: OLD })
+    await until("detto", () => b.sent.length === 1)
+    b.emit("fresco", { id: "m2", sentMs: NOW })
+    await until("il turno", () => turns.started.length === 1)
+    turns.started[0]!.finish({ text: "fatto" })
+    await until("la risposta", () => b.sent.length === 2)
+    b.emit("vecchio di nuovo", { id: "m3", sentMs: OLD })
+    await until("detto ancora", () => b.sent.length === 3)
+    expect(b.sent[2]!.text).toBe(t("gateway.tooOld", minutes))
+  })
+})

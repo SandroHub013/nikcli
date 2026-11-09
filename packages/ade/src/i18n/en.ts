@@ -924,6 +924,8 @@ export const en: Messages = {
   // A bot's gateway, in the chat it answers (G4): what the bot says there on its own.
   "gateway.recoveredNotice":
     "[Recovered message: received while ADE was closed or restarting (may be a duplicate).]",
+  "gateway.tooOld": (minutes: number) =>
+    `This message is more than ${minutes} minutes old and I did not run it. If you still need it, send it again.`,
   "gateway.redacted": "I hid a key you wrote: I won't use it or save it.",
   "gateway.queued": (place) => `I'm finishing the previous turn: this message is queued, in place ${place}.`,
   "gateway.stopped": "Stopped. I cleared the queued messages.",
