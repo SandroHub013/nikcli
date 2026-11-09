@@ -132,6 +132,16 @@ describe("targets and roots", () => {
     expect(checkRemoteDir("/srv/app/")).toEqual({ dir: "/srv/app" })
     expect("error" in checkRemoteDir("srv")).toBe(true)
   })
+
+  test("a folder with a quote or a control character is refused, and the source says so in escapes, not in raw bytes (BOT-14)", () => {
+    expect("error" in checkRemoteDir("/a\u0001b")).toBe(true)
+    expect("error" in checkRemoteDir("/a\u001fb")).toBe(true)
+    expect("error" in checkRemoteDir("/it's")).toBe(true)
+    expect(checkRemoteDir("/srv/app")).toEqual({ dir: "/srv/app" })
+    // A raw byte under 0x20 in the file (tab, LF and CR aside) does not survive a copy and paste, and hides in review.
+    const source = readFileSync(join(import.meta.dir, "ssh.ts"), "utf8")
+    expect(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(source)).toBe(false)
+  })
 })
 
 describe("the command line", () => {

@@ -123,10 +123,11 @@ function rememberPast(list: readonly ChatSession[], past: ChatSession): { kept: 
   return { kept: all.slice(0, HISTORY_PER_CHAT), pushedOut: all.slice(HISTORY_PER_CHAT) }
 }
 
-const HISTORY_KEY = "ade.gateway.history"
+/** Where the past sessions of each chat are kept: one object, a key per `bot:platform:chat` (`forget.ts` takes a bot's away). */
+export const GATEWAY_HISTORY_KEY = "ade.gateway.history"
 
 /** In the renderer's storage, next to the sessions. */
-export function localHistoryStore(key: string = HISTORY_KEY): HistoryStore {
+export function localHistoryStore(key: string = GATEWAY_HISTORY_KEY): HistoryStore {
   const read = (): Record<string, unknown> => {
     try {
       const parsed = JSON.parse(localStorage.getItem(key) ?? "{}") as unknown

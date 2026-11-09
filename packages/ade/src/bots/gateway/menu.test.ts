@@ -60,7 +60,7 @@ describe("the menu is put on the bot when its gateway is up", () => {
     let now = language
     const sets: { bot: string; platform: string; commands: readonly MenuEntry[] }[] = []
     const warned: string[] = []
-    const state = { fail: false, stopped: [] as string[] }
+    const state = { fail: false, stopped: [] as string[], clock: 1_000_000 }
     const deps: MenuDeps = {
       statuses: async () => initial,
       onStatus: async (on) => {
@@ -77,6 +77,7 @@ describe("the menu is put on the bot when its gateway is up", () => {
         return () => void state.stopped.push("language")
       },
       warn: (line) => void warned.push(line),
+      now: () => state.clock,
     }
     return {
       deps,
@@ -153,6 +154,32 @@ describe("the menu is put on the bot when its gateway is up", () => {
     expect(h.warned[0]).toContain("BOT_COMMAND_INVALID")
     h.state.fail = false
     h.speak("en")
+    await settle()
+    expect(h.sets).toHaveLength(2)
+  })
+
+  test("a menu that failed because the network was down is tried again after a minute, not never (BOT-13)", async () => {
+    const h = harness([link()])
+    h.state.fail = true
+    await startMenuSync(h.deps)
+    await settle()
+    expect(h.sets).toHaveLength(1)
+    h.state.fail = false
+    // Within the minute: still not asked again, however many times the status is heard.
+    h.state.clock += 10_000
+    h.emit(link())
+    await settle()
+    expect(h.sets).toHaveLength(1)
+    // After it: the next status asks again, and the menu is given.
+    h.state.clock += 51_000
+    h.emit(link())
+    h.emit(link())
+    await settle()
+    expect(h.sets).toHaveLength(2)
+    expect(h.sets[1]!.commands).toEqual(chatMenu("it"))
+    // Given now: it is not asked a third time.
+    h.state.clock += 120_000
+    h.emit(link())
     await settle()
     expect(h.sets).toHaveLength(2)
   })

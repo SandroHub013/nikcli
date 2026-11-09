@@ -36,10 +36,11 @@ function parse(value: unknown): ChatModel | undefined {
   return typeof runner === "string" && typeof model === "string" && SAFE_MODEL.test(model) ? { runner, model } : undefined
 }
 
-const STORAGE_KEY = "ade.gateway.models"
+/** Where the model chosen for each chat is kept: one object, a key per `bot:platform:chat` (`forget.ts` takes a bot's away). */
+export const GATEWAY_MODELS_KEY = "ade.gateway.models"
 
 /** In the renderer's storage, so the choice survives ADE restarting. */
-export function localChatModelStore(key: string = STORAGE_KEY): ChatModelStore {
+export function localChatModelStore(key: string = GATEWAY_MODELS_KEY): ChatModelStore {
   const read = (): Record<string, unknown> => {
     try {
       const parsed = JSON.parse(localStorage.getItem(key) ?? "{}") as unknown
