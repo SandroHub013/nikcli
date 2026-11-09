@@ -624,6 +624,7 @@ export function createVoiceSettingsState(props: VoiceSettingsStateProps, options
   const listenKeys = radioGroupKeys((value) => updateSettings({ alwaysListen: value === "always" }))
   const replyKeys = radioGroupKeys((value) => updateSettings({ speakReplies: value === "speak" }))
   const alertsKeys = radioGroupKeys((value) => updateSettings({ spokenAlerts: value === "on" }))
+  const alertsListenKeys = radioGroupKeys((value) => updateSettings({ alertsListen: value === "on" }))
   /*
    * The voice and its backend are written together: `normalizeSettings`
    * repairs a pair that disagrees, and says so, which a click must not cause.
@@ -758,6 +759,7 @@ export function createVoiceSettingsState(props: VoiceSettingsStateProps, options
     listenKeys,
     replyKeys,
     alertsKeys,
+    alertsListenKeys,
     pickReplyVoice,
     replyVoiceKeys,
     replyBackendKeys,

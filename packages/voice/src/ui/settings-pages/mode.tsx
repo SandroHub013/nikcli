@@ -80,6 +80,7 @@ export function ModePage(p: { state: VoiceSettingsState; bare?: boolean }): JSX.
     sendKeys,
     replyKeys,
     alertsKeys,
+    alertsListenKeys,
     engineKeys,
     speedKeys,
     fallbackKeys,
@@ -240,7 +241,7 @@ export function ModePage(p: { state: VoiceSettingsState; bare?: boolean }): JSX.
             <span id="agent-alerts-listen-label" data-slot="sub-choice-label">
               {t("vui.alertsListen.title")}
             </span>
-            <div role="radiogroup" aria-labelledby="agent-alerts-listen-label" data-slot="sub-choice-row">
+            <div role="radiogroup" aria-labelledby="agent-alerts-listen-label" data-slot="sub-choice-row" onKeyDown={alertsListenKeys}>
               <div
                 role="radio"
                 data-value="on"
