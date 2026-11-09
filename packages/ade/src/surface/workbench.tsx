@@ -298,8 +298,8 @@ import { scrubSecrets } from "../bots/terms"
 import type { AgentFile } from "../bots/ragu"
 import type { Runner } from "../bots/runners"
 import { senderToken } from "../session/senders"
-import { followInboxRound, inboxNamesOf, rearmInbox } from "../session/mail-inbox"
-import { firstTime, resealUnread, sealedBy, splitSealed, useMailKeys } from "../session/mail-seal"
+import { followInboxRound, inboxEntriesOf, rearmInbox } from "../session/mail-inbox"
+import { bodyHash, firstTime, resealUnread, sealedBy, splitSealed, useMailKeys } from "../session/mail-seal"
 import { createActivityReads, type ActivityReads } from "../session/activity-reads"
 import { boardCandidates, parseOwners, whoOwns } from "../session/owners"
 import { mayReroute, pickProvider, setProviderPicker } from "../session/provider-pick"
@@ -618,6 +618,7 @@ import {
 } from "../decisions/delivery"
 import { createDecisionsHub } from "../decisions/hub"
 import { createDecisionsRegister } from "../decisions/register"
+import { answerLedger } from "../session/answer-ledger"
 import { askerLedger } from "../session/asker-ledger"
 import { decisionsPath } from "../decisions/store"
 import { formatMoment as formatDesignMoment } from "../design/answer"
@@ -1717,8 +1718,11 @@ export function Workbench() {
    */
   // Which pane asked, as ADE wrote it: a `fromPane` written by hand in a register is not trusted.
   const askers = askerLedger(() => (typeof localStorage === "undefined" ? undefined : localStorage))
+  // And the answers ADE's own buttons wrote: a line of the user's that is not among them is shown as reported (SEC-3).
+  const answers = answerLedger(() => (typeof localStorage === "undefined" ? undefined : localStorage))
   const decisionsRegister = createDecisionsRegister({
-    vouch: askers.vouch,
+    vouch: (path, events) => answers.vouch(path, askers.vouch(path, events)),
+    remember: answers.remember,
     path: () => {
       const root = project()?.root
       return root ? decisionsPath(root) : undefined
@@ -1882,7 +1886,8 @@ export function Workbench() {
    * time, and the panel with all of them. See `design/`.
    */
   const designRegister = createDesignRegister({
-    vouch: askers.vouch,
+    vouch: (path, events) => answers.vouch(path, askers.vouch(path, events)),
+    remember: answers.remember,
     path: () => {
       const root = project()?.root
       return root ? designPath(root) : undefined
@@ -1916,6 +1921,9 @@ export function Workbench() {
       localStorage.setItem(DESIGN_OUTBOX_KEY, JSON.stringify(items))
     } catch {}
   }
+
+  // The answers this ADE gave and that still stand are its own clicks: they do not turn into «riportata» at the update (SEC-3).
+  answers.seed([...decisionsOutbox(), ...designOutbox()])
 
   const [designRecipients, setDesignRecipients] = createSignal<Record<string, RecipientChoice>>(
     (() => {
@@ -3416,6 +3424,7 @@ export function Workbench() {
       at,
       ringAt: at,
       rings: 0,
+      sha256: await bodyHash(full),
     }
     const stored = await host.mailboxInboxPut(paneId, entry.name, full).then(
       () => true,
@@ -3831,13 +3840,19 @@ export function Workbench() {
   const freshPaneToken = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, paneId: string) => {
     const token = mintPaneToken(paneId)
     if (rearmInbox(inboxPending, paneId)) saveInbox()
-    const names = inboxNamesOf(inboxPending, paneId)
+    const entries = inboxEntriesOf(inboxPending, paneId)
     const { mailboxInboxText: read, mailboxInboxPut: put } = host
-    if (names.length > 0 && read && put) {
-      await resealUnread(names, retiredTokens.get(paneId) ?? [], {
+    if (entries.length > 0 && read && put) {
+      const adopted = await resealUnread(entries, retiredTokens.get(paneId) ?? [], {
         read: (name) => read(paneId, name),
         write: (name, body) => put(paneId, name, body),
       })
+      // An entry saved before the hash was kept was taken on its word, once: it has its hash now.
+      for (const { name, sha256 } of adopted) {
+        const kept = inboxPending.find((entry) => entry.paneId === paneId && entry.name === name)
+        if (kept) kept.sha256 = sha256
+      }
+      if (adopted.length > 0) saveInbox()
     }
     return token
   }
@@ -5072,7 +5087,7 @@ export function Workbench() {
         waitFor(found.k, folder, message.timeout)
         // Chosen already: written now, and the typed line, if still queued, waits for this claim like any other.
         // Only an answer given in ADE is printed as the user's choice: one written into the register is not one.
-        if (found.answer && answeredInAde(found, path, designOutbox())) {
+        if (found.answer && answeredInAde(found, path, designOutbox(), answers.has)) {
           answerDesignWaiters(path, found)
           await answer(`ok: ${found.k} ha già una scelta (progetto ${owner.name})`)
         } else if (found.answer)

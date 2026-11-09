@@ -113,12 +113,15 @@ export function answered(proposal: DesignProposal, event: AnsweredDesignEvent): 
  * prints as the user's choice must come from ADE's own buttons. Those
  * answers are the ones in the answers' outbox, delivered or not (an entry is
  * made only by `onAnswered`); one no longer there, because the outbox was
- * pruned, still counts when it is the user's and no pane wrote it.
+ * pruned, still counts when ADE's own record of its clicks has it (`has`):
+ * «by utente, no pane» is only what the file says, and an agent that wrote the
+ * line by hand says it too (SEC-3).
  */
 export function answeredInAde(
   proposal: DesignProposal,
   path: string,
   outbox: readonly { readonly path: string; readonly k: string; readonly answeredAt: string; readonly kind?: string }[],
+  has: (path: string, k: string, at: string) => boolean,
 ): boolean {
   const answer = proposal.answer
   if (!answer) return false
@@ -127,7 +130,7 @@ export function answeredInAde(
   )
   if (queued) return true
   const event = [...proposal.history].reverse().find((item) => item.type === "risposta" && item.at === answer.at)
-  return answer.by === USER && event !== undefined && !event.fromPane
+  return answer.by === USER && event !== undefined && !event.fromPane && has(path, proposal.k, answer.at)
 }
 
 /** A field on one line, whatever the register holds: no line break or control character reaches a terminal. */

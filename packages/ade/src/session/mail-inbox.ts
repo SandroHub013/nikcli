@@ -85,7 +85,12 @@ export function rearmInbox(pending: readonly InboxEntry[], paneId: string): bool
   return changed
 }
 
-/** The messages left for a pane and not read yet, as ADE knows them. */
-export function inboxNamesOf(pending: readonly InboxEntry[], paneId: string): string[] {
-  return pending.filter((entry) => entry.paneId === paneId).map((entry) => entry.name)
+/**
+ * The messages left for a pane and not read yet, as ADE knows them: the file's name, and the hash of the text ADE put in
+ * it (absent in an entry saved before the hash was kept), so a file that is not that text is not sealed as ADE's.
+ */
+export function inboxEntriesOf(pending: readonly InboxEntry[], paneId: string): { name: string; sha256?: string }[] {
+  return pending
+    .filter((entry) => entry.paneId === paneId)
+    .map((entry) => ({ name: entry.name, ...(entry.sha256 ? { sha256: entry.sha256 } : {}) }))
 }
