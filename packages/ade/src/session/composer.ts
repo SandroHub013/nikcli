@@ -110,6 +110,13 @@ const pressOfTheFocus = new WeakSet<object>()
 /** A marked terminal that showed a dialog's hint at the focus-in: the hint's going can then be read as the dialog's. */
 const hintAtFocus = new WeakSet<object>()
 /**
+ * How long the hint has to stay off the screen. A reading is not enough: a pane that loses rows takes the header off the top
+ * until ragu repaints, with the cursor still showing, and an Enter then would pick the highlighted model.
+ */
+export const HINT_GONE_MS = 1_500
+/** Since when no reading has found the hint, on a marked terminal. */
+const hintGoneSince = new WeakMap<object, number>()
+/**
  * What every dialog of opentui's agents draws in its header (`DialogHeader`, `esc`, or `esc/enter to close`). Looked for as
  * letters anywhere on the screen: the transcript shows through the blanks of a dialog, so the cells around it say nothing. A
  * transcript with those letters in it only keeps the old wait.
@@ -153,6 +160,7 @@ export function followKeys(terminal: ComposerTerminal, agentId: string, data: st
     if (composerOf(terminal, agentId) === "none" && rowsOf(terminal).some((row) => MODEL_ROW.test(row))) {
       refocused.add(terminal)
       pressOfTheFocus.add(terminal)
+      hintGoneSince.delete(terminal)
       if (hintOnScreen(terminal)) hintAtFocus.add(terminal)
       else hintAtFocus.delete(terminal)
     }
@@ -193,12 +201,20 @@ export function dialogOver(terminal: ComposerTerminal, agentId: string): boolean
   })
 }
 
-/** The mark of a focus-in, until the press it was owed has been made and took the dialog's hint off the screen with it. */
+/** The mark of a focus-in, until the press it was owed has been made and the dialog's hint has stayed off the screen. */
 function markStands(terminal: ComposerTerminal): boolean {
   if (!refocused.has(terminal)) return false
-  if (pressOfTheFocus.has(terminal) || !hintAtFocus.has(terminal) || hintOnScreen(terminal)) return true
+  if (pressOfTheFocus.has(terminal) || !hintAtFocus.has(terminal)) return true
+  if (hintOnScreen(terminal)) {
+    hintGoneSince.delete(terminal)
+    return true
+  }
+  const since = hintGoneSince.get(terminal) ?? Date.now()
+  hintGoneSince.set(terminal, since)
+  if (Date.now() - since < HINT_GONE_MS) return true
   refocused.delete(terminal)
   hintAtFocus.delete(terminal)
+  hintGoneSince.delete(terminal)
   return false
 }
 

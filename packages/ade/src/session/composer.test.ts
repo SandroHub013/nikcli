@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, setSystemTime, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { Terminal } from "@xterm/xterm"
 import { loadCapture, play, screenText, terminalFor, writtenTo } from "../test-support/live-bytes"
@@ -14,6 +14,7 @@ import {
   enterBlocked,
   followKeys,
   forgetRefocus,
+  HINT_GONE_MS,
   lineBegunNow,
   mayTypeNow,
   questionHolds,
@@ -1051,51 +1052,108 @@ describe("a dialog left open over ragu's box, after a focus-in (audit SES2-2)", 
   describe("a click on the backdrop closes the dialog with the press the focus brought (live test 8, three of three)", () => {
     /** The dialog gone, and the same box with the cursor in it. */
     const CLOSED = `\x1b[2J${box}\x1b[10;6H\x1b[?25h`
+    /** A header as ragu draws it, with blanks after the hint. */
+    const header = "\x1b[5;70H Select model            esc      \x1b[6;70H Search                         \x1b[6;79H"
+    const REOPENED = `\x1b[2J${box}${header}\x1b[10;6H\x1b[?25h`
+    const FROM = 1_800_000_000_000
+    const clockAt = (ms: number) => setSystemTime(new Date(FROM + ms))
+    afterEach(() => void setSystemTime())
 
     for (const agent of ["ragu", "opencode"]) {
-      test(`${agent}: once its "esc" has left the screen the box is read again, with no key`, async () => {
-        const terminal = await drawn(`${box}${picker}`, 120, 17)
+      test(`${agent}: once its "esc" has stayed off the screen the box is read again, with no key`, async () => {
+        clockAt(0)
+        const terminal = await drawn(`${box}${header}`, 120, 17)
         followKeys(terminal, agent, FOCUS_REPORT)
         followKeys(terminal, agent, PRESS)
         await writtenTo(terminal, BACK_ON_BOX)
         expect(composerOf(terminal, agent)).toBe("none")
         await writtenTo(terminal, CLOSED)
+        expect(composerOf(terminal, agent)).toBe("none")
+        clockAt(HINT_GONE_MS - 1)
+        expect(composerOf(terminal, agent)).toBe("none")
+        clockAt(HINT_GONE_MS)
         expect(composerOf(terminal, agent)).toBe("ready")
         expect(mayTypeNow({ composer: composerOf(terminal, agent), question: false, nothingDrawn: false })).toBe(true)
       })
     }
 
+    test("a pane that shrinks takes the header off the top until it repaints: the mark stands", async () => {
+      const terminal = await drawn(`${box}${header}`, 120, 17)
+      followKeys(terminal, "ragu", FOCUS_REPORT)
+      followKeys(terminal, "ragu", PRESS)
+      await writtenTo(terminal, BACK_ON_BOX)
+      terminal.resize(120, 5)
+      expect(composerOf(terminal, "ragu")).toBe("none")
+      terminal.resize(120, 17)
+      await writtenTo(terminal, REOPENED)
+      expect(composerOf(terminal, "ragu")).toBe("none")
+    })
+
+    test("every reading with the hint on the screen starts the wait over", async () => {
+      clockAt(0)
+      const terminal = await drawn(`${box}${header}`, 120, 17)
+      followKeys(terminal, "ragu", FOCUS_REPORT)
+      followKeys(terminal, "ragu", PRESS)
+      await writtenTo(terminal, CLOSED)
+      expect(composerOf(terminal, "ragu")).toBe("none")
+      clockAt(1_000)
+      await writtenTo(terminal, REOPENED)
+      expect(composerOf(terminal, "ragu")).toBe("none")
+      clockAt(1_100)
+      await writtenTo(terminal, CLOSED)
+      expect(composerOf(terminal, "ragu")).toBe("none")
+      clockAt(2_000)
+      expect(composerOf(terminal, "ragu")).toBe("none")
+      clockAt(1_100 + HINT_GONE_MS)
+      expect(composerOf(terminal, "ragu")).toBe("ready")
+    })
+
     test("before the press nothing can have closed it, whatever the screen says", async () => {
-      const terminal = await drawn(`${box}${picker}`, 120, 17)
+      clockAt(0)
+      const terminal = await drawn(`${box}${header}`, 120, 17)
       followKeys(terminal, "ragu", FOCUS_REPORT)
       await writtenTo(terminal, CLOSED)
+      expect(composerOf(terminal, "ragu")).toBe("none")
+      clockAt(HINT_GONE_MS * 2)
       expect(composerOf(terminal, "ragu")).toBe("none")
     })
 
     test("a dialog with no hint at the focus-in is not guessed at: it waits for a key", async () => {
+      clockAt(0)
       const terminal = await drawn(`${box}\x1b[5;70H│ Scegli           │\x1b[6;79H`, 120, 17)
       followKeys(terminal, "ragu", FOCUS_REPORT)
       followKeys(terminal, "ragu", PRESS)
       await writtenTo(terminal, CLOSED)
       expect(composerOf(terminal, "ragu")).toBe("none")
-    })
-
-    test("the next dialog, opened by the same click, still holds", async () => {
-      const terminal = await drawn(`${box}${picker}`, 120, 17)
-      followKeys(terminal, "ragu", FOCUS_REPORT)
-      followKeys(terminal, "ragu", PRESS)
-      await writtenTo(terminal, `\x1b[2J${box}\x1b[5;70H│ Connect a provider      esc │\x1b[10;6H\x1b[?25h`)
+      clockAt(HINT_GONE_MS * 2)
       expect(composerOf(terminal, "ragu")).toBe("none")
     })
 
-    test("released once, and a later focus-in marks it again", async () => {
-      const terminal = await drawn(`${box}${picker}`, 120, 17)
+    test("the next dialog, opened by the same click, still holds", async () => {
+      clockAt(0)
+      const terminal = await drawn(`${box}${header}`, 120, 17)
+      followKeys(terminal, "ragu", FOCUS_REPORT)
+      followKeys(terminal, "ragu", PRESS)
+      await writtenTo(terminal, `\x1b[2J${box}\x1b[5;70H Connect a provider      esc      \x1b[10;6H\x1b[?25h`)
+      expect(composerOf(terminal, "ragu")).toBe("none")
+      clockAt(HINT_GONE_MS * 2)
+      expect(composerOf(terminal, "ragu")).toBe("none")
+    })
+
+    test("released once, and a later focus-in marks it again, with a wait of its own", async () => {
+      clockAt(0)
+      const terminal = await drawn(`${box}${header}`, 120, 17)
       followKeys(terminal, "ragu", FOCUS_REPORT)
       followKeys(terminal, "ragu", PRESS)
       await writtenTo(terminal, CLOSED)
+      expect(composerOf(terminal, "ragu")).toBe("none")
+      clockAt(HINT_GONE_MS)
       expect(composerOf(terminal, "ragu")).toBe("ready")
-      await writtenTo(terminal, `${picker}`)
+      await writtenTo(terminal, header)
       followKeys(terminal, "ragu", FOCUS_REPORT)
+      followKeys(terminal, "ragu", PRESS)
+      clockAt(HINT_GONE_MS * 2)
+      await writtenTo(terminal, CLOSED)
       expect(composerOf(terminal, "ragu")).toBe("none")
     })
   })
