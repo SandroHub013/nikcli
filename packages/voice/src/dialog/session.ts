@@ -345,11 +345,14 @@ function promoteQueuedSend(state: DialogState, now: number, effects: DialogEffec
   // A send that waited too long is not asked: a yes to a message the user forgot would send it (MOD-20).
   if (now - (req.at ?? now) > QUEUED_SEND_MAX_MS) {
     effects.push({ type: "confirm_send", id: req.id, approved: false })
-    return withSpokenLocal(
-      { ...state, queuedSend: undefined },
-      `Il messaggio per «${req.to}» è rimasto in coda troppo a lungo: non l'ho inviato.`,
-      effects,
-    )
+    const rest = { ...state, queuedSend: undefined }
+    const refusal = `Il messaggio per «${req.to}» è rimasto in coda troppo a lungo: non l'ho inviato.`
+    // A plan that waited behind it gets its turn now: idle never asks a queued plan, so it would stay for hours.
+    if (rest.queuedPlan) {
+      effects.push({ type: "speak", text: refusal })
+      return promoteQueuedPlan(rest, now, effects)
+    }
+    return withSpokenLocal(rest, refusal, effects)
   }
 
   effects.push({ type: "cancel_timer" })

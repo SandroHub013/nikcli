@@ -65,3 +65,46 @@ describe("a queued send that waited too long is refused (MOD-20)", () => {
     expect(out.state.pendingSend?.id).toBe("m2")
   })
 })
+
+/*
+ * Review of ade/moduli-piccoli, B2: the refusal returned a result, so a plan queued behind the expired send never got
+ * its turn: the state went to idle, and idle never asks a queued plan. It stayed there for hours, and every plan that
+ * came meanwhile was refused with «Ho già un piano in coda».
+ */
+describe("a plan queued behind an expired send is asked at once (MOD-20, review B2)", () => {
+  const plan = {
+    steps: [{ action: "send_prompt" as const, paneIndex: 1, text: "fai" }],
+    refusals: [] as string[],
+  }
+
+  test("asleep, send then plan, wake after 11 minutes: the send is refused and the plan is asked in the same step", () => {
+    let state = createInitialDialogState("asleep")
+    state = transition(state, { type: "send_requested", id: "m2", to: "Beta", text: "due" }, 10_000, ctx).state
+    state = transition(state, { type: "plan_ready", ...plan }, 10_000 + MINUTE, ctx).state
+    expect(state.queuedSend?.id).toBe("m2")
+    expect(state.queuedPlan).toBeDefined()
+
+    const out = transition(state, { type: "wake" }, 10_000 + 11 * MINUTE, ctx)
+
+    expect(out.effects).toContainEqual({ type: "confirm_send", id: "m2", approved: false })
+    const said = out.effects.filter((e) => e.type === "speak").map((e) => (e as { text: string }).text)
+    expect(said.some((text) => text.includes("Beta") && text.includes("rimasto in coda troppo a lungo"))).toBe(true)
+    // Both are said, the refusal first, and the plan is now the question being asked.
+    expect(said.length).toBe(2)
+    expect(said[0]!.includes("rimasto in coda")).toBe(true)
+    expect(out.state.queuedPlan).toBeUndefined()
+    expect(out.state.pendingPlan).toBeDefined()
+    expect(out.state.status).toBe("confirming")
+    expect(out.effects.some((e) => e.type === "start_timer")).toBe(true)
+  })
+
+  test("with no plan behind it, the refusal still leaves the dialogue idle and says only the refusal", () => {
+    let state = createInitialDialogState("asleep")
+    state = transition(state, { type: "send_requested", id: "m2", to: "Beta", text: "due" }, 10_000, ctx).state
+    const out = transition(state, { type: "wake" }, 10_000 + 11 * MINUTE, ctx)
+    const said = out.effects.filter((e) => e.type === "speak").map((e) => (e as { text: string }).text)
+    expect(said.length).toBe(1)
+    expect(out.state.status).toBe("idle")
+    expect(out.state.pendingPlan).toBeUndefined()
+  })
+})
