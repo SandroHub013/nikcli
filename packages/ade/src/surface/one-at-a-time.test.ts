@@ -42,6 +42,20 @@ describe("one start per pane at a time (ALTO 3)", () => {
     expect(guard.busy("p3")).toBe(false)
   })
 
+  test("a run's clock starts with it, and a refused second run does not restart it (review of WB2-2)", async () => {
+    let now = 1_000
+    const guard = oneAtATime(() => now)
+    let finish!: () => void
+    const first = guard.run("p", () => new Promise<void>((resolve) => (finish = resolve)))
+    expect(guard.startedAt("p")).toBe(1_000)
+    now = 5_000
+    expect(await guard.run("p", async () => undefined)).toBe(false)
+    expect(guard.startedAt("p")).toBe(1_000)
+    finish()
+    await first
+    expect(guard.startedAt("p")).toBeUndefined()
+  })
+
   test("lint: reopen and the restore start a pane through the reopening guard (ALTO 3)", () => {
     const source = workbenchSource()
     const reopen = source.slice(source.indexOf("const reopen = async "), source.indexOf("const reopenPane = async "))

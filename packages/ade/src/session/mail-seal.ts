@@ -127,11 +127,29 @@ export async function openReclaimed(kind: "result" | "update", id: string, text:
   return ""
 }
 
-/** The text of an inbox file to seal again, `undefined` to leave it: with `retired` tokens, only what one of them sealed. */
-async function bodyToReseal(retired: readonly string[], name: string, text: string): Promise<string | undefined> {
+/** SHA-256 of a text, in hex: what ADE keeps of an inbox message to know it again after a restart (SEC2-3). */
+export async function bodyHash(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(text))
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("")
+}
+
+/**
+ * The text of an inbox file to seal again, `undefined` to leave it: with `retired` tokens, only what one of them sealed.
+ * With none (ADE has just started and the tokens of before are gone with it) only the text ADE left, which it knows by its
+ * hash (SEC2-3): any session can write the inbox folder, and a file that is not that text is left for the client to refuse.
+ * An entry with no hash was saved before it was kept, and is taken as it is, once.
+ */
+async function bodyToReseal(
+  retired: readonly string[],
+  entry: { name: string; sha256?: string },
+  text: string,
+): Promise<string | undefined> {
+  const { name } = entry
   const sealed = splitSealed(text)
-  // ADE has just started, and the tokens of before are gone with it: what its own list names is taken as it is.
-  if (retired.length === 0) return sealed?.body ?? text
+  if (retired.length === 0) {
+    const body = sealed?.body ?? text
+    return entry.sha256 === undefined || (await bodyHash(body)) === entry.sha256 ? body : undefined
+  }
   if (!sealed) return undefined
   for (const token of retired) {
     if (await sealedBy(token, "inbox", name, sealed)) return sealed.body
@@ -141,21 +159,30 @@ async function bodyToReseal(retired: readonly string[], name: string, text: stri
 
 /**
  * Called when a pane gets a new token, before its process starts: what it has not read yet was sealed for the process
- * before, and the new one would take it for false. `names` are the messages ADE knows it left there; `write` seals.
+ * before, and the new one would take it for false. `entries` are the messages ADE knows it left there; `write` seals.
  * A file that fails is left as it is and does not stop the others, nor the start.
+ *
+ * Returns the entries that had no hash and were sealed again (the first restart after the hash was kept), with the hash
+ * of the text taken: the caller keeps it, so that restart is the only one that takes a file on its word.
  */
 export async function resealUnread(
-  names: readonly string[],
+  entries: readonly { name: string; sha256?: string }[],
   retired: readonly string[],
   io: { read: (name: string) => Promise<string | null>; write: (name: string, body: string) => Promise<void> },
-): Promise<void> {
-  for (const name of names) {
+): Promise<{ name: string; sha256: string }[]> {
+  const adopted: { name: string; sha256: string }[] = []
+  for (const entry of entries) {
+    const { name } = entry
     try {
       const text = await io.read(name)
-      const body = text === null ? undefined : await bodyToReseal(retired, name, text)
-      if (body !== undefined) await io.write(name, body)
+      const body = text === null ? undefined : await bodyToReseal(retired, entry, text)
+      if (body !== undefined) {
+        await io.write(name, body)
+        if (entry.sha256 === undefined && retired.length === 0) adopted.push({ name, sha256: await bodyHash(body) })
+      }
     } catch (error) {
       console.error(`ADE: posta ${name}: non ho potuto sigillarla di nuovo`, error)
     }
   }
+  return adopted
 }

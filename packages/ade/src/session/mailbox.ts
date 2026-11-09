@@ -717,6 +717,12 @@ export interface InboxEntry {
   at: number
   ringAt: number
   rings: number
+  /**
+   * SHA-256, in hex, of the text ADE put in the inbox file (the body under the seal). After a restart the tokens that
+   * sealed it are gone, so this is what tells ADE's own text from a file another session wrote under the same name
+   * (SEC2-3). Absent in an entry saved before it was kept.
+   */
+  sha256?: string
 }
 
 /** A file name for a message: its time first, so `ade-msg inbox` prints them in order. */

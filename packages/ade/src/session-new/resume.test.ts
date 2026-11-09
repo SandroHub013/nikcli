@@ -9,6 +9,7 @@ import {
   newSessionId,
   planMint,
   planRestore,
+  restoreByAgent,
   planResume,
   planStart,
   lostConversation,
@@ -522,8 +523,8 @@ describe("a restore's claims reach the panes it reopens", () => {
 
   test("lint: the restore hands its claims to the exited panes it reopens", () => {
     const workbench = workbenchSource()
-    expect(workbench).toContain("const claims = restoreClaims(planned)")
-    expect(workbench).toContain("void reopen(pane, undefined, claims)")
+    expect(readFileSync(join(import.meta.dir, "resume.ts"), "utf8")).toContain("return restoreClaims(planned)")
+    expect(workbench).toContain("reopen(pane, undefined, claims)")
     expect(workbench).toContain(
       "lastTakenFor(pane, wb().panes) || claimedByRestore(claims, agentId, pane.cwd || project()?.root)",
     )
@@ -819,5 +820,67 @@ describe("a resumed start that types nothing is idle, and says it was resumed", 
     expect(workbench).toContain("status: starting.status,")
     expect(workbench).toContain("if (starting.typesTask) {")
     expect(workbench).not.toContain('status: hasTask ? "working" : "idle",')
+  })
+})
+
+describe("a restore waits only for the checks of its own agent (audit WB-8)", () => {
+  type Saved = { id: string; agentId: string; cwd: string; resumeId?: string }
+  const checked = (saved: Saved) => ({ ...saved, missing: false })
+  const settled = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+  test("a Claude pane starts while ragu's check is still out", async () => {
+    const started: string[] = []
+    const never = new Promise<ReturnType<typeof checked>>(() => {})
+    restoreByAgent(
+      [
+        { id: "r", agentId: "ragu", cwd: "C:/p", resumeId: "ses_abcdefgh12345678" },
+        { id: "c", agentId: "claude-code", cwd: "C:/p" },
+      ] as Saved[],
+      (saved) => saved.agentId,
+      (saved) => (saved.agentId === "ragu" ? never : Promise.resolve(checked(saved))),
+      ({ session }) => started.push(session.id),
+    )
+    await settled()
+    expect(started).toEqual(["c"])
+  })
+
+  test("planned one agent at a time, the plans are those of planning them all together", async () => {
+    const id = "ses_abcdefgh12345678"
+    const saved: Saved[] = [
+      { id: "1", agentId: "ragu", cwd: "C:/a", resumeId: id },
+      { id: "2", agentId: "claude-code", cwd: "C:/a" },
+      { id: "3", agentId: "ragu", cwd: "C:/a", resumeId: id },
+      { id: "4", agentId: "claude-code", cwd: "C:/a" },
+      { id: "5", agentId: "codex", cwd: "C:/b" },
+    ]
+    const whole = planRestore(saved.map(checked))
+    const got = new Map<string, { plan: unknown; sharedWith?: string }>()
+    const byAgent = restoreByAgent(saved, (one) => one.agentId, (one) => Promise.resolve(checked(one)), ({ session, plan, sharedWith }) => {
+      got.set(session.id, { plan, ...(sharedWith ? { sharedWith: sharedWith.id } : {}) })
+    })
+    await Promise.all(byAgent.values())
+    for (const { session, plan, sharedWith } of whole) {
+      expect(got.get(session.id)).toEqual({ plan, ...(sharedWith ? { sharedWith: sharedWith.id } : {}) })
+    }
+  })
+
+  test("each agent's claims are its own, and come when its checks are done", async () => {
+    const saved: Saved[] = [{ id: "c", agentId: "claude-code", cwd: "C:/a" }]
+    const byAgent = restoreByAgent(saved, (one) => one.agentId, (one) => Promise.resolve(checked(one)), () => {})
+    expect(claimedByRestore(await byAgent.get("claude-code")!, "claude-code", "C:/a")).toBe(
+      claimedByRestore(restoreClaims(planRestore(saved.map(checked))), "claude-code", "C:/a"),
+    )
+    expect(byAgent.has("ragu")).toBe(false)
+  })
+
+  test("lint: the boot does not wait for the checks, and a pane closed or started meanwhile is left alone", () => {
+    const workbench = workbenchSource().replace(/\s+/g, "")
+    expect(workbench).toContain("constbyAgent=restoreByAgent(")
+    expect(workbench).not.toContain("constsessions=awaitPromise.all(sessionsToResume(restored)")
+    expect(workbench).toContain("if(!paneExists(session.pane.id)||running.has(session.pane.id)||reopening.busy(session.pane.id)){restorePlanned.delete(session.pane.id)return}")
+    // A check that throws must not stop its agent's sessions: whatever the folder is called.
+    expect(workbench).toMatch(/conversationMissing\(pane\.agent,pane\.resumeId,[^)]*\)\.catch\(\(\)=>false\)/)
+    expect(workbench).toContain("adoptLastReport(saved).catch(()=>undefined)")
+    expect(workbench).toContain("paneExists(pane.id)?reopen(pane,undefined,claims):undefined")
   })
 })

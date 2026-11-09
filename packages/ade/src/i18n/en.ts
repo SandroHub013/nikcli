@@ -1811,6 +1811,8 @@ export const en: Messages = {
     "A message is waiting: this session hasn't written anything yet. It arrives as soon as it does; if the program doesn't start, restart it.",
   "note.mailHeldByMenu":
     "A message is waiting: ADE sees a question on screen. Answer it in the terminal and it arrives; if there is no question, press Enter in the terminal.",
+  "note.noticesExpired": (count) =>
+    `${count} ADE ${plural(count, { one: "notice", other: "notices" }, "en")} for this session expired: it did not come free in time.`,
   "note.mailHeldByDialog":
     "A message is waiting: ADE sees a window open in the terminal. Finish it, or close it with Esc, and it arrives.",
   "note.interruptedBy": (from) => `Interrupted by ${from}`,
