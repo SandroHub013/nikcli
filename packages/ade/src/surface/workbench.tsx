@@ -4360,9 +4360,9 @@ export function Workbench() {
       }
     }
 
-    for (const [paneId, notices] of expiredNotices(heldLines, Date.now())) {
+    for (const [paneId, notices] of expiredNotices(heldLines, Date.now(), (paneId) => running.has(paneId) && blindHold(paneId).blind)) {
       for (const notice of notices) dropFrom(heldLines, notice)
-      if (running.has(paneId)) tellPane(paneId, t("note.noticesExpired", notices.length))
+      tellPane(paneId, t("note.noticesExpired", notices.length))
     }
 
     for (const item of [...heldLines]) {
