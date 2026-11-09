@@ -697,7 +697,7 @@ describe("what lands in the terminal", () => {
     const line = formatRequest("171-ab", "trova i test lenti", panes[0])
     expect(line.startsWith('[Richiesta 171-ab da "Sessione 1 — claude-code"]: trova i test lenti')).toBe(true)
     expect(line).toContain("ade-msg reply 171-ab '<sintesi>'")
-    expect(line.length).toBeLessThan(400)
+    expect(line.length).toBeLessThan(460)
     expect(line).toContain("ade-msg update 171-ab")
   })
 
@@ -746,6 +746,19 @@ describe("what lands in the terminal", () => {
     expect(line).toContain("Apici singoli")
     expect(line).toContain("--file")
     expect(line).toContain("mai virgolette doppie")
+  })
+
+  // SEC2-1: an apostrophe breaks a single-quoted summary, and the double quotes an agent then falls back to run
+  // backticks and $(...). A quoted heredoc into --stdin runs nothing, whatever the text holds.
+  test("the help and the request offer --stdin with a quoted heredoc, and the typographic apostrophe", () => {
+    expect(USAGE).toContain("--stdin <<'EOF'")
+    expect(USAGE).toContain("’")
+    const line = formatRequest("x", "t", panes[0])
+    expect(line).toContain("--stdin <<'EOF'")
+    expect(line).toContain("’")
+    // Still a line, and no double quote after the command the agent is told to type.
+    expect(line.length).toBeLessThan(460)
+    expect(line).not.toMatch(/ade-msg[^\n]*"/)
   })
 
   test("a late reply names the request it answers", () => {

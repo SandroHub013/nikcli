@@ -640,7 +640,7 @@ export function formatRequest(
     `Rispondi solo con ade-msg reply ${id} '<sintesi>' (max 15 righe: ESITO, FILE, PROBLEMI, PROSSIMO PASSO` +
     (results ? `; dettagli in ${results}` : "") +
     `); se bloccata: ade-msg update ${id} bloccata|decisione '<motivo>'.` +
-    ` Apici singoli, senza apostrofi dentro, o --file: mai virgolette doppie, che eseguono $ e i backtick.`
+    ` Apici singoli (apostrofo: ’, o da bash --stdin <<'EOF' … EOF) o --file: mai virgolette doppie, che eseguono $ e i backtick.`
   )
 }
 
@@ -1838,7 +1838,11 @@ export const USAGE =
   "uso:\n" +
   "  ade-msg --help | ade-msg <comando> --help  l'aiuto (del comando, se c'è) e non manda niente; dopo -- è testo\n" +
   "  testo tra apici singoli in sh e PowerShell, senza apostrofi dentro, o --file <perc>; mai virgolette doppie:\n" +
-  "  $ e i backtick vengono eseguiti.\n" +
+  "  $ e i backtick vengono eseguiti. Con gli apostrofi usa ’ (tipografico), oppure da bash:\n" +
+  "    ade-msg reply <id> --stdin <<'EOF'   (anche send, ask, spawn, update, kv, memory, registro)\n" +
+  "    il testo, con ' e `backtick` e $(...), che non viene eseguito\n" +
+  "    EOF\n" +
+  "  Da PowerShell 5.1 usa --file: una pipe perde le lettere accentate.\n" +
   "  ade-msg send   <sessione> '<testo>'       nota, non aspetta risposta\n" +
   "  ade-msg ask    <sessione> '<richiesta>'   aspetta la risposta e la stampa\n" +
   "  ade-msg spawn  <agente> '<compito>'       nuova sessione (subagent), aspetta il risultato\n" +
