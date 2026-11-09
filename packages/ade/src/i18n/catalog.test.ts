@@ -242,7 +242,7 @@ describe("the words of the glossary (UX-11, UX-12, UX-27)", () => {
   })
 
   test("ADE speaks in the feminine in Italian: never «non sono riuscito» or «ADE non è riuscito»", () => {
-    expect(italian.filter(([, text]) => /[Nn]on sono riuscito|ADE non è riuscito/.test(text)).map(([key]) => key)).toEqual([])
+    expect(italian.filter(([, text]) => /[Nn]on sono riuscito\b|ADE non è riuscito\b/.test(text)).map(([key]) => key)).toEqual([])
   })
 
   test("an ellipsis is the one character «…», never three dots, in the Italian texts", () => {

@@ -110,7 +110,7 @@ describe("a finished dictation is announced only once the host has taken it", ()
     const { spoken, visible } = await dictate(new Error("Nessuna sessione attiva per il pannello 'pane-1'."))
 
     expect(spoken).not.toContain(SENT)
-    expect(spoken).toContain("Non sono riuscito a inviare la dettatura: il testo non è partito.")
+    expect(spoken).toContain("Non sono riuscita a inviare la dettatura: il testo non è partito.")
     expect(visible).toHaveLength(1)
     expect(visible[0]!.trim().length).toBeGreaterThan(0)
   })
