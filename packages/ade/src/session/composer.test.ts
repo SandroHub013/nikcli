@@ -1163,6 +1163,7 @@ describe("a dialog left open over ragu's box, after a focus-in (audit SES2-2)", 
       followKeys(terminal, "ragu", FOCUS_REPORT)
       followKeys(terminal, "ragu", PRESS)
       await writtenTo(terminal, `\x1b[14;3H             \x1b[10;6H\x1b[?25h`)
+      expect(composerOf(terminal, "ragu")).toBe("none")
       clockAt(HINT_GONE_MS * 2)
       expect(composerOf(terminal, "ragu")).toBe("none")
     })
