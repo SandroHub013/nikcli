@@ -116,7 +116,7 @@ export const en: Messages = {
   "paneState.work": "Working",
   "paneState.perm": "Waiting for permission",
   "paneState.ask": "Waiting on another session",
-  "paneState.err": "Stuck",
+  "paneState.err": "Error",
   "paneState.limit": "Limit reached",
   "paneState.idle": "Ready",
   "paneState.off": "Suspended",

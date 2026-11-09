@@ -103,7 +103,7 @@ describe("the chip, in every state (DS-18, UX-8)", () => {
   test("the chip is named for assistive technology, as an image with the full sentence", () => {
     const chip = mount({ status: "working" }).querySelector(".a-state")!
     expect(chip.getAttribute("role")).toBe("img")
-    expect(chip.getAttribute("aria-label")).toBe("Al lavoro: Al lavoro")
+    expect(chip.getAttribute("aria-label")).toBe("Al lavoro")
   })
 })
 
@@ -288,5 +288,29 @@ describe("«needs you» is blue in the bar and in the chat too (DS-1)", () => {
     for (const rule of parseCss(pillTabsCss).filter((one) => /ade-pill-(badge|dot)/.test(one.selector))) {
       expect(rule.body).not.toMatch(/--ade-(accent|warning|working)/)
     }
+  })
+
+  describe("UX2-12 with DS2-9: chip states, raw agent id, and error chip", () => {
+    test("quiet pane does not repeat state twice in aria-label or tooltip", () => {
+      const pane = mount({ status: "idle", agent: "claude-code" })
+      const chip = pane.querySelector(".a-state")!
+      expect(chip.getAttribute("aria-label")).toBe("Pronta")
+      expect(chip.getAttribute("title")).toBe("Pronta")
+    })
+
+    test("tooltips show agent display name instead of raw id", () => {
+      const pane = mount({ status: "idle", agent: "claude-code", title: "Test Session" })
+      const logo = pane.querySelector(".logo")!
+      expect(logo.getAttribute("title")).toBe("Claude Code")
+      const title = pane.querySelector('[data-slot="pane-title"]')!
+      expect(title.getAttribute("title")).toContain("Claude Code · Pronta")
+      expect(title.getAttribute("title")).not.toContain("claude-code")
+    })
+
+    test("DS2-9: error chip shows Errore instead of Bloccata", () => {
+      const pane = mount({ status: "error", exited: true, activity: "exited:1" })
+      expect(pane.querySelector(".lbl")?.textContent).toBe("Errore")
+      expect(chipText(pane)).toBe("Terminata (codice 1)")
+    })
   })
 })

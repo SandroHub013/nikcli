@@ -121,7 +121,7 @@ export const it = {
   "paneState.work": "Al lavoro",
   "paneState.perm": "In attesa di permesso",
   "paneState.ask": "Attende un'altra sessione",
-  "paneState.err": "Bloccata",
+  "paneState.err": "Errore",
   "paneState.limit": "Limite raggiunto",
   "paneState.idle": "Pronta",
   "paneState.off": "Sospesa",
