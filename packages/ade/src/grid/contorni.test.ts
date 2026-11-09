@@ -275,7 +275,39 @@ describe("lint: no pane draws its focus in accent", () => {
  *   `box-shadow: inset 0 -1.5px 0 var(--ade-accent)`. It says «you are typing
  *   here» for as long as the rename lasts, and vanishes after it.
  */
+/**
+ * What reads the accent, through an alias of it declared in the same sheet (one level). The Raguverse frames write
+ * `--accent: var(--ade-accent)` and then `border-color: var(--accent)`, which a test for `var(--ade-accent` alone cannot
+ * see (DS2-5). For a contour the alias must be the accent itself (`--accent`, not `--ade-btn-fg`, which is its ink); for
+ * a fill any of its family counts, as it does for the lint's own prefix test (`--ade-badge-bg: var(--ade-accent-soft)`).
+ */
+const accentTests = (root: postcss.Root) => {
+  const own: string[] = []
+  const family: string[] = []
+  root.walkDecls(/^--/, (decl) => {
+    if (/^var\(--ade-accent\s*[,)]/.test(decl.value.trim())) own.push(decl.prop)
+    if (/var\(--ade-accent/.test(decl.value)) family.push(decl.prop)
+  })
+  const reads = (names: string[]) => {
+    const alias = names.map((name) => new RegExp(`var\\(${name}(?![\\w-])`))
+    return (value: string) => /var\(--ade-accent/.test(value) || alias.some((re) => re.test(value))
+  }
+  return { contour: reads(own), fill: reads(family) }
+}
+
 describe("lint: no accent outline, in any sheet of packages/ade", () => {
+  test("lint: the focus ring is not the accent, through an alias or not (DS2-5)", () => {
+    const rings: string[] = []
+    for (const entry of new Bun.Glob("**/*.css").scanSync(src)) {
+      const root = sheet(entry.replace(/\\/g, "/"))
+      const { contour } = accentTests(root)
+      root.walkDecls("--ade-focus-ring", (decl) => {
+        if (contour(decl.value)) rings.push(`${entry.replace(/\\/g, "/")}: ${decl.value}`)
+      })
+    }
+    expect(rings).toEqual([])
+  })
+
   test("lint: an accent border, outline or shadow only sits on an accent fill", () => {
     // Every sheet, not the panes' three: the rule is the user's, and it is not a
     // per-file habit. On the parsed sheet, so a reformat cannot hide one.
@@ -293,7 +325,9 @@ describe("lint: no accent outline, in any sheet of packages/ade", () => {
     const offenders: string[] = []
     for (const { path, file: raw } of files) {
       const file = raw.replace(/\\/g, "/")
-      postcss.parse(readFileSync(path, "utf-8")).walkRules((rule) => {
+      const root = postcss.parse(readFileSync(path, "utf-8"))
+      const { contour, fill: isFill } = accentTests(root)
+      root.walkRules((rule) => {
         const decls = new Map<string, string>()
         for (const node of rule.nodes) {
           if (node.type === "decl") decls.set(node.prop, node.value.trim())
@@ -302,15 +336,34 @@ describe("lint: no accent outline, in any sheet of packages/ade", () => {
         for (const prop of decls.keys()) {
           if (!CONTOUR.test(prop)) continue
           const value = decls.get(prop) ?? ""
-          if (!/var\(--ade-accent/.test(value)) continue
+          if (!contour(value)) continue
           // A border the colour of the fill it sits on is that same surface seen
           // edge-on, not a contour: anything else would draw a seam inside a
           // solid chip. So the fill decides, and the border follows it.
-          if (/var\(--ade-accent/.test(fill)) continue
+          if (isFill(fill)) continue
           offenders.push(`${file} ${prop}: ${value} in ${rule.selector}`)
         }
       })
     }
     expect(offenders).toEqual([])
+  })
+})
+
+describe("the Raguverse frames follow ADE's control style (DS2-5)", () => {
+  test("«Continua», the primary button of a lesson, is a solid accent fill with the accent's own ink, not a tinted wash", () => {
+    const learn = sheet("raguverse/learn/page/learn.css")
+    let fill: string | undefined
+    let ink: string | undefined
+    learn.walkRules((rule) => {
+      if (rule.selector.trim() !== ".azioni .principale") return
+      rule.walkDecls("background", (decl) => {
+        fill = decl.value
+      })
+      rule.walkDecls("color", (decl) => {
+        ink = decl.value
+      })
+    })
+    expect(fill).toBe("var(--accent)")
+    expect(ink).toBe("var(--ade-accent-fg)")
   })
 })
