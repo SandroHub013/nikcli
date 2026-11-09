@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
 import { DEFAULT_MAX_DEPTH, depthOf } from "./orchestra"
 import {
   MAX_TEXT,
+  USAGE,
   spawnDepthRefusal,
   spawnLimit,
   spawnLimitRefusal,
@@ -682,16 +684,32 @@ describe("the permission prompt the hook says", () => {
 describe("what lands in the terminal", () => {
   test("a note arrives on one line, with the way to answer", () => {
     expect(formatDelivery({ text: "riga uno\nriga due" }, panes[1])).toBe(
-      '[Messaggio da "Sessione 2 — codex"]: riga uno riga due — rispondi: ade-msg send n2-1 "<testo>"',
+      '[Messaggio da "Sessione 2 — codex"]: riga uno riga due — rispondi: ade-msg send n2-1 \'<testo>\'',
     )
   })
 
   test("a request ends with the reply command the caller is blocked on", () => {
     const line = formatRequest("171-ab", "trova i test lenti", panes[0])
     expect(line.startsWith('[Richiesta 171-ab da "Sessione 1 — claude-code"]: trova i test lenti')).toBe(true)
-    expect(line).toContain('ade-msg reply 171-ab "<sintesi>"')
-    expect(line.length).toBeLessThan(260)
+    expect(line).toContain("ade-msg reply 171-ab '<sintesi>'")
+    expect(line.length).toBeLessThan(400)
     expect(line).toContain("ade-msg update 171-ab")
+  })
+
+  /** SEC2-1: in sh and PowerShell a double-quoted summary runs backticks and `$(…)` before ade-msg sees it. */
+  test("no template tells an agent to type its text in double quotes", () => {
+    const source = readFileSync(new URL("./mailbox.ts", import.meta.url), "utf8")
+    expect(source).not.toMatch(/ade-msg[^\n]*"</)
+  })
+
+  test("the help and the request say how to quote text, or the shell runs it", () => {
+    expect(USAGE).toContain("apici singoli")
+    expect(USAGE).toContain("apostrofi")
+    expect(USAGE).toContain("mai virgolette doppie")
+    const line = formatRequest("x", "t", panes[0])
+    expect(line).toContain("Apici singoli")
+    expect(line).toContain("--file")
+    expect(line).toContain("mai virgolette doppie")
   })
 
   test("a late reply names the request it answers", () => {
@@ -1144,7 +1162,7 @@ describe("stuck sessions, interrupts and relaunch notes", () => {
 
   test("relaunch without --note, or of a session somebody else spawned, is refused with the reason", () => {
     const target = { id: "p2", title: "Revisore" }
-    expect(relaunchRefusal({ from: "p1", note: "" }, target, "p1")).toContain('relaunch richiede --note "')
+    expect(relaunchRefusal({ from: "p1", note: "" }, target, "p1")).toContain("relaunch richiede --note '")
     expect(relaunchRefusal({ from: "p1", note: "   " }, target, "p1")).toContain("richiede --note")
     expect(relaunchRefusal({ from: "p1", note: "test verdi, manca il commit" }, target, "p9")).toContain(
       '"Revisore" non lo è',

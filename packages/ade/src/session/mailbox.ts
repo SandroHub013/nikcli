@@ -581,7 +581,7 @@ export function formatDelivery(
   sender: MailPane | undefined,
   options: { keepLines?: boolean } = {},
 ): string {
-  const reply = sender ? ` — rispondi: ade-msg send ${sender.id} "<testo>"` : ""
+  const reply = sender ? ` — rispondi: ade-msg send ${sender.id} '<testo>'` : ""
   return `[Messaggio da ${who(sender)}]: ${options.keepLines ? cleanText(message.text) : oneLine(message.text)}${reply}`
 }
 
@@ -616,9 +616,10 @@ export function formatRequest(
   const budget = context.budget ? ` · budget ${context.budget}s` : ""
   return (
     `[Richiesta ${id} da ${who(sender)}${budget}]: ${context.keepLines ? cleanText(text) : oneLine(text)} —${where}${delegate} ` +
-    `Rispondi solo con ade-msg reply ${id} "<sintesi>" (max 15 righe: ESITO, FILE, PROBLEMI, PROSSIMO PASSO` +
+    `Rispondi solo con ade-msg reply ${id} '<sintesi>' (max 15 righe: ESITO, FILE, PROBLEMI, PROSSIMO PASSO` +
     (results ? `; dettagli in ${results}` : "") +
-    `); se bloccata: ade-msg update ${id} bloccata|decisione "<motivo>".`
+    `); se bloccata: ade-msg update ${id} bloccata|decisione '<motivo>'.` +
+    ` Apici singoli, senza apostrofi dentro, o --file: mai virgolette doppie, che eseguono $ e i backtick.`
   )
 }
 
@@ -640,13 +641,13 @@ export function formatUpdate(id: string, state: UpdateState, text: string, repli
   const what = state === "bloccata" ? "è bloccata" : "chiede una decisione"
   return (
     `[Aggiornamento ${id}] ${who(replier)} ${what}: ${text.trim()}\n` +
-    `Resta aperta: rispondi con ade-msg send ${replier?.id ?? "<sessione>"} "<risposta>", poi ade-msg wait ${id}.`
+    `Resta aperta: rispondi con ade-msg send ${replier?.id ?? "la sessione"} '<risposta>', poi ade-msg wait ${id}.`
   )
 }
 
 /** Typed into a session that went quiet with a request still unanswered. */
 export function formatNudge(id: string, caller: MailPane | undefined): string {
-  return `[Promemoria] ${who(caller)} aspetta ${id}: ade-msg reply ${id} "<risultato o motivo>"`
+  return `[Promemoria] ${who(caller)} aspetta ${id}: ade-msg reply ${id} '<risultato o motivo>'`
 }
 
 // ---------------------------------------------------------------------------
@@ -1007,7 +1008,7 @@ export function formatTimeNote(
   if (which === 1) return `[Tempo] ${request.id}: ${elapsed}`
   // Blocked, or waiting on a decision: the session is waiting on its caller, and «chiudi» would push it to.
   if (request.update) return `[Tempo] ${request.id}: ${elapsed}, budget finito`
-  return `[Tempo] ${request.id}: ${elapsed}, budget finito: chiudi con ade-msg reply ${request.id}, o chiedi tempo con ade-msg update ${request.id} decisione "<motivo>"`
+  return `[Tempo] ${request.id}: ${elapsed}, budget finito: chiudi con ade-msg reply ${request.id}, o chiedi tempo con ade-msg update ${request.id} decisione '<motivo>'`
 }
 
 export type RequestState =
@@ -1375,7 +1376,7 @@ export function relaunchRefusal(
     return `errore: puoi riavviare solo le sessioni avviate da questa sessione con spawn ("${target.title}" non lo è)`
   }
   if (!message.note.trim()) {
-    return `errore: relaunch richiede --note "<a che punto è e cosa fare adesso>": la sessione riparte da quella nota`
+    return `errore: relaunch richiede --note '<a che punto è e cosa fare adesso>': la sessione riparte da quella nota`
   }
   return undefined
 }
@@ -1384,7 +1385,7 @@ export function relaunchRefusal(
 export function formatWedged(request: OpenRequest, answerer: MailPane | undefined, now: number): string {
   return (
     `[ade-msg] ${who(answerer)} lavora alla richiesta ${request.id} da ${age(now - (request.deliveredAt ?? request.at))} ` +
-    `senza output né modifiche: forse bloccata. Guarda il suo pane, poi ade-msg interrupt ${answerer?.id ?? "<sessione>"} o relaunch --note.`
+    `senza output né modifiche: forse bloccata. Guarda il suo pane, poi ade-msg interrupt ${answerer?.id ?? "la sessione"} o relaunch --note.`
   )
 }
 
@@ -1790,24 +1791,26 @@ export function sessionsTable(panes: readonly MailPane[]): string {
 
 /** What `ade-msg agents` prints: the CLIs a `spawn` can start. */
 export function agentsTable(agents: readonly { id: string; label: string }[]): string {
-  return `${agents.map((agent) => `${agent.id.padEnd(14)}${agent.label}`).join("\n")}\n\nuso: ade-msg spawn <agente> "<compito>" [--no-wait] [--close]\n`
+  return `${agents.map((agent) => `${agent.id.padEnd(14)}${agent.label}`).join("\n")}\n\nuso: ade-msg spawn <agente> '<compito>' [--no-wait] [--close]\n`
 }
 
 export const USAGE =
   "uso:\n" +
   "  ade-msg --help | ade-msg <comando> --help  l'aiuto (del comando, se c'è) e non manda niente; dopo -- è testo\n" +
-  '  ade-msg send   <sessione> "<testo>"       nota, non aspetta risposta\n' +
-  '  ade-msg ask    <sessione> "<richiesta>"   aspetta la risposta e la stampa\n' +
-  '  ade-msg spawn  <agente> "<compito>"       nuova sessione (subagent), aspetta il risultato\n' +
-  '  ade-msg reply  <id> "<risultato>"         risponde a una richiesta ricevuta\n' +
-  '  ade-msg update <id> bloccata|decisione "<motivo>"  non è una risposta: sveglia chi aspetta, la richiesta resta aperta\n' +
+  "  testo tra apici singoli in sh e PowerShell, senza apostrofi dentro, o --file <perc>; mai virgolette doppie:\n" +
+  "  $ e i backtick vengono eseguiti.\n" +
+  "  ade-msg send   <sessione> '<testo>'       nota, non aspetta risposta\n" +
+  "  ade-msg ask    <sessione> '<richiesta>'   aspetta la risposta e la stampa\n" +
+  "  ade-msg spawn  <agente> '<compito>'       nuova sessione (subagent), aspetta il risultato\n" +
+  "  ade-msg reply  <id> '<risultato>'         risponde a una richiesta ricevuta\n" +
+  "  ade-msg update <id> bloccata|decisione '<motivo>'  non è una risposta: sveglia chi aspetta, la richiesta resta aperta\n" +
   "  ade-msg wait   <id> [<id>...] [--any]     aspetta le risposte (tutte, o la prima con --any)\n" +
   "  ade-msg status                          richieste in corso\n" +
   "  ade-msg cancel <id>                     annulla una tua richiesta\n" +
   "  ade-msg delivered <id> [no [motivo]]    dopo una consegna nativa: l'hai mandata (o no, e ADE la digita)\n" +
   "  ade-msg close  <sessione> [--force]     chiude una sessione avviata da te con spawn e le sue figlie;\n" +
   "                                          rifiuta se una worktree ha lavoro non integrato, salvo --force\n" +
-  '  ade-msg relaunch <sessione> --note "<a che punto è>" [--model <id>] [--fresh]\n' +
+  "  ade-msg relaunch <sessione> --note '<a che punto è>' [--model <id>] [--fresh]\n" +
   "                                          riavvia una sessione avviata da te, stesso pane e worktree:\n" +
   "                                          riprende la sua conversazione (o da zero con --fresh) e riceve la nota\n" +
   "  ade-msg interrupt <sessione>            ferma quello che sta facendo (Esc o Ctrl-C), la sessione resta aperta\n" +
@@ -1816,14 +1819,14 @@ export const USAGE =
   "  ade-msg design attendi <k> [--timeout <sec>]  aspetta la scelta su una proposta, o la stampa se c'è già\n" +
   "  ade-msg design <file.html> [--title T]  mostra una pagina di .ade/design/ accanto a te; riscrivila e si ricarica\n" +
   "                                          un file solo: CSS e JS dentro, immagini data:, niente CDN né fetch\n" +
-  '  ade-msg memory add decisione|fatto|trappola|todo "<testo>"\n' +
+  "  ade-msg memory add decisione|fatto|trappola|todo '<testo>'\n" +
   "                                          aggiunge una voce a .ade/memory.md, la memoria condivisa del progetto\n" +
   "  ade-msg memory show                     stampa la memoria condivisa\n" +
   "  ade-msg registro <decisioni|design> <aperta|risposta|rimandata|riaperta|chiusa> '<json>' | --file <perc>\n" +
   "                                          scrive un evento nel registro Decisioni o Design (ade-msg help decisioni)\n" +
-  '  ade-msg kv set <chiave> "<valore>" | get <chiave> | del <chiave> | list [<prefisso>]\n' +
+  "  ade-msg kv set <chiave> '<valore>' | get <chiave> | del <chiave> | list [<prefisso>]\n" +
   "                                          stato condiviso tra le sessioni del progetto\n" +
-  '  ade-msg kv lock <chiave> [--ttl <sec>] ["<nota>"] | unlock <chiave> [--force]\n' +
+  "  ade-msg kv lock <chiave> [--ttl <sec>] ['<nota>'] | unlock <chiave> [--force]\n" +
   "                                          lock con scadenza (predefinita 600s): chi lo tiene lo rilascia\n" +
   "                                          ogni progetto ha i suoi lock: «sweep» di due progetti sono due lock\n" +
   "                                          per ciò che la macchina ha una volta sola (ADE Test, sweep, GPU)\n" +
