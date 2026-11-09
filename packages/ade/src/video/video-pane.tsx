@@ -13,6 +13,7 @@ import {
 } from "./video"
 import type { VideoController } from "./commands"
 import { FolderGlyph, PaneActions } from "../grid/pane-actions"
+import { alreadyOpen, waitForSeek } from "./media-wait"
 import "./video-pane.css"
 import { t } from "../i18n"
 
@@ -84,25 +85,14 @@ export function VideoPane(props: VideoPaneProps) {
     rate: rate(),
   })
 
-  /** Waits for the element to actually reach the frame that was asked for. */
-  const seekTo = (seconds: number): Promise<number> =>
-    new Promise((resolve) => {
-      const video = element
-      if (!video) return resolve(position())
-      const done = () => {
-        video.removeEventListener("seeked", done)
-        setPosition(video.currentTime)
-        resolve(video.currentTime)
-      }
-      video.addEventListener("seeked", done)
-      video.currentTime = seconds
-      /*
-       * A seek to where the element already is fires no `seeked` at all, and
-       * the command would never answer. Resolving on the next frame in that
-       * case is not a guess: the position is already correct.
-       */
-      if (Math.abs(video.currentTime - seconds) < 0.001) queueMicrotask(done)
-    })
+  /** Waits for the element to actually reach the frame that was asked for (or its error, or the time limit). */
+  const seekTo = async (seconds: number): Promise<number> => {
+    const video = element
+    if (!video) return position()
+    const where = await waitForSeek(video, seconds)
+    setPosition(where)
+    return where
+  }
 
   /** Draws the current frame and hands back the PNG bytes. */
   const frameBytes = (): Promise<Uint8Array> =>
@@ -128,6 +118,8 @@ export function VideoPane(props: VideoPaneProps) {
         throw new Error(t("video.error.unsupportedFormat", PLAYABLE_EXTENSIONS.join(", ")))
       }
       setNote(undefined)
+      // The file the element already holds fires no `loadedmetadata` again: waiting for it would never answer.
+      if (alreadyOpen(element, props.path, path)) return path
       props.onOpen(path)
       /*
        * Waited for, not assumed. `open` resolves once the element has enough
