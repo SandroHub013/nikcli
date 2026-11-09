@@ -124,15 +124,15 @@ function describeFailure(step: PlanStep, error: unknown): string {
   const reason = error instanceof Error ? error.message : String(error)
   switch (step.action) {
     case "start_session":
-      return `Non sono riuscita ad avviare ${step.agent}: ${reason}.`
+      return `Non riesco ad avviare ${step.agent}: ${reason}.`
     case "open_project":
-      return `Non sono riuscita ad aprire il progetto: ${reason}.`
+      return `Non riesco ad aprire il progetto: ${reason}.`
     case "run_command":
       return `Il comando ${step.command} non è andato a buon fine: ${reason}.`
     case "focus_pane":
-      return `Non sono riuscita a spostarmi sul pannello ${step.paneIndex}: ${reason}.`
+      return `Non riesco a spostarmi sul pannello ${step.paneIndex}: ${reason}.`
     case "send_prompt":
-      return `Non sono riuscita a scrivere al pannello ${step.paneIndex}: ${reason}.`
+      return `Non riesco a scrivere al pannello ${step.paneIndex}: ${reason}.`
   }
 }
 

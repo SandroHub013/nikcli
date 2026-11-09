@@ -8,7 +8,7 @@ describe("dialog state machine", () => {
       const { state: s1, effects } = transition(s0, { type: "wake" }, 1000)
 
       expect(s1.status).toBe("idle")
-      expect(effects.some((e) => e.type === "speak" && e.text.includes("sveglia"))).toBe(true)
+      expect(effects.some((e) => e.type === "speak" && e.text.includes("Eccomi"))).toBe(true)
     })
 
     test("wakes from sleep on spoken wake utterance", () => {

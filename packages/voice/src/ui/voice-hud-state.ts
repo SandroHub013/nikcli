@@ -75,7 +75,7 @@ export interface HudInput {
  * The user's latest sentence and the assistant's answer to it, from the agent log.
  *
  * `spoken` alone cannot say which question it answers: during an agent turn it
- * still holds whatever the assistant said before ("Sono sveglia e in ascolto."),
+ * still holds whatever the assistant said before ("Eccomi, ti ascolto."),
  * and the HUD read that out as if it were about the request in progress. The
  * log has the order, so an answer only counts when it came after the sentence.
  */
