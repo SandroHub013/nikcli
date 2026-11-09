@@ -397,7 +397,12 @@ fn recheck_unacked(
     platform: Platform,
     pending: &mut VecDeque<PendingEntry>,
 ) -> (Vec<GatewayMessage>, bool) {
-    let link = store.link(bot, platform);
+    // Cannot be read for now: neither handed on nor dropped, and the next `ready` tries again. Read as empty it would
+    // say every sender was revoked and lose every waiting message for good (BOT2-4).
+    let Ok(link) = store.try_link(bot, platform) else {
+        env.log(&format!("gateway {} {}: stato non leggibile: i messaggi in coda restano in attesa", platform.id(), &bot_key(bot)[..8]));
+        return (Vec::new(), false);
+    };
     let mut again = Vec::new();
     let mut dropped = 0;
     for entry in pending.iter_mut().filter(|entry| !entry.acked) {
@@ -3786,6 +3791,35 @@ mod tests {
         *adapter.position.lock().unwrap() = Some("900".into());
         s.hub.stop(BOT, Platform::Fake).unwrap();
         assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref(), Some("900"));
+    }
+
+    /* BOT2-4: an unreadable state is not an empty one. */
+    #[tokio::test]
+    async fn a_state_that_cannot_be_read_for_a_moment_drops_nothing() {
+        let s = setup("state-unreadable");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        feed.send(Ok(vec![with_cursor("800", message("1", "c42", "42", "uno"))])).unwrap();
+        eventually("il messaggio", || s.env.messages.lock().unwrap().len() == 1).await;
+        let aside = s.path.with_extension("tenuto");
+        std::fs::rename(&s.path, &aside).unwrap();
+        // A folder where the file was: the read fails whatever the system.
+        std::fs::create_dir(&s.path).unwrap();
+
+        s.hub.unready();
+        s.hub.ready();
+        tokio::time::sleep(Duration::from_millis(30)).await;
+
+        assert_eq!(s.env.messages.lock().unwrap().len(), 1);
+        let on_disk = read_pending_file(&pending_file_path(s.hub.store.path(), BOT, Platform::Fake));
+        assert_eq!(on_disk.len(), 1, "a moment's unreadable file lost the message");
+        assert!(s.env.log.lock().unwrap().iter().all(|line| !line.contains("non più autorizzato")), "a revocation that never happened");
+
+        std::fs::remove_dir(&s.path).unwrap();
+        std::fs::rename(&aside, &s.path).unwrap();
+        s.hub.unready();
+        s.hub.ready();
+        eventually("riconsegnato quando si legge", || s.env.messages.lock().unwrap().len() == 2).await;
     }
 
     /* BOT-10: the page decides by age, so the age must reach it, and survive the pending file. */

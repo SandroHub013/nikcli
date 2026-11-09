@@ -188,6 +188,14 @@ impl Store {
         self.read().links.into_iter().find(|link| link.bot == bot && link.platform == platform)
     }
 
+    /// `link`, telling a state that cannot be read for now (an antivirus holding the file) from one with no such link:
+    /// `read` makes both empty, and «empty» means nobody is authorized (BOT2-4).
+    pub fn try_link(&self, bot: &str, platform: Platform) -> Result<Option<LinkState>, ()> {
+        let _guard = self.lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let state = read_file(&self.path, Some(&self.aside)).ok_or(())?;
+        Ok(state.links.into_iter().find(|link| link.bot == bot && link.platform == platform))
+    }
+
     /// Changes the link for `bot` on `platform` (created if new) and saves.
     /// Refused when the file cannot be accessed (I/O error). If unparseable,
     /// it recovers cleanly from an empty state.
