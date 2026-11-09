@@ -60,8 +60,18 @@ describe("the type scale (polish B1)", () => {
     const index = sheets.find((sheet) => sheet.file === "index.css")!.text
     const scale = [...index.matchAll(/--ade-font-([\w-]+):\s*([^;]+);/g)].map((match) => [match[1], match[2]!.trim()])
     expect(scale.length).toBeGreaterThanOrEqual(8)
-    // `body` is the md step by name (DS-20: «merge md and body»): one twelve, not two.
-    for (const [name, value] of scale) if (name !== "body") expect(value).toMatch(/^\d+px$/)
+    // `body` is the md step by name (DS-20: «merge md and body»): one twelve, not two. `xs` is the sm step by name
+    // (DS2-10): one eleven under two names. A step that is a name for another must land on a whole pixel.
+    const named = Object.fromEntries(scale) as Record<string, string>
+    const resolve = (value: string): string => {
+      const alias = /^var\(--ade-font-([\w-]+)\)$/.exec(value)
+      return alias ? resolve(named[alias[1]!] ?? value) : value
+    }
+    for (const [name, value] of scale) {
+      if (name === "body") continue
+      expect([name, resolve(value!)]).toEqual([name, expect.stringMatching(/^\d+px$/)])
+    }
+    expect(resolve(named.xs!)).toBe("11px")
     expect(Object.fromEntries(scale).body).toBe("var(--ade-font-md)")
     expect(Object.fromEntries(scale).md).toBe("12px")
   })
