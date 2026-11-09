@@ -481,6 +481,7 @@ import { watchLongTasks } from "../session/long-task-log"
 import { formatSpawnFailed, spawnOutcome } from "../session/spawn-outcome"
 import { isTyping, questionOpened, submittedSince, typedAfter, typedSince } from "../session/typed-line"
 import { createPasteModes } from "../session/paste-mode"
+import { createChangeWriter } from "../session/change-writer"
 import {
   composerLine,
   composerOf,
@@ -3227,10 +3228,13 @@ export function Workbench() {
       return null
     }
   }
-  const writeStored = (key: string, value: string) => {
+  const writeStored = (key: string, value: string): boolean => {
     try {
       localStorage.setItem(key, value)
-    } catch {}
+      return true
+    } catch {
+      return false
+    }
   }
 
   /** The `ask` and `spawn` requests still waiting for a reply. */
@@ -3271,7 +3275,8 @@ export function Workbench() {
    * the panes are restored (`restoreMail`).
    */
   const QUEUE_KEY = "ade.mailbox.queue"
-  let savedMail = ""
+  // The queue is written when it changed, and again when a write failed; a failure is told once (WB-13).
+  const mailWriter = createChangeWriter(() => report(t("workspace.saveFailed")))
   /** The ids read back from the saved queue: they wait for their pane's process after a start (`waitsForRestore`). */
   const replayedMail = new Set<string>()
   // Nothing is written until what was saved has been read back: an empty queue at boot must not erase it.
@@ -3280,10 +3285,7 @@ export function Workbench() {
     if (!mailRestored) return
     const queue = queueToSave(mailQueue)
     const now = JSON.stringify([queue, suspendedMailToSave(heldLines, paneExists)])
-    if (now === savedMail) return
-    savedMail = now
-    writeStored(QUEUE_KEY, queue)
-    saveSuspendedMail()
+    mailWriter.save(now, () => writeStored(QUEUE_KEY, queue) && saveSuspendedMail())
   }
   /**
    * The held mail back, once the panes are: the messages go on waiting for a free session, and a sender is told
