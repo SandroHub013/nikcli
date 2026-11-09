@@ -5730,7 +5730,9 @@ export function Workbench() {
     // Read again after the await: the round's held lines may have started one for this pane in the meantime.
     if (!(await freeNow(host, target.pane.id, true)) || linesInFlight.has(target.pane.id)) {
       noteMailHeld(target.pane.id, message.from)
-      const byLine = lineBegun(target.pane.id)
+      // Not the line ADE is typing itself, the first task for one: it is in the box for a moment, and a turn comes after it.
+      const byLine = lineBegun(target.pane.id) && !linesInFlight.has(target.pane.id)
+      if (!byLine && heldByLineNoted.delete(target.pane.id)) dropPaneNote(target.pane.id, t("note.mailHeldByLine"))
       const bySilence = !byLine && silentFor(target.pane.id) !== undefined
       /*
        * Said to the user too, once for as long as the line stands: the pane waits for the line and the user sees nothing

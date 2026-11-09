@@ -843,6 +843,12 @@ describe("lint: the workbench's wiring", () => {
     }
   })
 
+  test("lint: the line ADE itself is typing is no line begun, and the note about a line goes when the line has", () => {
+    expect(source).toContain(codeOf("const byLine = lineBegun(target.pane.id) && !linesInFlight.has(target.pane.id)"))
+    const held = between("const byLine =", "if (message.kind")
+    expect(held).toContain(codeOf('if (!byLine && heldByLineNoted.delete(target.pane.id)) dropPaneNote(target.pane.id, t("note.mailHeldByLine"))'))
+  })
+
   test("lint: the first task asks the screen on every pass, and says what it waits for", () => {
     const poll = between("if (starting.typesTask) {", "openingPolls.add(poll)")
     expect(poll).toContain(codeOf('const asked = box !== "ready" && questionOpen(paneId)'))
@@ -886,7 +892,7 @@ describe("lint: the workbench's wiring", () => {
     for (const start of [between("const startProcess = async (", "const startRemoteProcess = async ("), between("const startRemoteProcess = async (", "openingPolls.add(poll)")]) {
       expect(start).toContain(codeOf("undrawnSince.set(paneId, Date.now())"))
     }
-    const held = between("const byLine = lineBegun(target.pane.id)", "if (message.kind")
+    const held = between("const byLine =", "if (message.kind")
     expect(held).toContain(codeOf('tellPane(target.pane.id, t("note.mailHeldBySilence"))'))
     expect(held).toContain(codeOf("(silentFor(target.pane.id) ?? 0) >= OPENING_TIMEOUT_MS"))
     expect(held).toContain(codeOf("formatHeldSilentReceipt(target.pane)"))
