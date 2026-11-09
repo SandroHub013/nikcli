@@ -187,12 +187,7 @@ impl Registry {
      * outlive a kill of the agent alone.
      */
     pub fn end_all(&self) -> usize {
-        let sessions = self.take_all();
-        let count = sessions.len();
-        for session in sessions {
-            end_session(session);
-        }
-        count
+        end_sessions(self.take_all(), END_WAIT)
     }
 
     /*
@@ -207,33 +202,52 @@ impl Registry {
         let sessions = self.take_all();
         let count = sessions.len();
         if count > 0 {
-            std::thread::spawn(move || {
-                for session in sessions {
-                    end_session(session);
-                }
-            });
+            std::thread::spawn(move || end_sessions(sessions, END_WAIT));
         }
         count
     }
 }
 
+/// How long ending sessions waits for them.
 const END_WAIT: Duration = Duration::from_secs(5);
 
-fn end_sessions(sessions: Vec<Session>, _limit: Duration) -> usize {
+/*
+ * Ends these sessions and their trees, within `limit`, and says how many there were.
+ *
+ * One look at the process table for all of them: it is a walk of the whole system, and one per pane added up (RS-12).
+ * Then each waits on a thread of its own, because `wait()` has no limit and closing a pseudo console waits for its
+ * console host. On `RunEvent::Exit` that is the main thread, and before an update it is what the setup is waiting for,
+ * so one stuck session held ADE's end and every other session's (RS2-3).
+ *
+ * A thread still stuck past the limit keeps its session, and with it the job, the last of the fields: when ADE exits
+ * the kernel closes the job and the tree dies.
+ */
+fn end_sessions(sessions: Vec<Session>, limit: Duration) -> usize {
     let count = sessions.len();
-    for session in sessions {
-        end_session(session);
+    if count == 0 {
+        return 0;
+    }
+    let roots: Vec<u32> = sessions.iter().filter_map(|session| session.child.process_id()).collect();
+    kill_trees_keeping(&roots, true);
+    let (answer, answers) = std::sync::mpsc::channel::<()>();
+    for mut session in sessions {
+        let answer = answer.clone();
+        std::thread::spawn(move || {
+            let _ = session.child.kill();
+            // Reaped here: the reader thread's lookup now misses, and nobody else will wait on it.
+            let _ = session.child.wait();
+            drop(session);
+            let _ = answer.send(());
+        });
+    }
+    drop(answer);
+    let deadline = Instant::now() + limit;
+    for _ in 0..count {
+        if answers.recv_timeout(deadline.saturating_duration_since(Instant::now())).is_err() {
+            break;
+        }
     }
     count
-}
-
-fn end_session(mut session: Session) {
-    if let Some(pid) = session.child.process_id() {
-        kill_tree(pid);
-    }
-    let _ = session.child.kill();
-    // Reaped here: the reader thread's lookup now misses, and nobody else will wait on it.
-    let _ = session.child.wait();
 }
 
 /*
@@ -1463,9 +1477,6 @@ pub async fn pty_spawn(
                 Err(_) => (None, sessions.remove(&waited_id)),
             }
         };
-        // Past the lock: dropping it closes the pseudo console, which waits for conhost, and every spawn, write,
-        // resize and kill of every other pane would wait behind it (RS-8).
-        drop(gone);
         // Not said from here: the sender may still have output queued, and the page stops listening at the exit.
         let _ = exit_tx.send(code);
         // The sender may be waiting for output that will never come (no EOF): it looks at the code when it is woken.
@@ -1475,6 +1486,10 @@ pub async fn pty_spawn(
                 let _ = tx.try_send(String::new());
             }
         }
+        // Past the lock: dropping it closes the pseudo console, which waits for conhost, and every spawn, write,
+        // resize and kill of every other pane would wait behind it (RS-8). After the exit is out: a slow close then
+        // costs the sender its grace and no more.
+        drop(gone);
         break;
     });
 
@@ -1749,7 +1764,7 @@ fn tree_of(root: u32, rows: &[ProcRow]) -> Vec<u32> {
 /// `ade-msg ask` waiting, a node process — and killing only the CLI leaves them
 /// running, holding the turn's mailbox identity and its files.
 pub(crate) fn kill_tree(pid: u32) {
-    kill_tree_keeping(pid, true);
+    kill_trees_keeping(&[pid], true);
 }
 
 /// The processes to kill for `root`: its tree, children first, with or without `root` itself.
@@ -1761,16 +1776,25 @@ fn victims(root: u32, rows: &[ProcRow], include_root: bool) -> Vec<u32> {
     members
 }
 
-fn trees_of(_roots: &[u32], _rows: &[ProcRow], _include_root: bool) -> Vec<u32> {
-    Vec::new()
+/// What `victims` gives for each of `roots`, over one table, with no process listed twice.
+fn trees_of(roots: &[u32], rows: &[ProcRow], include_root: bool) -> Vec<u32> {
+    let mut members = Vec::new();
+    for root in roots {
+        for pid in victims(*root, rows, include_root) {
+            if !members.contains(&pid) {
+                members.push(pid);
+            }
+        }
+    }
+    members
 }
 
-/// `kill_tree`, with the choice of leaving the root to its owner.
+/// `kill_tree`, for several trees over one look at the process table, with the choice of leaving the roots to their owner.
 ///
 /// A pane's own child is ended afterwards by `portable-pty`, which on unix sends SIGHUP and waits up to
 /// 200 ms before SIGKILL: the agent gets to close its files. Killing the whole tree first, root included,
 /// took that away (Dario's review of F3, N1), so there only the descendants go here.
-fn kill_tree_keeping(pid: u32, include_root: bool) {
+fn kill_trees_keeping(roots: &[u32], include_root: bool) {
     use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
     let mut sys = System::new();
     sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
@@ -1783,7 +1807,7 @@ fn kill_tree_keeping(pid: u32, include_root: bool) {
             started: process.start_time(),
         })
         .collect();
-    for member in victims(pid, &rows, include_root) {
+    for member in trees_of(roots, &rows, include_root) {
         if let Some(process) = sys.process(Pid::from_u32(member)) {
             #[cfg(windows)]
             {
@@ -1838,7 +1862,7 @@ pub async fn pty_kill(registry: tauri::State<'_, Registry>, id: String, tree: Op
         if tree == Some(true) {
             if let Some(pid) = session.child.process_id() {
                 // On unix the root is left to `child.kill()` below (SIGHUP, a short wait, SIGKILL).
-                kill_tree_keeping(pid, cfg!(windows));
+                kill_trees_keeping(&[pid], cfg!(windows));
             }
         }
         let _ = session.child.kill();
@@ -2624,7 +2648,7 @@ mod tests {
         drop(job);
         std::thread::sleep(Duration::from_millis(500));
         assert!(tree_alive(pid), "dropping the job killed the pane");
-        end_session(session);
+        end_sessions(vec![session], END_WAIT);
         wait_until("the tree outlived its session", || !tree_alive(pid));
     }
 
