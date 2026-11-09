@@ -299,8 +299,8 @@ import { scrubSecrets } from "../bots/terms"
 import type { AgentFile } from "../bots/ragu"
 import type { Runner } from "../bots/runners"
 import { senderToken } from "../session/senders"
-import { followInboxRound, inboxNamesOf, rearmInbox } from "../session/mail-inbox"
-import { firstTime, resealUnread, sealedBy, splitSealed, useMailKeys } from "../session/mail-seal"
+import { followInboxRound, inboxEntriesOf, rearmInbox } from "../session/mail-inbox"
+import { bodyHash, firstTime, resealUnread, sealedBy, splitSealed, useMailKeys } from "../session/mail-seal"
 import { createActivityReads, type ActivityReads } from "../session/activity-reads"
 import { boardCandidates, parseOwners, whoOwns } from "../session/owners"
 import { mayReroute, pickProvider, setProviderPicker } from "../session/provider-pick"
@@ -3422,6 +3422,7 @@ export function Workbench() {
       at,
       ringAt: at,
       rings: 0,
+      sha256: await bodyHash(full),
     }
     const stored = await host.mailboxInboxPut(paneId, entry.name, full).then(
       () => true,
@@ -3837,13 +3838,19 @@ export function Workbench() {
   const freshPaneToken = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, paneId: string) => {
     const token = mintPaneToken(paneId)
     if (rearmInbox(inboxPending, paneId)) saveInbox()
-    const names = inboxNamesOf(inboxPending, paneId)
+    const entries = inboxEntriesOf(inboxPending, paneId)
     const { mailboxInboxText: read, mailboxInboxPut: put } = host
-    if (names.length > 0 && read && put) {
-      await resealUnread(names, retiredTokens.get(paneId) ?? [], {
+    if (entries.length > 0 && read && put) {
+      const adopted = await resealUnread(entries, retiredTokens.get(paneId) ?? [], {
         read: (name) => read(paneId, name),
         write: (name, body) => put(paneId, name, body),
       })
+      // An entry saved before the hash was kept was taken on its word, once: it has its hash now.
+      for (const { name, sha256 } of adopted) {
+        const kept = inboxPending.find((entry) => entry.paneId === paneId && entry.name === name)
+        if (kept) kept.sha256 = sha256
+      }
+      if (adopted.length > 0) saveInbox()
     }
     return token
   }
