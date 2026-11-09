@@ -10,7 +10,7 @@
  *
  * Pure, like `mailbox.ts`; the workbench does the storing and the files.
  */
-import type { KvOpName } from "./mailbox"
+import { keptBody, type KvOpName } from "./mailbox"
 
 // -- key-value store ---------------------------------------------------------
 
@@ -111,6 +111,9 @@ export interface KvWho {
   title: string
 }
 
+/** A lock note on one line: it is printed inside a reply line, and a line break in it would start a new one. */
+const oneLineNote = (note: string) => note.replace(/\s+/g, " ")
+
 /**
  * Applies one operation. `reply` starts with `ok` or `errore`; for reads the
  * value follows on the next line, which `ade-msg` prints on its own.
@@ -141,7 +144,12 @@ export function applyKv(
     case "get": {
       const entry = own(space.entries, key)
       if (!entry) return { space, reply: `errore: nessun valore per ${key}` }
-      return { space, reply: `ok\n${entry.value}` }
+      // A stored value is some session's text, returned as the answer to another one. Its lines after the first are
+      // barred, like every kept body; the first has no header before it here (the client prints all that follows "ok"),
+      // so it is barred too when it opens with the tag of the user's own answer. Any other first line is left alone:
+      // scripts read this, and a JSON value must come back as it went in.
+      const body = keptBody(entry.value)
+      return { space, reply: `ok\n${/^\[[^\]\n]* da utente\]/.test(body) ? `│ ${body}` : body}` }
     }
     case "list": {
       const prefix = key
@@ -160,7 +168,7 @@ export function applyKv(
       for (const name of lockNames) {
         const lock = space.locks[name]!
         lines.push(
-          `lock ${name}: ${lock.ownerTitle}, scade tra ${age(lock.until - now)}${lock.note ? ` — ${lock.note}` : ""}`,
+          `lock ${name}: ${lock.ownerTitle}, scade tra ${age(lock.until - now)}${lock.note ? ` — ${oneLineNote(lock.note)}` : ""}`,
         )
       }
       return { space, reply: `ok\n${lines.join("\n")}` }
@@ -196,7 +204,7 @@ export function applyKv(
       if (lock && lock.owner !== who.id) {
         return {
           space,
-          reply: `errore: ${key} è già bloccata da "${lock.ownerTitle}" per ${age(lock.until - now)}${lock.note ? ` (${lock.note})` : ""}`,
+          reply: `errore: ${key} è già bloccata da "${lock.ownerTitle}" per ${age(lock.until - now)}${lock.note ? ` (${oneLineNote(lock.note)})` : ""}`,
         }
       }
       const ttl = Math.min(KV_MAX_TTL, request.ttl > 0 ? request.ttl : KV_DEFAULT_TTL)

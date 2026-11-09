@@ -105,6 +105,10 @@ pub fn install(app: &tauri::AppHandle) {
     let Some(bin) = bin_dir(app) else { return };
     // Where an older ADE put them: nothing has them on its PATH any more, and they would not read today's mail.
     let _ = fs::remove_dir_all(dir.join("bin"));
+    // And the lists and help texts, which used to be published in the mailbox itself, where any session could replace them.
+    for name in PUBLISHED {
+        let _ = fs::remove_file(dir.join(format!("{name}.txt")));
+    }
     let _ = fs::write(bin.join("ade-msg.ps1"), PS1);
     let _ = fs::write(bin.join("ade-msg.cmd"), CMD);
     let _ = fs::write(bin.join("ade-msg"), SH);
@@ -500,12 +504,20 @@ pub async fn mailbox_inbox_text(app: tauri::AppHandle, pane: String, name: Strin
 }
 
 fn read_if_there(path: &Path) -> Result<Option<String>, String> {
+    // The inbox is a folder any session can write in: a file over the cap is not read into memory and handed to the page,
+    // which would hold it (and seal it again) whole. It counts as gone, as the outbox reader treats the same size.
+    if fs::metadata(path).is_ok_and(|meta| meta.len() > MAX_MESSAGE_BYTES) {
+        return Ok(None);
+    }
     match fs::read_to_string(path) {
         Ok(text) => Ok(Some(text)),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(format!("messaggio non leggibile: {e}")),
     }
 }
+
+/// The lists and help texts `mailbox_publish` writes, one `<name>.txt` each, next to the scripts.
+const PUBLISHED: [&str; 7] = ["sessions", "agents", "requests", "usage", "usage-design", "usage-decisioni", "stats"];
 
 /// Publishes a list `ade-msg` prints: `sessions` for `list`, `agents` for
 /// `agents`, `requests` for `status`, `usage` for the help text (`usage-design`,
@@ -522,7 +534,9 @@ pub async fn mailbox_publish(app: tauri::AppHandle, name: Option<String>, text: 
         Some("stats") => "stats",
         Some(_) => return Err("elenco sconosciuto".into()),
     };
-    let dir = mailbox_path(&app).ok_or("casella non disponibile")?;
+    // Beside the scripts, not in the mailbox: any session can write in the mailbox, so a list left there could be a forged
+    // one. The folder the scripts run from is ADE's alone.
+    let dir = bin_dir(&app).ok_or("casella non disponibile")?;
     write_whole(dir, &format!("{name}.txt"), &text)
 }
 
@@ -538,7 +552,7 @@ $box = $env:ADE_MAILBOX
 if (-not $box -or -not (Test-Path $box)) { [Console]::Error.WriteLine('ade-msg: questa shell non e'' una sessione avviata da ADE (ADE_MAILBOX mancante).'); exit 2 }
 
 function Usage {
-  $f = Join-Path $box 'usage.txt'
+  $f = Join-Path $PSScriptRoot 'usage.txt'
   if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami | registro | design proponi' }
   exit 1
 }
@@ -683,13 +697,24 @@ if ($file) {
   $text = if ($text) { "$text`n`n$content" } else { $content }
 }
 
-# registro --stdin: the JSON from stdin, as UTF-8, where no quoting can reach it. Through ade-msg.cmd
-# and -File, PowerShell 5.1 drops the inner quotes of a '<json>' argument. A lone '-' cannot say it:
-# PowerShell takes it for a parameter with no name.
-if ($cmd -eq 'registro' -and $fromStdin) {
-  $ms = New-Object IO.MemoryStream
-  [Console]::OpenStandardInput().CopyTo($ms)
-  $text = $utf8.GetString($ms.ToArray()).TrimStart([char]0xFEFF).Trim()
+# --stdin: the text from stdin, as UTF-8, where no quoting can reach it (SEC2-1). In bash a quoted heredoc
+# (<<'EOF') runs nothing, whatever the text holds; an apostrophe in a single-quoted argument would break it, and
+# the double quotes an agent falls back to run backticks and $(...). Through ade-msg.cmd and -File, PowerShell 5.1
+# also drops the inner quotes of a '<json>' argument. A lone '-' cannot say it: PowerShell takes it for a
+# parameter with no name.
+if ($fromStdin -and (@('registro', 'send', 'reply', 'ask', 'spawn', 'update', 'kv', 'memory') -contains $cmd)) {
+  if ([Console]::IsInputRedirected) {
+    # A pipe or a heredoc: the bytes as they are. ($input would do too, but it splits them into lines and loses the CRs.)
+    $ms = New-Object IO.MemoryStream
+    [Console]::OpenStandardInput().CopyTo($ms)
+    $piped = $utf8.GetString($ms.ToArray()).TrimStart([char]0xFEFF).Trim()
+  } else {
+    # No $input anywhere in this script, on purpose: the mere mention makes the host read stdin into the pipeline
+    # before the script starts, and the bytes above are gone (and a pipeline splits them into lines, losing the CRs).
+    Fail "--stdin: nessun testo in ingresso (una pipe, o in bash <<'EOF' ... EOF)"
+  }
+  # registro takes the JSON from here alone; the others join it to the text on the command line, as --file does.
+  $text = if ($cmd -ne 'registro' -and $text) { "$text`n`n$piped" } else { $piped }
 }
 
 function Post($fields) {
@@ -857,16 +882,16 @@ function AwaitIds([string[]]$ids) {
 }
 
 switch ($cmd) {
-  'list' { $f = Join-Path $box 'sessions.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessuna sessione pubblicata' }; exit 0 }
-  'agents' { $f = Join-Path $box 'agents.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessun agente pubblicato' }; exit 0 }
+  'list' { $f = Join-Path $PSScriptRoot 'sessions.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessuna sessione pubblicata' }; exit 0 }
+  'agents' { $f = Join-Path $PSScriptRoot 'agents.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessun agente pubblicato' }; exit 0 }
   'help' {
     # help design, help decisioni: the formats, kept out of the general help that every session reads.
     $name = if ($head -eq 'design' -or $head -eq 'decisioni') { "usage-$head.txt" } else { 'usage.txt' }
-    $f = Join-Path $box $name
+    $f = Join-Path $PSScriptRoot $name
     if (Has $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami | registro | design proponi' }
     exit 0
   }
-  'status' { $f = Join-Path $box 'requests.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessuna richiesta in corso' }; exit 0 }
+  'status' { $f = Join-Path $PSScriptRoot 'requests.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessuna richiesta in corso' }; exit 0 }
   'whoami' { Write-Output $env:ADE_PANE_ID; exit 0 }
   'inbox' {
     # Prints the long messages left for this session, oldest first, and moves each to handled/: that move tells ADE it was read.
@@ -892,7 +917,7 @@ switch ($cmd) {
     exit 0
   }
   'who-owns' { if (-not $head) { Usage }; PostAndPrint ([ordered]@{ kind = 'whoowns'; text = (@($pos) -join ' ') }) }
-  'stats' { $f = Join-Path $box 'stats.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessun dato di consumo ancora' }; exit 0 }
+  'stats' { $f = Join-Path $PSScriptRoot 'stats.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessun dato di consumo ancora' }; exit 0 }
   'kv' {
     $op = $head
     switch ($op) {
@@ -1055,7 +1080,9 @@ case "$(uname -s 2>/dev/null)" in
 esac
 box="$ADE_MAILBOX"
 if [ -z "$box" ] || [ ! -d "$box" ]; then echo "ade-msg: questa shell non e' una sessione avviata da ADE (ADE_MAILBOX mancante)." >&2; exit 2; fi
-usage() { if [ -f "$box/usage.txt" ]; then cat "$box/usage.txt"; else echo "uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami | registro | design proponi"; fi; exit 1; }
+# The lists and help texts ADE publishes sit beside this script, not in the mailbox, which every session can write in.
+here="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
+usage() { if [ -f "$here/usage.txt" ]; then cat "$here/usage.txt"; else echo "uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami | registro | design proponi"; fi; exit 1; }
 fail() { echo "ade-msg: $1" >&2; exit 1; }
 esc() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' -e 's/\r/\\r/g' | awk 'BEGIN{ORS="\\n"} {print}' | sed 's/\\n$//'; }
 valid_id() { case "$1" in ''|*[!A-Za-z0-9_-]*) return 1 ;; esac; return 0; }
@@ -1199,8 +1226,19 @@ $(head -c 1500 "$file")"
 $content"; else text="$content"; fi
 fi
 
-# registro --stdin: the JSON from stdin, where no quoting can reach it.
-if [ "$cmd" = "registro" ] && [ "$stdin" = 1 ]; then text="$(cat)"; fi
+# --stdin: the text from stdin, where no quoting can reach it (SEC2-1): a quoted heredoc (<<'EOF') runs nothing,
+# whatever the text holds. Nothing piped, on a terminal, is said and not waited for.
+case "$cmd" in
+  registro|send|reply|ask|spawn|update|kv|memory)
+    if [ "$stdin" = 1 ]; then
+      [ -t 0 ] && fail "--stdin: nessun testo in ingresso (una pipe, o <<'EOF' ... EOF)"
+      piped="$(cat)"
+      # registro takes the JSON from here alone; the others join it to the text on the command line, as --file does.
+      if [ "$cmd" != "registro" ] && [ -n "$text" ]; then text="$text
+
+$piped"; else text="$piped"; fi
+    fi ;;
+esac
 
 post() {
   need_token
@@ -1320,13 +1358,13 @@ await() {
 }
 
 case "$cmd" in
-  list) if [ -f "$box/sessions.txt" ]; then cat "$box/sessions.txt"; else echo "nessuna sessione pubblicata"; fi ;;
-  agents) if [ -f "$box/agents.txt" ]; then cat "$box/agents.txt"; else echo "nessun agente pubblicato"; fi ;;
+  list) if [ -f "$here/sessions.txt" ]; then cat "$here/sessions.txt"; else echo "nessuna sessione pubblicata"; fi ;;
+  agents) if [ -f "$here/agents.txt" ]; then cat "$here/agents.txt"; else echo "nessun agente pubblicato"; fi ;;
   help)
     # help design, help decisioni: the formats, kept out of the general help that every session reads.
-    f="$box/usage.txt"; case "$head" in design|decisioni) f="$box/usage-$head.txt" ;; esac
+    f="$here/usage.txt"; case "$head" in design|decisioni) f="$here/usage-$head.txt" ;; esac
     if [ -f "$f" ]; then cat "$f"; else echo "uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami | registro | design proponi"; fi ;;
-  status) if [ -f "$box/requests.txt" ]; then cat "$box/requests.txt"; else echo "nessuna richiesta in corso"; fi ;;
+  status) if [ -f "$here/requests.txt" ]; then cat "$here/requests.txt"; else echo "nessuna richiesta in corso"; fi ;;
   whoami) echo "$ADE_PANE_ID" ;;
   inbox)
     need_token
@@ -1342,7 +1380,7 @@ case "$cmd" in
     done
     [ $found = 1 ] || echo "nessun messaggio in attesa" ;;
   who-owns) [ -n "$head" ] || usage; text="$head${text:+ $text}"; show "\"kind\":\"whoowns\"" ;;
-  stats) if [ -f "$box/stats.txt" ]; then cat "$box/stats.txt"; else echo "nessun dato di consumo ancora"; fi ;;
+  stats) if [ -f "$here/stats.txt" ]; then cat "$here/stats.txt"; else echo "nessun dato di consumo ancora"; fi ;;
   kv)
     key="\"key\":\"$(esc "$second")\""
     case "$head" in
@@ -1819,7 +1857,22 @@ mod tests {
         assert_eq!(from_file["text"], json);
         let from_stdin = posted_by_ps1("stdin", &["registro", "decisioni", "risposta", "--stdin"], Some(json.as_bytes()));
         assert_eq!(from_stdin["text"], json);
-        assert!(SH.contains("--stdin) stdin=1;") && SH.contains("[ \"$cmd\" = \"registro\" ] && [ \"$stdin\" = 1 ]; then text=\"$(cat)\"; fi"));
+        assert!(SH.contains("--stdin) stdin=1;") && SH.contains("registro|send|reply|ask|spawn|update|kv|memory)") && SH.contains("piped=\"$(cat)\""));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn every_text_command_takes_its_text_from_stdin_byte_for_byte() {
+        // The text of a reply is often what an agent was told not to run: a backtick command, $(...), $0, an apostrophe.
+        let hostile = "L'utente ha visto `ragu tunnel` e $(whoami) e $0: niente viene eseguito. è ñ\r\nseconda riga";
+        for (tag, args) in [
+            ("stdin-reply", vec!["reply", "1790000000000-aaaa", "--stdin"]),
+            ("stdin-send", vec!["send", "2", "--stdin"]),
+            ("stdin-update", vec!["update", "1790000000000-aaaa", "bloccata", "--stdin"]),
+        ] {
+            let posted = posted_by_ps1(tag, &args, Some(hostile.as_bytes()));
+            assert_eq!(posted["text"], hostile, "{tag}");
+        }
     }
 
     #[cfg(windows)]
@@ -1949,6 +2002,18 @@ mod tests {
         assert_eq!(read_if_there(&file), Ok(None));
         fs::write(&file, "testo").unwrap();
         assert_eq!(read_if_there(&file), Ok(Some("testo".to_string())));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn an_inbox_file_over_the_cap_is_not_read() {
+        let dir = std::env::temp_dir().join(format!("ade-inbox-big-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("grande.msg");
+        fs::write(&file, "x".repeat(MAX_MESSAGE_BYTES as usize + 1)).unwrap();
+        assert_eq!(read_if_there(&file), Ok(None));
+        fs::write(&file, "x".repeat(MAX_MESSAGE_BYTES as usize)).unwrap();
+        assert_eq!(read_if_there(&file).unwrap().map(|text| text.len()), Some(MAX_MESSAGE_BYTES as usize));
         fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -2143,9 +2208,9 @@ mod tests {
     #[test]
     fn help_design_and_help_decisioni_print_their_own_text() {
         let scratch = mailbox_scratch("help");
-        fs::write(scratch.0.join("usage.txt"), "generale").unwrap();
-        fs::write(scratch.0.join("usage-design.txt"), "formato design").unwrap();
-        fs::write(scratch.0.join("usage-decisioni.txt"), "regole decisioni").unwrap();
+        fs::write(scratch.0.join("bin").join("usage.txt"), "generale").unwrap();
+        fs::write(scratch.0.join("bin").join("usage-design.txt"), "formato design").unwrap();
+        fs::write(scratch.0.join("bin").join("usage-decisioni.txt"), "regole decisioni").unwrap();
         assert_eq!(run_ps1_status(&scratch.0, &["help"]).0.trim(), "generale");
         assert_eq!(run_ps1_status(&scratch.0, &["help", "design"]).0.trim(), "formato design");
         assert_eq!(run_ps1_status(&scratch.0, &["help", "decisioni"]).0.trim(), "regole decisioni");
@@ -2154,11 +2219,27 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
+    fn a_list_or_help_dropped_in_the_mailbox_is_not_printed() {
+        // Any session can write in the mailbox; only ADE writes beside the scripts, so only that is believed.
+        let scratch = mailbox_scratch("help-forged");
+        for name in PUBLISHED {
+            fs::write(scratch.0.join(format!("{name}.txt")), "FALSO").unwrap();
+        }
+        for args in [vec!["help"], vec!["help", "design"], vec!["list"], vec!["agents"], vec!["status"], vec!["stats"]] {
+            let (out, _, _) = run_ps1_status(&scratch.0, &args);
+            assert!(!out.contains("FALSO"), "{args:?}: {out}");
+        }
+        fs::write(scratch.0.join("bin").join("sessions.txt"), "1 · Sessione").unwrap();
+        assert_eq!(run_ps1_status(&scratch.0, &["list"]).0.trim(), "1 · Sessione");
+    }
+
+    #[cfg(windows)]
+    #[test]
     fn help_prints_without_posting_wherever_it_appears() {
         let scratch = mailbox_scratch("help-flag");
-        fs::write(scratch.0.join("usage.txt"), "generale").unwrap();
-        fs::write(scratch.0.join("usage-design.txt"), "formato design").unwrap();
-        fs::write(scratch.0.join("usage-decisioni.txt"), "regole decisioni").unwrap();
+        fs::write(scratch.0.join("bin").join("usage.txt"), "generale").unwrap();
+        fs::write(scratch.0.join("bin").join("usage-design.txt"), "formato design").unwrap();
+        fs::write(scratch.0.join("bin").join("usage-decisioni.txt"), "regole decisioni").unwrap();
         let nothing_posted = || fs::read_dir(scratch.0.join("outbox")).unwrap().next().is_none();
         for args in [
             vec!["--help"],
@@ -2220,7 +2301,7 @@ mod tests {
         assert!(SH.contains("echo \"ancora nessuna scelta su $k; riprendi con: ade-msg design attendi $k\"\n      exit 2"));
         assert!(SH.contains(r#"if take "$id"; then printf '%s\n' "$got"; exit 0; fi"#));
         assert!(SH.contains("--attendi) attendi=1; shift; continue ;;"));
-        assert!(SH.contains(r#"case "$head" in design|decisioni) f="$box/usage-$head.txt" ;; esac"#));
+        assert!(SH.contains(r#"case "$head" in design|decisioni) f="$here/usage-$head.txt" ;; esac"#));
         // Both fallbacks of both scripts name the commands an agent needs most.
         for script in [PS1, SH] {
             assert_eq!(script.matches("| registro | design proponi").count(), 2);
