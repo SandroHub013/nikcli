@@ -775,7 +775,8 @@ export const en: Messages = {
   "pane.close.named": (title: string) => `Close ${title}`,
   "hooks.foreign":
     "From another build of ADE, not this one: this build neither updates nor removes it, because the official ADE's sessions run through that file",
-  "bar.raguVersion": (v) => `Ragù Code ${v}: the program new sessions start, not ADE`,
+  "bar.meta.ragu": (version) => `CLI Ragù Code ${version}`,
+  "bar.raguVersion.tip": "the program new sessions start",
   "bar.sessions": (count) => `${count} ${count === 1 ? "session" : "sessions"}`,
   "bar.meta.ade": (version) => `ADE ${version}`,
   "bar.info": (facts) => `Project details: ${facts}`,

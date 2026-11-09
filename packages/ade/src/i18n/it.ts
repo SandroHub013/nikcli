@@ -792,7 +792,8 @@ export const it = {
   "pane.close.named": (title: string) => `Chiudi ${title}`,
   "hooks.foreign":
     "Di un'altra build di ADE, non di questa: questa non lo aggiorna e non lo rimuove, perché con quel file ci lavorano le sessioni dell'ADE ufficiale",
-  "bar.raguVersion": (v: string) => `Ragù Code ${v}: è il programma con cui partono le sessioni, non ADE`,
+  "bar.meta.ragu": (version: string) => `CLI Ragù Code ${version}`,
+  "bar.raguVersion.tip": "il programma con cui partono le sessioni",
   "bar.sessions": (count: number) => `${count} ${count === 1 ? "sessione" : "sessioni"}`,
   "bar.meta.ade": (version: string) => `ADE ${version}`,
   "bar.info": (facts: string) => `Dettagli del progetto: ${facts}`,

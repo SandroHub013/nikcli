@@ -25,12 +25,14 @@ export interface ProjectBarProps {
  * (closure 2): the stylesheet chooses, the popover is the browser's own.
  */
 export function ProjectBar(props: ProjectBarProps) {
-  // «ADE 1.2.3»: the name already says what the number is, the «v» is noise. This is ADE's
-  // version because the bar is ADE's; the ragu one is in the tooltip below.
+  // «ADE 1.2.3» and «CLI Ragù Code 1.399.0»: the name already says what the number is,
+  // the «v» is noise. ADE and the CLI have separate items (UX2-15).
   const version = () => props.adeVersion?.replace(/^v(?=\d)/, "")
+  const raguVersion = () => props.raguVersion?.replace(/^v(?=\d)/, "")
   const facts = (project: Project) =>
     [
       version() ? t("bar.meta.ade", version()!) : undefined,
+      raguVersion() ? t("bar.meta.ragu", raguVersion()!) : undefined,
       project.git ? undefined : t("projectBar.noGit.short"),
       t("bar.sessions", props.sessions),
     ].filter((fact): fact is string => Boolean(fact))
@@ -48,11 +50,18 @@ export function ProjectBar(props: ProjectBarProps) {
                 space is the correct report. */}
             <Show when={version()}>
               {(shown) => (
+                <span data-slot="ade-meta-item">
+                  {t("bar.meta.ade", shown())}
+                </span>
+              )}
+            </Show>
+            <Show when={raguVersion()}>
+              {(ragu) => (
                 <span
                   data-slot="ade-meta-item"
-                  title={props.raguVersion ? t("bar.raguVersion", props.raguVersion) : undefined}
+                  title={t("bar.raguVersion.tip")}
                 >
-                  {t("bar.meta.ade", shown())}
+                  {t("bar.meta.ragu", ragu())}
                 </span>
               )}
             </Show>

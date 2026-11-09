@@ -72,6 +72,7 @@ const SAME_IN_BOTH = new Set<string>([
   "vui.replies.sample.it",
   "vui.replies.sample.en",
   "bar.meta.ade",
+  "bar.meta.ragu",
   "pane.tree.worktree",
 ])
 
