@@ -209,11 +209,27 @@ fn put_script(dir: &Path, name: &str, text: &str) -> Result<bool, String> {
     Ok(true)
 }
 
+/// How many times more a replace is tried, and how far apart: a reader or a scanner holds a file for milliseconds.
+const REPLACE_RETRIES: usize = 4;
+const REPLACE_RETRY_GAP: Duration = Duration::from_millis(20);
+
 /// Writes `dir/<name>` whole: a reader polling for the final name never sees half of it.
 fn write_whole(dir: PathBuf, name: &str, text: &str) -> Result<(), String> {
     let part = dir.join(format!("{name}.part"));
     fs::write(&part, text).map_err(|e| format!("scrittura fallita: {e}"))?;
-    fs::rename(&part, dir.join(name)).map_err(|e| format!("scrittura fallita: {e}"))
+    let target = dir.join(name);
+    let mut replaced = fs::rename(&part, &target);
+    for _ in 0..REPLACE_RETRIES {
+        if replaced.is_ok() {
+            break;
+        }
+        std::thread::sleep(REPLACE_RETRY_GAP);
+        replaced = fs::rename(&part, &target);
+    }
+    replaced.map_err(|e| {
+        let _ = fs::remove_file(&part);
+        format!("scrittura fallita: {e}")
+    })
 }
 
 #[derive(Serialize)]
@@ -641,12 +657,14 @@ const PS1: &str = r#"# ade-msg — talk to the other ADE sessions. Written by AD
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 $utf8 = New-Object Text.UTF8Encoding $false
+# Every file ADE republishes: it replaces them by renaming, which a reader that does not share delete would make fail.
+function ReadShared($p) { $s = [IO.File]::Open($p, 'Open', 'Read', 'ReadWrite, Delete'); try { (New-Object IO.StreamReader($s, $utf8)).ReadToEnd() } finally { $s.Dispose() } }
 $box = $env:ADE_MAILBOX
 if (-not $box -or -not (Test-Path $box)) { [Console]::Error.WriteLine('ade-msg: questa shell non e'' una sessione avviata da ADE (ADE_MAILBOX mancante).'); exit 2 }
 
 function Usage {
   $f = Join-Path $PSScriptRoot 'usage.txt'
-  if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami | registro | design proponi' }
+  if (Test-Path $f) { ReadShared $f } else { Write-Output 'uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami | registro | design proponi' }
   exit 1
 }
 function Fail($message) { [Console]::Error.WriteLine("ade-msg: $message"); exit 1 }
@@ -683,7 +701,7 @@ function NeedToken {
   exit 2
 }
 # The text of a file, $null when it has gone or is held open: another process may have just taken it.
-function ReadFile($path) { try { return [IO.File]::ReadAllText($path, $utf8) } catch { return $null } }
+function ReadFile($path) { try { return ReadShared $path } catch { return $null } }
 # Sealed, and said once if the file is still there and fails. Nothing that fails is moved or removed: it may be the real
 # one for the session it is signed for.
 function Checks($kind, $id, $path, $what) {
@@ -962,7 +980,7 @@ function AwaitIds([string[]]$ids) {
       }
       if (Has $stateFile) {
         $s = $null
-        try { $s = Sealed 'state' $id ([IO.File]::ReadAllText($stateFile, $utf8)) } catch {}
+        try { $s = Sealed 'state' $id (ReadShared $stateFile) } catch {}
         if ($s) { $s = $s.Trim() }
         if ($s -and $seen[$id] -ne $s) { $seen[$id] = $s; [Console]::Error.WriteLine("ade-msg: richiesta $id - $s") }
       }
@@ -975,16 +993,16 @@ function AwaitIds([string[]]$ids) {
 }
 
 switch ($cmd) {
-  'list' { $f = Join-Path $PSScriptRoot 'sessions.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessuna sessione pubblicata' }; exit 0 }
-  'agents' { $f = Join-Path $PSScriptRoot 'agents.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessun agente pubblicato' }; exit 0 }
+  'list' { $f = Join-Path $PSScriptRoot 'sessions.txt'; if (Test-Path $f) { ReadShared $f } else { Write-Output 'nessuna sessione pubblicata' }; exit 0 }
+  'agents' { $f = Join-Path $PSScriptRoot 'agents.txt'; if (Test-Path $f) { ReadShared $f } else { Write-Output 'nessun agente pubblicato' }; exit 0 }
   'help' {
     # help design, help decisioni: the formats, kept out of the general help that every session reads.
     $name = if ($head -eq 'design' -or $head -eq 'decisioni') { "usage-$head.txt" } else { 'usage.txt' }
     $f = Join-Path $PSScriptRoot $name
-    if (Has $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami | registro | design proponi' }
+    if (Has $f) { ReadShared $f } else { Write-Output 'uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami | registro | design proponi' }
     exit 0
   }
-  'status' { $f = Join-Path $PSScriptRoot 'requests.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessuna richiesta in corso' }; exit 0 }
+  'status' { $f = Join-Path $PSScriptRoot 'requests.txt'; if (Test-Path $f) { ReadShared $f } else { Write-Output 'nessuna richiesta in corso' }; exit 0 }
   'whoami' { Write-Output $env:ADE_PANE_ID; exit 0 }
   'inbox' {
     # Prints the long messages left for this session, oldest first, and moves each to handled/: that move tells ADE it was read.
@@ -1010,7 +1028,7 @@ switch ($cmd) {
     exit 0
   }
   'who-owns' { if (-not $head) { Usage }; PostAndPrint ([ordered]@{ kind = 'whoowns'; text = (@($pos) -join ' ') }) }
-  'stats' { $f = Join-Path $PSScriptRoot 'stats.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessun dato di consumo ancora' }; exit 0 }
+  'stats' { $f = Join-Path $PSScriptRoot 'stats.txt'; if (Test-Path $f) { ReadShared $f } else { Write-Output 'nessun dato di consumo ancora' }; exit 0 }
   'kv' {
     $op = $head
     switch ($op) {
