@@ -20,8 +20,11 @@
 
 import type { Message } from "./mailbox"
 
-/** Whether a signal of the native side runs a round. */
-export const pulseRuns = (mailWaiting: boolean, _hidden: boolean): boolean => mailWaiting
+/**
+ * Whether a signal of the native side runs a round. Mail in the outbox always does. The pulse a second does on a hidden
+ * page, minimised or covered, whose timers Chromium slows to one a minute; a visible page has its 700 ms timer.
+ */
+export const pulseRuns = (mailWaiting: boolean, hidden: boolean): boolean => mailWaiting || hidden
 
 /** A step that only touches ADE's own state and one file. */
 export const MAIL_QUICK_MS = 30_000

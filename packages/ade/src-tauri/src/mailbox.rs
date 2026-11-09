@@ -30,7 +30,6 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant, SystemTime};
 
 use serde::Serialize;
@@ -152,29 +151,21 @@ const WATCH_EVERY: Duration = Duration::from_millis(200);
 /// The least time between two signals, unless new mail has just appeared.
 const SIGNAL_GAP: Duration = Duration::from_secs(1);
 
-/// Whether WebView2 was told the window is off screen (`follow_window_visibility`).
-static PAGE_HIDDEN: AtomicBool = AtomicBool::new(false);
-
-#[cfg(windows)]
-pub fn set_page_hidden(hidden: bool) {
-    PAGE_HIDDEN.store(hidden, Ordering::Relaxed);
-}
-
 fn outbox_has_mail(outbox: &Path) -> bool {
     fs::read_dir(outbox).is_ok_and(|mut entries| {
         entries.any(|entry| entry.is_ok_and(|entry| entry.path().extension().is_some_and(|ext| ext == "json")))
     })
 }
 
-/// Whether to signal the page now, and with what: `true` for mail in the outbox, `false` for a hidden page's pulse.
+/// Whether to signal the page now, and with what: `true` for mail in the outbox, `false` for the pulse a second.
+///
+/// The pulse goes out whatever the window looks like, and the page drops it while it is visible (`pulseRuns`). Only the
+/// page can tell a window that another one covers: it was left on a timer Chromium had slowed to one a minute.
 fn pending_signal(mail: bool, mail_before: bool, since_last: Duration) -> Option<bool> {
     if mail && (!mail_before || since_last >= SIGNAL_GAP) {
         return Some(true);
     }
-    if PAGE_HIDDEN.load(Ordering::Relaxed) && since_last >= SIGNAL_GAP {
-        return Some(false);
-    }
-    None
+    (since_last >= SIGNAL_GAP).then_some(false)
 }
 
 /// Tells the page when to run its mail round, from a thread no page throttling can reach.

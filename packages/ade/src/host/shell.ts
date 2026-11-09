@@ -171,7 +171,7 @@ export interface Host {
   mailboxTake?: () => Promise<{ id: string; body: string }[]>
   /**
    * The native side's signal to run a mail round: `true` when mail is in the outbox, `false` about once a second
-   * while the window is hidden. Events reach a hidden page at once; its timers do not (`watch_outbox` in `mailbox.rs`).
+   * whatever the window looks like. Events reach a hidden page at once; its timers do not (`watch_outbox` in `mailbox.rs`).
    */
   onMailboxPending?: (listener: (mailWaiting: boolean) => void) => Promise<() => void>
   /** Answers the `ade-msg send` that is waiting on message `id`. */

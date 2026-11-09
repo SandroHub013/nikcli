@@ -509,6 +509,7 @@ import {
   clientStoppedReading,
   createMailLanes,
   createMailRound,
+  pulseRuns,
   dropFrom,
   hangNotice,
   lockCameTooLate,
@@ -6213,8 +6214,9 @@ export function Workbench() {
      * A page timer alone cannot keep that pace: hidden for more than 5 minutes,
      * Chromium wakes a chained timer once a minute, and every `ade-msg kv` times
      * out at 10 s. So the native side signals too, when mail reaches the outbox
-     * and about once a second while the window is hidden (`watch_outbox` in
-     * `mailbox.rs`). This timer stays as the fallback.
+     * and about once a second (`watch_outbox` in `mailbox.rs`). Only here is it
+     * known whether another window covers this one: a visible page drops the
+     * pulse (`pulseRuns`). This timer stays as the fallback.
      */
     onCleanup(every(700, () => mailRound(false), { whenHidden: 700 }))
     let stopMailSignal: (() => void) | undefined
@@ -6224,7 +6226,11 @@ export function Workbench() {
       stopMailSignal?.()
     })
     void getHost()
-      .then((host) => host?.onMailboxPending?.(mailRound))
+      .then((host) =>
+        host?.onMailboxPending?.((waiting) => {
+          if (pulseRuns(waiting, pageHidden())) mailRound(waiting)
+        }),
+      )
       .then((stop) => {
         if (mailSignalGone) stop?.()
         else stopMailSignal = stop

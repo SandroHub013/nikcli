@@ -2512,8 +2512,6 @@ fn follow_window_visibility(window: &tauri::WebviewWindow) {
         if applied.swap(state, Ordering::SeqCst) == state {
             return;
         }
-        // Off screen the page's timers are throttled, so the mail takes its pace from the native side.
-        mailbox::set_page_hidden(!on_screen);
         let result = target.with_webview(move |webview| unsafe {
             if let Err(error) = webview.controller().SetIsVisible(on_screen) {
                 eprintln!("ADE: visibilità della webview non cambiata: {error}");
