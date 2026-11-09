@@ -25,6 +25,8 @@ const USER_BY = "utente"
 export const ANSWER_LEDGER_KEY = "ade.register.answers"
 /** The newest answers kept; an older one shows as reported. */
 export const ANSWER_LEDGER_CAP = 2000
+/** The most the record weighs, in characters. An entry holds a whole answer, and the record shares its storage with the mail. */
+export const ANSWER_LEDGER_BUDGET = 500_000
 
 /** What the record asks of a register event. */
 export interface LedgerEvent {
@@ -68,7 +70,11 @@ export interface AnswerLedger {
   ): E[]
 }
 
-export function answerLedger(store: () => AnswerStore | undefined, cap = ANSWER_LEDGER_CAP): AnswerLedger {
+export function answerLedger(
+  store: () => AnswerStore | undefined,
+  cap = ANSWER_LEDGER_CAP,
+  budget = ANSWER_LEDGER_BUDGET,
+): AnswerLedger {
   const read = (): string[] => {
     try {
       const parsed: unknown = JSON.parse(store()?.getItem(ANSWER_LEDGER_KEY) ?? "[]")
@@ -80,7 +86,11 @@ export function answerLedger(store: () => AnswerStore | undefined, cap = ANSWER_
 
   const write = (entries: string[]) => {
     try {
-      store()?.setItem(ANSWER_LEDGER_KEY, JSON.stringify(entries.slice(-cap)))
+      const kept = entries.slice(-cap)
+      let size = JSON.stringify(kept).length
+      let first = 0
+      while (size > budget && first < kept.length - 1) size -= JSON.stringify(kept[first++]).length + 1
+      store()?.setItem(ANSWER_LEDGER_KEY, JSON.stringify(kept.slice(first)))
     } catch {
       // No storage: the answer shows as reported by the register, which loses nothing.
     }

@@ -165,6 +165,24 @@ describe("the answers ADE wrote (SEC-3)", () => {
     expect(none.vouch(DECISIONS, [{ type: "risposta", k: "D1", at: AT, by: "utente" }])[0]!.by).toBe(UNVOUCHED_BY)
   })
 
+  test("the record keeps to a budget of characters, the oldest going first: it shares its storage with the mail", () => {
+    const store = memory()
+    const ledger = answerLedger(() => store, 2000, 1_000)
+    const long = (k: string) => ({ type: "risposta", k, at: AT, words: "x".repeat(300) })
+    for (const k of ["D1", "D2", "D3", "D4", "D5"]) ledger.remember(DECISIONS, long(k))
+    expect(store.items.get(ANSWER_LEDGER_KEY)!.length).toBeLessThanOrEqual(1_000)
+    expect(ledger.has(DECISIONS, long("D5"))).toBe(true)
+    expect(ledger.has(DECISIONS, long("D1"))).toBe(false)
+  })
+
+  test("the newest answer stays, even alone over the budget", () => {
+    const store = memory()
+    const ledger = answerLedger(() => store, 2000, 100)
+    const long = { type: "risposta", k: "D1", at: AT, words: "x".repeat(300) }
+    ledger.remember(DECISIONS, long)
+    expect(ledger.has(DECISIONS, long)).toBe(true)
+  })
+
   test("storage that refuses the write does not stop the answer", () => {
     const refusing: AnswerStore = {
       getItem: () => null,
