@@ -333,7 +333,8 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
       if (!isCurrent()) return
 
       if (res.ok) {
-        const html = await res.text()
+        // Only the status and the headers are looked at: the body is let go, not read (it can be large, or never end).
+        void res.body?.cancel().catch(() => undefined)
         const blocked = framingBlocked((name) => res.headers.get(name))
         // A bridge that announced itself meanwhile has already settled it.
         if (!isCurrent() || fidelity() !== "pending") return
