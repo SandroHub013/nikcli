@@ -286,22 +286,27 @@ export function createPushToTalkHandler(engine: PushToTalkTarget, options: PushT
     return false
   }
 
+  /**
+   * Whether a press is held, or waiting for the earlier release to settle (MOD-7). The window's key-up and blur ask this,
+   * not `isPressed`, or a key let go during the wait never reaches the handler.
+   */
+  const holds = (): boolean => isPressed || waiting !== undefined
+
   const shouldReleaseKey = (key?: string, code?: string): boolean => {
-    if (!isPressed) return false
-    const keyMatches = key !== undefined && endsPress(key, activeChord)
-    const codeMatches = code !== undefined && endsPress(code, activeChord)
+    if (!holds()) return false
+    // The chord that is held, or the one that waits. No key at all (the global hotkey's release, a blur) ends either.
+    const chord = isPressed ? activeChord : waiting
+    const keyMatches = key !== undefined && endsPress(key, chord)
+    const codeMatches = code !== undefined && endsPress(code, chord)
     return (key === undefined && code === undefined) || keyMatches || codeMatches
   }
 
   const onKeyUp = async (key?: string, code?: string): Promise<boolean> => {
-    if (!isPressed && waiting) {
-      const keyMatches = key !== undefined && endsPress(key, waiting)
-      const codeMatches = code !== undefined && endsPress(code, waiting)
-      if (!keyMatches && !codeMatches) return false
+    if (!shouldReleaseKey(key, code)) return false
+    if (!isPressed) {
       waiting = undefined
       return true
     }
-    if (!shouldReleaseKey(key, code)) return false
     return release()
   }
 
@@ -312,6 +317,7 @@ export function createPushToTalkHandler(engine: PushToTalkTarget, options: PushT
 
   return {
     isPressed: () => isPressed,
+    holds,
     activeChord: () => activeChord,
     shouldReleaseKey,
     onKeyDown,

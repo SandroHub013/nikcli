@@ -576,3 +576,82 @@ describe("a press that waits for a release still hears its key go up (MOD-7)", (
     expect(timers.filter((timer) => !timer.cleared)).toHaveLength(1)
   })
 })
+
+/*
+ * Review of ade/moduli-piccoli, B1: the fix was only reached by a direct `onKeyUp("k")`. The app asks `holds()` before
+ * it calls the handler (the window's key-up and blur), and the global hotkey's release calls `onKeyUp()` with no key at
+ * all: during the wait the first was false and the second matched nothing, so the key-up was dropped as before.
+ */
+describe("the app's own paths reach a waiting press (MOD-7, review B1)", () => {
+  function waitingPress() {
+    let finish: () => void = () => {}
+    const calls: string[] = []
+    const engine: PushToTalkTarget = {
+      pressToTalk: async () => {
+        calls.push("press")
+      },
+      releaseToTalk: () => {
+        calls.push("release")
+        return new Promise<void>((resolve) => {
+          finish = resolve
+        })
+      },
+    }
+    const handler = createPushToTalkHandler(engine)
+    const chord = parseChord("mod+shift+k", "other")
+    return { handler, chord, calls, settle: () => finish() }
+  }
+
+  test("holds() is true while a press waits, and false once nothing is held or waiting", async () => {
+    const it = waitingPress()
+    expect(it.handler.holds()).toBe(false)
+    await it.handler.onKeyDown(it.chord, {}, "agent")
+    expect(it.handler.holds()).toBe(true)
+    const releasing = it.handler.onKeyUp("k")
+    expect(it.handler.holds()).toBe(false)
+    const again = it.handler.onKeyDown(it.chord, {}, "agent")
+    expect(it.handler.holds()).toBe(true) // waiting
+    await it.handler.onKeyUp("k")
+    expect(it.handler.holds()).toBe(false)
+    it.settle()
+    await releasing
+    await again
+  })
+
+  test("the window asks shouldReleaseKey during the wait, and the chord's key answers yes", async () => {
+    const it = waitingPress()
+    await it.handler.onKeyDown(it.chord, {}, "agent")
+    const releasing = it.handler.onKeyUp("k")
+    const again = it.handler.onKeyDown(it.chord, {}, "agent")
+    expect(it.handler.shouldReleaseKey("k", "KeyK")).toBe(true)
+    expect(it.handler.shouldReleaseKey("a", "KeyA")).toBe(false)
+    await it.handler.onKeyUp("k", "KeyK")
+    it.settle()
+    await releasing
+    expect(await again).toBe(false)
+  })
+
+  test("the global hotkey's release, with no key, cancels the waiting press", async () => {
+    const it = waitingPress()
+    await it.handler.onKeyDown(it.chord, {}, "agent")
+    const releasing = it.handler.onKeyUp("k")
+    const again = it.handler.onKeyDown(it.chord, {}, "agent")
+    expect(await it.handler.onKeyUp()).toBe(true)
+    it.settle()
+    await releasing
+    expect(await again).toBe(false)
+    expect(it.calls.filter((call) => call === "press")).toHaveLength(1)
+    expect(it.handler.isPressed()).toBe(false)
+  })
+
+  test("the workbench's key-up and blur ask holds(), not isPressed()", () => {
+    // The workbench cannot be loaded under bun: read from the source. Booleans, so a failure does not print the file.
+    const source = require("node:fs").readFileSync(
+      require("node:path").join(import.meta.dir, "..", "surface", "workbench.tsx"),
+      "utf8",
+    ) as string
+    expect(source.includes("if (pttHandler.holds() && pttHandler.shouldReleaseKey(e.key, e.code))")).toBe(true)
+    expect(source.includes("      if (pttHandler.holds()) {\n        void pttHandler.onBlur()")).toBe(true)
+    expect(source.includes("pttHandler.isPressed() && pttHandler.shouldReleaseKey")).toBe(false)
+  })
+})
