@@ -381,6 +381,7 @@ import {
   timeNoteFor,
   lineIsTaken,
   formatUpdate,
+  keptBody,
   activityOrFormer,
   keptActivity,
   parseOpenRequests,
@@ -4658,7 +4659,7 @@ export function Workbench() {
         handoff.acked = true
         settleHandoffs(Date.now())
       }
-      if (!(await settle(host, message.ref, message.text))) {
+      if (!(await settle(host, message.ref, keptBody(message.text)))) {
         await answer(
           `errore: risposta non scritta, la richiesta ${message.ref} resta aperta: riprova ade-msg reply ${message.ref}`,
         )

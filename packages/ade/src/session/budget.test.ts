@@ -72,7 +72,7 @@ describe("the budget on a request (D73)", () => {
     const request = { id: "171-ab", at: 0, budget: 1200 }
     expect(formatTimeNote(request, 600_000, 1)).toBe("[Tempo] 171-ab: elapsed 600s / 1200s")
     expect(formatTimeNote(request, 1_200_000, 2)).toBe(
-      '[Tempo] 171-ab: elapsed 1200s / 1200s, budget finito: chiudi con ade-msg reply 171-ab, o chiedi tempo con ade-msg update 171-ab decisione "<motivo>"',
+      "[Tempo] 171-ab: elapsed 1200s / 1200s, budget finito: chiudi con ade-msg reply 171-ab, o chiedi tempo con ade-msg update 171-ab decisione '<motivo>'",
     )
   })
 

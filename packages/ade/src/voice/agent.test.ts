@@ -12,6 +12,8 @@ import {
   VOICE_AGENT_DISABLED_TOOLS,
   VOICE_AGENT_FAST,
   VOICE_AGENT_INSTRUCTIONS,
+  VOICE_AGENT_INSTRUCTIONS_EN,
+  VOICE_AGENT_INSTRUCTIONS_IT,
   VOICE_AGENT_TIMEOUT_MS,
   VOICE_PLAN_FIRST_TOKEN_MS,
   VOICE_PLAN_IDLE_MS,
@@ -489,6 +491,17 @@ describe("who answers", () => {
     expect(VOICE_AGENT_INSTRUCTIONS).toContain("Sei ragù")
     expect(VOICE_AGENT_INSTRUCTIONS).toContain("dai del tu")
     expect(VOICE_AGENT_INSTRUCTIONS).toContain("prima una frase brevissima")
+  })
+
+  /** SEC2-1: a double-quoted sentence loses `$0.16` before ade-msg reads it, because sh runs `$0` first. */
+  test("the ade-msg lines quote text with single quotes, in both languages", () => {
+    for (const instructions of [VOICE_AGENT_INSTRUCTIONS_IT, VOICE_AGENT_INSTRUCTIONS_EN]) {
+      expect(instructions).not.toMatch(/ade-msg[^\n]*"/)
+    }
+    expect(VOICE_AGENT_INSTRUCTIONS_IT).toContain("ade-msg ask SESSIONE 'RICHIESTA'")
+    expect(VOICE_AGENT_INSTRUCTIONS_EN).toContain("ade-msg ask SESSION 'REQUEST'")
+    expect(VOICE_AGENT_INSTRUCTIONS_IT).toContain("apici singoli")
+    expect(VOICE_AGENT_INSTRUCTIONS_EN).toContain("single quotes")
   })
 })
 
