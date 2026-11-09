@@ -6,6 +6,8 @@ import { createLineWriter } from "../surface/pane-lines"
 import { codeOf } from "../test-support/source-text"
 import { typeThenEnter } from "./enter"
 import { formatHeldByMenu, formatHeldMenuReceipt, formatHeldSilentReceipt, formatSilentStart } from "./mailbox"
+import { en as enText } from "../i18n/en"
+import { it as itText } from "../i18n/it"
 import { decideOpening, OPENING_TIMEOUT_MS } from "./opening"
 import { detectPermission, followPermission, type PermissionRequest } from "./permission"
 import { createMenuHold, createUnparsed, menuNames, screenQuestion, statusFromScreen } from "./screen-question"
@@ -820,8 +822,25 @@ describe("lint: the workbench's wiring", () => {
   test("lint: the note about a question goes when the question has gone, and a later one tells the pane again, but not the sender", () => {
     const poll = between("if (starting.typesTask) {", "openingPolls.add(poll)")
     expect(poll).toContain(codeOf("} else if (menuTold && !trustHandled && drawn) {"))
-    expect(poll).toContain(codeOf('menuTold = false dropPaneNote(paneId, t("task.heldByMenu"))'))
+    expect(poll).toContain(codeOf("menuTold = false dropPaneNote(paneId, menuNote)"))
     expect(poll).toContain(codeOf("if (request && !senderHeard) { senderHeard = true"))
+  })
+
+  test("lint: over a dialog of ragu's the note says how to close it, and follows what is on the screen", () => {
+    expect(source).toContain(codeOf('const note = t(dialogUp(paneId) ? "note.mailHeldByDialog" : "note.mailHeldByMenu")'))
+    const poll = between("if (starting.typesTask) {", "openingPolls.add(poll)")
+    expect(poll).toContain(codeOf('const note = t(dialogUp(paneId) ? "task.heldByDialog" : "task.heldByMenu")'))
+    expect(poll).toContain(codeOf("if (menuTold && !trustHandled && drawn && note !== menuNote) { dropPaneNote(paneId, menuNote) tellPane(paneId, note) menuNote = note }"))
+  })
+
+  test.each([
+    ["it", itText],
+    ["en", enText],
+  ])("the notes over a dialog name Esc, because an Enter there picks what is highlighted: %s", (_language, text) => {
+    for (const key of ["note.mailHeldByDialog", "task.heldByDialog"] as const) {
+      expect(text[key]).toContain("Esc")
+      expect(text[key]).not.toMatch(/Invio|Enter/)
+    }
   })
 
   test("lint: the first task asks the screen on every pass, and says what it waits for", () => {
@@ -855,7 +874,7 @@ describe("lint: the workbench's wiring", () => {
     // Before the question is read: a menu drawn first has its own note.
     expect(poll.indexOf(codeOf("if (silenceTold && openingBytes.firstByteAt"))).toBeLessThan(poll.indexOf(codeOf('const asked = box !== "ready" && questionOpen(paneId)')))
     const stopped = poll.slice(poll.indexOf(codeOf("if (running.get(paneId) !== session) {")), poll.indexOf(codeOf("const drawn = screenDrawn")))
-    expect(stopped).toContain(codeOf('if (menuTold) dropPaneNote(paneId, t("task.heldByMenu"))'))
+    expect(stopped).toContain(codeOf("if (menuTold) dropPaneNote(paneId, menuNote)"))
     expect(stopped).toContain(codeOf('if (silenceTold) dropPaneNote(paneId, t("task.notSent"))'))
   })
 
@@ -885,7 +904,7 @@ describe("lint: the workbench's wiring", () => {
   test("lint: a remote session forgets the hold and the note, reads the first text, and says a step held for long", () => {
     const remote = between("const startRemoteProcess = async (", "openingPolls.add(poll)")
     expect(remote).toContain(codeOf("menuHold.forget(paneId)"))
-    expect(remote).toContain(codeOf('if (heldByMenuNoted.delete(paneId)) dropPaneNote(paneId, t("note.mailHeldByMenu"))'))
+    expect(remote).toContain(codeOf("dropHeldByMenu(paneId)"))
     expect(remote).toContain(codeOf("if (drawsText(chunk)) textAt = Date.now()"))
     expect(remote).toContain(codeOf("Date.now() - stepStart >= REMOTE_STEP_NOTE_MS"))
     expect(remote).toContain(codeOf('t("task.stepHeld", String(steps[index]))'))
@@ -895,7 +914,7 @@ describe("lint: the workbench's wiring", () => {
 
   test("lint: a restart forgets the note of the process before it", () => {
     const local = between("const startProcess = async (", "const startRemoteProcess = async (")
-    expect(local).toContain(codeOf('if (heldByMenuNoted.delete(paneId)) dropPaneNote(paneId, t("note.mailHeldByMenu"))'))
-    expect(local).toContain(codeOf('dropPaneNote(paneId, t("task.heldByMenu")) dropPaneNote(paneId, t("task.notSent"))'))
+    expect(local).toContain(codeOf("dropHeldByMenu(paneId)"))
+    expect(local).toContain(codeOf('dropPaneNote(paneId, t("task.heldByMenu")) dropPaneNote(paneId, t("task.heldByDialog")) dropPaneNote(paneId, t("task.notSent"))'))
   })
 })

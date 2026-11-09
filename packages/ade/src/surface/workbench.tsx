@@ -2881,12 +2881,20 @@ export function Workbench() {
   const heldStates = new Map<string, string>()
   /** Panes told, in their own terminal, that a message waits for the line typed in them. */
   const heldByLineNoted = new Set<string>()
-  /** Panes told, in their own terminal, that a message waits for the menu on their screen. */
-  const heldByMenuNoted = new Set<string>()
+  /** Panes told, in their own terminal, that a message waits for the menu on their screen, and in what words. */
+  const heldByMenuNoted = new Map<string, string>()
   const noteHeldByMenu = (paneId: string) => {
     if (heldByMenuNoted.has(paneId)) return
-    heldByMenuNoted.add(paneId)
-    tellPane(paneId, t("note.mailHeldByMenu"))
+    // An Enter on a dialog of ragu's picks what is highlighted: there the way past it is another.
+    const note = t(dialogUp(paneId) ? "note.mailHeldByDialog" : "note.mailHeldByMenu")
+    heldByMenuNoted.set(paneId, note)
+    tellPane(paneId, note)
+  }
+  const dropHeldByMenu = (paneId: string) => {
+    const note = heldByMenuNoted.get(paneId)
+    if (note === undefined) return
+    heldByMenuNoted.delete(paneId)
+    dropPaneNote(paneId, note)
   }
   /*
    * Panes whose process has drawn nothing yet, and since when. What is typed now is read by whatever it opens on, with no
@@ -3748,10 +3756,7 @@ export function Workbench() {
     if (waiting) screenWaiting.add(paneId)
     else screenWaiting.delete(paneId)
     // Answered: the note goes at once, and the mail on the next round.
-    if (heldByMenuNoted.has(paneId) && !questionOpen(paneId)) {
-      heldByMenuNoted.delete(paneId)
-      dropPaneNote(paneId, t("note.mailHeldByMenu"))
-    }
+    if (heldByMenuNoted.has(paneId) && !questionOpen(paneId)) dropHeldByMenu(paneId)
     if (next === "waiting") {
       // A new question: the key that answered the last one is not this one's answer (re-review B7).
       records.typed.update(paneId, questionOpened)
@@ -4335,7 +4340,7 @@ export function Workbench() {
       } else if ((await freeNow(host, item.paneId, !item.notice)) && !linesInFlight.has(item.paneId)) {
         if (!dropFrom(heldLines, item)) continue
         if (item.suspended) saveSuspendedMail()
-        if (heldByMenuNoted.delete(item.paneId)) dropPaneNote(item.paneId, t("note.mailHeldByMenu"))
+        dropHeldByMenu(item.paneId)
         // Not typed while the session is still there (a prompt opened): back among the held lines.
         void (
           item.inbox
@@ -5769,7 +5774,7 @@ export function Workbench() {
       // The line has gone and the mail is on its way: the note about it leaves `notices` too (re-review N12).
       dropPaneNote(target.pane.id, t("note.mailHeldByLine"))
     }
-    if (heldByMenuNoted.delete(target.pane.id)) dropPaneNote(target.pane.id, t("note.mailHeldByMenu"))
+    dropHeldByMenu(target.pane.id)
     if (heldBySilenceNoted.delete(target.pane.id)) dropPaneNote(target.pane.id, t("note.mailHeldBySilence"))
 
     const targetDepth = depthOf(target.pane.id, parentOf)
@@ -9717,8 +9722,9 @@ export function Workbench() {
       newProcessOnPane(paneId)
       undrawnSince.set(paneId, Date.now())
       if (heldBySilenceNoted.delete(paneId)) dropPaneNote(paneId, t("note.mailHeldBySilence"))
-      if (heldByMenuNoted.delete(paneId)) dropPaneNote(paneId, t("note.mailHeldByMenu"))
+      dropHeldByMenu(paneId)
       dropPaneNote(paneId, t("task.heldByMenu"))
+      dropPaneNote(paneId, t("task.heldByDialog"))
       dropPaneNote(paneId, t("task.notSent"))
       paneClasses.delete(paneId)
       // A conversation reopened is drawn again, requests and all: those were acted on.
@@ -9911,6 +9917,8 @@ export function Workbench() {
         // A menu in front of the task: said once, here and to whoever asked for the task. Its last moment on the screen
         // is where the wait for a drawn screen starts again: what comes after an answer is still being drawn.
         let menuTold = false
+        // The words the pane was given: a question and a dialog of ragu's are got past differently.
+        let menuNote = t("task.heldByMenu")
         // One line to the sender, however many questions the opening asks: each is a turn it pays for.
         let senderHeard = false
         let silenceTold = false
@@ -9930,7 +9938,7 @@ export function Workbench() {
           if (running.get(paneId) !== session) {
             stopOpeningPoll(poll)
             // The session they spoke of has gone.
-            if (menuTold) dropPaneNote(paneId, t("task.heldByMenu"))
+            if (menuTold) dropPaneNote(paneId, menuNote)
             if (silenceTold) dropPaneNote(paneId, t("task.notSent"))
             if (trustSeen) dropPaneNote(paneId, t("task.confirmTrust"))
             // Closed with its task: «No, exit» on a trust dialog, or anything else. Said, in the pane and to whoever asked.
@@ -9994,9 +10002,17 @@ export function Workbench() {
           if (boxRead && boxHolds && !asked && box !== "ready") noteMailHeld(paneId, request?.from)
           if (asked) {
             menuAt = Date.now()
+            const note = t(dialogUp(paneId) ? "task.heldByDialog" : "task.heldByMenu")
+            // The answer to the trust prompt can open the first-run wizard, with no pass in between that sees no question.
+            if (menuTold && !trustHandled && drawn && note !== menuNote) {
+              dropPaneNote(paneId, menuNote)
+              tellPane(paneId, note)
+              menuNote = note
+            }
             if (!menuTold && drawn) {
               menuTold = true
-              if (!trustHandled) tellPane(paneId, t("task.heldByMenu"))
+              menuNote = note
+              if (!trustHandled) tellPane(paneId, note)
               if (request && !senderHeard) {
                 senderHeard = true
                 const reader = mailPanes().find((pane) => pane.id === paneId)
@@ -10006,7 +10022,7 @@ export function Workbench() {
           } else if (menuTold && !trustHandled && drawn) {
             // Answered, and the task may wait on: the note goes at once, as the mail's does.
             menuTold = false
-            dropPaneNote(paneId, t("task.heldByMenu"))
+            dropPaneNote(paneId, menuNote)
           }
           const decision = decideOpening({
             ...clockAfterMenu({ startedAt, ...openingBytes }, menuAt),
@@ -10037,7 +10053,7 @@ export function Workbench() {
           }
 
           stopOpeningPoll(poll)
-          if (menuTold) dropPaneNote(paneId, t("task.heldByMenu"))
+          if (menuTold) dropPaneNote(paneId, menuNote)
           if (trustSeen) dropPaneNote(paneId, t("task.confirmTrust"))
           setWb((w) =>
             updatePane(w, paneId, {
@@ -10132,7 +10148,7 @@ export function Workbench() {
       newProcessOnPane(paneId)
       undrawnSince.set(paneId, Date.now())
       if (heldBySilenceNoted.delete(paneId)) dropPaneNote(paneId, t("note.mailHeldBySilence"))
-      if (heldByMenuNoted.delete(paneId)) dropPaneNote(paneId, t("note.mailHeldByMenu"))
+      dropHeldByMenu(paneId)
       // Born at the pane's size, not the host's 120x30 (S77); undefined for a pane not yet fitted.
       const bornAt = ptySize(paneId)
       const paneToken = await freshPaneToken(host, paneId)
