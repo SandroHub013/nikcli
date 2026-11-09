@@ -133,8 +133,7 @@ import {
   mintMarks,
   MintLedger,
   lastHereBesideMints,
-  planRestore,
-  restoreClaims,
+  restoreByAgent,
   claimedByRestore,
   openedConversation,
   LIST_COLS,
@@ -503,7 +502,8 @@ import {
 } from "../session/composer"
 import { COMPOSER_LOG_KEY, composerLogEntry, disagreement, logWith, type ComposerLogReason } from "../session/composer-log"
 import { blindNow, createDeliverNow, turnKnown, type BlindHold, type DeliverNowChange } from "../session/deliver-now"
-import { parseQueue, queueToSave, waitsForRestore } from "../session/mail-queue"
+import { parseQueue, queueToSave, waitsForRestore, waitsForStart } from "../session/mail-queue"
+import { expiredNotices, gatherNotices, joinNotices } from "../session/held-notices"
 import {
   clientStoppedReading,
   createMailLanes,
@@ -2602,6 +2602,8 @@ export function Workbench() {
   onCleanup(watchLongTasks((text) => console.error(text)))
   // The panes being started back (`reopen`, the restore): recorded before their awaits, not after (ALTO 3).
   const reopening = oneAtATime()
+  /** The panes the boot means to start and has not finished starting: mail for them waits (`waitsForStart`). */
+  const restorePlanned = new Set<string>()
   /** Why the host refused each pane's last start (`onRefused`), so `ade-msg spawn` can tell its sender. Cleared when a start begins. */
   const startRefusals = new Map<string, string>()
   const [runningTick, setRunningTick] = createSignal(0)
@@ -3071,6 +3073,8 @@ export function Workbench() {
     told?: boolean
     /** A notice from ADE, and no message of anyone's: «Consegna ora» is not for it. */
     notice?: true
+    /** When a notice was written: it expires (`session/held-notices.ts`). */
+    at?: number
     full?: string
     suspended?: true
   }[] = []
@@ -3438,7 +3442,7 @@ export function Workbench() {
   const tellSender = (from: string | undefined, text: string) => {
     const target = noticeTarget(from, (paneId) => running.has(paneId))
     if (target === "window") report(text, "info")
-    else if (target) heldLines.push({ paneId: target.pane, text, notice: true })
+    else if (target) heldLines.push({ paneId: target.pane, text, notice: true, at: Date.now() })
   }
 
   /** Rings again for unread inbox messages, and tells the sender of one never read. */
@@ -4354,6 +4358,11 @@ export function Workbench() {
       }
     }
 
+    for (const [paneId, notices] of expiredNotices(heldLines, Date.now(), (paneId) => running.has(paneId) && blindHold(paneId).blind)) {
+      for (const notice of notices) dropFrom(heldLines, notice)
+      tellPane(paneId, t("note.noticesExpired", notices.length))
+    }
+
     for (const item of [...heldLines]) {
       const session = running.get(item.paneId)
       if (!session) {
@@ -4369,6 +4378,17 @@ export function Workbench() {
         tellPane(item.paneId, t("note.mailNotTyped", clippedForNote(item.text)))
         // Read again after the await: a lane may have started a line for this pane in the meantime.
       } else if ((await freeNow(host, item.paneId, !item.notice)) && !linesInFlight.has(item.paneId)) {
+        if (item.notice) {
+          // All that ADE has to say to this pane, in one turn. A later notice of the snapshot finds the line going, and waits.
+          const notices = gatherNotices(heldLines, item.paneId)
+          if (notices.length === 0) continue
+          for (const notice of notices) dropFrom(heldLines, notice)
+          dropHeldByMenu(item.paneId)
+          void typeLineOutcome(session, joinNotices(notices.map((notice) => notice.text)), { mail: false }).then((outcome) => {
+            if (deliveryResult(outcome, running.get(item.paneId) === session) === "held") heldLines.push(...notices)
+          })
+          continue
+        }
         if (!dropFrom(heldLines, item)) continue
         if (item.suspended) saveSuspendedMail()
         dropHeldByMenu(item.paneId)
@@ -4387,7 +4407,7 @@ export function Workbench() {
                 }
                 return result === "held"
               })
-            : typeLineOutcome(session, item.text, { mail: !item.notice }).then(
+            : typeLineOutcome(session, item.text, { mail: true }).then(
                 (outcome) => deliveryResult(outcome, running.get(item.paneId) === session) === "held",
               )
         ).then((again) => {
@@ -4411,7 +4431,7 @@ export function Workbench() {
           if (running.has(item.inbox.from)) {
             const reader = mailPanes().find((pane) => pane.id === item.paneId)
             const text = byMenu ? formatHeldByMenu(item.inbox, reader) : formatHeld(item.inbox, reader)
-            heldLines.push({ paneId: item.inbox.from, text, told: true, notice: true })
+            heldLines.push({ paneId: item.inbox.from, text, told: true, notice: true, at: Date.now() })
           }
         }
       }
@@ -4472,6 +4492,7 @@ export function Workbench() {
               now,
             ),
             notice: true,
+            at: now,
           })
         }
         tellPane(request.to, t("pane.maybeStuck", request.id))
@@ -5628,7 +5649,17 @@ export function Workbench() {
     if (!session && waitsForRestore({ replayed: replayedMail.has(id), paneExists: paneExists(target.pane.id), sinceBoot: Date.now() - loadedAt }))
       return false
     // Between the old process and the new one of a relaunch: not a closed pane, so what was held for it waits (review B4).
-    if (!session && running.relaunching(target.pane.id)) {
+    if (
+      !session &&
+      (running.relaunching(target.pane.id) ||
+        waitsForStart({
+          paneExists: paneExists(target.pane.id),
+          reopening: reopening.busy(target.pane.id),
+          sinceStart: Date.now() - (reopening.startedAt(target.pane.id) ?? Date.now()),
+          plannedAtBoot: restorePlanned.has(target.pane.id),
+          sinceBoot: Date.now() - loadedAt,
+        }))
+    ) {
       // Fresh mail too: the sender hears now, and `held` makes the branch below tell the truth if the start then fails (re-review B8).
       if (!held.has(id)) {
         held.add(id)
@@ -7418,6 +7449,8 @@ export function Workbench() {
       }
       restored = state
       setWb(fromWorkspaceState(state))
+      for (const pane of sessionsToResume(state)) restorePlanned.add(pane.id)
+      for (const pane of liveToReopen(wb().panes, restorePlanned, state)) restorePlanned.add(pane.id)
       // The suspended sessions' queues, now that their panes are back (P1-C6).
       // Also for a pane resumed just before ADE closed: its mail waits for the session to start again.
       heldLines.push(...parseSuspendedMail(readStored(SUSPENDED_MAIL_KEY)).filter((line) => paneExists(line.paneId)))
@@ -7501,10 +7534,14 @@ export function Workbench() {
          * an id nobody recorded — on every restart, forever. The agent runs in
          * `p.root` (see `startProcess`), so that is where its transcript is.
          */
-        const sessions = await Promise.all(
-          sessionsToResume(restored).map(async (saved) => {
+        // Per agent, and not awaited: no session waits for another agent's check, and the window does not wait for any (WB-8).
+        const toResume = sessionsToResume(restored)
+        const byAgent = restoreByAgent(
+          toResume,
+          (saved) => saved.agent,
+          async (saved) => {
             // The conversation the pane last switched to, when ADE closed before reading it.
-            const reported = await adoptLastReport(saved)
+            const reported = await adoptLastReport(saved).catch(() => undefined)
             const pane = reported ? { ...saved, resumeId: reported } : saved
             // The pane's own folder first: with the last project gone there is no open project, and each pane still
             // restarts in its own (`startProcess` finds its project and says when its folder is missing).
@@ -7513,22 +7550,28 @@ export function Workbench() {
               agentId: pane.agent,
               cwd: folder,
               ...(pane.resumeId !== undefined ? { resumeId: pane.resumeId } : {}),
-              missing: await conversationMissing(pane.agent, pane.resumeId, folder),
+              missing: await conversationMissing(pane.agent, pane.resumeId, folder).catch(() => false),
               pane,
             }
-          }),
+          },
+          ({ session, plan, sharedWith }) => {
+            // The panes are on the screen while their checks run: the user may have closed this one, or pressed «Riprendi».
+            if (!paneExists(session.pane.id) || running.has(session.pane.id) || reopening.busy(session.pane.id)) {
+              restorePlanned.delete(session.pane.id)
+              return
+            }
+            if (sharedWith) {
+              // The conversation stays with the other pane: this one must not reopen it by its saved id.
+              setWb((w) => updatePane(w, session.pane.id, { resumeId: undefined }))
+              tellPane(session.pane.id, t("resume.shared", sharedWith.pane.title))
+            }
+            void reopening
+              .run(session.pane.id, () =>
+                startProcess(session.pane.id, session.pane.agent, session.pane.task ?? "", plan),
+              )
+              .finally(() => restorePlanned.delete(session.pane.id))
+          },
         )
-        const planned = planRestore(sessions)
-        for (const { session, plan, sharedWith } of planned) {
-          if (sharedWith) {
-            // The conversation stays with the other pane: this one must not reopen it by its saved id.
-            setWb((w) => updatePane(w, session.pane.id, { resumeId: undefined }))
-            tellPane(session.pane.id, t("resume.shared", sharedWith.pane.title))
-          }
-          void reopening.run(session.pane.id, () =>
-            startProcess(session.pane.id, session.pane.agent, session.pane.task ?? "", plan),
-          )
-        }
 
         /*
          * And the sessions that were alive but had nothing to resume (a terminal).
@@ -7539,12 +7582,15 @@ export function Workbench() {
          * item 12). `reopen` asks for the conversation by id when there is one,
          * and starts the agent fresh when there is not.
          */
-        // With the claims just handed out: a pane planned `here` has not reported its id yet.
-        const claims = restoreClaims(planned)
-        const plannedIds = new Set(sessions.map((session) => session.pane.id))
-        for (const pane of liveToReopen(wb().panes, plannedIds, restored)) void reopen(pane, undefined, claims)
-      }
-    }
+        // With its own agent's claims, once handed out: a pane planned `here` has not reported its id yet.
+        const plannedIds = new Set(toResume.map((saved) => saved.id))
+        for (const pane of liveToReopen(wb().panes, plannedIds, restored)) {
+          void (byAgent.get(pane.agent ?? pane.model ?? "") ?? Promise.resolve(new Set<string>()))
+            .then((claims) => (paneExists(pane.id) ? reopen(pane, undefined, claims) : undefined))
+            .finally(() => restorePlanned.delete(pane.id))
+        }
+      } else restorePlanned.clear()
+    } else restorePlanned.clear()
 
     /*
      * The splash stays up for a moment even when there was nothing to wait

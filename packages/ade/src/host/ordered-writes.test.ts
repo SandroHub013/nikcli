@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { orderedWrites } from "./ordered-writes"
+import { latestOnly, orderedWrites } from "./ordered-writes"
+import { codeOf } from "../test-support/source-text"
 
 /** A `send` whose calls stay open until the test answers them. */
 function held() {
@@ -81,5 +82,56 @@ describe("orderedWrites", () => {
     const shell = readFileSync(join(import.meta.dir, "shell.ts"), "utf8")
     expect(shell).toContain('orderedWrites((data) => invoke("pty_write", { id, data }))')
     expect(shell).not.toContain('void invoke("pty_write"')
+  })
+})
+
+describe("latestOnly (audit RS2-6)", () => {
+  const deferred = () => {
+    const calls: { value: string; done: () => void; fail: () => void }[] = []
+    const send = (value: string) =>
+      new Promise<void>((resolve, reject) => calls.push({ value, done: resolve, fail: () => reject(new Error("no")) }))
+    return { calls, send }
+  }
+  const settled = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+  test("three while one is in flight: the first, then only the newest", async () => {
+    const { calls, send } = deferred()
+    const resize = latestOnly(send)
+    resize("A")
+    resize("B")
+    resize("C")
+    expect(calls.map((call) => call.value)).toEqual(["A"])
+    calls[0]!.done()
+    await settled()
+    expect(calls.map((call) => call.value)).toEqual(["A", "C"])
+    calls[1]!.done()
+    await settled()
+    expect(calls).toHaveLength(2)
+  })
+
+  test("a refused one still lets the newest go", async () => {
+    const { calls, send } = deferred()
+    const resize = latestOnly(send)
+    resize("A")
+    resize("C")
+    calls[0]!.fail()
+    await settled()
+    expect(calls.map((call) => call.value)).toEqual(["A", "C"])
+  })
+
+  test("idle again, the next goes at once", async () => {
+    const { calls, send } = deferred()
+    const resize = latestOnly(send)
+    resize("A")
+    calls[0]!.done()
+    await settled()
+    resize("B")
+    expect(calls.map((call) => call.value)).toEqual(["A", "B"])
+  })
+
+  test("lint: the pane's resize goes through it", () => {
+    const shell = codeOf(readFileSync(new URL("./shell.ts", import.meta.url), "utf8"))
+    expect(shell).toContain(codeOf('const resizePane = latestOnly((size: { cols: number; rows: number }) => invoke("pty_resize", { id, ...size }))'))
+    expect(shell).toContain(codeOf("resizePane({ cols: nextCols, rows: nextRows })"))
   })
 })

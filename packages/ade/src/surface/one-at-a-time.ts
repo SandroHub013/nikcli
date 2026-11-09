@@ -12,14 +12,16 @@ export interface OneAtATime {
   /** Runs `work` unless a run for `key` is under way; true when it ran. */
   readonly run: (key: string, work: () => Promise<unknown>) => Promise<boolean>
   readonly busy: (key: string) => boolean
+  /** When the run under way for `key` began. A run refused because of it does not count. */
+  readonly startedAt: (key: string) => number | undefined
 }
 
-export function oneAtATime(): OneAtATime {
-  const under = new Set<string>()
+export function oneAtATime(clock: () => number = Date.now): OneAtATime {
+  const under = new Map<string, number>()
   return {
     run: async (key, work) => {
       if (under.has(key)) return false
-      under.add(key)
+      under.set(key, clock())
       try {
         await work()
         return true
@@ -28,5 +30,6 @@ export function oneAtATime(): OneAtATime {
       }
     },
     busy: (key) => under.has(key),
+    startedAt: (key) => under.get(key),
   }
 }

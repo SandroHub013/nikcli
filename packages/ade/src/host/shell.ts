@@ -484,7 +484,7 @@ export { stripAnsi } from "./ansi"
 import { openReclaimed, sealForPane, sealForRequest } from "../session/mail-seal"
 import { createLineAccumulator } from "./line-stream"
 import { DEFAULT_PTY_COLS, DEFAULT_PTY_ROWS } from "../terminal/pty-defaults"
-import { orderedWrites } from "./ordered-writes"
+import { latestOnly, orderedWrites } from "./ordered-writes"
 import { createAckBatcher, deliverChunk } from "./flow-ack"
 
 /** What a session says to its page, on its channel. Must match `PtyEvent` in `src-tauri/src/pty.rs`. */
@@ -752,6 +752,7 @@ export async function getHost(): Promise<Host | undefined> {
       }
 
       const sendToPane = orderedWrites((data) => invoke("pty_write", { id, data }))
+      const resizePane = latestOnly((size: { cols: number; rows: number }) => invoke("pty_resize", { id, ...size }))
       return {
         kill: (options) => {
           if (killed) return Promise.resolve(true)
@@ -771,7 +772,7 @@ export async function getHost(): Promise<Host | undefined> {
         },
         resize: (nextCols, nextRows) => {
           if (dead) return
-          void invoke("pty_resize", { id, cols: nextCols, rows: nextRows }).catch(() => undefined)
+          resizePane({ cols: nextCols, rows: nextRows })
         },
       }
     },
