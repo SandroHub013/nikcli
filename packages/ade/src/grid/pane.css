@@ -577,6 +577,8 @@
   justify-content: flex-end;
   gap: var(--ade-space-3);
   padding: var(--ade-space-2) var(--ade-space-3);
+  /* Clear of the cell's corner grip (14px wide, 2px in): the last button never sits under it. */
+  padding-right: 20px;
   flex: 0 0 auto;
 }
 
@@ -1492,7 +1494,8 @@
 
   [data-slot="pane-terminal"] ~ [data-slot="pane-dock"][data-offer] {
     position: absolute;
-    right: 6px;
+    /* 20px, not 6: the corner grip takes the last 16 px, and «Consegna ora» is the button under it. */
+    right: 20px;
     bottom: 6px;
     z-index: var(--ade-z-above);
     border-top: 0;
