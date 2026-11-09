@@ -2373,6 +2373,7 @@ fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
         let origin = own_origin(None);
         browse::refuse_ade_in_frames(&window, origin);
         allow_own_microphone(&window);
+        renderer::watch(&window);
         follow_window_visibility(&window);
     }
 

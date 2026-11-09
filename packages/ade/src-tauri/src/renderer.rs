@@ -33,8 +33,53 @@ pub(crate) enum AfterFailure {
     Nothing,
 }
 
-pub(crate) fn after_failure(_kind: i32, _recent: &mut Vec<Instant>, _now: Instant) -> AfterFailure {
-    AfterFailure::Nothing
+/// What to do about a failed process of `kind`, given the reloads of the crashes before it.
+pub(crate) fn after_failure(kind: i32, recent: &mut Vec<Instant>, now: Instant) -> AfterFailure {
+    match kind {
+        BROWSER_PROCESS_EXITED => AfterFailure::GiveUp,
+        RENDER_PROCESS_EXITED => {
+            recent.retain(|at| now.duration_since(*at) < RELOAD_WINDOW);
+            if recent.len() < MOST_RELOADS {
+                recent.push(now);
+                AfterFailure::Reload
+            } else {
+                AfterFailure::GiveUp
+            }
+        }
+        _ => AfterFailure::Nothing,
+    }
+}
+
+/// Hears of the window's failed processes for as long as it lives.
+pub(crate) fn watch(window: &tauri::WebviewWindow) {
+    let app = window.app_handle().clone();
+    let result = window.with_webview(move |webview| unsafe {
+        let Ok(core) = webview.controller().CoreWebView2() else { return };
+        let mut recent = Vec::new();
+        let handler = ProcessFailedEventHandler::create(Box::new(move |sender, args| {
+            let Some(args) = args else { return Ok(()) };
+            let mut kind = COREWEBVIEW2_PROCESS_FAILED_KIND::default();
+            args.ProcessFailedKind(&mut kind)?;
+            let reloaded = match after_failure(kind.0, &mut recent, Instant::now()) {
+                AfterFailure::Nothing => return Ok(()),
+                AfterFailure::GiveUp => false,
+                // The page load that follows ends the old sessions (`on_page_load`).
+                AfterFailure::Reload => sender.is_some_and(|page| page.Reload().is_ok()),
+            };
+            if !reloaded {
+                eprintln!("ADE: la pagina non si riprende (processo di tipo {}): chiudo le sessioni", kind.0);
+                app.state::<crate::pty::Registry>().end_all_in_background();
+            }
+            Ok(())
+        }));
+        let mut token = 0i64;
+        if let Err(error) = core.add_ProcessFailed(&handler, &mut token) {
+            eprintln!("ADE: crash della pagina non sorvegliati: {error}");
+        }
+    });
+    if let Err(error) = result {
+        eprintln!("ADE: crash della pagina non sorvegliati: {error}");
+    }
 }
 
 #[cfg(test)]
