@@ -72,6 +72,8 @@ export function createDeliverNow() {
   const held = new Map<string, HeldMail>()
   const offered = new Set<string>()
   const armed = new Map<string, number>()
+  /** Clicked, and its line still on its way: the note and the button stay, or their rows going back resize the pane under its Enter. */
+  const typing = new Set<string>()
 
   const drop = (paneId: string): DeliverNowChange => {
     held.delete(paneId)
@@ -130,7 +132,12 @@ export function createDeliverNow() {
       if (!isArmed(paneId, now)) return false
       armed.delete(paneId)
       held.delete(paneId)
+      typing.add(paneId)
       return true
+    },
+    /** The line of the click has been dealt with, gone or not. */
+    typed(paneId: string): void {
+      typing.delete(paneId)
     },
     /** The clicks that have run out with no message gone: said once. The mail's next round offers the action again. */
     lapsed(now: number): string[] {
@@ -140,6 +147,8 @@ export function createDeliverNow() {
     },
     offered: (paneId: string) => offered.has(paneId),
     offeredPanes: () => [...offered],
+    /** The panes that keep the action's row: offered, or clicked until its line has been typed. */
+    standing: () => [...new Set([...offered, ...armed.keys(), ...typing])],
     /** Who has not yet heard of the mail held for this pane, and from now on has. */
     untold(paneId: string): string[] {
       const entry = held.get(paneId)
@@ -150,6 +159,7 @@ export function createDeliverNow() {
     },
     forget(paneId: string): DeliverNowChange {
       armed.delete(paneId)
+      typing.delete(paneId)
       return drop(paneId)
     },
   }

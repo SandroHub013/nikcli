@@ -52,6 +52,12 @@ export function asOneLine(text: string): string {
   return text.replace(LINE_BREAKS, " ").replace(CONTROL, "")
 }
 
+/** `text` on one line for a pane's note, which holds 160 characters: cut where it shows that it is cut. */
+export function clippedForNote(text: string): string {
+  const line = asOneLine(text)
+  return line.length > 160 ? `${line.slice(0, 159)}…` : line
+}
+
 /**
  * `text` as a single line, terminated so the agent actually receives it.
  *

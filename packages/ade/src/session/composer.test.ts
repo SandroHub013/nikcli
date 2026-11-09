@@ -878,6 +878,19 @@ describe("the gate and what it does not touch", () => {
     expect(gone).toContain("tellSender(asked.from,formatExitedUnsent(asked.id,reader,trustSeen))")
   })
 
+  test("lint: «No, exit» ends the request, and the trust note leaves on the way out and when the task goes", () => {
+    const poll = between("if(starting.typesTask){", "openingPolls.add(poll)")
+    const gone = poll.slice(poll.indexOf("if(running.get(paneId)!==session){"), poll.indexOf("constdrawn=screenDrawn"))
+    expect(gone).toContain("settle(host,asked.id,said)")
+    expect(gone).toContain('if(trustSeen)dropPaneNote(paneId,t("task.confirmTrust"))')
+    const typed = poll.slice(poll.indexOf("stopOpeningPoll(poll)", poll.indexOf("constdecision=decideOpening")))
+    expect(typed).toContain('if(trustSeen)dropPaneNote(paneId,t("task.confirmTrust"))')
+  })
+
+  test("the line to the sender fits a note whole, for the names panes have", () => {
+    expect(formatHeldByScreen("Claude Code", { id: "p", title: "sessione 12" } as never).length).toBeLessThanOrEqual(160)
+  })
+
   test("the sender hears why, in words that do not read as being ignored", () => {
     const reader = { id: "p", title: "agy 1" } as never
     expect(formatExitedUnsent("r1", reader, true)).toContain("No, exit")

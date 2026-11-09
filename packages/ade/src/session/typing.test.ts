@@ -4,6 +4,7 @@ import {
   PASTE_QUIET_MS,
   PASTE_SETTLE_MAX_MS,
   asOneLine,
+  clippedForNote,
   asSubmittedLine,
   confirmDeadline,
   pasteSettled,
@@ -17,6 +18,19 @@ const LS = String.fromCharCode(0x2028)
 const PS = String.fromCharCode(0x2029)
 const VT = String.fromCharCode(11)
 const FF = String.fromCharCode(12)
+
+describe("clippedForNote", () => {
+  test("a line that fits is left whole", () => {
+    expect(clippedForNote(`a${LF}b`)).toBe("a b")
+    expect(clippedForNote("x".repeat(160))).toBe("x".repeat(160))
+  })
+
+  test("a line that does not shows that it was cut (live test 5: «che lì ha i»)", () => {
+    const clipped = clippedForNote("x".repeat(200))
+    expect(clipped).toHaveLength(160)
+    expect(clipped.endsWith("…")).toBe(true)
+  })
+})
 
 describe("asOneLine", () => {
   test("a carriage return becomes a space, not a second line", () => {

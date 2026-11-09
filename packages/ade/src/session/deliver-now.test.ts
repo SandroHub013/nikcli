@@ -249,6 +249,23 @@ describe("the click", () => {
     expect(typed).toEqual(["uno", "\r"])
   })
 
+  test("the action keeps its row until the click's line has been typed: its going back resizes the pane under the Enter", () => {
+    const now = offered()
+    now.click("p", false, AFTER)
+    expect(now.offered("p")).toBe(false)
+    expect(now.standing()).toEqual(["p"])
+    expect(now.take("p", AFTER + 1)).toBe(true)
+    expect(now.standing()).toEqual(["p"])
+    now.typed("p")
+    expect(now.standing()).toEqual([])
+  })
+
+  test("a click a menu took back keeps nothing", () => {
+    const now = offered()
+    now.click("p", true, AFTER)
+    expect(now.standing()).toEqual([])
+  })
+
   test("a menu that came before the click takes it back", () => {
     const now = offered()
     expect(now.click("p", true, AFTER)).toBe(false)

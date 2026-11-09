@@ -360,7 +360,7 @@ import {
   statusFromScreen,
 } from "../session/screen-question"
 import { readReportLine } from "../session/report"
-import { asOneLine, asSubmittedLine, confirmDeadline, pasteSettled, submitCheck } from "../session/typing"
+import { asOneLine, asSubmittedLine, clippedForNote, confirmDeadline, pasteSettled, submitCheck } from "../session/typing"
 import { searchPaths, walkProject } from "../search"
 import { createProjectWalk } from "./project-walk"
 import {
@@ -2784,6 +2784,10 @@ export function Workbench() {
     }
     // The click was spent on this line: if it did not go, that is said, and the mail is still queued.
     if (paneId !== undefined && armed) {
+      // Only now: the note and the button going back resize the pane, and an Enter during that was lost on ragu (live test 5).
+      deliverNow.typed(paneId)
+      setDeliverNowPanes(new Set(deliverNow.standing()))
+      dropPaneNote(paneId, deliverNowNote(paneId))
       if (outcome === "not-typed") tellPane(paneId, t("note.deliverNowLapsed"))
       else dropPaneNote(paneId, t("note.deliverNowLapsed"))
     }
@@ -3116,7 +3120,7 @@ export function Workbench() {
         .map((entry) => `${named(entry.from)}: ${entry.chars} caratteri, ${entry.id}`),
     ]
     if (waiting.length === 0) return
-    for (const line of waiting) tellPane(paneId, t("note.mailWaiting", asOneLine(line).slice(0, 160)))
+    for (const line of waiting) tellPane(paneId, t("note.mailWaiting", clippedForNote(line)))
   }
 
   /** The activity files, one call a pass; a delivery reuses the pass's read for a second (P1-C2a). */
@@ -3596,7 +3600,7 @@ export function Workbench() {
     t("note.deliverNowOffer", agentLabel(wb().panes.find((pane) => pane.id === paneId)?.agent ?? ""))
   const deliverNowChanged = (paneId: string, change: DeliverNowChange) => {
     if (!change) return
-    setDeliverNowPanes(new Set(deliverNow.offeredPanes()))
+    setDeliverNowPanes(new Set(deliverNow.standing()))
     dropPaneNote(paneId, t("note.deliverNowLapsed"))
     if (change === "withdrawn") return dropPaneNote(paneId, deliverNowNote(paneId))
     tellPane(paneId, deliverNowNote(paneId))
@@ -3615,9 +3619,10 @@ export function Workbench() {
   /** The click: one message, with its Enter, and the action goes. */
   const pressDeliverNow = (paneId: string) => {
     const go = deliverNow.click(paneId, questionOpen(paneId), Date.now())
-    setDeliverNowPanes(new Set(deliverNow.offeredPanes()))
-    dropPaneNote(paneId, deliverNowNote(paneId))
+    setDeliverNowPanes(new Set(deliverNow.standing()))
+    // A click that goes keeps note and button until its line has gone (`typeLineNow`).
     if (go) void mailRound(false)
+    else if (!deliverNow.standing().includes(paneId)) dropPaneNote(paneId, deliverNowNote(paneId))
   }
 
   /** Where the box and the reading of menus disagree, the shape goes in the local log: it is how we would know. */
@@ -4257,7 +4262,11 @@ export function Workbench() {
 
   /** What moves: the held lines, and the queue's lanes when a session has gone free. Typing is never awaited here. */
   const moveMail = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>) => {
-    for (const paneId of deliverNow.lapsed(Date.now())) tellPane(paneId, t("note.deliverNowLapsed"))
+    for (const paneId of deliverNow.lapsed(Date.now())) {
+      setDeliverNowPanes(new Set(deliverNow.standing()))
+      dropPaneNote(paneId, deliverNowNote(paneId))
+      tellPane(paneId, t("note.deliverNowLapsed"))
+    }
     for (const paneId of deliverNow.offeredPanes()) {
       deliverNowChanged(paneId, deliverNow.review(paneId, blindHold(paneId), Date.now()))
     }
@@ -4290,7 +4299,7 @@ export function Workbench() {
         // A shell runs what is typed: the line is shown in the pane as a notice and never given to it.
         if (!dropFrom(heldLines, item)) continue
         if (item.suspended) saveSuspendedMail()
-        tellPane(item.paneId, t("note.mailNotTyped", asOneLine(item.text).slice(0, 160)))
+        tellPane(item.paneId, t("note.mailNotTyped", clippedForNote(item.text)))
         // Read again after the await: a lane may have started a line for this pane in the meantime.
       } else if ((await freeNow(host, item.paneId, !item.notice)) && !linesInFlight.has(item.paneId)) {
         if (!dropFrom(heldLines, item)) continue
@@ -8449,7 +8458,7 @@ export function Workbench() {
     records.forget(id)
     menuHold.forget(id)
     deliverNow.forget(id)
-    setDeliverNowPanes(new Set(deliverNow.offeredPanes()))
+    setDeliverNowPanes(new Set(deliverNow.standing()))
     disagreementLoggedAt.delete(id)
     unparsed.forget(id)
     undrawnSince.delete(id)
@@ -9880,6 +9889,7 @@ export function Workbench() {
             // The session they spoke of has gone.
             if (menuTold) dropPaneNote(paneId, t("task.heldByMenu"))
             if (silenceTold) dropPaneNote(paneId, t("task.notSent"))
+            if (trustSeen) dropPaneNote(paneId, t("task.confirmTrust"))
             // Closed with its task: «No, exit» on a trust dialog, or anything else. Said, in the pane and to whoever asked.
             if (running.get(paneId) === undefined && !running.relaunching(paneId) && paneExists(paneId)) {
               tellPane(paneId, t(trustSeen ? "task.exitedOnTrust" : "task.exitedUnsent"))
@@ -9887,6 +9897,11 @@ export function Workbench() {
               if (asked) {
                 const reader = mailPanes().find((pane) => pane.id === paneId)
                 tellSender(asked.from, formatExitedUnsent(asked.id, reader, trustSeen))
+                // Nothing will answer it now: `ade-msg wait` stops saying it is starting.
+                const said = formatExitedUnsent(asked.id, reader, trustSeen)
+                void getHost().then((host) => {
+                  if (host) void settle(host, asked.id, said)
+                })
               }
             }
             return
@@ -9975,6 +9990,7 @@ export function Workbench() {
 
           stopOpeningPoll(poll)
           if (menuTold) dropPaneNote(paneId, t("task.heldByMenu"))
+          if (trustSeen) dropPaneNote(paneId, t("task.confirmTrust"))
           setWb((w) =>
             updatePane(w, paneId, {
               status: "working",
