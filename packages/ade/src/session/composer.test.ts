@@ -827,6 +827,34 @@ describe("ragu at 36 columns: the example goes to the next row whole (live test 
   })
 })
 
+describe("ragu 0.2.14 in a pane too short for its home (live test 6, FAIL 3)", () => {
+  test.each([
+    ["ragu-36x14", 36, 14],
+    ["ragu-30x12", 30, 12],
+  ])("the footer painted over the box stands for the model's row, and the placeholder may wrap before its dots: %s", async (name, cols, rows) => {
+    const terminal = await play(name, () => {}, { cols, rows })
+    expect(composerOf(terminal, "ragu")).toBe("ready")
+    expect(gate(terminal, "ragu")).toBe(true)
+  })
+
+  const paint = async (rows: string[], x: number, y: number) => {
+    const terminal = new Terminal({ cols: 36, rows: rows.length, scrollback: 100, allowProposedApi: true })
+    watchCursor(terminal)
+    await writtenTo(terminal, `${rows.join("\r\n")}\x1b[${y + 1};${x + 1}H\x1b[?25h`)
+    return terminal
+  }
+
+  test("a line of two rows over the footer is a line", async () => {
+    const rows = ["  ┃", "  ┃  ciao come", "  ┃  stai", "  ~\\Favorites\\ade   0.2.14", "  ┃"]
+    expect(composerOf(await paint(rows, 5, 1), "ragu")).toBe("draft")
+  })
+
+  test("a bar with neither a model's row nor the footer under it is still not the box", async () => {
+    const rows = ["  ┃", '  ┃  Chiedi... "x"', "  ┃", "  altro testo", "  ┃"]
+    expect(composerOf(await paint(rows, 5, 1), "ragu")).toBe("none")
+  })
+})
+
 describe("a click means nothing on a pane that has drawn nothing (audit SES2-3)", () => {
   const workbench = codeOf(readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8"))
   const between = (from: string, to: string) => workbench.slice(workbench.indexOf(from), workbench.indexOf(to))

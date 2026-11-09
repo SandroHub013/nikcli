@@ -60,6 +60,11 @@ const BAR_ROW = /^( *)┃( |$)/
 /** The bar's row that closes the box: «Build · Grok 4.7 · xAI». In a narrow pane opentui squeezes the spaces out of it. */
 const MODEL_ROW = /^ *┃ {2}\S.*·/
 /**
+ * The last row of opentui's home: the folder, and the version at the right. In a pane too short for the home it is painted
+ * over the box, and the model's row may be under it. No question is ever asked on the home, so it closes the box as well.
+ */
+const HOME_FOOTER = /^ *(?:~|[A-Za-z]:|\/).*\d+\.\d+\.\d+\S* *$/
+/**
  * What opentui draws in an empty box before the first turn: «Ask anything… "Fix a TODO"». Its colour depends on the theme.
  * At 36 columns or fewer the example goes to the next row whole, and the first row ends on the dots.
  */
@@ -332,7 +337,7 @@ function barBox(terminal: ComposerTerminal): ComposerState {
 
   // Down to the row that names the agent and the model: a question drawn in the same column has none.
   let model = cursorY
-  while (model < terminal.rows && !MODEL_ROW.test(textAt(terminal, model))) {
+  while (model < terminal.rows && !MODEL_ROW.test(textAt(terminal, model)) && !HOME_FOOTER.test(textAt(terminal, model))) {
     if (!BAR_ROW.test(textAt(terminal, model))) return "none"
     model++
   }
@@ -378,12 +383,17 @@ function boxText(terminal: ComposerTerminal, inputColumn: number, top: number, e
   const rowHasText = (y: number) => textAt(terminal, y).charAt(inputColumn).trim() !== ""
   if (cursorX !== inputColumn) return "draft"
   for (let y = cursorY - 1; y >= top; y--) if (rowHasText(y)) return "draft"
-  const first = here.slice(inputColumn)
+  // At 30 columns the words wrap before the dots: the first row has neither them nor a quote.
+  let first = here.slice(inputColumn)
+  let afterFirst = cursorY + 1
+  while (!BAR_PLACEHOLDER.test(first) && !first.includes('"') && afterFirst < end && rowHasText(afterFirst)) {
+    first = `${first.trimEnd()} ${textAt(terminal, afterFirst++).slice(inputColumn)}`
+  }
   const placeholder = BAR_PLACEHOLDER.test(first)
   if (rowHasText(cursorY) && !placeholder) return "draft"
   // A long example wraps: the rows down to its closing quote are the example too. Past that, or with no quote, a row is a line.
   const quotes = (row: string) => row.split('"').length - 1
-  let below = cursorY + 1
+  let below = afterFirst
   if (placeholder) {
     let seen = quotes(first)
     while (seen < 2 && below < end) seen += quotes(textAt(terminal, below++).slice(inputColumn))
