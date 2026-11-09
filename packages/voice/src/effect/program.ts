@@ -757,6 +757,16 @@ export function makeVoiceProgram(
                * dialogue to idle (and promotes any permission queued behind
                * this confirmation).
                */
+              const currentProject = host.listProjects?.().find((p) => p.isOpen)?.root
+              if (planProjectRoot !== undefined && currentProject !== planProjectRoot) {
+                planProjectRoot = undefined
+                const msg = tr("voice.msg.plan.projectChanged")
+                options.onError?.(msg)
+                yield* say(msg)
+                yield* applyDialogEvent({ type: "command_failed" })
+                break
+              }
+              planProjectRoot = undefined
               const execution = yield* Effect.promise(() => executePlan(effect.steps, host))
               options.onPlan?.({ steps: effect.steps, execution })
               const agents = host.listAgents?.() ?? []
@@ -805,6 +815,8 @@ export function makeVoiceProgram(
     let handedOff: string | undefined
     /** Why the planner could not plan this sentence: said only if the agent cannot take it either. */
     let plannerFailed: string | undefined
+    /** The project open when a plan was proposed for confirmation, so a project switch refuses it. */
+    let planProjectRoot: string | undefined
 
     /* A free sentence heard while thinking, and whether the user asked for it to go out. */
     let held: string | null = null
@@ -1004,6 +1016,7 @@ export function makeVoiceProgram(
         if (needsConfirm) {
           if (agentAbort === abort) agentAbort = null
           if (plannerAbort === abort) plannerAbort = null
+          planProjectRoot = host.listProjects?.().find((p) => p.isOpen)?.root
           yield* applyDialogEvent({
             type: "plan_ready",
             steps: planned.steps,

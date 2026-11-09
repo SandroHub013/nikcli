@@ -561,6 +561,7 @@ export const voiceIt = {
   "voice.msg.plan.serverError": "Il servizio ha risposto con un errore. Riprova fra un momento.",
   "voice.msg.plan.unreachable": "Non ho raggiunto il servizio. Controlla la connessione e riprova.",
   "voice.msg.plan.noPlan": "Non sono riuscito a ottenere un piano. Riprova fra un momento.",
+  "voice.msg.plan.projectChanged": "Il progetto è cambiato: il piano era per un altro progetto e non è stato eseguito.",
 
   "voice.msg.host.noProject": "Non c'è nessun progetto aperto: dimmi in quale progetto avviare la sessione.",
   "voice.msg.host.noProcess": (paneId: string) => `Il pannello '${paneId}' non ha un processo vivo a cui inviare il messaggio.`,

@@ -543,6 +543,7 @@ export const voiceEn: VoiceMessages = {
   "voice.msg.plan.serverError": "The service answered with an error. Try again in a moment.",
   "voice.msg.plan.unreachable": "I didn't reach the service. Check the connection and try again.",
   "voice.msg.plan.noPlan": "I couldn't get a plan. Try again in a moment.",
+  "voice.msg.plan.projectChanged": "The project changed: the plan was for another project and was not executed.",
 
   "voice.msg.host.noProject": "There is no project open: tell me which project to start the session in.",
   "voice.msg.host.noProcess": (paneId) => `Panel '${paneId}' has no live process to send the message to.`,
