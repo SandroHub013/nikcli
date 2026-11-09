@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { readFileSync } from "node:fs"
+import { readFileSync, readdirSync } from "node:fs"
+import { join } from "node:path"
 import postcss from "postcss"
 import { translate } from "../i18n"
 
@@ -89,9 +90,25 @@ describe("the workbench's notices", () => {
     expect(block).not.toContain("style={{")
   })
 
-  test("no close control is drawn as a ✕ or × glyph in a text node (DS-21)", () => {
-    // Between a tag and the next one, so a comment or a string that mentions the glyph is not read as a control.
-    const glyphs = [...source.matchAll(/>\s*([✕×])\s*</g)].map((match) => source.slice(0, match.index).split("\n").length)
+  test("no close control is drawn as a ✕ or × glyph in a text node (DS-21, DS2-7)", () => {
+    const src = join(import.meta.dir, "..")
+    const files: string[] = []
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name)
+        if (entry.isDirectory()) walk(path)
+        else if (path.endsWith(".tsx") && !path.endsWith(".test.tsx")) files.push(path)
+      }
+    }
+    walk(src)
+    const glyphs: string[] = []
+    for (const file of files) {
+      const text = readFileSync(file, "utf8").replace(/\r\n/g, "\n")
+      // Between a tag and the next one, so a comment or a string that mentions the glyph is not read as a control.
+      for (const match of text.matchAll(/>\s*([✕×])\s*</g)) {
+        glyphs.push(`${file.slice(src.length + 1)}:${text.slice(0, match.index).split("\n").length}`)
+      }
+    }
     expect(glyphs).toEqual([])
   })
 })

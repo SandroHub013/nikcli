@@ -25,6 +25,7 @@ import {
 import { StateIcon } from "./state-icon"
 import { t } from "../i18n"
 import { FolderGlyph, PaneActions } from "./pane-actions"
+import { Notice } from "../ui/controls"
 
 export { type PaneStatus, type PaneState, STATE_FULL, STATE_SHORT, resolvePaneState, StateIcon }
 
@@ -919,23 +920,18 @@ export function SessionPane(props: SessionPaneProps) {
       {/* Over the terminal, because the transcript the notes are written to is hidden while it is there. */}
       <Show when={props.terminalId && props.notices?.length ? props.notices : undefined}>
         {(notices) => (
-          <div data-slot="pane-notice" role="status">
+          <Notice
+            tone="working"
+            role="status"
+            data-slot="pane-notice"
+            closeLabel={t("pane.noticeDismiss")}
+            onClose={() => props.onDismissNotices?.()}
+            onClick={(event) => event.stopPropagation()}
+          >
             <div data-slot="pane-notice-lines">
               <For each={notices()}>{(text) => <p>{text}</p>}</For>
             </div>
-            <button
-              type="button"
-              data-slot="pane-notice-close"
-              aria-label={t("pane.noticeDismiss")}
-              title={t("pane.noticeDismiss")}
-              onClick={(event) => {
-                event.stopPropagation()
-                props.onDismissNotices?.()
-              }}
-            >
-              ×
-            </button>
-          </div>
+          </Notice>
         )}
       </Show>
 
