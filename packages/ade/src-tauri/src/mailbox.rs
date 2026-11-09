@@ -504,6 +504,11 @@ pub async fn mailbox_inbox_text(app: tauri::AppHandle, pane: String, name: Strin
 }
 
 fn read_if_there(path: &Path) -> Result<Option<String>, String> {
+    // The inbox is a folder any session can write in: a file over the cap is not read into memory and handed to the page,
+    // which would hold it (and seal it again) whole. It counts as gone, as the outbox reader treats the same size.
+    if fs::metadata(path).is_ok_and(|meta| meta.len() > MAX_MESSAGE_BYTES) {
+        return Ok(None);
+    }
     match fs::read_to_string(path) {
         Ok(text) => Ok(Some(text)),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -1997,6 +2002,18 @@ mod tests {
         assert_eq!(read_if_there(&file), Ok(None));
         fs::write(&file, "testo").unwrap();
         assert_eq!(read_if_there(&file), Ok(Some("testo".to_string())));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn an_inbox_file_over_the_cap_is_not_read() {
+        let dir = std::env::temp_dir().join(format!("ade-inbox-big-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("grande.msg");
+        fs::write(&file, "x".repeat(MAX_MESSAGE_BYTES as usize + 1)).unwrap();
+        assert_eq!(read_if_there(&file), Ok(None));
+        fs::write(&file, "x".repeat(MAX_MESSAGE_BYTES as usize)).unwrap();
+        assert_eq!(read_if_there(&file).unwrap().map(|text| text.len()), Some(MAX_MESSAGE_BYTES as usize));
         fs::remove_dir_all(&dir).unwrap();
     }
 
