@@ -124,6 +124,7 @@ const EXCLUDED_PROSE_FILES = new Set([
 
   // Internal CLI / IPC protocol implementation (ade-msg terminal stdout/stderr, not UI):
   "session/mailbox.ts", // ade-msg terminal mailbox commands and status formatting
+  "session/held-notices.ts", // The "[ade-msg] N avvisi di ADE: ..." line typed into an agent's terminal, like mailbox.ts
   "session/orchestra.ts", // Orchestra conductor CLI protocol
   "session/native-mail.ts", // Native mailbox IPC protocol
   "session/register-write.ts", // Session registration IPC protocol
