@@ -205,7 +205,7 @@ impl Registry {
      * The sessions are taken at once, on the caller's thread: a page-load
      * handler that only started a thread could have that thread take a
      * session the new page had already spawned. Walking the process table
-     * for each tree is what takes time, and that is what moves off.
+     * and waiting for the trees is what takes time, and that moves off.
      */
     pub fn end_all_in_background(&self) -> usize {
         let sessions = self.take_all();
