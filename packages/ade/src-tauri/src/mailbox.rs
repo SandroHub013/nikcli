@@ -1681,9 +1681,9 @@ mod tests {
     fn new_mail_is_signalled_at_once_and_a_stuck_outbox_only_once_a_second() {
         let soon = Duration::from_millis(200);
         let later = SIGNAL_GAP;
-        assert_eq!(pending_signal(true, false, false, soon), Some(true));
-        assert_eq!(pending_signal(true, true, false, soon), None);
-        assert_eq!(pending_signal(true, true, false, later), Some(true));
+        assert_eq!(pending_signal(true, false, soon), Some(true));
+        assert_eq!(pending_signal(true, true, soon), None);
+        assert_eq!(pending_signal(true, true, later), Some(true));
     }
 
     #[test]
