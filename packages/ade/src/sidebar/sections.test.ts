@@ -138,8 +138,8 @@ describe("statPills", () => {
       expect(statPills({ working: 3, waiting: 0, error: 0 })[0].label).toBe("3 al lavoro")
       expect(statPills({ working: 0, waiting: 1, error: 0 })[0].label).toBe("1 permesso")
       expect(statPills({ working: 0, waiting: 2, error: 0 })[0].label).toBe("2 permessi")
-      expect(statPills({ working: 0, waiting: 0, error: 1 })[0].label).toBe("1 bloccata")
-      expect(statPills({ working: 0, waiting: 0, error: 2 })[0].label).toBe("2 bloccate")
+      expect(statPills({ working: 0, waiting: 0, error: 1 })[0].label).toBe("1 in errore")
+      expect(statPills({ working: 0, waiting: 0, error: 2 })[0].label).toBe("2 in errore")
     })
 
     test("uses grammatical localized plural pills in English", () => {
@@ -147,7 +147,8 @@ describe("statPills", () => {
       expect(statPills({ working: 3, waiting: 0, error: 0 })[0].label).toBe("3 working")
       expect(statPills({ working: 0, waiting: 1, error: 0 })[0].label).toBe("1 permission")
       expect(statPills({ working: 0, waiting: 2, error: 0 })[0].label).toBe("2 permissions")
-      expect(statPills({ working: 0, waiting: 0, error: 2 })[0].label).toBe("2 stuck")
+      expect(statPills({ working: 0, waiting: 0, error: 1 })[0].label).toBe("1 error")
+      expect(statPills({ working: 0, waiting: 0, error: 2 })[0].label).toBe("2 errors")
     })
   })
 })

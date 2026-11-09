@@ -194,7 +194,7 @@ export const en: Messages = {
   "sidebar.openProjectSessions": "Open project sessions",
   "sidebar.pill.working": (count: number) => `${count} working`,
   "sidebar.pill.waiting": (count: number) => `${count} ${plural(count, { one: "permission", other: "permissions" }, "en")}`,
-  "sidebar.pill.error": (count: number) => `${count} stuck`,
+  "sidebar.pill.error": (count: number) => `${count} ${plural(count, { one: "error", other: "errors" }, "en")}`,
   "sidebar.addSpace": "Add a project",
   "sidebar.addRemote": "Add a remote environment (ssh)",
   "sidebar.noSpaces": "No projects open.",

@@ -201,7 +201,7 @@ export const it = {
   "sidebar.openProjectSessions": "Apri le sessioni del progetto",
   "sidebar.pill.working": (count: number) => `${count} al lavoro`,
   "sidebar.pill.waiting": (count: number) => `${count} ${plural(count, { one: "permesso", other: "permessi" }, "it")}`,
-  "sidebar.pill.error": (count: number) => `${count} ${plural(count, { one: "bloccata", other: "bloccate" }, "it")}`,
+  "sidebar.pill.error": (count: number) => `${count} ${plural(count, { one: "in errore", other: "in errore" }, "it")}`,
   "sidebar.addSpace": "Aggiungi progetto",
   "sidebar.addRemote": "Aggiungi ambiente remoto (ssh)",
   "sidebar.noSpaces": "Nessun progetto aperto.",
