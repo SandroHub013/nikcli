@@ -191,6 +191,63 @@ mod tests {
         assert_eq!(found[0].to_string(), "127.0.0.1:5177");
     }
 
+    // RS-15: `bun x vite` is a launcher, and what it starts holds the port.
+    #[cfg(windows)]
+    #[test]
+    fn shutdown_ends_what_the_launcher_started() {
+        use super::DevServer;
+        use std::os::windows::process::CommandExt;
+        use std::process::{Command, Stdio};
+        use std::sync::Mutex;
+        use std::time::{Duration, Instant};
+        use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+
+        fn table() -> System {
+            let mut sys = System::new();
+            sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
+            sys
+        }
+
+        fn wait_for(limit: Duration, done: impl Fn() -> bool) -> bool {
+            let deadline = Instant::now() + limit;
+            while !done() && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            done()
+        }
+
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let launcher = Command::new("cmd")
+            .args(["/c", "ping -n 60 127.0.0.1 >NUL"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .unwrap();
+        let launcher_pid = launcher.id();
+        let server = DevServer(Mutex::new(Some(launcher)));
+
+        let ping = || {
+            table()
+                .processes()
+                .values()
+                .find(|process| {
+                    process.parent().map(|parent| parent.as_u32()) == Some(launcher_pid)
+                        && process.name().eq_ignore_ascii_case("ping.exe")
+                })
+                .map(|process| process.pid().as_u32())
+        };
+        assert!(wait_for(Duration::from_secs(10), || ping().is_some()), "the launcher started nothing");
+        let started = ping().unwrap();
+
+        server.shutdown();
+        assert!(
+            wait_for(Duration::from_secs(5), || table().process(Pid::from_u32(started)).is_none()),
+            "what the launcher started outlived it"
+        );
+    }
+
     #[test]
     fn nonsense_gives_nothing_rather_than_panicking() {
         assert!(addresses("").is_empty());

@@ -1186,6 +1186,24 @@ mod tests {
         dir
     }
 
+    // RS-18: a list of numbers is about four times the bytes, in JSON, on the page's heap.
+    #[test]
+    fn a_picture_crosses_as_bytes_and_not_as_a_list_of_numbers() {
+        let source = include_str!("shots.rs");
+        let command = source.split("pub async fn shot_bytes(").nth(1).expect("the command");
+        assert!(command.split('{').next().unwrap().contains("Result<tauri::ipc::Response, String>"));
+    }
+
+    // RS2-7: the shell asks before it deletes for good, and nobody knew where to look for its dialog.
+    #[test]
+    fn deleting_a_picture_waits_off_the_workers_and_gives_its_dialog_an_owner() {
+        let source = include_str!("shots.rs");
+        let delete = source.split("pub async fn shot_delete(").nth(1).expect("the command");
+        assert!(delete.split("\n}").next().unwrap().contains("spawn_blocking("), "the dialog holds an async worker");
+        let recycle = source.split(concat!("fn recycle", "_owned(")).nth(1).expect("the delete with an owner");
+        assert!(recycle.split("\n}").next().unwrap().contains(concat!("hwnd: HWND(", "owner as _)")), "a dialog with no owner");
+    }
+
     // Full review 2026-10-06, rust (minor): `canonicalize` on a UNC path talks to the server before the text check.
     #[test]
     fn a_network_path_is_refused_before_it_is_resolved() {

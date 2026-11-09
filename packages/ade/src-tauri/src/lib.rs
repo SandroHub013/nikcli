@@ -37,6 +37,8 @@ mod project_bytes;
 mod pty;
 mod windows_path;
 mod record;
+#[cfg(windows)]
+mod renderer;
 mod reveal;
 mod secrets;
 mod serve;
