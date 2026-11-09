@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { t } from "@ragu/ade/i18n"
+import { t, translate } from "@ragu/ade/i18n"
 import { maiCapped, maiOfferShown, maiRetryShown, maiSpendText, maiStatusText, type MaiPanelInput } from "./mai-panel"
 import { MAI_DAILY_CAP_USD } from "../tts/mai"
 
@@ -54,5 +54,17 @@ describe("il pannello MAI", () => {
     expect(it).toContain("8")
     expect(it).not.toContain("0,40")
     expect(maiSpendText(spent, "en")).toContain("0.12")
+  })
+
+  test("MOD2-6 with UX2-6: l'offerta di Rosa non dice «predefinita» e avvisa che usa OpenRouter ed è a pagamento", () => {
+    const offerIt = translate("it", "vui.mai.offer")
+    expect(offerIt).not.toContain("predefinita")
+    expect(offerIt).toContain("OpenRouter")
+    expect(offerIt).toContain("pagamento")
+
+    const offerEn = translate("en", "vui.mai.offer")
+    expect(offerEn.toLowerCase()).not.toContain("default")
+    expect(offerEn).toContain("OpenRouter")
+    expect(offerEn).toContain("paid")
   })
 })

@@ -198,9 +198,9 @@ export const voiceIt = {
   "vui.reply.mai.licence": "Microsoft MAI-Voice, via OpenRouter.",
   // Voce delle risposte su Microsoft MAI, nella scheda OpenRouter
   "vui.mai.title": "Microsoft MAI",
-  "vui.mai.offer": "Nuova voce predefinita: Rosa (Microsoft)",
-  "vui.mai.offer.use": "Usa",
-  "vui.mai.offer.keep": "Tieni Ugo",
+  "vui.mai.offer": "Rosa (Microsoft) legge le risposte con la tua chiave OpenRouter: è a pagamento.",
+  "vui.mai.offer.use": "Usa Rosa",
+  "vui.mai.offer.keep": "Tieni Ugo (gratis)",
   "vui.mai.voice": "Voce MAI",
   "vui.mai.local": "Voce locale di ripiego",
   "vui.mai.status.active": "MAI attivo",

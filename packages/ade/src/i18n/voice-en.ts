@@ -198,9 +198,9 @@ export const voiceEn: VoiceMessages = {
   "vui.reply.mai.licence": "Microsoft MAI-Voice, through OpenRouter.",
   // Reply voice on Microsoft MAI, in the OpenRouter card
   "vui.mai.title": "Microsoft MAI",
-  "vui.mai.offer": "New default voice: Rosa (Microsoft)",
-  "vui.mai.offer.use": "Use",
-  "vui.mai.offer.keep": "Keep Ugo",
+  "vui.mai.offer": "Rosa (Microsoft) reads replies with your OpenRouter key: it is paid.",
+  "vui.mai.offer.use": "Use Rosa",
+  "vui.mai.offer.keep": "Keep Ugo (free)",
   "vui.mai.voice": "MAI voice",
   "vui.mai.local": "Local fallback voice",
   "vui.mai.status.active": "MAI active",
