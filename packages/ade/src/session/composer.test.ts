@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, setSystemTime, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { Terminal } from "@xterm/xterm"
 import { loadCapture, play, screenText, terminalFor, writtenTo } from "../test-support/live-bytes"
@@ -1051,6 +1051,46 @@ describe("a dialog left open over ragu's box, after a focus-in (audit SES2-2)", 
       expect(mayTypeNow({ composer: composerOf(terminal, agent), question: false, nothingDrawn: false })).toBe(false)
     })
   }
+
+  describe("a click on the backdrop closes the dialog and no key follows (live test 8): ADE does not guess", () => {
+    const header = "\x1b[5;70H Select model            esc      \x1b[6;70H Search                         \x1b[6;79H"
+    const closed = `\x1b[2J${box}\x1b[10;6H\x1b[?25h`
+    const FROM = 1_800_000_000_000
+
+    const clicked = async () => {
+      setSystemTime(new Date(FROM))
+      const terminal = await drawn(`${box}${header}`, 120, 17)
+      followKeys(terminal, "ragu", FOCUS_REPORT)
+      followKeys(terminal, "ragu", PRESS)
+      followKeys(terminal, "ragu", RELEASE)
+      await writtenTo(terminal, closed)
+      expect(composerOf(terminal, "ragu")).toBe("none")
+      setSystemTime(new Date(FROM + 600_000))
+      expect(composerOf(terminal, "ragu")).toBe("none")
+      expect(mayTypeNow({ composer: composerOf(terminal, "ragu"), question: false, nothingDrawn: false })).toBe(false)
+      return terminal
+    }
+
+    test("the mark stands with the dialog's «esc» gone from the screen, until a key", async () => {
+      try {
+        const terminal = await clicked()
+        followKeys(terminal, "ragu", "\x1b")
+        expect(composerOf(terminal, "ragu")).toBe("ready")
+      } finally {
+        setSystemTime()
+      }
+    })
+
+    test("or until «Consegna ora», which forgets it", async () => {
+      try {
+        const terminal = await clicked()
+        forgetRefocus(terminal)
+        expect(composerOf(terminal, "ragu")).toBe("ready")
+      } finally {
+        setSystemTime()
+      }
+    })
+  })
 
   test("a later click closes it, and each new return to the pane gets its own free press", async () => {
     const terminal = await drawn(`${box}${picker}`, 120, 17)
