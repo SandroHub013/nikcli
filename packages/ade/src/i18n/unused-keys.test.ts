@@ -39,5 +39,6 @@ describe("the Italian catalog", () => {
       return ![...prefixes].some((prefix) => key.startsWith(prefix))
     })
     expect(unused).toEqual([])
-  })
+    // Reads every source file of ade and voice: on a cold disk 5 s is not enough.
+  }, 30_000)
 })
