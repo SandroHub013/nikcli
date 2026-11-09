@@ -196,8 +196,6 @@ describe("a primary-coloured control is the primitive's", () => {
     "chat/chat.css :: [data-slot=\"chat-caret\"]",
     "command/palette.css :: [data-component=\"palette\"] [data-slot=\"option\"][data-selected]::before",
     "decisions/decisions.css :: [data-slot=\"decision-option\"][data-on] [data-slot=\"decision-option-key\"]",
-    "decisions/decisions.css :: [data-slot=\"sheet-steps\"] i[data-on]",
-    "design/design.css :: [data-slot=\"sheet-steps\"] i[data-on]",
     "design/design.css :: [data-slot=\"variant-pick-button\"][data-on=\"true\"] [data-slot=\"variant-key\"]",
     "dev.css :: [data-slot=\"ade-add\"][data-tone=\"primary\"]",
     "dev.css :: [data-slot=\"ade-add\"][data-tone=\"primary\"]:hover",
