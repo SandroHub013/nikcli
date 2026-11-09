@@ -4383,7 +4383,8 @@ export function Workbench() {
     }
     mailQueue.push(...arrived)
     // The native side has kept them until it hears this: every one, the refused and the copies too, or they come back in 30 s.
-    // Only with them on disk, or a crash loses what was told «in coda», and before any delivery: what has run must not come back.
+    // Only with them saved, or a crash loses what was told «in coda», and before any delivery: what has run must not come back.
+    // Saved means `send` and `ask` (`queueToSave`): the other kinds are lost if the page goes first, as a `spawn` run twice would be worse.
     if (persistMail()) await host.mailboxTaken?.(taken.map(({ id }) => id)).catch(() => {})
     else if (settled.length > 0) await host.mailboxTaken?.(settled).catch(() => {})
     mailLanes.start(mailQueue)

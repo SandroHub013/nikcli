@@ -248,8 +248,8 @@ pub struct Outgoing {
 ///
 /// Only `*.json`: the scripts write `*.part` and rename, so a file with the
 /// final name is always whole. Each one is claimed by a rename before it is
-/// read, and removed once read, which is what makes a message delivered at
-/// most once; a read that failed for a passing reason leaves it for the next pass.
+/// read, and removed once the page says it holds it (`mailbox_taken`); a read
+/// that failed for a passing reason leaves it for the next pass.
 #[tauri::command]
 pub async fn mailbox_take(app: tauri::AppHandle) -> Result<Vec<Outgoing>, String> {
     let dir = mailbox_path(&app).ok_or("casella non disponibile")?;
