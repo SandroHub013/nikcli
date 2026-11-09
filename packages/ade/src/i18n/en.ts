@@ -1771,9 +1771,13 @@ export const en: Messages = {
   "note.enterHeldFor": (to: string) => `Typed to ${to}, Enter not pressed: a permission prompt is open`,
   "note.inboxLost": (id) => `Message ${id} vanished from the inbox before it was read: the sender is told`,
   "note.rang": (rings) => `Reminder sent again: message not read yet (${rings}/3)`,
-  "note.mailWaiting": (what) => `Mail waiting (the session is typing): ${what}`,
+  "note.mailWaiting": (what: string) => `Pending mail: ${what}`,
+  "note.mailLine": (from: string, chars: number) =>
+    `${from}: ${chars} ${plural(chars, { one: "character", other: "characters" }, "en")}`,
+  "note.mailUnknownSession": "a session",
   "note.mailNotTyped": (what) => `Mail not typed (a shell runs here): ${what}`,
-  "pane.mail": (count) => `${count} waiting: ADE holds mail back while the line is half-written`,
+  "pane.mail": (count: number) =>
+    `${count} pending: will arrive when the session is free. Click to view.`,
   "note.resentRequest": (id) => `Pressed Enter again: request ${id} hadn't been sent`,
   "note.nudged": (id) => `Reminder sent: request ${id} is waiting for a reply`,
   "note.outputWorkGivenUp": () =>
@@ -1782,8 +1786,8 @@ export const en: Messages = {
   "note.replySentTo": (to, ref) => `Reply sent to ${to} (request ${ref})`,
   "note.replyFrom": (from, text) => `Reply from ${from}: ${text}`,
   "note.keptOpen": (problem) => `Kept open: ${problem}`,
-  "mail.stuck": (kind, id) =>
-    `Mail between sessions: ${kind} ${id} gave no result. ADE moved on; the sender will hear of it if still open`,
+  "mail.stuck":
+    "A message between sessions was not delivered and ADE stopped waiting for it. The sender will know, if it is still open.",
   "mail.stepStuck": "Mail between sessions: a step does not finish. ADE keeps trying; if mail stays stuck, restart ADE",
   "note.closedAfterReply": (closed) => `Closed after replying: ${closed}`,
   "note.updateFrom": (from, state, text) => `Update from ${from}: ${state} — ${text}`,

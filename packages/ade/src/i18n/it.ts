@@ -1815,9 +1815,13 @@ export const it = {
   "note.inboxLost": (id: string) =>
     `Messaggio ${id} sparito dalla casella prima di essere letto: il mittente è avvisato`,
   "note.rang": (rings: number) => `Avviso ripetuto: messaggio non ancora letto (${rings}/3)`,
-  "note.mailWaiting": (what: string) => `Posta in attesa (la sessione sta scrivendo): ${what}`,
+  "note.mailWaiting": (what: string) => `Posta in attesa: ${what}`,
+  "note.mailLine": (from: string, chars: number) =>
+    `${from}: ${chars} ${plural(chars, { one: "carattere", other: "caratteri" }, "it")}`,
+  "note.mailUnknownSession": "una sessione",
   "note.mailNotTyped": (what: string) => `Posta non digitata (qui gira una shell): ${what}`,
-  "pane.mail": (count: number) => `${count} in attesa: ADE non consegna finché la riga è a metà`,
+  "pane.mail": (count: number) =>
+    `${count} in attesa: arrivano quando la sessione è libera. Clic per vederli.`,
   "note.resentRequest": (id: string) => `Invio ripetuto: la richiesta ${id} non era partita`,
   "note.nudged": (id: string) => `Promemoria inviato: la richiesta ${id} aspetta una risposta`,
   "note.outputWorkGivenUp": () =>
@@ -1826,8 +1830,8 @@ export const it = {
   "note.replySentTo": (to: string, ref: string) => `Risposta inviata a ${to} (richiesta ${ref})`,
   "note.replyFrom": (from: string, text: string) => `Risposta ricevuta da ${from}: ${text}`,
   "note.keptOpen": (problem: string) => `Resta aperta: ${problem}`,
-  "mail.stuck": (kind: string, id: string) =>
-    `Posta tra le sessioni: ${kind} ${id} non ha dato esito. ADE è andata avanti; il mittente lo saprà, se è ancora aperto`,
+  "mail.stuck":
+    "Un messaggio tra sessioni non è stato consegnato e ADE ha smesso di aspettarlo. Chi l'ha mandato lo saprà, se è ancora aperto.",
   "mail.stepStuck": "Posta tra le sessioni: un passo non finisce. ADE lo riprova; se la posta resta ferma, riavvia ADE",
   "note.closedAfterReply": (closed: string) => `Chiusa dopo la risposta: ${closed}`,
   "note.updateFrom": (from: string, state: string, text: string) => `Aggiornamento da ${from}: ${state} — ${text}`,
