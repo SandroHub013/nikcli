@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
+import { resetLocaleForTests } from "../i18n"
 import {
   countSessions,
   defaultOpenSections,
@@ -126,6 +127,27 @@ describe("statPills", () => {
   test("each pill carries its count and a word", () => {
     const [pill] = statPills({ working: 3, waiting: 0, error: 0 })
     expect(pill.count).toBe(3)
-    expect(pill.label).toBe("lavora")
+    expect(pill.label).toBe("3 al lavoro")
+  })
+
+  describe("UX2-7: sidebar header pills", () => {
+    afterEach(() => resetLocaleForTests("it"))
+
+    test("uses grammatical localized plural pills in Italian", () => {
+      resetLocaleForTests("it")
+      expect(statPills({ working: 3, waiting: 0, error: 0 })[0].label).toBe("3 al lavoro")
+      expect(statPills({ working: 0, waiting: 1, error: 0 })[0].label).toBe("1 permesso")
+      expect(statPills({ working: 0, waiting: 2, error: 0 })[0].label).toBe("2 permessi")
+      expect(statPills({ working: 0, waiting: 0, error: 1 })[0].label).toBe("1 bloccata")
+      expect(statPills({ working: 0, waiting: 0, error: 2 })[0].label).toBe("2 bloccate")
+    })
+
+    test("uses grammatical localized plural pills in English", () => {
+      resetLocaleForTests("en")
+      expect(statPills({ working: 3, waiting: 0, error: 0 })[0].label).toBe("3 working")
+      expect(statPills({ working: 0, waiting: 1, error: 0 })[0].label).toBe("1 permission")
+      expect(statPills({ working: 0, waiting: 2, error: 0 })[0].label).toBe("2 permissions")
+      expect(statPills({ working: 0, waiting: 0, error: 2 })[0].label).toBe("2 stuck")
+    })
   })
 })

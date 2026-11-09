@@ -21,6 +21,7 @@
  */
 
 import type { Workspace } from "./workspace-tree"
+import { t } from "../i18n"
 
 /** The sections the sidebar owns. Plugins and the shot tray own their own. */
 export type SectionId = "progetti" | "agenti" | "file"
@@ -134,8 +135,8 @@ export interface StatPill {
  */
 export function statPills(counts: SessionCounts): StatPill[] {
   const pills: StatPill[] = []
-  if (counts.working > 0) pills.push({ tone: "working", count: counts.working, label: "lavora" })
-  if (counts.waiting > 0) pills.push({ tone: "waiting", count: counts.waiting, label: "attende" })
-  if (counts.error > 0) pills.push({ tone: "error", count: counts.error, label: "in errore" })
+  if (counts.working > 0) pills.push({ tone: "working", count: counts.working, label: t("sidebar.pill.working", counts.working) })
+  if (counts.waiting > 0) pills.push({ tone: "waiting", count: counts.waiting, label: t("sidebar.pill.waiting", counts.waiting) })
+  if (counts.error > 0) pills.push({ tone: "error", count: counts.error, label: t("sidebar.pill.error", counts.error) })
   return pills
 }
