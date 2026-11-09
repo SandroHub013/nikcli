@@ -223,6 +223,14 @@ describe("the words of the glossary (UX-11, UX-12, UX-27)", () => {
     }
   })
 
+  test("a worktree is a copia di lavoro, never an albero isolato (UX-11)", () => {
+    expect(italian.filter(([, text]) => /[Aa]lbero isolato/.test(text)).map(([key]) => key)).toEqual([])
+  })
+
+  test("a notice is taken off, as the bar says: «Togli l'avviso», not «Scarta l'avviso» (UX-27)", () => {
+    expect(italian.filter(([, text]) => /Scarta l'avviso/.test(text)).map(([key]) => key)).toEqual([])
+  })
+
   test("ADE speaks in the feminine in Italian: never «non sono riuscito» or «ADE non è riuscito»", () => {
     expect(italian.filter(([, text]) => /[Nn]on sono riuscito|ADE non è riuscito/.test(text)).map(([key]) => key)).toEqual([])
   })
