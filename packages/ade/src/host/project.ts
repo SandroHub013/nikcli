@@ -33,7 +33,9 @@ export interface Project {
  * someone who started it from one: from the Start menu it is the shortcut's «Start in» (normally ADE's own install
  * folder) and from the Dock the home folder, where writes are refused. So on the very first run (no saved workspace,
  * no recent project) none is opened and the empty project screen shows «Apri una cartella» (audit 2026-11-02, UX-5).
- * A user with a history keeps the old fallback, and a saved workspace with sessions never opens on nothing.
+ * A user with a history keeps the old fallback, and a saved workspace with sessions never opens on nothing, except when
+ * its project is gone: the sessions still restart, each in its own folder (the workbench's resume block does not need
+ * an open project).
  */
 export function startFolder(input: {
   /** The project folder the saved workspace names. */

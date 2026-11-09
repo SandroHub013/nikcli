@@ -7402,7 +7402,7 @@ export function Workbench() {
       setBooting(t("boot.project"))
       const here = host.currentDir ? await host.currentDir() : ""
       const saved = restored?.projectPath
-      // The last project's folder gone: ADE opens where it was started, and says why.
+      // The last project's folder gone: ADE opens no project, and says why (the saved sessions still restart, each in its own folder).
       const gone = saved ? await refuseMissingRoot(host, saved) : false
       // The first run opens no folder: the empty project screen offers «Apri una cartella» (UX-5).
       const path = startFolder({
@@ -7432,12 +7432,12 @@ export function Workbench() {
        * and the task it was given — and starting that work again on open is
        * what "the sessions come back" can actually mean.
        *
-       * Only after the project resolves, because `startProcess` needs it to
-       * choose a working directory, and only for sessions that were live and
+       * Only after the project resolves (there may be none: the last one's folder is gone, and each pane
+       * brings its own), and only for sessions that were live and
        * carry a task: a finished one has nothing to resume, and a task-less
        * one would launch an agent with an empty prompt.
        */
-      if (restored && p) {
+      if (restored) {
         /*
          * Planned all at once, not one at a time.
          *
@@ -7458,11 +7458,14 @@ export function Workbench() {
             // The conversation the pane last switched to, when ADE closed before reading it.
             const reported = await adoptLastReport(saved)
             const pane = reported ? { ...saved, resumeId: reported } : saved
+            // The pane's own folder first: with the last project gone there is no open project, and each pane still
+            // restarts in its own (`startProcess` finds its project and says when its folder is missing).
+            const folder = pane.cwd || p?.root || pane.projectRoot || ""
             return {
               agentId: pane.agent,
-              cwd: pane.cwd || p.root,
+              cwd: folder,
               ...(pane.resumeId !== undefined ? { resumeId: pane.resumeId } : {}),
-              missing: await conversationMissing(pane.agent, pane.resumeId, pane.cwd || p.root),
+              missing: await conversationMissing(pane.agent, pane.resumeId, folder),
               pane,
             }
           }),
