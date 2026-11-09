@@ -19,7 +19,7 @@ describe("the saved sessions are restarted whether or not a project is open (UX-
   })
 
   test("a pane's own folder is used when there is no open project", () => {
-    expect(source.includes('const folder = pane.cwd || p?.root || pane.projectRoot || ""')).toBe(true)
+    expect(source.includes("const folder = restoreFolder(pane, p?.root)")).toBe(true)
     expect(source.includes("cwd: folder,")).toBe(true)
     expect(source.includes("conversationMissing(pane.agent, pane.resumeId, folder)")).toBe(true)
     expect(source.includes("cwd: pane.cwd || p.root,")).toBe(false)

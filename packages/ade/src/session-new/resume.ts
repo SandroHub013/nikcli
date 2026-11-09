@@ -850,6 +850,15 @@ export function restoreByAgent<S, T extends { agentId: string; cwd: string; resu
   return claims
 }
 
+/**
+ * The folder a restored pane counts under: its own, else the project open at the boot (`root`), else the one it belonged to.
+ * With the last project gone there is no open project, and the panes still restart. The claims are keyed by this, so the
+ * plan and the live panes that look a claim up must both ask here.
+ */
+export function restoreFolder(pane: { cwd?: string; projectRoot?: string }, root: string | undefined): string {
+  return pane.cwd || root || pane.projectRoot || ""
+}
+
 /** Whether a restore already handed out this folder's "most recent conversation" (`restoreClaims`). */
 export function claimedByRestore(
   claims: ReadonlySet<string> | undefined,

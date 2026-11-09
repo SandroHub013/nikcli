@@ -58,7 +58,7 @@ describe("one start per pane at a time (ALTO 3)", () => {
   test("lint: reopen and the restore start a pane through the reopening guard (ALTO 3)", () => {
     const source = readFileSync(join(import.meta.dir, "workbench.tsx"), "utf8")
     const reopen = source.slice(source.indexOf("const reopen = async "), source.indexOf("const reopenPane = async "))
-    expect(codeOf(reopen)).toContain(codeOf("reopening.run(given.id, () => reopenPane(given, line, claims))"))
+    expect(codeOf(reopen)).toContain(codeOf("reopening.run(given.id, () => reopenPane(given, line, claimed))"))
     expect(codeOf(source)).toContain(
       codeOf(
         'void reopening.run(session.pane.id, () => startProcess(session.pane.id, session.pane.agent, session.pane.task ?? "", plan))',

@@ -134,6 +134,7 @@ import {
   MintLedger,
   lastHereBesideMints,
   restoreByAgent,
+  restoreFolder,
   claimedByRestore,
   openedConversation,
   LIST_COLS,
@@ -7562,7 +7563,7 @@ export function Workbench() {
             const pane = reported ? { ...saved, resumeId: reported } : saved
             // The pane's own folder first: with the last project gone there is no open project, and each pane still
             // restarts in its own (`startProcess` finds its project and says when its folder is missing).
-            const folder = pane.cwd || p?.root || pane.projectRoot || ""
+            const folder = restoreFolder(pane, p?.root)
             return {
               agentId: pane.agent,
               cwd: folder,
@@ -7603,7 +7604,11 @@ export function Workbench() {
         const plannedIds = new Set(toResume.map((saved) => saved.id))
         for (const pane of liveToReopen(wb().panes, plannedIds, restored)) {
           void (byAgent.get(pane.agent ?? pane.model ?? "") ?? Promise.resolve(new Set<string>()))
-            .then((claims) => (paneExists(pane.id) ? reopen(pane, undefined, claims) : undefined))
+            .then((claims) =>
+              paneExists(pane.id)
+                ? reopen(pane, undefined, claimedByRestore(claims, pane.agent ?? pane.model ?? "", restoreFolder(pane, p?.root)))
+                : undefined,
+            )
             .finally(() => restorePlanned.delete(pane.id))
         }
       } else restorePlanned.clear()
@@ -9360,13 +9365,13 @@ export function Workbench() {
    * pane had no way to reach it. Now the pane reopens it by id when it can,
    * and `line`, when the user typed one, is sent once the agent is ready.
    */
-  const reopen = async (given: Pane, line?: string, claims?: ReadonlySet<string>) => {
+  const reopen = async (given: Pane, line?: string, claimed?: boolean) => {
     if (running.has(given.id)) return
     // One at a time: its awaits left room for a second one to start the same pane twice (ALTO 3).
-    await reopening.run(given.id, () => reopenPane(given, line, claims))
+    await reopening.run(given.id, () => reopenPane(given, line, claimed))
   }
 
-  const reopenPane = async (given: Pane, line?: string, claims?: ReadonlySet<string>) => {
+  const reopenPane = async (given: Pane, line?: string, claimed?: boolean) => {
     const agentId = given.agent ?? given.model
     // A sign-in runs its sign-in again: the bare agent would start a session, on the default model.
     const restart = restartOf(given)
@@ -9391,7 +9396,7 @@ export function Workbench() {
       ...(pane.resumeId ? { resumeId: pane.resumeId } : {}),
       // "The most recent one here" unless another pane of this folder may be
       // in it: per folder, and for ragu only a pane without an id of its own.
-      lastTaken: lastTakenFor(pane, wb().panes) || claimedByRestore(claims, agentId, pane.cwd || project()?.root),
+      lastTaken: lastTakenFor(pane, wb().panes) || Boolean(claimed),
       missing,
     })
     // A `here` plan may start a new conversation, which then gets the task; a found one is not typed into.
