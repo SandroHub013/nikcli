@@ -4201,11 +4201,21 @@ export function Workbench() {
       }),
     deadlineOf: (item) => mailDeadline(item.message),
     done: (item) => {
+      voiceSendDecisions.delete(item.id)
+      voiceSendRequested.delete(item.id)
       dropFrom(mailQueue, item)
       persistMail()
     },
-    hung: (item, afterMs) => giveUpOnMail(item, hungReceipt(item.message.kind, item.id, afterMs)),
-    failed: (item, error) => giveUpOnMail(item, failedReceipt(error)),
+    hung: (item, afterMs) => {
+      voiceSendDecisions.delete(item.id)
+      voiceSendRequested.delete(item.id)
+      giveUpOnMail(item, hungReceipt(item.message.kind, item.id, afterMs))
+    },
+    failed: (item, error) => {
+      voiceSendDecisions.delete(item.id)
+      voiceSendRequested.delete(item.id)
+      giveUpOnMail(item, failedReceipt(error))
+    },
   })
 
   /* A round of the mail, in three parts that never wait for each other (`createMailRound`). */
@@ -4608,8 +4618,6 @@ export function Workbench() {
         }
         return false
       }
-      voiceSendDecisions.delete(id)
-      voiceSendRequested.delete(id)
     }
 
     if (message.kind === "reply") {

@@ -446,6 +446,64 @@ describe("lint: the workbench's round waits for nothing slow", () => {
     expect(source).toContain("void voiceEngine\n            .requestSendConfirmation")
   })
 
+  test("WB2-1: voice send approval is kept across delivery retries and deleted only when the lane finishes", async () => {
+    const deliverOneStart = source.indexOf("const spoken = voiceConfirmationFor(message)")
+    const approvedBlock = source.slice(deliverOneStart, deliverOneStart + 1200)
+    expect(approvedBlock).not.toContain("if (decision !== \"approved\") {\n        if (!voiceSendRequested.has(id)) {\n          voiceSendRequested.add(id)\n          // Not awaited: this lasts as long as the question takes to speak, and the message waits in the queue for the answer anyway.\n          void voiceEngine\n            .requestSendConfirmation(id, spoken.to, spoken.text, spoken.lead)\n            .catch(() => false)\n            .then((asked) => {\n              if (!asked) voiceSendDecisions.set(id, \"unavailable\")\n            })\n        }\n        return false\n      }\n      voiceSendDecisions.delete(id)\n      voiceSendRequested.delete(id)")
+
+    const lanesStart = source.indexOf("const mailLanes = createMailLanes<")
+    const lanesBlock = source.slice(lanesStart, lanesStart + 1500)
+    expect(lanesBlock).toContain("done: (item) => {\n      voiceSendDecisions.delete(item.id)\n      voiceSendRequested.delete(item.id)")
+    expect(lanesBlock).toContain("hung: (item, afterMs) => {\n      voiceSendDecisions.delete(item.id)\n      voiceSendRequested.delete(item.id)")
+    expect(lanesBlock).toContain("failed: (item, error) => {\n      voiceSendDecisions.delete(item.id)\n      voiceSendRequested.delete(item.id)")
+
+    const voiceSendDecisions = new Map<string, "approved" | "rejected" | "unavailable">()
+    const voiceSendRequested = new Set<string>()
+
+    let targetBusy = true
+    const item = { id: "msg-123" }
+    const lanes = createMailLanes<{ id: string }>({
+      deliver: async (i) => {
+        const decision = voiceSendDecisions.get(i.id)
+        if (decision !== "approved") return false
+        if (targetBusy) return false
+        return true
+      },
+      laneOf: () => "target-1",
+      deadlineOf: () => 1000,
+      done: (i) => {
+        voiceSendDecisions.delete(i.id)
+        voiceSendRequested.delete(i.id)
+      },
+      hung: (i) => {
+        voiceSendDecisions.delete(i.id)
+        voiceSendRequested.delete(i.id)
+      },
+      failed: (i) => {
+        voiceSendDecisions.delete(i.id)
+        voiceSendRequested.delete(i.id)
+      },
+    })
+
+    voiceSendDecisions.set(item.id, "approved")
+    voiceSendRequested.add(item.id)
+
+    lanes.start([item])
+    await flush()
+
+    // While target is busy, delivery returned false; decision and request marker must be kept
+    expect(voiceSendDecisions.get(item.id)).toBe("approved")
+    expect(voiceSendRequested.has(item.id)).toBe(true)
+
+    // Target becomes free; delivery succeeds and lane calls done to clean up
+    targetBusy = false
+    lanes.start([item])
+    await flush()
+
+    expect(voiceSendDecisions.has(item.id)).toBe(false)
+    expect(voiceSendRequested.has(item.id)).toBe(false)
+  })
+
   test("a request closed during a loop's awaits is not closed again, reminded or given a state", () => {
     expect(source).toContain("settleOnce(id, async () => {")
     expect(source).toContain("if (request.to === id && openRequests.has(request.id))")
