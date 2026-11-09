@@ -484,14 +484,16 @@ import {
   composerOf,
   cursorSaysDialog,
   enterBlocked,
+  followKeys,
+  forgetRefocus,
   lineBegunNow,
   mayTypeNow,
   questionHolds,
   readsComposer,
   type ComposerState,
 } from "../session/composer"
-import { COMPOSER_LOG_KEY, composerLogEntry, logWith, type ComposerLogReason } from "../session/composer-log"
-import { createDeliverNow, turnKnown, type BlindHold, type DeliverNowChange } from "../session/deliver-now"
+import { COMPOSER_LOG_KEY, composerLogEntry, disagreement, logWith, type ComposerLogReason } from "../session/composer-log"
+import { blindNow, createDeliverNow, turnKnown, type BlindHold, type DeliverNowChange } from "../session/deliver-now"
 import { parseQueue, queueToSave, waitsForRestore } from "../session/mail-queue"
 import {
   clientStoppedReading,
@@ -3153,7 +3155,7 @@ export function Workbench() {
     // A line on its way is a turn about to start (`createInFlight`).
     if (linesInFlight.has(paneId)) return false
     // «Consegna ora» says go, for the mail it was pressed for, and the reading of menus alone can still say no.
-    if (mail && deliverNow.armed(paneId, Date.now())) return !questionOpen(paneId)
+    if (mail && deliverNow.armed(paneId, Date.now())) return !questionOpen(paneId) && !undrawnSince.has(paneId)
     const isHooked = hooked(paneId)
     let activity = activityOf.get(paneId)
     const nonce = paneNonces.get(paneId)
@@ -3590,7 +3592,7 @@ export function Workbench() {
       now: Date.now(),
     })
     return {
-      blind: (box === "none" || box === "draft") && !questionOpen(paneId) && !turn,
+      blind: blindNow({ box, question: questionOpen(paneId), turn, nothingDrawn: undrawnSince.has(paneId) }),
       ...(box === "draft" ? { line: composerLine(getTerminal(paneId).terminal) } : {}),
       ...(hasTerminal(paneId) && cursorSaysDialog(getTerminal(paneId).terminal)
         ? { dialog: true }
@@ -3617,6 +3619,13 @@ export function Workbench() {
     if (composerNow(paneId) === undefined) return
     deliverNowChanged(paneId, deliverNow.mailHeld(paneId, blindHold(paneId), Date.now(), from))
   }
+  /** A new process on this pane: an offer or a click was about the one before it. */
+  const newProcessOnPane = (paneId: string) => {
+    deliverNow.forget(paneId)
+    setDeliverNowPanes(new Set(deliverNow.standing()))
+    dropPaneNote(paneId, deliverNowNote(paneId))
+    if (hasTerminal(paneId)) forgetRefocus(getTerminal(paneId).terminal)
+  }
   /** The click: one message, with its Enter, and the action goes. */
   const pressDeliverNow = (paneId: string) => {
     const go = deliverNow.click(paneId, questionOpen(paneId), Date.now())
@@ -3637,9 +3646,9 @@ export function Workbench() {
   const logDisagreement = (paneId: string, box: ComposerState | undefined) => {
     if (box === undefined || box === "draft") return
     const now = Date.now()
-    const asked = questionOpen(paneId)
     const quiet = now - (lastOutputAt.get(paneId) ?? now) >= QUIET_FREE_MS
-    const reason = box === "ready" && asked ? "box-over-menu" : box === "none" && !asked && quiet ? "no-box-no-menu" : undefined
+    const onScreen = modeTracker.heldOpen(paneId) || screenAsks(paneId)
+    const reason = disagreement({ box, asked: questionOpen(paneId), onScreen, quiet })
     if (!reason || now - (disagreementLoggedAt.get(paneId) ?? 0) < 5_000) return
     disagreementLoggedAt.set(paneId, now)
     logComposer(paneId, reason)
@@ -5765,6 +5774,8 @@ export function Workbench() {
       { id, kind: message.kind === "ask" ? "ask" : "send", from: message.from },
       stored,
     )
+    // The lane gave up on it meanwhile, and its sender has been told so: nothing here may reopen what that closed.
+    if (mailLanes.abandoned(id)) return true
     // A prompt opened before the text: the message stays queued, as for a prompt seen above.
     if (delivered === "held") return false
     if (delivered === "closed") {
@@ -9680,6 +9691,7 @@ export function Workbench() {
       discardNotes.started(paneId)
       modeTracker.forget(paneId)
       menuHold.forget(paneId)
+      newProcessOnPane(paneId)
       undrawnSince.set(paneId, Date.now())
       if (heldBySilenceNoted.delete(paneId)) dropPaneNote(paneId, t("note.mailHeldBySilence"))
       if (heldByMenuNoted.delete(paneId)) dropPaneNote(paneId, t("note.mailHeldByMenu"))
@@ -10087,6 +10099,7 @@ export function Workbench() {
       startOnCleanScreen(paneId)
       discardNotes.started(paneId)
       menuHold.forget(paneId)
+      newProcessOnPane(paneId)
       undrawnSince.set(paneId, Date.now())
       if (heldBySilenceNoted.delete(paneId)) dropPaneNote(paneId, t("note.mailHeldBySilence"))
       if (heldByMenuNoted.delete(paneId)) dropPaneNote(paneId, t("note.mailHeldByMenu"))
@@ -10544,6 +10557,10 @@ export function Workbench() {
     menuEnter,
     deliverNowOffered: (id) => deliverNowPanes().has(id),
     deliverNow: pressDeliverNow,
+    followKeys: (id, data) => {
+      const pane = wb().panes.find((candidate) => candidate.id === id)
+      if (pane && hasTerminal(id)) followKeys(getTerminal(id).terminal, pane.agent ?? pane.model ?? "", data)
+    },
     interrupted,
     restart: (pane, line) => void reopen(pane, line),
     suspendCheck: suspendCheckFor,

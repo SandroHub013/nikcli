@@ -36,6 +36,19 @@ export interface BlindHold {
 export type DeliverNowChange = "offered" | "withdrawn" | undefined
 
 /**
+ * Whether ADE cannot say what waits. A pane that has drawn nothing is no unknown screen: it is a program starting, and
+ * whatever it opens on (a trust question, a wizard) would read the text and the Enter.
+ */
+export function blindNow(input: {
+  box: "ready" | "draft" | "none" | undefined
+  question: boolean
+  turn: boolean
+  nothingDrawn: boolean
+}): boolean {
+  return (input.box === "none" || input.box === "draft") && !input.question && !input.turn && !input.nothingDrawn
+}
+
+/**
  * Whether a turn is going, for what ADE knows: the hook's word where there is one, for as long as a busy is believed
  * anywhere; else a line ADE saw go, for as long as a turn is believed. A pane still starting says `working` and has seen no
  * line: its first task is what starts a turn.

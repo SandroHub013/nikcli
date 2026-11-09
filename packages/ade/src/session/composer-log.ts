@@ -62,6 +62,20 @@ export function composerLogEntry(
 const sameShape = (a: ComposerLogEntry, b: ComposerLogEntry) =>
   a.agent === b.agent && a.reason === b.reason && JSON.stringify(a.shape) === JSON.stringify(b.shape)
 
+/**
+ * What a pane's disagreement is worth writing down. A hook's `permission` stays until the turn ends, while the box is back
+ * for the rest of it: only a question still on the screen disagrees with an empty box, or healthy turns fill the log.
+ */
+export function disagreement(input: {
+  box: "ready" | "none"
+  asked: boolean
+  onScreen: boolean
+  quiet: boolean
+}): ComposerLogReason | undefined {
+  if (input.box === "ready") return input.onScreen ? "box-over-menu" : undefined
+  return !input.asked && input.quiet ? "no-box-no-menu" : undefined
+}
+
 /** The stored log with `entry` added: a shape already there is not added twice, and the oldest go first. */
 export function logWith(stored: string | null, entry: ComposerLogEntry): string {
   let entries: ComposerLogEntry[] = []

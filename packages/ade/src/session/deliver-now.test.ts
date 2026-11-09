@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import { codeOf } from "../test-support/source-text"
 import { composerLogEntry, logWith, maskRow } from "./composer-log"
 import {
+  blindNow,
   createDeliverNow,
   DELIVER_NOW_AFTER_MS,
   DELIVER_NOW_OVER_DIALOG_MS,
@@ -264,6 +265,16 @@ describe("the click", () => {
     const now = offered()
     now.click("p", true, AFTER)
     expect(now.standing()).toEqual([])
+  })
+
+  test("a pane that has drawn nothing is not blind: it is starting (audit SES2-3)", () => {
+    const base = { box: "none", question: false, turn: false } as const
+    expect(blindNow({ ...base, nothingDrawn: false })).toBe(true)
+    expect(blindNow({ ...base, nothingDrawn: true })).toBe(false)
+    const now = createDeliverNow()
+    const starting = { blind: blindNow({ ...base, nothingDrawn: true }) }
+    for (let at = 0; at <= 60_000; at += 1_000) expect(now.mailHeld("p", starting, at)).toBeUndefined()
+    expect(now.offered("p")).toBe(false)
   })
 
   test("a menu that came before the click takes it back", () => {

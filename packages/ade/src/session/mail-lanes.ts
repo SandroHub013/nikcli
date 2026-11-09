@@ -22,8 +22,12 @@ import type { Message } from "./mailbox"
 
 /** A step that only touches ADE's own state and one file. */
 export const MAIL_QUICK_MS = 30_000
-/** Typing a line (up to 8 s per paste, behind the lines already queued), or a step that may call git once or twice. */
-export const MAIL_STEP_MS = 120_000
+/**
+ * Typing a line (its paste, then up to `ENTER_PATIENCE_MS` for its box to come back, behind the lines already queued), or a
+ * step that may call git once or twice. Longer than those on purpose: a lane that gave up first told the sender «senza
+ * esito» while the text was still in the box, and the same message then ran twice.
+ */
+export const MAIL_STEP_MS = 150_000
 /** `close` and `spawn`: several git calls of up to 120 s, and `git worktree add` of up to 600 s. */
 export const MAIL_LONG_MS = 15 * 60_000
 
@@ -39,7 +43,7 @@ export function mailLane(message: Message, paneOf: (to: string) => string | unde
     case "send":
     case "ask":
     // Their keys skip the line queue, and between a line's text and its Enter they would clear the line. A message
-    // held for that turn is no obstacle: it returns false at once. Only a line being typed delays them, by 8 s at most.
+    // held for that turn is no obstacle: it returns false at once. Only a line being typed delays them, its Enter included.
     case "interrupt":
     case "relaunch": {
       // Typed in the order they were sent, per pane.

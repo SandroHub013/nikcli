@@ -106,6 +106,8 @@ export interface PaneRendererDeps {
   deliverNowOffered: (id: string) => boolean
   /** The click: one message, with its Enter, on what shows now. */
   deliverNow: (id: string) => void
+  /** The keys and the focus reports on their way to a pane (`followKeys`). */
+  followKeys: (id: string, data: string) => void
   /** An Esc or a Ctrl-C typed in the pane, which Claude Code reports to no hook. */
   interrupted: (id: string) => void
   /** "Riprova" on a session that failed. */
@@ -513,6 +515,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
            * for every agent in the catalogue and for a plain shell, since it
            * never asks what is running: see `session/typing.ts`.
            */
+          deps.followKeys(current().id, data)
           // Asked before the key is written: a key that answers a menu on screen is not a line begun (F2).
           const menuOpen = isAnswerKey(data) && !isTyping(deps.records.typed.get(current().id)) && deps.menuOpen(current().id, data)
           deps.records.typed.update(current().id, (line) => typedAfter(line, data, Date.now(), menuOpen))

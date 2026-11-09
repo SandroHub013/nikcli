@@ -76,6 +76,11 @@ interface CursorModes {
 }
 
 const hiddenCursor = new WeakSet<object>()
+/** A bar agent's terminal that had a focus-in with something open over its box: see `followKeys`. */
+const refocused = new WeakSet<object>()
+const FOCUS_IN = "\x1b[I"
+/** A mouse report: `ESC [ < button ; x ; y M`. A button of 32 up is a motion or the wheel, and closes nothing. */
+const MOUSE_PRESS = /^\x1b\[<(\d+);\d+;\d+M$/
 
 /**
  * Follows `terminal`'s cursor mode from its birth. xterm has it, and says it to no public API. A dialog that takes the keys
@@ -93,6 +98,28 @@ export function watchCursor(terminal: CursorModes): void {
   terminal.parser.registerCsiHandler({ prefix: "?", final: "h" }, follow(false))
 }
 
+/**
+ * The keys on their way to a pane, for the one thing the screen stops saying. ragu gives its box the cursor back on every
+ * focus-in, with a dialog still open over it (`refocusPrompt`), and in a wide pane the box stands beside the dialog: the
+ * cursor says «box» and an Enter would be the dialog's. Each frame of opentui hides and shows the cursor, so nothing after
+ * it tells them apart. The focus-in does: a box drawn and not read, at that moment, has something over it. It holds until a
+ * key or a click that can close a dialog. If there was none to close, the pane waits and «Consegna ora» is the way out.
+ */
+export function followKeys(terminal: ComposerTerminal, agentId: string, data: string): void {
+  if (!BAR_AGENTS.has(agentId)) return
+  if (data === FOCUS_IN) {
+    if (composerOf(terminal, agentId) === "none" && rowsOf(terminal).some((row) => MODEL_ROW.test(row))) refocused.add(terminal)
+    return
+  }
+  const mouse = data.match(MOUSE_PRESS)
+  if (data === "\x1b" || data.includes("\r") || (mouse && Number(mouse[1]) < 32)) refocused.delete(terminal)
+}
+
+/** A new process on the same terminal: what stood over the old one's box has gone with it. */
+export function forgetRefocus(terminal: object): void {
+  refocused.delete(terminal)
+}
+
 /** Whether ADE knows this agent's input box. The others stay on the reading of menus (`questionOpen`). */
 export function readsComposer(agentId: string): boolean {
   return agentId in RULED_PROMPT || BAR_AGENTS.has(agentId)
@@ -103,6 +130,7 @@ export function composerOf(terminal: ComposerTerminal, agentId: string): Compose
   if (!readsComposer(agentId)) return undefined
   const hidden = hiddenCursor.has(terminal)
   if (hidden && !HIDES_ITS_CURSOR.has(agentId)) return "none"
+  if (refocused.has(terminal)) return "none"
   // ragu gives its box the cursor back on a focus-in, with a dialog still open over it: the reading has to say so here.
   if (agentId === "ragu" && confirmDialog(rowsOf(terminal))) return "none"
   const glyph = RULED_PROMPT[agentId]
@@ -216,7 +244,8 @@ export interface TypingFacts {
 /** Whether a line may be typed now: the first task, mail, a re-ring, a reminder, a nudge and the preamble alike. */
 export function mayTypeNow(facts: TypingFacts): boolean {
   if (facts.composer === undefined) return !facts.question && !facts.nothingDrawn
-  return facts.composer === "ready" || (facts.armed === true && !facts.question)
+  // A click is an answer to what the user sees, and a blank pane shows nothing: what it opens on would read the text.
+  return facts.composer === "ready" || (facts.armed === true && !facts.question && !facts.nothingDrawn)
 }
 
 /** Whether a line has been begun in the pane: read off the box where it can be, counted from the keys where not. */

@@ -3,11 +3,14 @@ import { readFileSync } from "node:fs"
 import { Terminal } from "@xterm/xterm"
 import { loadCapture, play, screenText, terminalFor, writtenTo } from "../test-support/live-bytes"
 import { codeOf } from "../test-support/source-text"
+import { disagreement } from "./composer-log"
 import { AGENTS } from "../session-new/agents"
 import {
   composerOf,
   cursorSaysDialog,
   enterBlocked,
+  followKeys,
+  forgetRefocus,
   lineBegunNow,
   mayTypeNow,
   questionHolds,
@@ -819,6 +822,103 @@ describe("ragu at 36 columns: the example goes to the next row whole (live test 
   test("an example that closes before the model row is the example, and text under it is a line", async () => {
     expect(composerOf(await drawn(box("Chiedi...", '"Qual e lo stack', 'di questo?"'), 36, 15), "ragu")).toBe("ready")
     expect(composerOf(await drawn(box("Chiedi...", '"Fix"', "altro"), 36, 15), "ragu")).toBe("draft")
+  })
+})
+
+describe("a click means nothing on a pane that has drawn nothing (audit SES2-3)", () => {
+  const workbench = codeOf(readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8"))
+  const between = (from: string, to: string) => workbench.slice(workbench.indexOf(from), workbench.indexOf(to))
+
+  test("armed or not, the text does not go before the first frame", () => {
+    expect(mayTypeNow({ composer: "none", question: false, nothingDrawn: true, armed: true })).toBe(false)
+    expect(mayTypeNow({ composer: "none", question: false, nothingDrawn: false, armed: true })).toBe(true)
+  })
+
+  test("lint: the armed shortcut asks it too, and a new process forgets the offer on both roads", () => {
+    expect(workbench).toContain("if(mail&&deliverNow.armed(paneId,Date.now()))return!questionOpen(paneId)&&!undrawnSince.has(paneId)")
+    expect(workbench.split("newProcessOnPane(paneId)").length - 1).toBe(2)
+    expect(between("constnewProcessOnPane=", "constpressDeliverNow=")).toContain("deliverNow.forget(paneId)")
+  })
+
+  test("lint: a pane closed or gone forgets its offer", () => {
+    expect(workbench.split("deliverNow.forget(id)").length - 1).toBe(2)
+  })
+})
+
+describe("a dialog left open over ragu's box, after a focus-in (audit SES2-2)", () => {
+  const FOCUS_REPORT = "\x1b[I"
+  /** What ragu writes on a focus-in: the cursor back on the box, with the dialog still there. */
+  const BACK_ON_BOX = "\x1b[?1000h\x1b[?1004h\x1b[?2004h\x1b[10;6H\x1b[?25h"
+  const box = "\x1b[?1049h\x1b[2J\x1b[9;3H┃\x1b[10;3H┃\x1b[11;3H┃  Build · Grok 4.7 · xAI\x1b[12;3H┃"
+  /** A picker with a filter field of its own: the cursor is visible, and in the dialog. */
+  const picker = "\x1b[5;70H│ Select model            esc │\x1b[6;70H│ Search                     │\x1b[6;79H"
+
+  for (const agent of ["ragu", "opencode"]) {
+    test(`${agent}: the mail holds from the focus-in until the dialog can have closed`, async () => {
+      const terminal = await drawn(`${box}${picker}`, 120, 17)
+      expect(composerOf(terminal, agent)).toBe("none")
+      followKeys(terminal, agent, FOCUS_REPORT)
+      await writtenTo(terminal, BACK_ON_BOX)
+      expect(composerOf(terminal, agent)).toBe("none")
+      followKeys(terminal, agent, "\x1b[<35;10;10M")
+      expect(composerOf(terminal, agent)).toBe("none")
+      followKeys(terminal, agent, "\x1b")
+      expect(composerOf(terminal, agent)).toBe("ready")
+    })
+  }
+
+  test("an Enter or a press closes it as well as an Esc", async () => {
+    for (const key of ["\r", "\x1b[<0;10;10M"]) {
+      const terminal = await drawn(`${box}${picker}`, 120, 17)
+      followKeys(terminal, "ragu", FOCUS_REPORT)
+      followKeys(terminal, "ragu", key)
+      await writtenTo(terminal, BACK_ON_BOX)
+      expect(composerOf(terminal, "ragu")).toBe("ready")
+    }
+  })
+
+  test("a box at rest is not touched by a focus-in", async () => {
+    const terminal = await drawn(`${box}\x1b[10;6H`, 120, 17)
+    expect(composerOf(terminal, "ragu")).toBe("ready")
+    followKeys(terminal, "ragu", FOCUS_REPORT)
+    expect(composerOf(terminal, "ragu")).toBe("ready")
+  })
+
+  test("a pane still starting is not marked: its first task would wait for a key", async () => {
+    const terminal = await drawn("\x1b[?25l", 120, 17)
+    followKeys(terminal, "ragu", FOCUS_REPORT)
+    await writtenTo(terminal, `${box}\x1b[10;6H\x1b[?25h`)
+    expect(composerOf(terminal, "ragu")).toBe("ready")
+  })
+
+  test("a new process on the terminal starts clean", async () => {
+    const terminal = await drawn(`${box}${picker}`, 120, 17)
+    followKeys(terminal, "ragu", FOCUS_REPORT)
+    await writtenTo(terminal, BACK_ON_BOX)
+    forgetRefocus(terminal)
+    expect(composerOf(terminal, "ragu")).toBe("ready")
+  })
+
+  test("other agents are not followed", async () => {
+    const terminal = await drawn(rowsAt(["─".repeat(78), "> ", "─".repeat(78)], [2, 1]))
+    followKeys(terminal, "agy", FOCUS_REPORT)
+    expect(composerOf(terminal, "agy")).toBe("ready")
+  })
+})
+
+describe("the log of a changed box keeps what it is for (audit SES2-5)", () => {
+  test("a hook's permission over a box that came back is a healthy turn, and is not written", () => {
+    expect(disagreement({ box: "ready", asked: true, onScreen: false, quiet: true })).toBeUndefined()
+  })
+
+  test("a question on the screen over an empty box is", () => {
+    expect(disagreement({ box: "ready", asked: true, onScreen: true, quiet: true })).toBe("box-over-menu")
+  })
+
+  test("no box and no question, and quiet, is what a changed box looks like", () => {
+    expect(disagreement({ box: "none", asked: false, onScreen: false, quiet: true })).toBe("no-box-no-menu")
+    expect(disagreement({ box: "none", asked: false, onScreen: false, quiet: false })).toBeUndefined()
+    expect(disagreement({ box: "none", asked: true, onScreen: false, quiet: true })).toBeUndefined()
   })
 })
 
