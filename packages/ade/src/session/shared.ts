@@ -144,9 +144,12 @@ export function applyKv(
     case "get": {
       const entry = own(space.entries, key)
       if (!entry) return { space, reply: `errore: nessun valore per ${key}` }
-      // A stored value is some session's text, returned as the answer to another one: its lines after the first are
-      // barred, like every kept body, so none can begin with the tag of the user's own answer.
-      return { space, reply: `ok\n${keptBody(entry.value)}` }
+      // A stored value is some session's text, returned as the answer to another one. Its lines after the first are
+      // barred, like every kept body; the first has no header before it here (the client prints all that follows "ok"),
+      // so it is barred too when it opens with the tag of the user's own answer. Any other first line is left alone:
+      // scripts read this, and a JSON value must come back as it went in.
+      const body = keptBody(entry.value)
+      return { space, reply: `ok\n${/^\[[^\]\n]* da utente\]/.test(body) ? `│ ${body}` : body}` }
     }
     case "list": {
       const prefix = key
