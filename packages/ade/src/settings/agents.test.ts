@@ -175,10 +175,15 @@ describe("Agenti e account › Account", () => {
       "Non installato: lo installi da Nuova sessione",
     )
     expect(buttons("codex")).toEqual([])
+    // The accessible name starts with the visible word (WCAG 2.5.3): a screen reader says the state, then the detail.
+    expect(card("codex")?.querySelector('[data-slot="provider-badge"]')?.getAttribute("aria-label")).toBe(
+      "Non installato: lo installi da Nuova sessione",
+    )
 
     expect(card("claude")?.getAttribute("data-state")).toBe("unverified")
     expect(card("claude")?.querySelector('[data-slot="status-label"]')?.textContent).toBe("Da verificare")
     expect(card("claude")?.querySelector('[data-slot="provider-badge"]')?.getAttribute("title")).toBe("???")
+    expect(card("claude")?.querySelector('[data-slot="provider-badge"]')?.getAttribute("aria-label")).toBe("Da verificare: ???")
     expect(buttons("claude")).toEqual(["Accedi"])
   })
 

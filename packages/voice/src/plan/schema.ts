@@ -186,7 +186,7 @@ export function validatePlan(raw: unknown, context: PlanContext): ValidatedPlan 
 
   // If there are no steps list and no speech was provided, it's unparseable
   if (!list && !speech) {
-    return { steps, refusals: ["Non sono riuscito a costruire un piano da quella frase."] }
+    return { steps, refusals: ["Non riesco a costruire un piano da quella frase."] }
   }
 
   if (list) {

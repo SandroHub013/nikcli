@@ -547,6 +547,14 @@ export function SessionPane(props: SessionPaneProps) {
     return detail ? `${STATE_FULL[state()]}\n${detail}${elText}` : `${STATE_FULL[state()]}${elText}`
   })
 
+  /** The narrow header's one button names its pane, as the full-width expand button does (UX-21). */
+  const expandLabel = () =>
+    props.title
+      ? t(props.expanded ? "pane.restore.named" : "pane.expand.named", props.title)
+      : props.expanded
+        ? t("pane.restore")
+        : t("pane.expand")
+
   return (
     <article
       ref={(element) => {
@@ -890,9 +898,9 @@ export function SessionPane(props: SessionPaneProps) {
         <button
           type="button"
           class="act more"
-          aria-label={props.expanded ? t("pane.restore") : t("pane.expand")}
-          title={props.expanded ? t("pane.restore") : t("pane.expand")}
-          data-tip={props.expanded ? t("pane.restore") : t("pane.expand")}
+          aria-label={expandLabel()}
+          title={expandLabel()}
+          data-tip={expandLabel()}
           onClick={() => props.onExpand?.()}
         >
           {/* The expand glyph, the same as the full-width button's: «⋯» means «more actions» everywhere else in ADE, and

@@ -241,8 +241,15 @@ describe("the words of the glossary (UX-11, UX-12, UX-27)", () => {
     expect(en["settings.providers.notInstalled"]).toBe("Not installed")
   })
 
-  test("ADE speaks in the feminine in Italian: never «non sono riuscito» or «ADE non è riuscito»", () => {
-    expect(italian.filter(([, text]) => /[Nn]on sono riuscito|ADE non è riuscito/.test(text)).map(([key]) => key)).toEqual([])
+  test("ADE's written texts are in the feminine: never «non sono riuscito» or «ADE non è riuscito»", () => {
+    expect(italian.filter(([, text]) => /[Nn]on sono riuscito\b|ADE non è riuscito\b/.test(text)).map(([key]) => key)).toEqual([])
+  })
+
+  // The voice's own lines (voice.msg.*) say nothing about its gender: the default voice, Ugo, is a man's and Rosa's is a
+  // woman's. «Non riesco a…», not «Non sono riuscita a…» (see packages/voice/src/neutral-self.test.ts).
+  test("the voice's own lines carry no gender about itself", () => {
+    const self = /\b(?:[Nn]on )?[Ss]ono (?:riuscit[oa]|svegli[oa]|pront[oa])\b|\bADE non è riuscit[oa]\b/
+    expect(italian.filter(([key, text]) => key.startsWith("voice.msg.") && self.test(text)).map(([key]) => key)).toEqual([])
   })
 
   test("an ellipsis is the one character «…», never three dots, in the Italian texts", () => {

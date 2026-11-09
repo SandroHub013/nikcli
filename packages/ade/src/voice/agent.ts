@@ -558,7 +558,7 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
             result.problem ||
             (loc === "en"
               ? "Could not answer you: agent gave no output."
-              : "Non sono riuscito a risponderti: l'agente non ha detto niente."),
+              : "Non riesco a risponderti: l'agente non ha detto niente."),
           ran: true,
         }
       } finally {

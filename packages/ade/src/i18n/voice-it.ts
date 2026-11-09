@@ -507,7 +507,7 @@ export const voiceIt = {
   "voice.msg.ignored.long": "Ignorata una frase lunga: non se ne poteva mandare solo l'inizio.",
   "voice.msg.ignored.noWake": (wakeWord: string, words: string) => `Ignorata, non inizia con «${wakeWord}»: «${words}».`,
   "voice.msg.synthFailed": "Errore durante la sintesi vocale.",
-  "voice.msg.micOpenFailed": "Non sono riuscito ad aprire il microfono: riprova.",
+  "voice.msg.micOpenFailed": "Non riesco ad aprire il microfono: riprova.",
   "voice.msg.settingsNotApplied": "Le nuove impostazioni vocali non sono state applicate.",
 
   "voice.msg.asr.base64Null": "Errore durante la codifica base64 del file audio: risultato nullo.",
@@ -524,7 +524,7 @@ export const voiceIt = {
   "voice.msg.asr.serverProblem": (status: number, detail: string) =>
     `Il servizio che trascrive la voce ha avuto un problema (${status})${detail}: riprova tra poco.`,
   "voice.msg.asr.badResponse": (why: string) => `Risposta non valida dal servizio di trascrizione: ${why}`,
-  "voice.msg.asr.transcribeFailed": (why: string) => `Non sono riuscito a trascrivere la frase: ${why}`,
+  "voice.msg.asr.transcribeFailed": (why: string) => `Non riesco a trascrivere la frase: ${why}`,
   "voice.msg.asr.unknownError": "errore sconosciuto",
   "voice.msg.asr.unexpectedFormat": "formato inatteso",
   "voice.msg.asr.micDenied":
@@ -536,7 +536,7 @@ export const voiceIt = {
   "voice.msg.asr.xaiKeyInvalid": "La chiave xAI non funziona: trascrivo con MAI-Transcribe-2.",
   "voice.msg.asr.xaiCreditOut": "Il credito xAI è finito: trascrivo con MAI-Transcribe-2 finché non lo ricarichi.",
 
-  "voice.msg.program.sendRefused": "Non sono riuscito a inviare la dettatura: il testo non è partito.",
+  "voice.msg.program.sendRefused": "Non riesco a inviare la dettatura: il testo non è partito.",
   "voice.msg.program.inClipboard": "Il testo dettato è negli appunti.",
   "voice.msg.program.whichPane": "Non so su quale pannello: dimmi il numero o il nome, oppure mettilo a fuoco.",
   "voice.msg.program.insertFailed": "Errore durante l'inserimento del testo trascritto nel pannello.",
@@ -560,7 +560,7 @@ export const voiceIt = {
   "voice.msg.plan.keyInvalid": "La chiave del servizio non è valida. Puoi correggerla nelle impostazioni della voce.",
   "voice.msg.plan.serverError": "Il servizio ha risposto con un errore. Riprova fra un momento.",
   "voice.msg.plan.unreachable": "Non ho raggiunto il servizio. Controlla la connessione e riprova.",
-  "voice.msg.plan.noPlan": "Non sono riuscito a ottenere un piano. Riprova fra un momento.",
+  "voice.msg.plan.noPlan": "Non riesco a ottenere un piano. Riprova fra un momento.",
   "voice.msg.plan.projectChanged": "Il progetto è cambiato: il piano era per un altro progetto e non è stato eseguito.",
 
   "voice.msg.host.noProject": "Non c'è nessun progetto aperto: dimmi in quale progetto avviare la sessione.",

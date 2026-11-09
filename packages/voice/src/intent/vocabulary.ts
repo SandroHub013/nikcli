@@ -457,7 +457,7 @@ export const VOCABULARY: readonly VoiceIntentSpec[] = [
     phrases: ["svegliati", "ascolta", "ehi ade", "torna attivo", "riprendi ascolto", "attiva voce"],
     slots: [],
     destructive: false,
-    readback: "Sono sveglio e in ascolto",
+    readback: "Eccomi, ti ascolto",
   },
   {
     intent: "dictation.start",

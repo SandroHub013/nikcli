@@ -100,7 +100,7 @@ describe("agentHudState", () => {
     const state = agentHudState({
       ...base,
       status: "executing",
-      spoken: "Sono sveglio e in ascolto.",
+      spoken: "Eccomi, ti ascolto.",
       utterance: "quante sessioni ci sono aperte in ADE?",
     })
     expect(state.line).toBe("quante sessioni ci sono aperte in ADE?")
@@ -140,10 +140,10 @@ describe("agentHudState", () => {
 
   it("latestExchange pairs the latest sentence with an answer only when it came after it", () => {
     const at = 1
-    expect(latestExchange([{ kind: "assistant", text: "Sono sveglio e in ascolto.", at }])).toEqual({})
+    expect(latestExchange([{ kind: "assistant", text: "Eccomi, ti ascolto.", at }])).toEqual({})
     expect(
       latestExchange([
-        { kind: "assistant", text: "Sono sveglio e in ascolto.", at },
+        { kind: "assistant", text: "Eccomi, ti ascolto.", at },
         { kind: "user", text: "quante sessioni?", at },
       ]),
     ).toEqual({ utterance: "quante sessioni?" })
