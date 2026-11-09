@@ -169,6 +169,8 @@ export interface Host {
   // -- Messages between sessions (see `src-tauri/src/mailbox.rs`) -----------
   /** Takes every message `ade-msg send` has dropped since the last call. */
   mailboxTake?: () => Promise<{ id: string; body: string }[]>
+  /** The page holds these messages on disk: the native side, which kept them until now, can let them go. */
+  mailboxTaken?: (ids: string[]) => Promise<void>
   /**
    * The native side's signal to run a mail round: `true` when mail is in the outbox, `false` about once a second
    * whatever the window looks like. Events reach a hidden page at once; its timers do not (`watch_outbox` in `mailbox.rs`).
@@ -1053,6 +1055,11 @@ export async function getHost(): Promise<Host | undefined> {
     async mailboxTake() {
       const { invoke } = await import("@tauri-apps/api/core")
       return invoke<{ id: string; body: string }[]>("mailbox_take")
+    },
+
+    async mailboxTaken(ids) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("mailbox_taken", { ids })
     },
 
     async onMailboxPending(listener) {

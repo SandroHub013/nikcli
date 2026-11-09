@@ -2736,6 +2736,7 @@ pub fn run() {
             stats::system_stats,
             usage::transcript_usage,
             mailbox::mailbox_take,
+            mailbox::mailbox_taken,
             tts::tts_piper_status,
             tts::tts_piper_delete,
             tts::tts_piper_install,
@@ -2876,6 +2877,8 @@ pub(crate) fn page_gone(app: &tauri::AppHandle) {
     app.state::<gateway::Gateway>().page_loading();
     // Nor the chat's streams to `ragu serve`: their channels are gone with the old page.
     app.state::<serve_proxy::Requests>().abort_all();
+    // And what was handed to it and never confirmed goes back, for the page that comes next.
+    mailbox::give_back_handed(app);
 }
 
 /// What ADE ends on its way out: on `RunEvent::Exit`, and before an update's installer takes over (`update.rs`), where

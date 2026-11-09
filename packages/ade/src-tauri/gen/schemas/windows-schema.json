@@ -873,6 +873,12 @@
           "markdownDescription": "Enables the mailbox_take command without any pre-configured scope."
         },
         {
+          "description": "Enables the mailbox_taken command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-mailbox-taken",
+          "markdownDescription": "Enables the mailbox_taken command without any pre-configured scope."
+        },
+        {
           "description": "Enables the path_exists command without any pre-configured scope.",
           "type": "string",
           "const": "allow-path-exists",
@@ -1759,6 +1765,12 @@
           "type": "string",
           "const": "deny-mailbox-take",
           "markdownDescription": "Denies the mailbox_take command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the mailbox_taken command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-mailbox-taken",
+          "markdownDescription": "Denies the mailbox_taken command without any pre-configured scope."
         },
         {
           "description": "Denies the path_exists command without any pre-configured scope.",

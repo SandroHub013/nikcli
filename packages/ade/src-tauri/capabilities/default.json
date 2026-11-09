@@ -101,6 +101,7 @@
     "allow-mailbox-result-reclaim",
     "allow-mailbox-state",
     "allow-mailbox-take",
+    "allow-mailbox-taken",
     "allow-path-exists",
     "allow-pty-ack",
     "allow-pty-kill",

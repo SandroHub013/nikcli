@@ -235,6 +235,21 @@ pub async fn mailbox_take(app: tauri::AppHandle) -> Result<Vec<Outgoing>, String
     take_outbox(&dir.join("outbox"), &dir.join("receipts"), Instant::now())
 }
 
+/// The page's word: it holds these messages on disk, and they can go.
+#[tauri::command]
+pub async fn mailbox_taken(app: tauri::AppHandle, ids: Vec<String>) -> Result<(), String> {
+    let dir = mailbox_path(&app).ok_or("casella non disponibile")?;
+    confirm_taken(&dir.join("outbox"), &ids);
+    Ok(())
+}
+
+/// A page has gone, with what it was handed and had not confirmed: the next one gets it.
+pub fn give_back_handed(app: &tauri::AppHandle) {
+    if let Some(dir) = mailbox_path(app) {
+        give_back_all(&dir.join("outbox"));
+    }
+}
+
 /// The outbox read, and a receipt for every message refused for its size.
 ///
 /// A refused message used to vanish: the sender waited for a receipt that
@@ -273,9 +288,40 @@ fn claims() -> std::sync::MutexGuard<'static, std::collections::HashMap<String, 
     MAP.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner())
 }
 
-fn confirm_taken(_outbox: &Path, _ids: &[String]) {}
+/// How long a message handed to the page may wait for the page's word before it goes back in the outbox.
+const UNCONFIRMED_AFTER: Duration = Duration::from_secs(30);
 
-fn give_back_all(_outbox: &Path) {}
+/// Deletes what the page says it now holds, and only what was handed to it.
+fn confirm_taken(outbox: &Path, ids: &[String]) {
+    for id in ids {
+        if !valid_id(id) {
+            continue;
+        }
+        let handed = matches!(claims().get(id), Some(Claim::Handed(_)));
+        if handed {
+            finish_claim(&outbox.join(format!("{id}.taking")), id);
+            claims().remove(id);
+        }
+    }
+}
+
+/// Every message handed to a page that never confirmed it, back in the outbox.
+fn give_back_all(outbox: &Path) {
+    let Ok(entries) = fs::read_dir(outbox) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("taking") {
+            continue;
+        }
+        let Some(id) = path.file_stem().and_then(|s| s.to_str()).map(str::to_string) else {
+            continue;
+        };
+        let handed = matches!(claims().get(&id), Some(Claim::Handed(_)));
+        if handed && fs::rename(&path, path.with_extension("json")).is_ok() {
+            claims().remove(&id);
+        }
+    }
+}
 
 /// Deletes a claim that has been dealt with; if that fails, remembers it so it is never delivered again.
 fn finish_claim(claim: &std::path::Path, id: &str) {
@@ -291,7 +337,12 @@ fn finish_claim(claim: &std::path::Path, id: &str) {
 /// That is what lets a failed delete leave a harmless file instead of a message
 /// delivered twice, and a transient read error leave the message for the next
 /// pass instead of being answered as if it were damaged (RS-10).
-fn take_outbox(outbox: &std::path::Path, receipts: &std::path::Path, _now: Instant) -> Result<Vec<Outgoing>, String> {
+///
+/// A message read stays as its `.taking` until the page says it has it
+/// (`mailbox_taken`): one taken by a page that then went was lost. It comes back
+/// if that word does not come, at the next page load or after `UNCONFIRMED_AFTER`,
+/// and the page knows a copy when it sees one (`session/mail-taken.ts`).
+fn take_outbox(outbox: &std::path::Path, receipts: &std::path::Path, now: Instant) -> Result<Vec<Outgoing>, String> {
     let mut out = Vec::new();
     // What this call claimed itself: a claim given back must not be taken twice in the same pass.
     let mut claimed_here = std::collections::HashSet::new();
@@ -308,9 +359,19 @@ fn take_outbox(outbox: &std::path::Path, receipts: &std::path::Path, _now: Insta
                 if claimed_here.contains(&id) {
                     continue;
                 }
-                // Another take is reading it: what becomes of it is decided there, and a rename now would pull it from under that read.
-                if matches!(claims().get(&id), Some(Claim::Reading)) {
-                    continue;
+                // Its own statement: the guard must be gone before the arms take it again.
+                let state = claims().get(&id).copied();
+                match state {
+                    // Another take is reading it: what becomes of it is decided there, and a rename now would pull it from under that read.
+                    Some(Claim::Reading) => continue,
+                    Some(Claim::Handed(at)) if now.saturating_duration_since(at) < UNCONFIRMED_AFTER => continue,
+                    Some(Claim::Handed(_)) => {
+                        if fs::rename(&path, path.with_extension("json")).is_ok() {
+                            claims().remove(&id);
+                        }
+                        continue;
+                    }
+                    None => {}
                 }
                 if !valid_id(&id) || undeleted().contains(&id) {
                     if fs::remove_file(&path).is_ok() {
@@ -367,9 +428,8 @@ fn take_outbox(outbox: &std::path::Path, receipts: &std::path::Path, _now: Insta
         }
         match fs::read_to_string(&claim) {
             Ok(body) => {
-                // If the delete fails the claim stays, and is not a `.json`: the message is not delivered again.
-                finish_claim(&claim, &id);
-                claims().remove(&id);
+                // Not deleted: that waits for the page's word, once it holds the message.
+                claims().insert(id.clone(), Claim::Handed(now));
                 out.push(Outgoing { id: id.clone(), body });
             }
             // Bytes that are not UTF-8 will never be: the sender is told. Any other error may pass.
@@ -1883,6 +1943,7 @@ mod tests {
         }
         assert_eq!(delivered.len(), 1, "delivered, and once");
         assert_eq!(delivered[0].id, "1757860000000-ffff");
+        confirm_taken(&outbox, &["1757860000000-ffff".to_string()]);
         assert!(!claim.exists() && !outbox.join("1757860000000-ffff.json").exists());
         let _ = fs::remove_dir_all(&base);
     }

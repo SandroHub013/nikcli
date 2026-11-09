@@ -301,6 +301,7 @@ import type { Runner } from "../bots/runners"
 import { senderToken } from "../session/senders"
 import { followInboxRound, inboxEntriesOf, rearmInbox } from "../session/mail-inbox"
 import { bodyHash, firstTime, resealUnread, sealedBy, splitSealed, useMailKeys } from "../session/mail-seal"
+import { createTakenMail } from "../session/mail-taken"
 import { createActivityReads, type ActivityReads } from "../session/activity-reads"
 import { boardCandidates, parseOwners, whoOwns } from "../session/owners"
 import { mayReroute, pickProvider, setProviderPicker } from "../session/provider-pick"
@@ -3344,11 +3345,12 @@ export function Workbench() {
   const replayedMail = new Set<string>()
   // Nothing is written until what was saved has been read back: an empty queue at boot must not erase it.
   let mailRestored = false
-  const persistMail = () => {
-    if (!mailRestored) return
+  /** Whether the queue is on disk now: what the native side was told to let go depends on it (`takeMail`). */
+  const persistMail = (): boolean => {
+    if (!mailRestored) return false
     const queue = queueToSave(mailQueue)
     const now = JSON.stringify([queue, suspendedMailToSave(heldLines, paneExists)])
-    mailWriter.save(now, () => writeStored(QUEUE_KEY, queue) && saveSuspendedMail())
+    return mailWriter.save(now, () => writeStored(QUEUE_KEY, queue) && saveSuspendedMail())
   }
   /**
    * The held mail back, once the panes are: the messages go on waiting for a free session, and a sender is told
@@ -3360,6 +3362,8 @@ export function Workbench() {
       // Its sender was told «in coda» before the restart: the outcome is reported where it listens now (`deliverOne`).
       held.add(item.id)
       replayedMail.add(item.id)
+      // The native side gives back what the old page had not confirmed: this is that message.
+      takenMail.restored(item.id)
       rememberMailSender(item.id, item.message.from)
       mailQueue.push(item)
     }
@@ -3879,6 +3883,13 @@ export function Workbench() {
   }
   /** The ids of the messages taken lately: a copy of one posted again is not carried out twice (`firstTime`). */
   const mailSeen = new Map<string, number>()
+  /** What the page has had from the outbox: a message handed over again is not carried out twice (`session/mail-taken.ts`). */
+  const takenMail = createTakenMail()
+  /** A message that has ended is confirmed by that: with storage refusing the queue, no save ever would. */
+  const confirmTaken = (id: string) =>
+    void getHost()
+      .then((host) => host?.mailboxTaken?.([id]))
+      .catch(() => {})
   // The asker first: a message's id is the sender's to choose, and one posted with the id of an open request must not get its answer.
   const paneOfMail = (id: string) =>
     openRequests.get(id)?.from || mailSenders.get(id) || designWaiters().find((waiter) => waiter.id === id)?.from
@@ -4291,16 +4302,19 @@ export function Workbench() {
       voiceSendRequested.delete(item.id)
       dropFrom(mailQueue, item)
       persistMail()
+      confirmTaken(item.id)
     },
     hung: (item, afterMs) => {
       voiceSendDecisions.delete(item.id)
       voiceSendRequested.delete(item.id)
       giveUpOnMail(item, hungReceipt(item.message.kind, item.id, afterMs))
+      confirmTaken(item.id)
     },
     failed: (item, error) => {
       voiceSendDecisions.delete(item.id)
       voiceSendRequested.delete(item.id)
       giveUpOnMail(item, failedReceipt(error))
+      confirmTaken(item.id)
     },
   })
 
@@ -4325,9 +4339,13 @@ export function Workbench() {
 
   /** What came in: out of the outbox, on disk, and started, before anything else is awaited. */
   const takeMail = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>) => {
+    // Before the saved queue is read back nothing can be written, and a message confirmed then would be lost.
+    if (!mailRestored) return
     const taken = (await host.mailboxTake?.().catch(() => [])) ?? []
     if (taken.length === 0) return
     for (const { id, body } of taken) {
+      if (takenMail.isCopy(id, body)) continue
+      takenMail.handled(id, body)
       const sealed = splitSealed(body)
       if (!sealed) {
         void host.mailboxReceipt?.(id, UNSEALED_MAIL).catch(() => {})
@@ -4351,8 +4369,9 @@ export function Workbench() {
       if (message) mailQueue.push({ id, message, at: Date.now() })
       else void host.mailboxReceipt?.(id, "errore: messaggio non valido").catch(() => {})
     }
-    // The take deleted them from the outbox: this is now the only copy, and a crash must not lose what was told «in coda».
-    persistMail()
+    // The native side has kept them until it hears this: every one, the refused and the copies too, or they come back in 30 s.
+    // Only with them on disk, or a crash loses what was told «in coda», and before any delivery: what has run must not come back.
+    if (persistMail()) await host.mailboxTaken?.(taken.map(({ id }) => id)).catch(() => {})
     mailLanes.start(mailQueue)
   }
 
