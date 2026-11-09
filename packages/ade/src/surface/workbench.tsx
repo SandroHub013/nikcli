@@ -647,6 +647,7 @@ import { watchRegisters } from "../host/register-watch"
 import { designPath } from "../design/store"
 import { foldProposals, type DesignProposal } from "../design/state"
 import { parseDesignLog } from "../design/log"
+import { mayDeliver } from "../decisions/answer"
 import { answered as answeredProposal, answeredInAde, choiceLine, proposalEvent } from "../design/propose"
 import {
   WAITERS_KEY as DESIGN_WAITERS_KEY,
@@ -1815,6 +1816,7 @@ export function Workbench() {
       for (const item of pending) {
         const decision = state.decisions.find((entry) => entry.k === item.k)
         if (!decision) continue
+        if (!mayDeliver(item, decision.answer)) continue
         const target = resolveDeliveryTarget(item, candidates, currentTarget)
         if (!target || !running.has(target.id) || !(await freeNow(host, target.id))) continue
         // Through the inbox when the line is long (a note of a few paragraphs), like every other message.
@@ -2077,6 +2079,7 @@ export function Workbench() {
       for (const item of pending) {
         const proposal = state.proposals.find((entry) => entry.k === item.k)
         if (!proposal) continue
+        if (!mayDeliver(item, proposal.answer)) continue
         const target = resolveDesignDeliveryTarget(item, candidates, currentTarget)
         if (!target || !running.has(target.id) || !(await freeNow(host, target.id))) continue
         if (

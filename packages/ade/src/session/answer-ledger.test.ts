@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot } from "solid-js"
-import { isUsersOwnAnswer, USER } from "../decisions/answer"
+import { isUsersOwnAnswer, mayDeliver, USER } from "../decisions/answer"
 import { parseDecisionLog } from "../decisions/log"
 import { createDecisionsRegister } from "../decisions/register"
 import { foldDecisions } from "../decisions/state"
@@ -337,6 +337,17 @@ describe("the design register read straight from the file (SEC-3)", () => {
   })
 })
 
+describe("what the outbox may type as the user's word (review of seguiti-posta, N2)", () => {
+  test("a reopening always; an answer only while the register's answer is the user's own click", () => {
+    expect(mayDeliver({ kind: "riaperta" }, undefined)).toBe(true)
+    expect(mayDeliver({}, { by: USER })).toBe(true)
+    expect(mayDeliver({}, { by: UNVOUCHED_BY })).toBe(false)
+    expect(mayDeliver({}, { by: "Master" })).toBe(false)
+    expect(mayDeliver({}, { by: USER, fromPane: "p-1" })).toBe(false)
+    expect(mayDeliver({}, undefined)).toBe(false)
+  })
+})
+
 describe("the workbench wires it (SEC-3)", () => {
   // The workbench cannot be loaded under bun: read from the source. Booleans, so a failure does not print the file.
   const source = workbenchSource()
@@ -346,6 +357,8 @@ describe("the workbench wires it (SEC-3)", () => {
     expect(source.split(vouch).length - 1).toBe(2)
     expect(source.split("remember: answers.remember,").length - 1).toBe(2)
     expect(source.includes("answeredInAde(found, path, answers.has)")).toBe(true)
+    expect(source.includes("if (!mayDeliver(item, decision.answer)) continue")).toBe(true)
+    expect(source.includes("if (!mayDeliver(item, proposal.answer)) continue")).toBe(true)
     expect(source.includes("answers.seed([...decisionsOutbox(), ...designOutbox()])")).toBe(true)
   })
 })
