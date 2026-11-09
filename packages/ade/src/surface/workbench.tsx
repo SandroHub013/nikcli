@@ -425,6 +425,7 @@ import {
   formatHeldByMenu,
   formatHeldSilentReceipt,
   formatEnterLost,
+  waitsForLine,
   formatEnterStuck,
   formatExitedUnsent,
   formatHeldByScreen,
@@ -485,6 +486,7 @@ import { isTyping, questionOpened, submittedSince, typedAfter, typedSince } from
 import {
   composerLine,
   composerOf,
+  composerRow,
   cursorSaysDialog,
   dialogOver,
   enterBlocked,
@@ -2741,6 +2743,8 @@ export function Workbench() {
     const boxPane = paneId !== undefined && !pastBox && composerNow(paneId) !== undefined ? paneId : undefined
     let stuck = false
     let textGone = false
+    // The box as it stands just before the Enter: only that line staying is ADE's.
+    let lineAtEnter: string | undefined
     enterStuck.delete(session)
     lineSender.delete(session)
     latestLine.set(session, typedAt)
@@ -2779,6 +2783,7 @@ export function Workbench() {
                 stop: () => !alive() || typedDuring(),
               })
               stuck = shown === "stuck"
+              lineAtEnter = boxLine(boxPane)
               return shown
             },
             enterBlocked: () => enterMustWait(boxPane),
@@ -2790,7 +2795,7 @@ export function Workbench() {
       claims.evidence(paneId)
       markWorking(paneId)
       void confirmSubmitted(paneId, session, typedAt)
-      void watchLineStays(paneId, session, typedAt)
+      if (lineAtEnter !== undefined) void watchLineStays(paneId, session, typedAt, lineAtEnter)
     }
     // The click was spent on this line: if it did not go, that is said, and the mail is still queued.
     if (paneId !== undefined && armed) {
@@ -2808,6 +2813,8 @@ export function Workbench() {
     return outcome
   }
 
+  const boxLine = (paneId: string) =>
+    composerNow(paneId) === "draft" && hasTerminal(paneId) ? composerRow(getTerminal(paneId).terminal) : undefined
   /** Who sent the last line typed in a session, for when it stays in the box. */
   const lineSender = new WeakMap<SpawnedSession, { from: string; id: string }>()
   const latestLine = new WeakMap<SpawnedSession, number>()
@@ -2815,12 +2822,11 @@ export function Workbench() {
    * A line ADE typed and pressed Enter on that is still in the box a while later has not gone, and nothing else would say so
    * (`note.enterStuck` is for an Enter never pressed). The pane and the sender are told, and the Enter is left to the user.
    */
-  const watchLineStays = async (paneId: string, session: SpawnedSession, typedAt: number) => {
-    const read = () =>
-      composerNow(paneId) === "draft" && hasTerminal(paneId) ? composerLine(getTerminal(paneId).terminal) : undefined
+  const watchLineStays = async (paneId: string, session: SpawnedSession, typedAt: number, before: string) => {
+    const read = () => boxLine(paneId)
     const alive = () => running.get(paneId) === session
     const stop = () => !alive() || latestLine.get(session) !== typedAt || typedSince(records.typed.get(paneId), typedAt)
-    if (!(await lineStays({ read, stop }))) return
+    if (!(await lineStays({ read, before, stop }))) return
     tellPane(paneId, t("note.enterLost"))
     const sender = lineSender.get(session)
     if (sender) tellSender(sender.from, formatEnterLost(sender.id, mailPanes().find((pane) => pane.id === paneId)))
@@ -5758,7 +5764,7 @@ export function Workbench() {
     if (!(await freeNow(host, target.pane.id, true)) || linesInFlight.has(target.pane.id)) {
       noteMailHeld(target.pane.id, message.from)
       // Not the line ADE is typing itself, the first task for one: it is in the box for a moment, and a turn comes after it.
-      const byLine = lineBegun(target.pane.id) && !linesInFlight.has(target.pane.id)
+      const byLine = waitsForLine(lineBegun(target.pane.id), linesInFlight.has(target.pane.id))
       if (!byLine && heldByLineNoted.delete(target.pane.id)) dropPaneNote(target.pane.id, t("note.mailHeldByLine"))
       const bySilence = !byLine && silentFor(target.pane.id) !== undefined
       /*

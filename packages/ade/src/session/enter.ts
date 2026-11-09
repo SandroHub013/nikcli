@@ -127,10 +127,15 @@ export const LINE_STAYS_MS = 10_000
 /** How long the box must stay without a line for the line to have gone: a repaint or a resize covers it for a moment. */
 const LINE_GONE_MS = 1_000
 
-/** Whether the line in the box, as `read` gives it, has stood still for `LINE_STAYS_MS`. False if it went, or on `stop`. */
+/**
+ * Whether the line ADE typed has stood still in the box for `LINE_STAYS_MS`. False if it went, on `stop`, or if what stands
+ * still is another line: a box misread as holding one must not tell the sender its message did not go.
+ */
 export async function lineStays(input: {
   /** The line in the box, or undefined with none in it. */
   read: () => string | undefined
+  /** What it showed just before the Enter. */
+  before: string
   /** The session has gone, or the user has begun typing: nothing to say. */
   stop: () => boolean
   now?: () => number
@@ -152,7 +157,7 @@ export async function lineStays(input: {
         line = current
         since = now()
       }
-      if (now() - since >= LINE_STAYS_MS) return true
+      if (now() - since >= LINE_STAYS_MS) return current === input.before
     }
     await sleep(BOX_READ_MS)
   }

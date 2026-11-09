@@ -855,6 +855,11 @@ export function formatEnterStuck(id: string, reader: MailPane | undefined): stri
   )
 }
 
+/** Whether held mail waits for a line begun. Not the line ADE itself is typing, the first task for one: a turn comes after it. */
+export function waitsForLine(lineBegun: boolean, adeTyping: boolean): boolean {
+  return lineBegun && !adeTyping
+}
+
 /** Told to the sender when its message is still in the box after its Enter. */
 export function formatEnterLost(id: string, reader: MailPane | undefined): string {
   return (
