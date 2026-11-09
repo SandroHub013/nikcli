@@ -128,6 +128,13 @@ describe("the answers ADE wrote (SEC-3)", () => {
     expect(ledger.vouch(DESIGN, [{ type: "riaperta", k: "DS-1", at: AT, by: "utente" }])[0]!.by).toBe(UNVOUCHED_BY)
   })
 
+  // N2 of the review of sicurezza-due: its `answeredAt` is the time of the reopening, and a reopening is no answer.
+  test("a reopening in the outbox seeds nothing", () => {
+    const ledger = fresh()
+    ledger.seed([{ path: DESIGN, k: "DS-1", answeredAt: AT, kind: "riaperta" }])
+    expect(ledger.vouch(DESIGN, [{ type: "risposta", k: "DS-1", at: AT, by: "utente", words: "x" }])[0]!.by).toBe(UNVOUCHED_BY)
+  })
+
   test("an answer ADE wrote and remembers is not loosened by the seed of the next start", () => {
     const ledger = fresh()
     const told = { type: "risposta", k: "DS-x", at: AT, by: "utente", choice: "1", words: "uno" }

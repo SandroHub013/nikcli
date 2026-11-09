@@ -60,7 +60,7 @@ export interface AnswerLedger {
   /** Whether ADE wrote that event. */
   has(path: string, event: LedgerEvent): boolean
   /** Answers ADE gave that still stand (the outbox), put in the record once at load. */
-  seed(items: readonly { readonly path: string; readonly k: string; readonly answeredAt: string }[]): void
+  seed(items: readonly { readonly path: string; readonly k: string; readonly answeredAt: string; readonly kind?: string }[]): void
   /** The events of `path`, with `by: "utente"` kept only where ADE wrote the event. */
   vouch<E extends LedgerEvent & { readonly by: string; readonly fromPane?: string }>(
     path: string,
@@ -96,6 +96,7 @@ export function answerLedger(store: () => AnswerStore | undefined, cap = ANSWER_
       if (items.length === 0) return
       const known = read()
       const added = items
+        .filter((item) => item.kind !== "riaperta")
         .map((item) => seededId(item.path, item.k, item.answeredAt))
         .filter((id) => !known.some((entry) => entry.startsWith(id)))
       if (added.length > 0) write([...known, ...added])
