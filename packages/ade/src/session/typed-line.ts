@@ -104,6 +104,9 @@ export function typedAfter(
    * letters would leave a pane dirty after nothing but arrow keys. The
    * newline does count, as one more line of draft.
    */
+  // The kitty keyboard protocol's Enter (SES-10): Ctrl+Enter sends, like `\r`; Shift+Enter is a newline in the draft.
+  if (data === `${ESC}[13;5u`) return undefined
+  if (data === `${ESC}[13;2u`) return { pending: pending + 1, at: now }
   if (data.startsWith(ESC)) {
     return data === `${ESC}\r` || data === `${ESC}\n` ? { pending: pending + 1, at: now } : keep(line, now)
   }

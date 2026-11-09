@@ -50,9 +50,14 @@ export type SidebarTab = "sessions" | "files"
 /**
  * Serializes a Set of string keys to a JSON array string.
  */
-export function serializeSet(set: ReadonlySet<string>): string {
-  return JSON.stringify(Array.from(set))
+export function serializeSet(set: ReadonlySet<string>, limit = Infinity): string {
+  const items = Array.from(set)
+  // A Set keeps the order things were added in: the last ones are the newest, and the ones a user still has open.
+  return JSON.stringify(items.length > limit ? items.slice(items.length - limit) : items)
 }
+
+/** How many opened folders the sidebar writes down: a long-lived project opens thousands, storage holds little (WB-15). */
+export const MAX_EXPANDED_DIRS = 500
 
 /**
  * Parses a serialized Set of string keys from storage.

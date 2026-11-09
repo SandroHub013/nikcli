@@ -70,7 +70,7 @@ import {
 import { syncOpenRouterKey } from "../host/openrouter-key-sync"
 import { createSttStreamTransport } from "../host/stt-stream"
 import { serializeWorkspace, type WorkspaceState } from "../session/persist"
-import { ignoreRestore, readSavedWorkspace, restorableCopy, restoreCopy, retryUnreadableCopy } from "../session/unreadable"
+import { dropIgnoredCopies, ignoreRestore, readSavedWorkspace, restorableCopy, restoreCopy, retryUnreadableCopy } from "../session/unreadable"
 import {
   DEFAULT_BINDINGS,
   NOT_FROM_TEXT_FIELDS,
@@ -326,6 +326,7 @@ import { BRAND } from "../brand"
 import { coverSecrets } from "../record/sensitive"
 import {
   DEFAULT_QUALITY,
+  EVENTS_MAX_BYTES,
   qualityLabel,
   qualityLevel,
   QUALITY_LEVELS,
@@ -483,6 +484,8 @@ import {
 import { watchLongTasks } from "../session/long-task-log"
 import { formatSpawnFailed, spawnOutcome } from "../session/spawn-outcome"
 import { isTyping, questionOpened, submittedSince, typedAfter, typedSince } from "../session/typed-line"
+import { createPasteModes } from "../session/paste-mode"
+import { createChangeWriter } from "../session/change-writer"
 import {
   composerLine,
   composerOf,
@@ -1526,10 +1529,9 @@ export function Workbench() {
     exportAbort = new AbortController()
     report(t("record.exporting"), "info")
     try {
-      const events = await host
-        .readTextFile(eventsPathFor(video))
-        .then((file) => file.text)
-        .catch(() => "")
+      const file = await host.readTextFile(eventsPathFor(video), EVENTS_MAX_BYTES).catch(() => undefined)
+      if (file?.truncated) report(t("record.export.eventsCut"), "info")
+      const events = file?.text ?? ""
       const exists = async (path: string) => ((await host.exists?.(path).catch(() => false)) ? path : undefined)
       const mic = (await exists(micPathFor(video, "webm"))) ?? (await exists(micPathFor(video, "m4a")))
       const voice = await exists(voicePathFor(video))
@@ -2727,7 +2729,7 @@ export function Workbench() {
      * after a wait that grows with the line — a thousand characters with the
      * reply contract were still being taken in when a fixed 400 ms Enter came.
      */
-    const bracketed = paneId !== undefined && bracketedPaste.get(paneId) === true
+    const bracketed = paneId !== undefined && pasteModes.on(paneId)
     // A message that quotes an `@ade` line must not run it when the TUI echoes it.
     if (paneId !== undefined) {
       panels.newTurn(paneId)
@@ -2841,12 +2843,7 @@ export function Workbench() {
   const ESC = String.fromCharCode(27)
 
   /** Whether each pane's program has bracketed paste on, from the mode switches in its own output. */
-  const bracketedPaste = new Map<string, boolean>()
-  const noteBracketedPaste = (paneId: string, chunk: string) => {
-    const on = chunk.lastIndexOf(`${ESC}[?2004h`)
-    const off = chunk.lastIndexOf(`${ESC}[?2004l`)
-    if (on >= 0 || off >= 0) bracketedPaste.set(paneId, on > off)
-  }
+  const pasteModes = createPasteModes()
 
   /**
    * Makes sure a typed line became a turn, where the CLI's hooks can say so.
@@ -3272,10 +3269,13 @@ export function Workbench() {
       return null
     }
   }
-  const writeStored = (key: string, value: string) => {
+  const writeStored = (key: string, value: string): boolean => {
     try {
       localStorage.setItem(key, value)
-    } catch {}
+      return true
+    } catch {
+      return false
+    }
   }
 
   /** The `ask` and `spawn` requests still waiting for a reply. */
@@ -3316,7 +3316,8 @@ export function Workbench() {
    * the panes are restored (`restoreMail`).
    */
   const QUEUE_KEY = "ade.mailbox.queue"
-  let savedMail = ""
+  // The queue is written when it changed, and again when a write failed; a failure is told once (WB-13).
+  const mailWriter = createChangeWriter(() => report(t("workspace.saveFailed")))
   /** The ids read back from the saved queue: they wait for their pane's process after a start (`waitsForRestore`). */
   const replayedMail = new Set<string>()
   // Nothing is written until what was saved has been read back: an empty queue at boot must not erase it.
@@ -3325,10 +3326,7 @@ export function Workbench() {
     if (!mailRestored) return
     const queue = queueToSave(mailQueue)
     const now = JSON.stringify([queue, suspendedMailToSave(heldLines, paneExists)])
-    if (now === savedMail) return
-    savedMail = now
-    writeStored(QUEUE_KEY, queue)
-    saveSuspendedMail()
+    mailWriter.save(now, () => writeStored(QUEUE_KEY, queue) && saveSuspendedMail())
   }
   /**
    * The held mail back, once the panes are: the messages go on waiting for a free session, and a sender is told
@@ -7452,7 +7450,7 @@ export function Workbench() {
       setBooting(t("boot.project"))
       const here = host.currentDir ? await host.currentDir() : ""
       const saved = restored?.projectPath
-      // The last project's folder gone: ADE opens where it was started, and says why.
+      // The last project's folder gone: ADE opens no project, and says why (the saved sessions still restart, each in its own folder).
       const gone = saved ? await refuseMissingRoot(host, saved) : false
       // The first run opens no folder: the empty project screen offers «Apri una cartella» (UX-5).
       const path = startFolder({
@@ -7482,12 +7480,12 @@ export function Workbench() {
        * and the task it was given — and starting that work again on open is
        * what "the sessions come back" can actually mean.
        *
-       * Only after the project resolves, because `startProcess` needs it to
-       * choose a working directory, and only for sessions that were live and
+       * Only after the project resolves (there may be none: the last one's folder is gone, and each pane
+       * brings its own), and only for sessions that were live and
        * carry a task: a finished one has nothing to resume, and a task-less
        * one would launch an agent with an empty prompt.
        */
-      if (restored && p) {
+      if (restored) {
         /*
          * Planned all at once, not one at a time.
          *
@@ -7508,11 +7506,14 @@ export function Workbench() {
             // The conversation the pane last switched to, when ADE closed before reading it.
             const reported = await adoptLastReport(saved)
             const pane = reported ? { ...saved, resumeId: reported } : saved
+            // The pane's own folder first: with the last project gone there is no open project, and each pane still
+            // restarts in its own (`startProcess` finds its project and says when its folder is missing).
+            const folder = pane.cwd || p?.root || pane.projectRoot || ""
             return {
               agentId: pane.agent,
-              cwd: pane.cwd || p.root,
+              cwd: folder,
               ...(pane.resumeId !== undefined ? { resumeId: pane.resumeId } : {}),
-              missing: await conversationMissing(pane.agent, pane.resumeId, pane.cwd || p.root),
+              missing: await conversationMissing(pane.agent, pane.resumeId, folder),
               pane,
             }
           }),
@@ -7585,10 +7586,20 @@ export function Workbench() {
       // Unwrapped: serialising walks every pane and every line, and doing that
       // through the store's proxy would subscribe whatever happens to be
       // tracking to the entire workbench.
+      let text = ""
       try {
-        localStorage.setItem("ade.workspace", serializeWorkspace(toWorkspaceState(unwrap(wbStore))))
+        text = serializeWorkspace(toWorkspaceState(unwrap(wbStore)))
+        localStorage.setItem("ade.workspace", text)
         saveFailedTold = false
       } catch {
+        // The copies the user turned down are the room it can take back (WB2-3): once more, before it says so.
+        if (text !== "" && dropIgnoredCopies(localStorage) > 0) {
+          try {
+            localStorage.setItem("ade.workspace", text)
+            saveFailedTold = false
+            return
+          } catch {}
+        }
         // Full storage: said once. It must not escape (a timer or `pagehide` has nobody to catch it, and `runUpdate` would stop).
         if (!saveFailedTold) {
           saveFailedTold = true
@@ -8568,7 +8579,7 @@ export function Workbench() {
     workingSince.delete(id)
     interruptedAt.delete(id)
     interruptSettled.delete(id)
-    bracketedPaste.delete(id)
+    pasteModes.forget(id)
     sheetWatch.forget(id)
   }
 
@@ -9667,7 +9678,7 @@ export function Workbench() {
       formerNonces.set(paneId, formerNonce)
     } else formerNonces.delete(paneId)
     activityOf.delete(paneId)
-    bracketedPaste.delete(paneId)
+    pasteModes.forget(paneId)
     let spawned: SpawnedSession | undefined
     // The host refused to start it: said by `onRefused`, then the exit that follows.
     let refused = false
@@ -9779,7 +9790,7 @@ export function Workbench() {
           const now = Date.now()
           openingBytes = bytesAfter(openingBytes, chunk, now)
           lastOutputAt.set(paneId, now)
-          noteBracketedPaste(paneId, chunk)
+          pasteModes.note(paneId, chunk)
           // The mode bar is repainted on every Shift+Tab, in a chunk with no newline: read from the raw bytes, the last one seen is the pane's class (native mail is picked on it).
           if (agentId === "claude-code") {
             const seen = modeTracker.push(paneId, chunk)
@@ -10151,7 +10162,7 @@ export function Workbench() {
     const shellOnly = agentId === "terminal"
     paneNonces.delete(paneId)
     activityOf.delete(paneId)
-    bracketedPaste.delete(paneId)
+    pasteModes.forget(paneId)
     records.typed.forget(paneId)
     setWb((w) =>
       updatePane(w, paneId, {
@@ -10196,7 +10207,7 @@ export function Workbench() {
           lastOutputAt.set(paneId, Date.now())
           // ConPTY's own bytes are not ssh having said anything (`bytesAfter`).
           if (drawsText(chunk)) textAt = Date.now()
-          noteBracketedPaste(paneId, chunk)
+          pasteModes.note(paneId, chunk)
           tail = (tail + stripAnsi(chunk)).slice(-400)
           // Whole, up to a generous cap: a PowerShell 5.1 error is 400+ characters, and what says it comes first.
           sinceStep = (sinceStep + stripAnsi(chunk)).slice(-8000)

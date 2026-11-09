@@ -146,6 +146,26 @@ export function ignoredCopies(store: UnreadableStore): string[] {
   }
 }
 
+/**
+ * Deletes the copies the user turned down with «Ignora», forgets the list, and says how many went (WB2-3).
+ *
+ * The one thing ADE may delete to make room when its own save does not fit: the user already said no to them. Any
+ * other kept copy stays.
+ */
+export function dropIgnoredCopies(store: UnreadableStore): number {
+  let removed = 0
+  try {
+    for (const key of ignoredCopies(store)) {
+      store.removeItem(key)
+      removed++
+    }
+    store.setItem(IGNORED_KEY, "[]")
+  } catch {
+    // Nothing more to free, or nowhere to write the empty list: what was removed is counted.
+  }
+  return removed
+}
+
 /** Remembers that the offer for this copy is not wanted. The copy stays until the rotation drops it. */
 export function ignoreRestore(store: UnreadableStore, copyKey: string): void {
   try {

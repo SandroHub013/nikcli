@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { deserializeSet, parseSidebarTab, safeGetStorage, safeSetStorage, serializeSet } from "./storage"
+import { MAX_EXPANDED_DIRS, deserializeSet, parseSidebarTab, safeGetStorage, safeSetStorage, serializeSet } from "./storage"
 
 describe("serializeSet and deserializeSet", () => {
   test("round-trips a set of string identifiers", () => {
@@ -101,5 +101,34 @@ describe("safeGetStorage and safeSetStorage", () => {
 
     expect(safeGetStorage(throwingStorage, "key")).toBeNull()
     expect(() => safeSetStorage(throwingStorage, "key", "val")).not.toThrow()
+  })
+})
+
+/*
+ * WB-15: the set of opened folders was written whole at each toggle and never trimmed: a long-lived project with
+ * thousands of opened folders wrote them all, each time, into a storage that holds little (and is shared with the
+ * workspace save).
+ */
+describe("serializeSet with a limit (WB-15)", () => {
+  const many = (n: number) => new Set(Array.from({ length: n }, (_, i) => `dir${i}`))
+
+  test("600 items serialise to the newest 500", () => {
+    const written = JSON.parse(serializeSet(many(600), MAX_EXPANDED_DIRS)) as string[]
+    expect(MAX_EXPANDED_DIRS).toBe(500)
+    expect(written).toHaveLength(500)
+    expect(written[0]).toBe("dir100")
+    expect(written.at(-1)).toBe("dir599")
+  })
+
+  test("fewer than the limit, and no limit, write everything", () => {
+    expect(JSON.parse(serializeSet(many(3), 500))).toEqual(["dir0", "dir1", "dir2"])
+    expect(JSON.parse(serializeSet(many(600)))).toHaveLength(600)
+  })
+
+  test("the sidebar passes it for the opened folders, and only for them", () => {
+    const source = require("node:fs").readFileSync(require("node:path").join(import.meta.dir, "sidebar.tsx"), "utf8") as string
+    expect(source.split("STORAGE_KEY_EXPANDED_DIRS, serializeSet(next, MAX_EXPANDED_DIRS)").length - 1).toBe(2)
+    expect(source.includes("STORAGE_KEY_EXPANDED_DIRS, serializeSet(next))")).toBe(false)
+    expect(source.includes("STORAGE_KEY_EXPANDED_WORKSPACES, serializeSet(next))")).toBe(true)
   })
 })

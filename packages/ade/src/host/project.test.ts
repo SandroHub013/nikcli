@@ -158,8 +158,14 @@ describe("startFolder: where ADE opens", () => {
     expect(startFolder({ saved: "C:\work\a", gone: false, hasRecents: false, hasPanes: true, here })).toBe("C:\work\a")
   })
 
-  it("a last project that is gone opens where ADE was started, as it always did", () => {
-    expect(startFolder({ saved: "C:\work\a", gone: true, hasRecents: true, hasPanes: true, here })).toBe(here)
+  // UX-5: the folder ADE was started from is ADE's own install folder or the home folder, not somewhere the user chose.
+  // A last project that vanished (a drive that is not there, a folder renamed) shows the empty project screen, where
+  // «Apri una cartella» and the recents are, rather than opening ADE on its own folder.
+  it("a last project that is gone opens no folder, so the empty project screen shows", () => {
+    expect(
+      startFolder({ saved: "C:\work\a", gone: true, hasRecents: true, hasPanes: true, here: "C:/Users/x/AppData/Local/ADE" }),
+    ).toBeUndefined()
+    expect(startFolder({ saved: "C:\work\a", gone: true, hasRecents: false, hasPanes: false, here })).toBeUndefined()
   })
 
   it("a user with recent projects but no saved workspace keeps the folder ADE was started from", () => {

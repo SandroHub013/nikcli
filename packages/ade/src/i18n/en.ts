@@ -826,6 +826,7 @@ export const en: Messages = {
   // Export, stuck note
   "record.export.busy": "An export is already running.",
   "record.export.desktopOnly": "Exporting only works in the desktop app.",
+  "record.export.eventsCut": "The pointer log is over 64 MB: zoom and clicks cover only the first part.",
   "record.export.done": (path) => `Video ready: ${path}`,
   "record.export.failed": (problem) =>
     `Export failed: ${problem}. The original recording was not touched: try again from Settings › Recording.`,
