@@ -107,15 +107,6 @@ const hiddenCursor = new WeakSet<object>()
 const refocused = new WeakSet<object>()
 /** A marked terminal whose next press is taken for the click that brought the focus back: see `followKeys`. */
 const pressOfTheFocus = new WeakSet<object>()
-/** A marked terminal that showed a dialog's hint at the focus-in: the hint's going can then be read as the dialog's. */
-const hintAtFocus = new WeakSet<object>()
-/**
- * What every dialog of opentui's agents draws in its header (`DialogHeader`, `esc`, or `esc/enter to close`). Looked for as
- * letters anywhere on the screen: the transcript shows through the blanks of a dialog, so the cells around it say nothing. A
- * transcript with those letters in it only keeps the old wait.
- */
-const DIALOG_HINT = "esc"
-const hintOnScreen = (terminal: ComposerTerminal) => rowsOf(terminal).some((row) => row.includes(DIALOG_HINT))
 const FOCUS_IN = "\x1b[I"
 /** A mouse report: `ESC [ < button ; x ; y M`. A button of 32 up is a motion or the wheel, and closes nothing. */
 const MOUSE_PRESS = /^\x1b\[<(\d+);\d+;\d+M$/
@@ -144,8 +135,6 @@ export function watchCursor(terminal: CursorModes): void {
  * key or a click that can close a dialog. If there was none to close, the pane waits and «Consegna ora» is the way out.
  * A click that returns to the pane sends the focus-in and then its press, and a press on the dialog's own panel leaves the
  * dialog open: the first press after a focus-in says nothing, however late it comes, since the box already has the cursor.
- * That press on the backdrop does close it, though, and no key follows: so once it has been made, a dialog whose hint was on
- * the screen at the focus-in and no longer is has gone, and the box is read again (`markStands`).
  */
 export function followKeys(terminal: ComposerTerminal, agentId: string, data: string): void {
   if (!BAR_AGENTS.has(agentId)) return
@@ -153,8 +142,6 @@ export function followKeys(terminal: ComposerTerminal, agentId: string, data: st
     if (composerOf(terminal, agentId) === "none" && rowsOf(terminal).some((row) => MODEL_ROW.test(row) || HOME_FOOTER.test(row))) {
       refocused.add(terminal)
       pressOfTheFocus.add(terminal)
-      if (hintOnScreen(terminal)) hintAtFocus.add(terminal)
-      else hintAtFocus.delete(terminal)
     }
     return
   }
@@ -193,15 +180,6 @@ export function dialogOver(terminal: ComposerTerminal, agentId: string): boolean
   })
 }
 
-/** The mark of a focus-in, until the press it was owed has been made and took the dialog's hint off the screen with it. */
-function markStands(terminal: ComposerTerminal): boolean {
-  if (!refocused.has(terminal)) return false
-  if (pressOfTheFocus.has(terminal) || !hintAtFocus.has(terminal) || hintOnScreen(terminal)) return true
-  refocused.delete(terminal)
-  hintAtFocus.delete(terminal)
-  return false
-}
-
 /** A new process on the same terminal: what stood over the old one's box has gone with it. */
 export function forgetRefocus(terminal: object): void {
   refocused.delete(terminal)
@@ -217,7 +195,7 @@ export function composerOf(terminal: ComposerTerminal, agentId: string): Compose
   if (!readsComposer(agentId)) return undefined
   const hidden = hiddenCursor.has(terminal)
   if (hidden && !HIDES_ITS_CURSOR.has(agentId)) return "none"
-  if (markStands(terminal)) return "none"
+  if (refocused.has(terminal)) return "none"
   // ragu gives its box the cursor back on a focus-in, with a dialog still open over it: the reading has to say so here.
   if (agentId === "ragu" && confirmDialog(rowsOf(terminal))) return "none"
   const glyph = RULED_PROMPT[agentId]

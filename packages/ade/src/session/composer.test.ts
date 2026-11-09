@@ -1064,58 +1064,6 @@ describe("a dialog left open over ragu's box, after a focus-in (audit SES2-2)", 
     expect(composerOf(terminal, "ragu")).toBe("ready")
   })
 
-  describe("a click on the backdrop closes the dialog with the press the focus brought (live test 8, three of three)", () => {
-    /** The dialog gone, and the same box with the cursor in it. */
-    const CLOSED = `\x1b[2J${box}\x1b[10;6H\x1b[?25h`
-
-    for (const agent of ["ragu", "opencode"]) {
-      test(`${agent}: once its "esc" has left the screen the box is read again, with no key`, async () => {
-        const terminal = await drawn(`${box}${picker}`, 120, 17)
-        followKeys(terminal, agent, FOCUS_REPORT)
-        followKeys(terminal, agent, PRESS)
-        await writtenTo(terminal, BACK_ON_BOX)
-        expect(composerOf(terminal, agent)).toBe("none")
-        await writtenTo(terminal, CLOSED)
-        expect(composerOf(terminal, agent)).toBe("ready")
-        expect(mayTypeNow({ composer: composerOf(terminal, agent), question: false, nothingDrawn: false })).toBe(true)
-      })
-    }
-
-    test("before the press nothing can have closed it, whatever the screen says", async () => {
-      const terminal = await drawn(`${box}${picker}`, 120, 17)
-      followKeys(terminal, "ragu", FOCUS_REPORT)
-      await writtenTo(terminal, CLOSED)
-      expect(composerOf(terminal, "ragu")).toBe("none")
-    })
-
-    test("a dialog with no hint at the focus-in is not guessed at: it waits for a key", async () => {
-      const terminal = await drawn(`${box}\x1b[5;70H│ Scegli           │\x1b[6;79H`, 120, 17)
-      followKeys(terminal, "ragu", FOCUS_REPORT)
-      followKeys(terminal, "ragu", PRESS)
-      await writtenTo(terminal, CLOSED)
-      expect(composerOf(terminal, "ragu")).toBe("none")
-    })
-
-    test("the next dialog, opened by the same click, still holds", async () => {
-      const terminal = await drawn(`${box}${picker}`, 120, 17)
-      followKeys(terminal, "ragu", FOCUS_REPORT)
-      followKeys(terminal, "ragu", PRESS)
-      await writtenTo(terminal, `\x1b[2J${box}\x1b[5;70H│ Connect a provider      esc │\x1b[10;6H\x1b[?25h`)
-      expect(composerOf(terminal, "ragu")).toBe("none")
-    })
-
-    test("released once, and a later focus-in marks it again", async () => {
-      const terminal = await drawn(`${box}${picker}`, 120, 17)
-      followKeys(terminal, "ragu", FOCUS_REPORT)
-      followKeys(terminal, "ragu", PRESS)
-      await writtenTo(terminal, CLOSED)
-      expect(composerOf(terminal, "ragu")).toBe("ready")
-      await writtenTo(terminal, `${picker}`)
-      followKeys(terminal, "ragu", FOCUS_REPORT)
-      expect(composerOf(terminal, "ragu")).toBe("none")
-    })
-  })
-
   test("a box at rest is not touched by a focus-in", async () => {
     const terminal = await drawn(`${box}\x1b[10;6H`, 120, 17)
     expect(composerOf(terminal, "ragu")).toBe("ready")
