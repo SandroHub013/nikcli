@@ -187,9 +187,9 @@ describe("answeredInAde", () => {
     expect(answeredInAde(proposal, PATH, [{ path: PATH, k: "DS-tasti", answeredAt: at }], nothing)).toBe(true)
     // SEC-3: «by utente, no pane» is only what the file says. Without ADE's own record of that click it does not count.
     expect(answeredInAde(proposal, PATH, [], nothing)).toBe(false)
-    expect(answeredInAde(proposal, PATH, [], (path, k, when) => path === PATH && k === "DS-tasti" && when === at)).toBe(true)
+    expect(answeredInAde(proposal, PATH, [], (path, event) => path === PATH && event.k === "DS-tasti" && event.at === at)).toBe(true)
     // The record vouches only for its own register, key and time.
-    expect(answeredInAde(proposal, PATH, [], (_path, k, when) => k === "DS-altra" && when === at)).toBe(false)
+    expect(answeredInAde(proposal, PATH, [], (_path, event) => event.k === "DS-altra" && event.at === at)).toBe(false)
     // The outbox vouches only for its own register and its own answer.
     const forged = { ...proposal, answer: { ...proposal.answer!, by: "Dario" } }
     expect(answeredInAde(forged, PATH, [{ path: "C:/q/.ade/design.jsonl", k: "DS-tasti", answeredAt: at }], nothing)).toBe(false)

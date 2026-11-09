@@ -15,7 +15,7 @@ import { batch, createMemo, createSignal, type Accessor } from "solid-js"
 import { every } from "../host/every"
 import type { DirEntry } from "../host/shell"
 import type { ReadDir } from "../host/register-watch"
-import type { DecisionEvent } from "./log"
+import { toEvent, type DecisionEvent } from "./log"
 import { foldDecisions, type DecisionsState } from "./state"
 import { appendDecisionEvent, loadDecisions, type DecisionsIo, type LoadedRegister } from "./store"
 import { t } from "../i18n"
@@ -29,7 +29,7 @@ export interface DecisionsRegisterDeps {
   /** Drops a `fromPane` ADE did not write (`asker-ledger`). */
   vouch?: <E extends DecisionEvent>(path: string, events: readonly E[]) => E[]
   /** ADE's own append is about to write this event: remembered first, so it never shows as reported (`answer-ledger`). */
-  remember?: (path: string, k: string, at: string) => void
+  remember?: (path: string, event: DecisionEvent) => void
 }
 
 export interface DecisionsRegister {
@@ -128,7 +128,9 @@ export function createDecisionsRegister(deps: DecisionsRegisterDeps): DecisionsR
     const io = await deps.io()
     if (!path || !io) throw new Error(t("decisions.noProject.short"))
     // Before the write: the fold is a memo, and a record made after it would show the user's own fresh answer as reported.
-    deps.remember?.(path, event.k, event.at)
+    // As the file will hold it: the record compares the content, and the parser tidies spaces.
+    const written = toEvent(event)
+    if (typeof written !== "string") deps.remember?.(path, written)
     await appendDecisionEvent(io, path, event)
     await refresh()
   }

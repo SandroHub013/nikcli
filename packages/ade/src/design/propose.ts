@@ -13,6 +13,7 @@
  * Plain `.ts`, with no I/O, so every refusal and every line is tested.
  */
 
+import { UNVOUCHED_BY, type LedgerEvent } from "../session/answer-ledger"
 import { asOneLine } from "../session/typing"
 import { USER } from "./answer"
 import type { AnsweredDesignEvent } from "./log"
@@ -121,16 +122,17 @@ export function answeredInAde(
   proposal: DesignProposal,
   path: string,
   outbox: readonly { readonly path: string; readonly k: string; readonly answeredAt: string; readonly kind?: string }[],
-  has: (path: string, k: string, at: string) => boolean,
+  has: (path: string, event: LedgerEvent) => boolean,
 ): boolean {
   const answer = proposal.answer
   if (!answer) return false
   const queued = outbox.some(
     (item) => item.path === path && item.k === proposal.k && item.answeredAt === answer.at && item.kind !== "riaperta",
   )
-  if (queued) return true
+  // The outbox goes by the time alone: a line of the user's that ADE does not vouch for is no answer of theirs.
+  if (queued && answer.by !== UNVOUCHED_BY) return true
   const event = [...proposal.history].reverse().find((item) => item.type === "risposta" && item.at === answer.at)
-  return answer.by === USER && event !== undefined && !event.fromPane && has(path, proposal.k, answer.at)
+  return answer.by === USER && event !== undefined && !event.fromPane && has(path, event)
 }
 
 /** A field on one line, whatever the register holds: no line break or control character reaches a terminal. */

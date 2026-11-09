@@ -26,17 +26,43 @@ export const ANSWER_LEDGER_KEY = "ade.register.answers"
 /** The newest answers kept; an older one shows as reported. */
 export const ANSWER_LEDGER_CAP = 2000
 
-const entryId = (path: string, k: string, at: string) => `${path}\n${k}\n${at}`
+/** What the record asks of a register event. */
+export interface LedgerEvent {
+  readonly type: string
+  readonly k: string
+  readonly at: string
+  readonly choice?: string
+  readonly choices?: readonly string[]
+  readonly note?: string
+  readonly words?: string
+  readonly again?: true
+  readonly until?: string
+}
+
+/**
+ * An event by its kind and what it says, and not only its time: the time of a true event is in the file for anyone to copy,
+ * and a session could add under it an answer of its own (review of sicurezza-due, N1). Whole and not hashed: `vouch` is
+ * synchronous, as WebCrypto is not, and an entry the size of one answer is no burden under `ANSWER_LEDGER_CAP`.
+ * Compared with the line as the parser gives it back: `toEvent` trims and tidies, and the registers remember its result.
+ */
+const entryPrefix = (path: string, k: string, type: string, at: string) => `${path}\n${k}\n${type}\n${at}\n`
+const entryId = (path: string, event: LedgerEvent) =>
+  entryPrefix(path, event.k, event.type, event.at) +
+  JSON.stringify([event.choice, event.choices, event.note, event.words, event.again, event.until].map((field) => field ?? null))
+/** An answer known only from the outbox, which holds no content. Never written for one this record already has. */
+const seededId = (path: string, k: string, at: string) => entryPrefix(path, k, "risposta", at)
+const vouchedBy = (known: ReadonlySet<string>, path: string, event: LedgerEvent) =>
+  known.has(entryId(path, event)) || (event.type === "risposta" && known.has(seededId(path, event.k, event.at)))
 
 export interface AnswerLedger {
-  /** ADE's own button wrote an event for `k` of register `path` at `at`. */
-  remember(path: string, k: string, at: string): void
+  /** ADE's own button wrote this event in register `path`. */
+  remember(path: string, event: LedgerEvent): void
   /** Whether ADE wrote that event. */
-  has(path: string, k: string, at: string): boolean
+  has(path: string, event: LedgerEvent): boolean
   /** Answers ADE gave that still stand (the outbox), put in the record once at load. */
   seed(items: readonly { readonly path: string; readonly k: string; readonly answeredAt: string }[]): void
   /** The events of `path`, with `by: "utente"` kept only where ADE wrote the event. */
-  vouch<E extends { readonly k: string; readonly at: string; readonly by: string; readonly fromPane?: string }>(
+  vouch<E extends LedgerEvent & { readonly by: string; readonly fromPane?: string }>(
     path: string,
     events: readonly E[],
   ): E[]
@@ -61,22 +87,24 @@ export function answerLedger(store: () => AnswerStore | undefined, cap = ANSWER_
   }
 
   return {
-    remember: (path, k, at) => {
-      const id = entryId(path, k, at)
+    remember: (path, event) => {
+      const id = entryId(path, event)
       write([...read().filter((known) => known !== id), id])
     },
-    has: (path, k, at) => read().includes(entryId(path, k, at)),
+    has: (path, event) => vouchedBy(new Set(read()), path, event),
     seed: (items) => {
       if (items.length === 0) return
-      const known = new Set(read())
-      const added = items.map((item) => entryId(item.path, item.k, item.answeredAt)).filter((id) => !known.has(id))
-      if (added.length > 0) write([...read(), ...added])
+      const known = read()
+      const added = items
+        .map((item) => seededId(item.path, item.k, item.answeredAt))
+        .filter((id) => !known.some((entry) => entry.startsWith(id)))
+      if (added.length > 0) write([...known, ...added])
     },
     vouch: (path, events) => {
       if (!events.some((event) => event.by === USER_BY && !event.fromPane)) return [...events]
       const known = new Set(read())
       return events.map((event) =>
-        event.by === USER_BY && !event.fromPane && !known.has(entryId(path, event.k, event.at))
+        event.by === USER_BY && !event.fromPane && !vouchedBy(known, path, event)
           ? { ...event, by: UNVOUCHED_BY }
           : event,
       )
