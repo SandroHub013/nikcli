@@ -95,7 +95,8 @@ function pageOn(native: ReturnType<typeof nativeClaims>, storage = { works: fals
   const ledger = createTakenMail()
   const queue: { id: string }[] = []
   const held: { inbox: { id: string } }[] = []
-  const waiting = waitingIn(queue, held)
+  const typing = new Set<string>()
+  const waiting = waitingIn(queue, held, typing)
   const saved = () => writer.save(JSON.stringify([queue, held]), () => storage.works)
   const out = <T extends object>(list: T[], at: (item: T) => boolean) => void list.splice(list.findIndex(at), 1)
   const ended = (id: string) => {
@@ -119,7 +120,15 @@ function pageOn(native: ReturnType<typeof nativeClaims>, storage = { works: fals
       held.push({ inbox: { id } })
       ended(id)
     },
-    heldTyped: (id: string) => out(held, (line) => line.inbox.id === id),
+    /** `moveMail` takes the line out of the held ones to type it, and puts it back if a prompt holds it. */
+    typing(id: string) {
+      out(held, (line) => line.inbox.id === id)
+      typing.add(id)
+    },
+    typingEnded(id: string, heldAgain: boolean) {
+      if (heldAgain) held.push({ inbox: { id } })
+      typing.delete(id)
+    },
     refused: (id: string) => out(queue, (item) => item.id === id),
   }
 }
@@ -153,10 +162,25 @@ describe("storage refusing every write: nothing lost, nothing typed twice", () =
     const page = pageOn(native)
     page.take()
     page.heldForSuspended(id)
-    page.heldTyped(id)
+    page.typing(id)
+    page.typingEnded(id, false)
     native.giveBack()
     expect(page.take()).toEqual([])
     expect(native.has(id)).toBe(false)
+  })
+
+  test("a copy handed over while a held line is being typed stays: a prompt can still hold that line", () => {
+    const native = posted()
+    const page = pageOn(native)
+    page.take()
+    page.heldForSuspended(id)
+    page.typing(id)
+    native.giveBack()
+    expect(page.take()).toEqual([])
+    expect(native.has(id)).toBe(true)
+    page.typingEnded(id, true)
+    native.giveBack()
+    expect(pageOn(native).take()).toEqual([id])
   })
 
   test("a confirm that found the message back in the outbox is made good at the next hand-out, so a reload does not type it again", () => {

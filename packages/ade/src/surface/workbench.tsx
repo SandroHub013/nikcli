@@ -3891,7 +3891,9 @@ export function Workbench() {
     void getHost()
       .then((host) => host?.mailboxTaken?.([id]))
       .catch(() => {})
-  const waitingHere = waitingIn(mailQueue, heldLines)
+  /** The held lines being typed: out of `heldLines` for the moment, and back there if a prompt holds them. */
+  const heldBeingTyped = new Set<string>()
+  const waitingHere = waitingIn(mailQueue, heldLines, heldBeingTyped)
   // The asker first: a message's id is the sender's to choose, and one posted with the id of an open request must not get its answer.
   const paneOfMail = (id: string) =>
     openRequests.get(id)?.from || mailSenders.get(id) || designWaiters().find((waiter) => waiter.id === id)?.from
@@ -4443,6 +4445,8 @@ export function Workbench() {
         if (!dropFrom(heldLines, item)) continue
         if (item.suspended) saveSuspendedMail()
         dropHeldByMenu(item.paneId)
+        const typingId = item.inbox?.id
+        if (typingId) heldBeingTyped.add(typingId)
         // Not typed while the session is still there (a prompt opened): back among the held lines.
         void (
           item.inbox
@@ -4461,11 +4465,15 @@ export function Workbench() {
             : typeLineOutcome(session, item.text, { mail: true }).then(
                 (outcome) => deliveryResult(outcome, running.get(item.paneId) === session) === "held",
               )
-        ).then((again) => {
-          if (!again) return
-          heldLines.push(item)
-          if (item.suspended) saveSuspendedMail()
-        })
+        )
+          .then((again) => {
+            if (!again) return
+            heldLines.push(item)
+            if (item.suspended) saveSuspendedMail()
+          })
+          .finally(() => {
+            if (typingId) heldBeingTyped.delete(typingId)
+          })
       } else {
         if (!item.notice) noteMailHeld(item.paneId, item.inbox?.from)
         if (

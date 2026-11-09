@@ -45,9 +45,9 @@ export function createTakenMail(cap = 5000) {
 
 /** Whether this page still has the message to deliver: with storage refusing it exists only here, and its outbox copy must stay. */
 export const waitingIn =
-  (queue: readonly { id: string }[], held: readonly { inbox?: { id: string } }[]) =>
+  (queue: readonly { id: string }[], held: readonly { inbox?: { id: string } }[], typing: ReadonlySet<string>) =>
   (id: string): boolean =>
-    queue.some((item) => item.id === id) || held.some((line) => line.inbox?.id === id)
+    queue.some((item) => item.id === id) || held.some((line) => line.inbox?.id === id) || typing.has(id)
 
 /** Whether a message whose delivery has ended can leave the outbox: it is saved, or there is nothing of it left to lose. */
 export const mayConfirmEnded = (saved: boolean, waiting: boolean): boolean => saved || !waiting

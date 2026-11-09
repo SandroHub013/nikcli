@@ -128,6 +128,14 @@ describe("a message is confirmed only once the page has it on disk (RS2-5 B)", (
     expect(started).toBeGreaterThan(confirmed)
   })
 
+  test("a held line counts as waiting for as long as it is being typed", () => {
+    const add = source.indexOf("if (typingId) heldBeingTyped.add(typingId)")
+    expect(add).toBeGreaterThan(-1)
+    expect(add).toBeLessThan(source.indexOf("deliverText(host, item.paneId, item.text, item.inbox, item.full)", add))
+    expect(source).toContain("if (typingId) heldBeingTyped.delete(typingId)")
+    expect(source).toContain("waitingIn(mailQueue, heldLines, heldBeingTyped)")
+  })
+
   test("persistMail says whether it wrote", () => {
     expect(source).toContain("return mailWriter.save(now, () => writeStored(QUEUE_KEY, queue) && saveSuspendedMail())")
     expect(source).toContain("const persistMail = (): boolean => {")
