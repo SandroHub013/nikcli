@@ -117,6 +117,13 @@ export const HINT_GONE_MS = 1_500
 /** Since when no reading has found the hint, on a marked terminal. */
 const hintGoneSince = new WeakMap<object, number>()
 /**
+ * The pane's size at the focus-in. While a pane is dragged xterm resizes at every step and ragu repaints only once it stops,
+ * so the header can stay off the screen for longer than any wait, with the dialog still open: only at this size does its
+ * going say anything. A pane resized since waits as before, for a key or «Consegna ora».
+ */
+const sizeAtFocus = new WeakMap<object, string>()
+const sizeNow = (terminal: ComposerTerminal) => `${terminal.cols}x${terminal.rows}`
+/**
  * What the header of a dialog of opentui's agents draws (`DialogHeader`): `esc`, or `esc/enter to close`. Only that word, at
  * the end of a field, arms the release: the `esc interrupt` under a turn and a «description» in the transcript do not. The
  * transcript shows through a dialog's blanks, so a real header can fail this, and then the mark just waits as it always has.
@@ -164,6 +171,7 @@ export function followKeys(terminal: ComposerTerminal, agentId: string, data: st
       refocused.add(terminal)
       pressOfTheFocus.add(terminal)
       hintGoneSince.delete(terminal)
+      sizeAtFocus.set(terminal, sizeNow(terminal))
       if (hintWordOnScreen(terminal)) hintAtFocus.add(terminal)
       else hintAtFocus.delete(terminal)
     }
@@ -208,7 +216,7 @@ export function dialogOver(terminal: ComposerTerminal, agentId: string): boolean
 function markStands(terminal: ComposerTerminal): boolean {
   if (!refocused.has(terminal)) return false
   if (pressOfTheFocus.has(terminal) || !hintAtFocus.has(terminal)) return true
-  if (hintOnScreen(terminal)) {
+  if (sizeAtFocus.get(terminal) !== sizeNow(terminal) || hintOnScreen(terminal)) {
     hintGoneSince.delete(terminal)
     return true
   }
