@@ -47,18 +47,23 @@ impl DevServer {
             Err(poisoned) => poisoned.into_inner(),
         };
         if let Some(mut child) = slot.take() {
-            let _ = child.kill();
-            let _ = child.wait();
+            end(&mut child);
         }
     }
+}
+
+/// Ends the server and what it started: `bun x vite` is a launcher, and killing it alone left Vite holding the port (RS-15).
+fn end(child: &mut Child) {
+    crate::pty::kill_tree(child.id());
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 impl Drop for DevServer {
     fn drop(&mut self) {
         if let Ok(mut slot) = self.0.lock() {
             if let Some(mut child) = slot.take() {
-                let _ = child.kill();
-                let _ = child.wait();
+                end(&mut child);
             }
         }
     }
