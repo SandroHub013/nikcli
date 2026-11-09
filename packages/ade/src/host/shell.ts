@@ -655,6 +655,8 @@ export async function getHost(): Promise<Host | undefined> {
       const id = `pty-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
       let dead = false
+      // The process is known to be gone: it exited, never started, or a kill went through (SES-12).
+      let killed = false
       let stopped = false
       // Batched: one call per chunk would be up to 62 a second for a pane that only prints a spinner (review, RS-7).
       const ackBatch = createAckBatcher((bytes) => void invoke("pty_ack", { id, bytes }).catch(() => undefined))
@@ -676,6 +678,7 @@ export async function getHost(): Promise<Host | undefined> {
       const receive = (event: PtyEvent) => {
         if (event.kind === "exit") {
           dead = true
+          killed = true
           // Whatever was still in flight when the process ended is the last
           // thing it said, and it is usually the reason it ended.
           for (const line of lineStream.flush()) hear(line)
@@ -739,6 +742,7 @@ export async function getHost(): Promise<Host | undefined> {
         })
       } catch (error) {
         dead = true
+        killed = true
         stop()
         // `secrets.rs` refuses a launch's keys with codes; the pane shows the sentence (review of F7b, O1).
         const reason = keyError(error instanceof Error ? error.message : String(error))
@@ -750,11 +754,14 @@ export async function getHost(): Promise<Host | undefined> {
       const sendToPane = orderedWrites((data) => invoke("pty_write", { id, data }))
       return {
         kill: (options) => {
-          if (dead) return Promise.resolve(true)
+          if (killed) return Promise.resolve(true)
           dead = true
           stop()
           return invoke("pty_kill", { id, tree: options?.tree === true }).then(
-            () => true,
+            () => {
+              killed = true
+              return true
+            },
             () => false,
           )
         },
