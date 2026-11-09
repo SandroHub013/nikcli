@@ -1497,7 +1497,7 @@
     top: 0;
     left: 0;
     right: 0;
-    z-index: calc(var(--ade-z-over) - 1);
+    z-index: var(--ade-z-above);
     max-height: 70cqh;
     overflow-y: auto;
   }
@@ -1506,7 +1506,7 @@
     position: absolute;
     right: 6px;
     bottom: 6px;
-    z-index: calc(var(--ade-z-over) - 1);
+    z-index: var(--ade-z-above);
     border-top: 0;
     background: none;
   }
