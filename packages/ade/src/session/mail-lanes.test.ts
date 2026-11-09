@@ -19,6 +19,7 @@ import {
   mailDeadline,
   mailLane,
   oneSettleAtATime,
+  pulseRuns,
   sentAt,
 } from "./mail-lanes"
 import { failedReceipt, hungReceipt, lateLockReceipt, type Message } from "./mailbox"
@@ -429,6 +430,17 @@ describe("a stale lock", () => {
 })
 
 /* `workbench.tsx` cannot be loaded under bun (Solid JSX), so its wiring is read from the source, as elsewhere here. */
+describe("the native pulse runs a round where the page's own timer cannot be trusted (RS2-2)", () => {
+  test.each([
+    [true, true, true],
+    [true, false, true],
+    [false, true, true],
+    [false, false, false],
+  ])("mail waiting %p, page hidden %p: %p", (waiting, hidden, runs) => {
+    expect(pulseRuns(waiting, hidden)).toBe(runs)
+  })
+})
+
 describe("lint: the workbench's round waits for nothing slow", () => {
   const source = workbenchSource()
 
@@ -440,7 +452,7 @@ describe("lint: the workbench's round waits for nothing slow", () => {
 
   test("the timer and the native signal both only start a round", () => {
     expect(source).toContain("every(700, () => mailRound(false), { whenHidden: 700 })")
-    expect(source).toContain("host?.onMailboxPending?.(mailRound)")
+    expect(source).toContain("if (pulseRuns(waiting, pageHidden())) mailRound(waiting)")
     expect(source).toContain("const mailRound = createMailRound({")
   })
 

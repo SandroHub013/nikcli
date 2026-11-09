@@ -109,6 +109,45 @@ describe("lint: the workbench writes the queue and reads it back", () => {
   })
 })
 
+describe("a message is confirmed only once the page has it on disk (RS2-5 B)", () => {
+  const source = workbenchSource()
+  const take = source.slice(source.indexOf("const takeMail = async ("), source.indexOf("const moveMail = async ("))
+
+  test("no take before the saved queue has been read back: a confirm then would lose what cannot be written yet", () => {
+    const gate = take.indexOf("if (!mailRestored) return")
+    expect(gate).toBeGreaterThan(-1)
+    expect(gate).toBeLessThan(take.indexOf("mailboxTake"))
+  })
+
+  test("every id taken is confirmed, only after a save that worked, and before any delivery starts", () => {
+    const saved = take.indexOf("if (persistMail()) await")
+    const confirmed = take.indexOf("host.mailboxTaken?.(taken.map(({ id }) => id))")
+    const started = take.indexOf("mailLanes.start(mailQueue)")
+    expect(saved).toBeGreaterThan(-1)
+    expect(confirmed).toBeGreaterThan(saved)
+    expect(started).toBeGreaterThan(confirmed)
+  })
+
+  test("persistMail says whether it wrote", () => {
+    expect(source).toContain("return mailWriter.save(now, () => writeStored(QUEUE_KEY, queue) && saveSuspendedMail())")
+    expect(source).toContain("const persistMail = (): boolean => {")
+  })
+
+  test("a copy goes before anything is done with it, and what the saved queue held counts as taken", () => {
+    const copy = take.indexOf("takenMail.isCopy(id, body)")
+    expect(copy).toBeGreaterThan(-1)
+    expect(copy).toBeLessThan(take.indexOf("splitSealed(body)"))
+    expect(take).toContain("takenMail.handled(id, body)")
+    expect(source).toContain("takenMail.restored(item.id)")
+  })
+
+  test("a delivery that ended confirms its id too: with storage refusing, no save ever will", () => {
+    const done = source.indexOf("done: (item) => {")
+    expect(source.indexOf("confirmTaken(item.id)", done)).toBeGreaterThan(done)
+    expect(source.indexOf("confirmTaken(item.id)", done)).toBeLessThan(source.indexOf("hung: (item, afterMs)", done))
+  })
+})
+
 describe("the lines held for a running session are saved too, not only those of a suspended one", () => {
   test("a held ask or send for a pane that exists is saved; a notice or a closed pane's mail is not", () => {
     const held = [

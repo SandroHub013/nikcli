@@ -20,6 +20,9 @@
 
 import type { Message } from "./mailbox"
 
+/** Whether a signal of the native side runs a round. */
+export const pulseRuns = (mailWaiting: boolean, _hidden: boolean): boolean => mailWaiting
+
 /** A step that only touches ADE's own state and one file. */
 export const MAIL_QUICK_MS = 30_000
 /**

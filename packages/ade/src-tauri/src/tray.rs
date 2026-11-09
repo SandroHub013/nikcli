@@ -83,12 +83,17 @@ pub(crate) fn hides_on_close(gateway_on: bool, quitting: bool) -> bool {
 
 /// The tray's tooltip: the window's name, and while the window is hidden what
 /// keeps ADE open, since a tray icon is all there is to see.
-pub(crate) fn tray_tooltip(title: &str, hidden: bool) -> String {
+pub(crate) fn tray_tooltip(title: &str, hidden: bool, _note: &str) -> String {
     if hidden {
         format!("{title} · gateway acceso")
     } else {
         title.to_owned()
     }
+}
+
+/// Whether a label the page sent can go in the menu.
+pub(crate) fn valid_tray_label(_label: &str) -> bool {
+    true
 }
 
 /// The tray's id: one per product, so ADE Test's is never the official one's.
@@ -109,7 +114,7 @@ pub(crate) fn single_instance(identifier: &str, asked: Option<&str>) -> bool {
 fn set_tooltip(app: &AppHandle, hidden: bool) {
     let title = app.state::<Tray>().title.lock().map(|title| title.clone()).unwrap_or_default();
     if let Some(tray) = app.tray_by_id(&tray_id(&app.config().identifier)) {
-        let _ = tray.set_tooltip(Some(tray_tooltip(&title, hidden)));
+        let _ = tray.set_tooltip(Some(tray_tooltip(&title, hidden, "")));
     }
 }
 
@@ -265,9 +270,18 @@ mod tests {
 
     #[test]
     fn the_tray_says_a_gateway_keeps_ade_open_only_while_hidden() {
-        assert_eq!(tray_tooltip("ADE", false), "ADE");
-        assert_eq!(tray_tooltip("ADE", true), "ADE · gateway acceso");
-        assert_eq!(tray_tooltip("ADE Test · lavoro-1", true), "ADE Test · lavoro-1 · gateway acceso");
+        assert_eq!(tray_tooltip("ADE", false, "chat connection on"), "ADE");
+        assert_eq!(tray_tooltip("ADE", true, "chat connection on"), "ADE · chat connection on");
+        assert_eq!(tray_tooltip("ADE Test · lavoro-1", true, "collegamento chat acceso"), "ADE Test · lavoro-1 · collegamento chat acceso");
+    }
+
+    #[test]
+    fn a_label_from_the_page_is_short_and_plain() {
+        assert!(valid_tray_label("Apri"));
+        assert!(valid_tray_label(&"é".repeat(40)), "characters, not bytes");
+        assert!(!valid_tray_label(""));
+        assert!(!valid_tray_label(&"a".repeat(41)));
+        assert!(!valid_tray_label("Apri\nEsci"));
     }
 
     /*
