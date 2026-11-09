@@ -771,6 +771,7 @@ const HANDLED_COMMANDS = new Set([
   "pane.close",
   "pane.expand",
   "pane.rename",
+  "pane.deliverNow",
   "pane.resize",
   "view.toggle",
   "theme.toggle",
@@ -7933,6 +7934,10 @@ export function Workbench() {
       if (target) closer.close(target, { confirmRunning: true })
     } else if (id === "pane.expand") {
       if (wb().focusedId) setWb((w) => expandPane(w, w.focusedId!))
+    } else if (id === "pane.deliverNow") {
+      // The click's road: the same one message, and a question on the screen takes it back.
+      const target = focusedHere()
+      if (target) pressDeliverNow(target)
     } else if (id === "pane.rename") {
       // Handled by the pane itself: the title is edited where it is shown.
       requestRename(wb().focusedId)
@@ -8160,6 +8165,7 @@ export function Workbench() {
       voiceActive: voiceEngine.isRunning(),
       voiceChord: voiceSettings().agentChord,
       ...(wb().focusedId ? { suspendCheck: suspendCheckFor(wb().focusedId!) } : {}),
+      deliverNowOffered: Boolean(wb().focusedId && deliverNowPanes().has(wb().focusedId!) && deliverNow.offered(wb().focusedId!)),
       recording: recordState().status === "recording",
       recordMic: recordMic(),
       recordQuality: `${qualityLabel(qualityLevel(recordQuality()))} (${sizePerMinute(qualityLevel(recordQuality()))})`,

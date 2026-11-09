@@ -229,6 +229,8 @@ export interface SessionPaneProps {
    */
   notices?: readonly string[]
   onDismissNotices?: () => void
+  /** «Consegna ora» stands among the actions: ADE holds mail for this pane, and nobody is being asked anything. */
+  deliverNowOffered?: boolean
   /**
    * Files were dropped on this session: from the project tree, from the
    * screenshot tray, or from the system's own file manager.
@@ -462,7 +464,8 @@ export function SessionPane(props: SessionPaneProps) {
       state: props.state,
       activity: props.activity,
       quota: quota(),
-      hasActions: Boolean(props.actions && props.actions.length > 0),
+      // Not the offer of «Consegna ora»: nobody is asking for a permission, and the sidebar says so too.
+      hasActions: Boolean(props.actions && props.actions.length > 0) && !props.deliverNowOffered,
       exited: props.exited,
     }),
   )
@@ -507,6 +510,7 @@ export function SessionPane(props: SessionPaneProps) {
    * it only restates the state (`chipDetail`, DS-18).
    */
   const stateHead = createMemo(() => {
+    if (props.deliverNowOffered) return t("pane.deliverNow.chip")
     if (answerInTerminal()) return t("paneState.perm.here")
     const detail = chipDetail({ activity: props.activity })
     if (detail) return detail

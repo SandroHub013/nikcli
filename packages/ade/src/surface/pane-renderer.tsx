@@ -499,6 +499,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         })()}
         mail={deps.mailWaiting()[current().id]}
         notices={current().notices}
+        deliverNowOffered={deps.deliverNowOffered(current().id)}
         onDismissNotices={() => deps.dismissNotices(current().id)}
         onMail={() => deps.showMail(current().id)}
         onLink={(request) => deps.openLink(current().id, request)}

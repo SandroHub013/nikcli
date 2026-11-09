@@ -50,6 +50,8 @@ export interface CommandContext {
   pluginCommands?: PluginCommandEntry[]
   /** The sections that can be reached. `VISIBLE_VIEWS` unless a test injects the other branch. */
   views?: readonly AdeView[]
+  /** Whether the focused pane offers «Consegna ora» now: the keyboard's way to the button. */
+  deliverNowOffered?: boolean
   /** Whether the focused pane can be suspended now (`canSuspend`); absent when it is not a Claude session. */
   suspendCheck?: SuspendCheck
   /** Whether the sidebar is hidden, so the palette says what the command will do. */
@@ -197,6 +199,14 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
       enabled: !!focusedPane,
       disabledReason: focusedPane ? undefined : t("palette.noFocusedPane"),
       shortcut: shortcutFor("pane.rename", platform),
+    },
+    {
+      id: "pane.deliverNow",
+      title: t("palette.pane.deliverNow"),
+      group: t("palette.group.pane"),
+      keywords: ["consegna", "posta", "messaggio", "invio", "deliver", "mail", "message"],
+      enabled: Boolean(focusedPane && ctx.deliverNowOffered),
+      disabledReason: focusedPane && ctx.deliverNowOffered ? undefined : t("palette.pane.deliverNow.none"),
     },
     {
       id: "pane.resize",

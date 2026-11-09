@@ -829,7 +829,7 @@ export function formatHeldByScreen(agent: string, reader: MailPane | undefined):
 export function formatEnterStuck(id: string, reader: MailPane | undefined): string {
   return (
     `[ade-msg] Il testo del messaggio ${id} è stato scritto in ${who(reader)}, ma ADE non ha premuto Invio: ` +
-    `il suo compositore non è tornato a schermo. Finché nessuno preme Invio, quella sessione non l'ha ricevuto.`
+    `la casella dove si scrive non è tornata a schermo. Finché nessuno preme Invio, quella sessione non l'ha ricevuto.`
   )
 }
 

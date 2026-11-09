@@ -36,6 +36,15 @@ describe("the shortcuts page", () => {
     expect(keysOf("mac", "grid")[0]).toBe("⌥←↑↓→")
   })
 
+  test("lists «Consegna ora» under the search for commands, the keyboard's way to it (UX2-2)", () => {
+    for (const platform of ["other", "mac"] as const) {
+      const row = group(platform, "other").rows.find((candidate) => candidate.labelKey === "shortcuts.other.deliverNow")
+      expect(row?.keys).toBe(formatChord(parseChord("mod+shift+p", platform), platform))
+    }
+    const palette = DEFAULT_BINDINGS.find((entry) => entry.commandId === "palette.open")
+    expect(palette?.chord).toBe("mod+shift+p")
+  })
+
   test("names the grid's keys, the terminal's mouse and the sidebar's row menu", () => {
     expect(keysOf("other", "grid")).toEqual(["Alt+←↑↓→", "Alt+Shift+←↑↓→", "←↑↓→", "Home"])
     expect(keysOf("other", "other")).toContain("Shift+F10")

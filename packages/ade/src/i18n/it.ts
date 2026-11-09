@@ -63,6 +63,8 @@ export const it = {
   "palette.pane.shrink": "Riduci pannello",
   "palette.pane.expand": "Espandi pannello",
   "palette.pane.rename": "Rinomina sessione",
+  "palette.pane.deliverNow": "Consegna ora la posta in attesa",
+  "palette.pane.deliverNow.none": "Il pannello a fuoco non ha posta da consegnare",
   "lazy.failed": "Questa schermata non si è caricata.",
   "lazy.retry": "Riprova",
   "palette.pane.resize": "Ridimensiona il pannello con la tastiera",
@@ -306,6 +308,7 @@ export const it = {
   "shortcuts.other.rowMenu": "Barra laterale: menu della riga (rinomina, riavvia, chiudi…)",
   "shortcuts.other.decisions": "Decisioni: scegli l'opzione con il suo numero",
   "shortcuts.other.shot": "Trascina una schermata su una sessione per mandarla all'agente",
+  "shortcuts.other.deliverNow": "Da Cerca comandi: consegna ora la posta in attesa, quando il pannello a fuoco lo propone",
   "shortcuts.key.drag": "trascina",
   "shortcuts.key.click": "clic",
   "shortcuts.voice": "I tasti della voce si scelgono in Voce › Scorciatoie.",
@@ -546,16 +549,17 @@ export const it = {
   "task.confirmTrust":
     "La sessione chiede la fiducia per questa cartella: confermala nel terminale e ADE scriverà il compito iniziale.",
   "task.heldByMenu":
-    "Il compito iniziale aspetta la domanda a schermo. Se non è vera o hai già risposto, premi Invio; se non cambia nulla, parte quando la sessione va avanti.",
-  "task.notTyped": "Il compito iniziale non è arrivato: si è aperto un menu, o il testo non è comparso nel compositore. Guarda il riquadro e, se non c'è, scrivilo tu.",
+    "Il compito iniziale aspetta: ADE vede una domanda a schermo. Rispondi nel terminale e parte; se non c'è nessuna domanda, premi Invio nel terminale.",
+  "task.notTyped": "Il compito iniziale non è arrivato: si è aperto un menu, o il testo non è comparso nella casella dove si scrive. Guarda il pannello e, se manca, scrivilo tu.",
   "task.exitedUnsent": "La sessione si è chiusa prima di ricevere il compito iniziale: ADE non l'ha scritto.",
-  "task.exitedOnTrust": "La sessione si è chiusa sul dialogo di fiducia («No, exit»): ADE non ha scritto il compito iniziale.",
+  "task.exitedOnTrust": "La sessione si è chiusa sul «No, exit» della fiducia: il compito non è stato scritto. Per riprovare, riaprila con il pulsante qui sotto e scegli «Yes».",
   "pane.deliverNow": "Consegna ora: scrive e preme Invio",
+  "pane.deliverNow.chip": "la posta aspetta te",
   "note.deliverNowOffer": (agent: string) =>
-    `ADE non riconosce lo schermo di ${agent} e la posta aspetta. «Consegna ora» scrive un messaggio e preme Invio su ciò che si vede, testo già lì compreso.`,
-  "note.deliverNowLapsed": "«Consegna ora» non ha consegnato niente: il messaggio non è partito ed è ancora in coda.",
-  "note.enterStuck": "Il testo è scritto ma ADE non ha premuto Invio: il compositore non è tornato. Se il testo è lì, premi Invio tu.",
-  "task.trustAccepted": "Cartella di lavoro creata da ADE per questa sessione: fiducia confermata, poi il compito.",
+    `Un messaggio per ${agent} aspetta: ADE non riconosce il suo schermo. «Consegna ora» lo scrive e preme Invio, anche sopra una domanda o del testo già scritto.`,
+  "note.deliverNowLapsed": "«Consegna ora» non ha scritto niente: lo schermo è cambiato o è comparsa una domanda. Il messaggio è ancora in coda; il pulsante torna se serve.",
+  "note.enterStuck": "Il testo è scritto ma ADE non ha premuto Invio: la casella dove si scrive non è tornata. Se il testo è lì, premi Invio tu.",
+  "task.trustAccepted": "Sessione in una copia di lavoro creata da ADE: alla domanda di fiducia ADE ha risposto sì, poi ha scritto il compito.",
   "task.stepHeld": (text: string) =>
     `ADE non ha ancora scritto «${text}»: la sessione aspetta una risposta, una password o un menu. Lo scrive appena si chiude.`,
   "task.stepNotSent": (text: string) =>
@@ -1829,7 +1833,7 @@ export const it = {
   "note.mailHeldBySilence":
     "Un messaggio aspetta: questa sessione non ha ancora scritto niente. Arriva appena scrive; se il programma non parte, riavviala.",
   "note.mailHeldByMenu":
-    "Un messaggio aspetta la domanda a schermo. Se non è vera o hai già risposto, premi Invio; se non cambia nulla, si libera quando la sessione va avanti o riparte.",
+    "Un messaggio aspetta: ADE vede una domanda a schermo. Rispondi nel terminale e arriva; se non c'è nessuna domanda, premi Invio nel terminale.",
   "note.interruptedBy": (from: string) => `Interrotta da ${from}`,
   "note.restarted": (from: string, model: string) => `Riavviata da ${from}${model ? ` con il modello ${model}` : ""}`,
   "note.restartedFresh": (from: string, model: string) =>

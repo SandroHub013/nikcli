@@ -214,6 +214,8 @@ describe("the words of the glossary (UX-11, UX-12, UX-27)", () => {
       ["a task is a compito", /\btasks?\b/],
       ["a gateway is a collegamento chat", /\b[Gg]ateway\b/],
       ["Decisioni is never cut to Dec", /^Dec$/],
+      ["the input box is the casella dove si scrive: a compositore writes music or draws windows", /compositore(?! grafico)/i],
+      ["a pane is a pannello", /riquadr/i],
     ]
     for (const [why, pattern] of forbidden) {
       expect(italian.filter(([, text]) => pattern.test(text)).map(([key]) => key), why).toEqual([])

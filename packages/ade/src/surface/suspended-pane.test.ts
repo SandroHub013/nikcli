@@ -27,9 +27,9 @@ afterEach(() => {
   cleanup = undefined
 })
 
-function mountSession(pane: { suspended?: true; status: "idle" | "done"; activity?: string }) {
+function mountSession(pane: { suspended?: true; status: "idle" | "done"; activity?: string }, offered = false) {
   resetLocaleForTests("it")
-  const calls = { resume: [] as string[], restart: [] as string[] }
+  const calls = { resume: [] as string[], restart: [] as string[], deliverNow: [] as string[] }
   const host = document.createElement("div")
   document.body.append(host)
   const dispose = createRoot((dispose) => {
@@ -60,8 +60,8 @@ function mountSession(pane: { suspended?: true; status: "idle" | "done"; activit
       isRunning: () => false,
       sessionFor: () => undefined,
       suspendCheck: () => ({ ok: false, reason: "notRunning" }),
-      deliverNowOffered: () => false,
-      deliverNow: () => {},
+      deliverNowOffered: () => offered,
+      deliverNow: (id: string) => void calls.deliverNow.push(id),
       resume: (id: string) => void calls.resume.push(id),
       restart: (pane: { id: string }) => void calls.restart.push(pane.id),
     } as never)
@@ -107,6 +107,18 @@ test("an exited session that is not suspended keeps its own Riprendi, which rest
   host.querySelector<HTMLButtonElement>('[data-slot="pane-answer"]')!.click()
   expect(calls.restart).toEqual(["s1"])
   expect(calls.resume).toEqual([])
+})
+
+test("a pane offering «Consegna ora» stays as it is: nobody is asking for a permission (UX2-1)", async () => {
+  const { host, calls } = mountSession({ status: "idle" }, true)
+  await frames()
+  expect(host.querySelector('[data-component="session-pane"]')?.getAttribute("data-state")).toBe("idle")
+  expect(host.textContent).toContain("la posta aspetta te")
+  expect(host.textContent).not.toContain("Permesso")
+  const button = host.querySelector<HTMLButtonElement>('[data-slot="pane-answer"]')!
+  expect(button.textContent).toContain("Consegna ora")
+  button.click()
+  expect(calls.deliverNow).toEqual(["s1"])
 })
 
 test("the header's Sospendi, off, stays visible and says why", async () => {

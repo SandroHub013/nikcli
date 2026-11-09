@@ -110,6 +110,8 @@ export function shortcutGroups(platform: Platform): readonly ShortcutGroup[] {
         { keys: `${key.shift}F10`, labelKey: "shortcuts.other.rowMenu" },
         { keys: "1–9", labelKey: "shortcuts.other.decisions" },
         { keys: t("shortcuts.key.drag"), labelKey: "shortcuts.other.shot" },
+        // No chord of its own: one key that presses Enter on a screen ADE cannot read is too easy to press.
+        { keys: formatChord(parseChord("mod+shift+p", platform), platform), labelKey: "shortcuts.other.deliverNow" },
       ],
     },
   ]
