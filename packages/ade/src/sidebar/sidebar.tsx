@@ -37,6 +37,7 @@ import {
   type EntryKind,
   deserializeKinds,
   toggleKind,
+  MAX_EXPANDED_DIRS,
   deserializeSet,
   safeGetStorage,
   safeSetStorage,
@@ -844,7 +845,7 @@ export function Sidebar(props: SidebarProps) {
   const toggleDir = (dirPath: string) => {
     const next = toggleDirectoryExpansion(expandedDirs(), dirPath)
     setExpandedDirs(next)
-    safeSetStorage(storage, STORAGE_KEY_EXPANDED_DIRS, serializeSet(next))
+    safeSetStorage(storage, STORAGE_KEY_EXPANDED_DIRS, serializeSet(next, MAX_EXPANDED_DIRS))
     if (next.has(dirPath)) {
       loadDir(dirPath)
     }
@@ -1139,7 +1140,7 @@ export function Sidebar(props: SidebarProps) {
     )
     const next = new Set([...expandedDirs(), ...chain, ...(root ? [root.path] : [])])
     setExpandedDirs(next)
-    safeSetStorage(storage, STORAGE_KEY_EXPANDED_DIRS, serializeSet(next))
+    safeSetStorage(storage, STORAGE_KEY_EXPANDED_DIRS, serializeSet(next, MAX_EXPANDED_DIRS))
     setSearchQuery("")
     if (root) void loadDir(root.path)
   }
