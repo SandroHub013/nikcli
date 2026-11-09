@@ -97,7 +97,7 @@ pub fn bin_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
 
 /// Writes the `ade-msg` scripts and clears old leftovers. Called at startup.
 ///
-/// Rewritten every launch rather than only when missing, so a session always
+/// Checked every launch rather than only when missing, so a session always
 /// runs the version that matches the ADE that will read its messages.
 pub fn install(app: &tauri::AppHandle) {
     let Some(dir) = mailbox_path(app) else { return };
@@ -108,9 +108,11 @@ pub fn install(app: &tauri::AppHandle) {
     for name in PUBLISHED {
         let _ = fs::remove_file(dir.join(format!("{name}.txt")));
     }
-    let _ = fs::write(bin.join("ade-msg.ps1"), PS1);
-    let _ = fs::write(bin.join("ade-msg.cmd"), CMD);
-    let _ = fs::write(bin.join("ade-msg"), SH);
+    for (name, text) in [("ade-msg.ps1", PS1), ("ade-msg.cmd", CMD), ("ade-msg", SH)] {
+        if let Err(error) = put_script(&bin, name, text) {
+            eprintln!("ADE: {name} non aggiornato: {error}");
+        }
+    }
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -203,9 +205,12 @@ fn valid_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 80 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
-/// Puts a script in the folder.
+/// Puts a script in the folder, whole, and only if it changed: whether it did. A session may be running it.
 fn put_script(dir: &Path, name: &str, text: &str) -> Result<bool, String> {
-    fs::write(dir.join(name), text).map_err(|e| format!("scrittura fallita: {e}"))?;
+    if fs::read(dir.join(name)).is_ok_and(|now| now == text.as_bytes()) {
+        return Ok(false);
+    }
+    write_whole(dir.to_path_buf(), name, text)?;
     Ok(true)
 }
 
