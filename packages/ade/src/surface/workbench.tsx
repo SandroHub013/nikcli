@@ -4349,6 +4349,8 @@ export function Workbench() {
     const taken = (await host.mailboxTake?.().catch(() => [])) ?? []
     if (taken.length === 0) return
     const settled: string[] = []
+    // Into the queue together, after the last proof: during those awaits a round could start the lanes and type a message not yet saved.
+    const arrived: typeof mailQueue = []
     for (const { id, body } of taken) {
       if (takenMail.isCopy(id, body)) {
         // Back here with nothing left to do: its own end, or a refusal, found no claim to confirm, and this is the next chance.
@@ -4376,9 +4378,10 @@ export function Workbench() {
       }
       const parsed = parseMessage(sealed.body)
       const message = parsed && verifySender(parsed, proven)
-      if (message) mailQueue.push({ id, message, at: Date.now() })
+      if (message) arrived.push({ id, message, at: Date.now() })
       else void host.mailboxReceipt?.(id, "errore: messaggio non valido").catch(() => {})
     }
+    mailQueue.push(...arrived)
     // The native side has kept them until it hears this: every one, the refused and the copies too, or they come back in 30 s.
     // Only with them on disk, or a crash loses what was told «in coda», and before any delivery: what has run must not come back.
     if (persistMail()) await host.mailboxTaken?.(taken.map(({ id }) => id)).catch(() => {})

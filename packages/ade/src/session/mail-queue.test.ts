@@ -87,7 +87,7 @@ describe("lint: the workbench writes the queue and reads it back", () => {
 
   test("written before any delivery starts and again when one ends, and nothing before it was read back", () => {
     // WB-6: the take deleted it from the outbox, so a crash during a long `close` must not lose what was told «in coda».
-    const taken = source.indexOf("mailQueue.push({ id, message, at: Date.now() })")
+    const taken = source.indexOf("mailQueue.push(...arrived)")
     const written = source.indexOf("persistMail()", taken)
     const started = source.indexOf("mailLanes.start(mailQueue)", taken)
     expect(taken).toBeGreaterThan(0)
@@ -145,6 +145,13 @@ describe("a message is confirmed only once the page has it on disk (RS2-5 B)", (
     const done = source.indexOf("done: (item) => {")
     expect(source.indexOf("confirmTaken(item.id)", done)).toBeGreaterThan(done)
     expect(source.indexOf("confirmTaken(item.id)", done)).toBeLessThan(source.indexOf("hung: (item, afterMs)", done))
+  })
+
+  test("the messages of one take join the queue together, after the last proof: a round cannot type the first before the save", () => {
+    const joined = take.indexOf("mailQueue.push(...arrived)")
+    expect(take).toContain("if (message) arrived.push({ id, message, at: Date.now() })")
+    expect(joined).toBeGreaterThan(take.lastIndexOf("await sealedBy("))
+    expect(joined).toBeLessThan(take.indexOf("if (persistMail()) await"))
   })
 
   test("storage refusing: a line held only in memory keeps its outbox copy until it has left (review F1)", () => {
