@@ -20,6 +20,11 @@ export function PaneActions(props: {
   children?: JSX.Element
 }) {
   const closeLabel = () => (props.title ? t("pane.close.named", props.title) : t("pane.close"))
+  /** The expand button names its pane too, as close does (UX-21): «Ingrandisci Claude 2», not just «Ingrandisci». */
+  const expandLabel = () =>
+    props.title
+      ? t(props.expanded ? "pane.restore.named" : "pane.expand.named", props.title)
+      : props.expanded ? t("pane.restore") : t("pane.expand")
   return (
     <span class="acts" data-slot="pane-actions">
       {props.children}
@@ -28,8 +33,8 @@ export function PaneActions(props: {
         class="act"
         data-slot="pane-action"
         onClick={() => props.onExpand?.()}
-        aria-label={props.expanded ? t("pane.restore") : t("pane.expand")}
-        title={props.expanded ? t("pane.restore") : t("pane.expand")}
+        aria-label={expandLabel()}
+        title={expandLabel()}
       >
         <svg class="gi" viewBox="0 0 16 16" aria-hidden="true">
           <path

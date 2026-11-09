@@ -233,7 +233,7 @@ export const it = {
   "sidebar.menu.restart": "Riavvia",
   "sidebar.menu.resume": "Riprendi",
   "sidebar.menu.close": "Chiudi",
-  "ui.notice.close": "Scarta l'avviso",
+  "ui.notice.close": "Togli l'avviso",
   "sidebar.menu.copyId": "Copia l'id",
   "sidebar.menu.openSession": "Apri la sessione",
   "sidebar.menu.newSession": "Nuova sessione",
@@ -243,9 +243,9 @@ export const it = {
   // Panels, grid, palette, empty project
   "pane.tree.stale.short": "solo l'ultimo commit",
   "pane.tree.noDeps.short": "senza dipendenze",
-  "pane.tree.full": "Albero isolato che contiene il lavoro corrente",
-  "pane.tree.stale": "Albero isolato dall'ultimo commit: le modifiche non salvate non ci sono",
-  "pane.tree.noDeps": "Albero isolato senza dipendenze collegate: l'agente può modificare ma non eseguire",
+  "pane.tree.full": "Copia di lavoro con il lavoro corrente",
+  "pane.tree.stale": "Copia di lavoro dall'ultimo commit: le modifiche non salvate non ci sono",
+  "pane.tree.noDeps": "Copia di lavoro senza dipendenze collegate: l'agente può modificare ma non eseguire",
   "pane.tree.project": "Nessuna copia di lavoro: l'agente lavora direttamente nel progetto",
   "pane.tree.preparing": "Preparazione della copia di lavoro…",
   "pane.tree.preparing.short": "preparazione…",
@@ -688,7 +688,7 @@ export const it = {
   "settings.skills.without": (tools: string) => `senza ${tools}`,
   "settings.howItWorks": "Come funziona",
   "settings.account.intro":
-    "I programmi su cui possono girare i bot, ognuno con l'account della propria CLI.",
+    "Gli agenti con cui partono le sessioni e i bot, ognuno con l'account della propria CLI.",
   "settings.providers.desc1":
     "I programmi su cui può girare un bot, ognuno con l'account della propria CLI: l'abbonamento Anthropic passa da Claude Code, quello ChatGPT da Codex, le chiavi e gli altri abbonamenti da Ragù Code. Il motore, il modello e lo sforzo si scelgono nella scheda di ogni bot.",
   "settings.providers.desc2Before": (max: number) =>
@@ -696,6 +696,7 @@ export const it = {
   "settings.providers.desc2After": ").",
   "settings.providers.checking": "Controllo…",
   "settings.providers.notInstalled": "Non installato",
+  "settings.providers.notInstalled.hint": "Non installato: lo installi da Nuova sessione",
   "settings.providers.connected": "Collegato",
   "settings.providers.notConnected": "Non collegato",
   "settings.providers.unverified": "Da verificare",
@@ -792,6 +793,9 @@ export const it = {
     "Il programma riceve i clic e la rotella. Per selezionare e copiare il testo, tieni Maiusc e trascina. Ctrl+clic apre un link.",
   "pane.close": "Chiudi",
   "pane.close.named": (title: string) => `Chiudi ${title}`,
+  "pane.expand.named": (title: string) => `Ingrandisci ${title}`,
+  "pane.restore.named": (title: string) => `Riduci ${title}`,
+  "pane.suspend.named": (title: string) => `Sospendi ${title}`,
   "hooks.foreign":
     "Di un'altra build di ADE, non di questa: questa non lo aggiorna e non lo rimuove, perché con quel file ci lavorano le sessioni dell'ADE ufficiale",
   "bar.meta.ragu": (version: string) => `CLI Ragù Code ${version}`,

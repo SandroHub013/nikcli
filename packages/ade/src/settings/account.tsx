@@ -133,7 +133,12 @@ export function AccountSection(props: AccountSectionProps): JSX.Element {
                   <span
                     data-slot="provider-badge"
                     data-state={kind()}
-                    title={state()?.login.detail ?? statusLabel(kind())}
+                    title={
+                      // A missing CLI says where to install it, over the check's own «Non installato.».
+                      kind() === "not-installed"
+                        ? t("settings.providers.notInstalled.hint")
+                        : (state()?.login.detail ?? statusLabel(kind()))
+                    }
                   >
                     <span data-slot="status-dot" />
                     <span data-slot="status-label">{statusLabel(kind())}</span>

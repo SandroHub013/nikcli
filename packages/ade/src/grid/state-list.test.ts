@@ -177,6 +177,9 @@ describe("the chip says what to do, not what the terminal scraped (UX-8, DS-18)"
     expect(chipDetail({ activity: "ready" })).toBe("")
     expect(chipDetail({ activity: "Disponibile" })).toBe("")
     expect(chipDetail({ activity: "running" })).toBe("")
+    // UX-6: a finished session's report is «done»: «Chiusa · Fatto» said the same thing twice.
+    expect(chipDetail({ activity: "done" })).toBe("")
+    expect(chipDetail({ activity: "Fatto" })).toBe("")
     expect(chipDetail({ activity: "exited:2" })).toBe("Terminata (codice 2)")
     expect(chipDetail({})).toBe("")
   })
@@ -288,6 +291,18 @@ describe("the header keeps four things (DS-19)", () => {
     for (const selector of [".a-q", ".a-mode", ".a-br", ".qbar", ".qk", ".qr", ".ct"]) {
       expect([selector, queries.includes(`.hA ${selector}`)]).toEqual([selector, false])
     }
+  })
+})
+
+describe("a narrow sidebar drops the row's second line (DS-20)", () => {
+  test("the session meta is hidden under a container query of the sidebar at 219px (a column narrower than 220px)", () => {
+    const at = sidebarCss.indexOf("@container ade-sidebar (max-width: 219px)")
+    expect(at).toBeGreaterThan(-1)
+    // The block of that query: up to the next `@container`, or the end.
+    const rest = sidebarCss.slice(at + 1)
+    const next = rest.indexOf("@container")
+    const block = rest.slice(0, next === -1 ? undefined : next)
+    expect(/\[data-slot="session-meta"\]\s*\{\s*display:\s*none;/.test(block)).toBe(true)
   })
 })
 

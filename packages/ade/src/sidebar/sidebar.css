@@ -1700,6 +1700,16 @@ aside[data-component="ade-sidebar"] {
   }
 }
 
+/*
+ * The second line of a session row (folder, branch, time) goes on a column narrower than 220px (DS-20): at the 180px
+ * minimum it was cut to a few letters and read as noise, while the first line still says which session it is.
+ */
+@container ade-sidebar (max-width: 219px) {
+  [data-slot="session-meta"] {
+    display: none;
+  }
+}
+
 @container (max-width: 230px) {
   [data-slot="sidebar-settings"],
   [data-slot="sidebar-footer-actions"] [data-slot="ade-icon"] {
