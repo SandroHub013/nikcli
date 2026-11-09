@@ -550,6 +550,8 @@ export const en: Messages = {
   "note.enterStuck": "The text is typed but ADE didn't press Enter: the input box did not come back. If the text is there, press Enter yourself.",
   "task.heldByMenu":
     "The initial task is waiting: ADE sees a question on screen. Answer it in the terminal and it goes; if there is no question, press Enter in the terminal.",
+  "task.heldByDialog":
+    "The initial task is waiting: ADE sees a window open in the terminal. Finish it, or close it with Esc, and it goes.",
   "task.notTyped": "The initial task did not arrive: a menu opened just then, or the text did not show in the input box. Check the pane and, if it isn't there, type it yourself.",
   "task.trustAccepted": "This session runs in a working copy ADE made: ADE answered yes to the trust question, then typed the task.",
   "task.stepHeld": (text) =>
@@ -1767,6 +1769,7 @@ export const en: Messages = {
   "resume.gone": (agent: string) => `The previous conversation no longer exists in ${agent}: opening a new one`,
   "resume.none": "This conversation cannot be found again: on a restart the session starts over, with the task retyped",
   "note.resent": "Pressed Enter again: the message hadn't been sent",
+  "note.enterLost": "ADE's text is still in the box after its Enter and has not gone. Press Enter yourself, or clear it.",
   "note.enterHeld": "Typed, Enter not pressed: a permission prompt is open",
   "note.panelReplyHeld": (why: string) => `Panel reply waiting (${why}): I will try again when the pane is free`,
   "note.panelReplyStale": (n: number) =>
@@ -1803,6 +1806,8 @@ export const en: Messages = {
     "A message is waiting: this session hasn't written anything yet. It arrives as soon as it does; if the program doesn't start, restart it.",
   "note.mailHeldByMenu":
     "A message is waiting: ADE sees a question on screen. Answer it in the terminal and it arrives; if there is no question, press Enter in the terminal.",
+  "note.mailHeldByDialog":
+    "A message is waiting: ADE sees a window open in the terminal. Finish it, or close it with Esc, and it arrives.",
   "note.interruptedBy": (from) => `Interrupted by ${from}`,
   "note.restarted": (from, model) => `Restarted by ${from}${model ? ` with model ${model}` : ""}`,
   "note.restartedFresh": (from, model) => `Restarted from scratch by ${from}${model ? ` with model ${model}` : ""}`,

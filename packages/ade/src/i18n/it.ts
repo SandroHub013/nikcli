@@ -557,6 +557,8 @@ export const it = {
     "La sessione chiede la fiducia per questa cartella: confermala nel terminale e ADE scriverà il compito iniziale.",
   "task.heldByMenu":
     "Il compito iniziale aspetta: ADE vede una domanda a schermo. Rispondi nel terminale e parte; se non c'è nessuna domanda, premi Invio nel terminale.",
+  "task.heldByDialog":
+    "Il compito iniziale aspetta: ADE vede una finestra aperta nel terminale. Completala, o chiudila con Esc, e parte.",
   "task.notTyped": "Il compito iniziale non è arrivato: si è aperto un menu, o il testo non è comparso nella casella dove si scrive. Guarda il pannello e, se manca, scrivilo tu.",
   "task.exitedUnsent": "La sessione si è chiusa prima di ricevere il compito iniziale: ADE non l'ha scritto.",
   "task.exitedOnTrust": "La sessione si è chiusa sul «No, exit» della fiducia: il compito non è stato scritto. Per riprovare, riaprila con il pulsante qui sotto e scegli «Yes».",
@@ -1808,6 +1810,7 @@ export const it = {
   "resume.none":
     "Questa conversazione non può essere ritrovata: al riavvio la sessione riparte da zero, con il compito riscritto",
   "note.resent": "Invio ripetuto: il messaggio non era partito",
+  "note.enterLost": "Il testo di ADE è ancora nella casella dopo il suo Invio e non è partito. Premi Invio tu, o cancellalo.",
   "note.enterHeld": "Digitata, Invio non premuto: c'è un permesso aperto",
   "note.panelReplyHeld": (why: string) =>
     `Risposta del pannello in attesa (${why}): la riprovo quando il pannello si libera`,
@@ -1846,6 +1849,8 @@ export const it = {
     "Un messaggio aspetta: questa sessione non ha ancora scritto niente. Arriva appena scrive; se il programma non parte, riavviala.",
   "note.mailHeldByMenu":
     "Un messaggio aspetta: ADE vede una domanda a schermo. Rispondi nel terminale e arriva; se non c'è nessuna domanda, premi Invio nel terminale.",
+  "note.mailHeldByDialog":
+    "Un messaggio aspetta: ADE vede una finestra aperta nel terminale. Completala, o chiudila con Esc, e arriva.",
   "note.interruptedBy": (from: string) => `Interrotta da ${from}`,
   "note.restarted": (from: string, model: string) => `Riavviata da ${from}${model ? ` con il modello ${model}` : ""}`,
   "note.restartedFresh": (from: string, model: string) =>

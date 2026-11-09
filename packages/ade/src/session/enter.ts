@@ -119,6 +119,47 @@ export async function textInBox(input: {
 }
 
 /**
+ * How long a line may stand still in the box after its Enter. An agent empties the box at once: the live test saw a line
+ * stay for minutes, with the pane idle and nobody told. Past this it is said, and never pressed again: what became of the
+ * Enter is not known, and a second one could land on whatever came next.
+ */
+export const LINE_STAYS_MS = 10_000
+/** How long the box must stay without a line for the line to have gone: a repaint or a resize covers it for a moment. */
+const LINE_GONE_MS = 1_000
+
+/** Whether the line in the box, as `read` gives it, has stood still for `LINE_STAYS_MS`. False if it went, or on `stop`. */
+export async function lineStays(input: {
+  /** The line in the box, or undefined with none in it. */
+  read: () => string | undefined
+  /** The session has gone, or the user has begun typing: nothing to say. */
+  stop: () => boolean
+  now?: () => number
+  sleep?: (ms: number) => Promise<void>
+}): Promise<boolean> {
+  const now = input.now ?? Date.now
+  const sleep = input.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
+  let line = input.read()
+  let since = now()
+  let goneSince: number | undefined
+  while (!input.stop()) {
+    const current = input.read()
+    if (current === undefined) {
+      goneSince ??= now()
+      if (now() - goneSince >= LINE_GONE_MS) return false
+    } else {
+      goneSince = undefined
+      if (current !== line) {
+        line = current
+        since = now()
+      }
+      if (now() - since >= LINE_STAYS_MS) return true
+    }
+    await sleep(BOX_READ_MS)
+  }
+  return false
+}
+
+/**
  * What a delivery made of its line.
  *
  * `held`: not typed while the session is still there — a prompt was open —

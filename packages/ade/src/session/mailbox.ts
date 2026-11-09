@@ -855,6 +855,14 @@ export function formatEnterStuck(id: string, reader: MailPane | undefined): stri
   )
 }
 
+/** Told to the sender when its message is still in the box after its Enter. */
+export function formatEnterLost(id: string, reader: MailPane | undefined): string {
+  return (
+    `[ade-msg] Il testo del messaggio ${id} è ancora nella casella di ${who(reader)} dopo l'Invio: non è partito. ` +
+    `Finché nessuno lo invia, quella sessione non l'ha ricevuto.`
+  )
+}
+
 /** Told to whoever asked for a task, when the session closed before it was typed. `onTrust`: on its trust dialog. */
 export function formatExitedUnsent(id: string, reader: MailPane | undefined, onTrust: boolean): string {
   return (

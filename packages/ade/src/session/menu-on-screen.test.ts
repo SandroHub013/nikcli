@@ -5,7 +5,9 @@ import { createLineAccumulator } from "../host/line-stream"
 import { createLineWriter } from "../surface/pane-lines"
 import { codeOf } from "../test-support/source-text"
 import { typeThenEnter } from "./enter"
-import { formatHeldByMenu, formatHeldMenuReceipt, formatHeldSilentReceipt, formatSilentStart } from "./mailbox"
+import { formatEnterLost, formatHeldByMenu, formatHeldMenuReceipt, formatHeldSilentReceipt, formatSilentStart } from "./mailbox"
+import { en as enText } from "../i18n/en"
+import { it as itText } from "../i18n/it"
 import { decideOpening, OPENING_TIMEOUT_MS } from "./opening"
 import { detectPermission, followPermission, type PermissionRequest } from "./permission"
 import { createMenuHold, createUnparsed, menuNames, screenQuestion, statusFromScreen } from "./screen-question"
@@ -811,6 +813,68 @@ describe("lint: the workbench's wiring", () => {
     )
   })
 
+  test("lint: a dialog of ragu's holds a line like any question: the offer, the click, the first task and the mail all ask here", () => {
+    expect(source).toContain(codeOf("isQuestionOpen(permissions()[paneId], activityOf.get(paneId)) || modeTracker.heldOpen(paneId) || screenAsks(paneId) || dialogUp(paneId)"))
+    const up = between("const dialogUp =", "const questionOpen =")
+    expect(up).toContain(codeOf('hasTerminal(paneId) && dialogOver(getTerminal(paneId).terminal, pane?.agent ?? pane?.model ?? "")'))
+  })
+
+  test("lint: the note about a question goes when the question has gone, and a later one tells the pane again, but not the sender", () => {
+    const poll = between("if (starting.typesTask) {", "openingPolls.add(poll)")
+    expect(poll).toContain(codeOf("} else if (menuTold && !trustHandled && drawn) {"))
+    expect(poll).toContain(codeOf("menuTold = false dropPaneNote(paneId, menuNote)"))
+    expect(poll).toContain(codeOf("if (request && !senderHeard) { senderHeard = true"))
+  })
+
+  test("lint: over a dialog of ragu's the note says how to close it, and follows what is on the screen", () => {
+    expect(source).toContain(codeOf('const note = t(dialogUp(paneId) ? "note.mailHeldByDialog" : "note.mailHeldByMenu")'))
+    const poll = between("if (starting.typesTask) {", "openingPolls.add(poll)")
+    expect(poll).toContain(codeOf('const note = t(dialogUp(paneId) ? "task.heldByDialog" : "task.heldByMenu")'))
+    expect(poll).toContain(codeOf("if (menuTold && !trustHandled && drawn && note !== menuNote) { dropPaneNote(paneId, menuNote) tellPane(paneId, note) menuNote = note }"))
+  })
+
+  test.each([
+    ["it", itText],
+    ["en", enText],
+  ])("the notes over a dialog name Esc, because an Enter there picks what is highlighted: %s", (_language, text) => {
+    for (const key of ["note.mailHeldByDialog", "task.heldByDialog"] as const) {
+      expect(text[key]).toContain("Esc")
+      expect(text[key]).not.toMatch(/Invio|Enter/)
+    }
+  })
+
+  test("lint: the line ADE itself is typing is no line begun, and the note about a line goes when the line has", () => {
+    expect(source).toContain(codeOf("const byLine = lineBegun(target.pane.id) && !linesInFlight.has(target.pane.id)"))
+    const held = between("const byLine =", "if (message.kind")
+    expect(held).toContain(codeOf('if (!byLine && heldByLineNoted.delete(target.pane.id)) dropPaneNote(target.pane.id, t("note.mailHeldByLine"))'))
+  })
+
+  test("lint: a line that stays after its Enter is said to the pane and to the sender, and no Enter goes by itself", () => {
+    const typed = between("const typeLineNow = async (", "const enterStuck = new WeakSet")
+    expect(typed).toContain(codeOf("void watchLineStays(paneId, session, typedAt)"))
+    const watch = between("const watchLineStays = async (", "const enterStuck = new WeakSet")
+    expect(watch).toContain(codeOf('tellPane(paneId, t("note.enterLost"))'))
+    expect(watch).toContain(codeOf("tellSender(sender.from, formatEnterLost(sender.id,"))
+    expect(watch).toContain(codeOf('dropPaneNote(paneId, t("note.enterLost"))'))
+    expect(watch).not.toContain("pressAgain")
+    expect(watch).not.toContain(".write(")
+    expect(source).toContain(codeOf('if (outcome === "sent" && meta.from) lineSender.set(session, { from: meta.from, id: meta.id })'))
+  })
+
+  test("the sender hears the message has not gone, and whose box it is in", () => {
+    const said = formatEnterLost("r7", { id: "p", title: "oc2", agent: "ragu" } as never)
+    expect(said).toContain("r7")
+    expect(said).toContain("oc2")
+    expect(said).toContain("non è partito")
+  })
+
+  test.each([
+    ["it", itText, "Invio"],
+    ["en", enText, "Enter"],
+  ])("the note says what to do with the line: %s", (_language, text, key) => {
+    expect(text["note.enterLost"]).toContain(key)
+  })
+
   test("lint: the first task asks the screen on every pass, and says what it waits for", () => {
     const poll = between("if (starting.typesTask) {", "openingPolls.add(poll)")
     expect(poll).toContain(codeOf('const asked = box !== "ready" && questionOpen(paneId)'))
@@ -842,7 +906,7 @@ describe("lint: the workbench's wiring", () => {
     // Before the question is read: a menu drawn first has its own note.
     expect(poll.indexOf(codeOf("if (silenceTold && openingBytes.firstByteAt"))).toBeLessThan(poll.indexOf(codeOf('const asked = box !== "ready" && questionOpen(paneId)')))
     const stopped = poll.slice(poll.indexOf(codeOf("if (running.get(paneId) !== session) {")), poll.indexOf(codeOf("const drawn = screenDrawn")))
-    expect(stopped).toContain(codeOf('if (menuTold) dropPaneNote(paneId, t("task.heldByMenu"))'))
+    expect(stopped).toContain(codeOf("if (menuTold) dropPaneNote(paneId, menuNote)"))
     expect(stopped).toContain(codeOf('if (silenceTold) dropPaneNote(paneId, t("task.notSent"))'))
   })
 
@@ -854,7 +918,7 @@ describe("lint: the workbench's wiring", () => {
     for (const start of [between("const startProcess = async (", "const startRemoteProcess = async ("), between("const startRemoteProcess = async (", "openingPolls.add(poll)")]) {
       expect(start).toContain(codeOf("undrawnSince.set(paneId, Date.now())"))
     }
-    const held = between("const byLine = lineBegun(target.pane.id)", "if (message.kind")
+    const held = between("const byLine =", "if (message.kind")
     expect(held).toContain(codeOf('tellPane(target.pane.id, t("note.mailHeldBySilence"))'))
     expect(held).toContain(codeOf("(silentFor(target.pane.id) ?? 0) >= OPENING_TIMEOUT_MS"))
     expect(held).toContain(codeOf("formatHeldSilentReceipt(target.pane)"))
@@ -872,7 +936,7 @@ describe("lint: the workbench's wiring", () => {
   test("lint: a remote session forgets the hold and the note, reads the first text, and says a step held for long", () => {
     const remote = between("const startRemoteProcess = async (", "openingPolls.add(poll)")
     expect(remote).toContain(codeOf("menuHold.forget(paneId)"))
-    expect(remote).toContain(codeOf('if (heldByMenuNoted.delete(paneId)) dropPaneNote(paneId, t("note.mailHeldByMenu"))'))
+    expect(remote).toContain(codeOf("dropHeldByMenu(paneId)"))
     expect(remote).toContain(codeOf("if (drawsText(chunk)) textAt = Date.now()"))
     expect(remote).toContain(codeOf("Date.now() - stepStart >= REMOTE_STEP_NOTE_MS"))
     expect(remote).toContain(codeOf('t("task.stepHeld", String(steps[index]))'))
@@ -882,7 +946,7 @@ describe("lint: the workbench's wiring", () => {
 
   test("lint: a restart forgets the note of the process before it", () => {
     const local = between("const startProcess = async (", "const startRemoteProcess = async (")
-    expect(local).toContain(codeOf('if (heldByMenuNoted.delete(paneId)) dropPaneNote(paneId, t("note.mailHeldByMenu"))'))
-    expect(local).toContain(codeOf('dropPaneNote(paneId, t("task.heldByMenu")) dropPaneNote(paneId, t("task.notSent"))'))
+    expect(local).toContain(codeOf("dropHeldByMenu(paneId)"))
+    expect(local).toContain(codeOf('dropPaneNote(paneId, t("task.heldByMenu")) dropPaneNote(paneId, t("task.heldByDialog")) dropPaneNote(paneId, t("task.notSent"))'))
   })
 })

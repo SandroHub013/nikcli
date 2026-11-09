@@ -60,10 +60,34 @@ const BAR_ROW = /^( *)┃( |$)/
 /** The bar's row that closes the box: «Build · Grok 4.7 · xAI». In a narrow pane opentui squeezes the spaces out of it. */
 const MODEL_ROW = /^ *┃ {2}\S.*·/
 /**
+ * The last row of opentui's home: the folder, and the version at the right. In a pane too short for the home it is painted
+ * over the box, and the model's row may be under it. No question is ever asked on the home, so it closes the box as well.
+ */
+const HOME_FOOTER = /^ *(?:~|[A-Za-z]:|\/).*\d+\.\d+\.\d+\S* *$/
+/**
  * What opentui draws in an empty box before the first turn: «Ask anything… "Fix a TODO"». Its colour depends on the theme.
  * At 36 columns or fewer the example goes to the next row whole, and the first row ends on the dots.
  */
 const BAR_PLACEHOLDER = /^[^"]*(?:\.{3}|…)(?: +"| *$)/
+/**
+ * ragu's box from 0.2.17: no bar, the mark and the text between two rules, the mode and the model on the row under them.
+ * A `!` in the mark's place is shell mode, where a line runs as a command: not a box to type into. Its plain glyphs are not
+ * read: there a dialog's frame cannot be told from a table, and «Consegna ora» is the way out.
+ */
+const MARK_ROW = /^( *)›( |$)/
+/** Whole, up to a sidebar after a gap: a dialog drawn across it leaves its own frame on the row, startup its own words. */
+const MARK_RULE = /^ *─{4,}(?: {2,}.*)?$/
+/** The tallest its text area grows. */
+const MARK_ROWS_MAX = 6
+/** The top of ragu's dialogs (`ui/dialog.tsx`): rounded, and centred on the terminal. */
+const DIALOG_TOP = /╭─{8,}╮/
+const FRAME_BOTTOM = /^ *╰─{8,}╯/
+/**
+ * The row of steps of ragu's first-run wizard, «1. …  ·  2. …  ·  3. …», with a rule under it at its own column. Before 0.2.17
+ * it has no frame round it. Its wide joints and the rule are what a reply's numbered row does not have.
+ */
+const WIZARD_STEPS = /\b1\. \S.* {2}· {2}2\. \S.* {2}· {2}3\. \S/
+const WIZARD_RULE = /^─{4,}/
 
 /** The part of a terminal that says when a program hides or shows the cursor. Off the chunk's road: only those two codes. */
 interface CursorModes {
@@ -124,6 +148,35 @@ export function followKeys(terminal: ComposerTerminal, agentId: string, data: st
   if (data === "\x1b" || data.includes("\r") || press) refocused.delete(terminal)
 }
 
+/**
+ * Whether one of ragu's dialogs is on the screen. A dialog with no field of its own, the first-run wizard for one, leaves
+ * the box's cursor where it was: the cursor says nothing there, and a dialog that does not reach the box leaves it whole.
+ */
+export function dialogOver(terminal: ComposerTerminal, agentId: string): boolean {
+  if (agentId !== "ragu") return false
+  return Array.from({ length: terminal.rows }, (_, y) => y).some((y) => {
+    const steps = textAt(terminal, y).match(WIZARD_STEPS)
+    if (steps && WIZARD_RULE.test(textAt(terminal, y + 1).slice(steps.index))) return true
+    const top = textAt(terminal, y).match(DIALOG_TOP)
+    if (!top) return false
+    // In cells: a wide character left of the frame takes two.
+    let left = top.index!
+    for (let x = 0; x < terminal.cols; x++) {
+      if (lineAt(terminal, y)?.getCell?.(x)?.getChars() !== "╭") continue
+      left = x
+      break
+    }
+    if (Math.abs(terminal.cols - top[0].length - 2 * left) > 1) return false
+    // Autocomplete has the same frame, stands on the box and is as wide as it: on a box the width of the pane it is centred
+    // too. So may a dialog be. But ragu opens its list only on a line, and an empty box under a frame has a dialog over it.
+    if (markedBox(terminal) !== "draft") return true
+    let bottom = y + 1
+    while (bottom < terminal.rows && !FRAME_BOTTOM.test(textAt(terminal, bottom))) bottom++
+    const under = bottom + 1 < terminal.rows ? textAt(terminal, bottom + 1) : ""
+    return !MARK_RULE.test(under) || under.match(/─+/)![0].length !== top[0].length
+  })
+}
+
 /** A new process on the same terminal: what stood over the old one's box has gone with it. */
 export function forgetRefocus(terminal: object): void {
   refocused.delete(terminal)
@@ -143,7 +196,10 @@ export function composerOf(terminal: ComposerTerminal, agentId: string): Compose
   // ragu gives its box the cursor back on a focus-in, with a dialog still open over it: the reading has to say so here.
   if (agentId === "ragu" && confirmDialog(rowsOf(terminal))) return "none"
   const glyph = RULED_PROMPT[agentId]
-  if (!glyph) return barBox(terminal)
+  if (!glyph) {
+    const marked = agentId === "ragu" ? markBox(terminal) : "none"
+    return marked === "none" ? barBox(terminal) : marked
+  }
   return hidden ? ruledBoxFromRows(terminal, glyph) : ruledBox(terminal, glyph)
 }
 
@@ -281,29 +337,68 @@ function barBox(terminal: ComposerTerminal): ComposerState {
 
   // Down to the row that names the agent and the model: a question drawn in the same column has none.
   let model = cursorY
-  while (model < terminal.rows && !MODEL_ROW.test(textAt(terminal, model))) {
+  while (model < terminal.rows && !MODEL_ROW.test(textAt(terminal, model)) && !HOME_FOOTER.test(textAt(terminal, model))) {
     if (!BAR_ROW.test(textAt(terminal, model))) return "none"
     model++
   }
   if (model >= terminal.rows || model === cursorY) return "none"
 
-  const inputColumn = indent + 3
+  let top = cursorY
+  while (top > 0 && BAR_ROW.test(textAt(terminal, top - 1))) top--
+  return boxText(terminal, indent + 3, top, model)
+}
+
+function markBox(terminal: ComposerTerminal): ComposerState {
+  const state = markedBox(terminal)
+  return state === "ready" && dialogOver(terminal, "ragu") ? "none" : state
+}
+
+/** The box as its own rows draw it, with nothing said yet about what may stand over it. */
+function markedBox(terminal: ComposerTerminal): ComposerState {
+  const { cursorY } = terminal.buffer.active
+  let top = cursorY
+  while (top >= 0 && !MARK_ROW.test(textAt(terminal, top))) {
+    if (MARK_RULE.test(textAt(terminal, top))) return "none"
+    top--
+  }
+  if (top < 1 || !MARK_RULE.test(textAt(terminal, top - 1))) return "none"
+  const inputColumn = textAt(terminal, top).match(MARK_ROW)![1]!.length + 2
+
+  let closing = cursorY + 1
+  while (closing < terminal.rows && !MARK_RULE.test(textAt(terminal, closing))) {
+    if (closing - top >= MARK_ROWS_MAX || textAt(terminal, closing).slice(0, inputColumn).trim()) return "none"
+    closing++
+  }
+  // The status row under the closing rule says the box is the agent's own.
+  if (closing + 1 >= terminal.rows || !textAt(terminal, closing + 1).trim()) return "none"
+  return boxText(terminal, inputColumn, top, closing)
+}
+
+/** The text of a box whose rows run from `top` to `end` (not included), with the cursor in them. */
+function boxText(terminal: ComposerTerminal, inputColumn: number, top: number, end: number): ComposerState {
+  const { cursorX, cursorY } = terminal.buffer.active
+  const here = textAt(terminal, cursorY)
   if (cursorX < inputColumn) return "none"
   // Its first cell, and not the whole row: a wide pane has OpenCode's sidebar further along the same rows.
   const rowHasText = (y: number) => textAt(terminal, y).charAt(inputColumn).trim() !== ""
   if (cursorX !== inputColumn) return "draft"
-  for (let y = cursorY - 1; y >= 0 && BAR_ROW.test(textAt(terminal, y)); y--) if (rowHasText(y)) return "draft"
-  const first = here.slice(inputColumn)
+  for (let y = cursorY - 1; y >= top; y--) if (rowHasText(y)) return "draft"
+  // At 30 columns the words wrap before the dots: the first row has neither them nor a quote.
+  let first = here.slice(inputColumn)
+  let afterFirst = cursorY + 1
+  while (!BAR_PLACEHOLDER.test(first) && !first.includes('"') && afterFirst < end && rowHasText(afterFirst)) {
+    first = `${first.trimEnd()} ${textAt(terminal, afterFirst++).slice(inputColumn)}`
+  }
   const placeholder = BAR_PLACEHOLDER.test(first)
   if (rowHasText(cursorY) && !placeholder) return "draft"
   // A long example wraps: the rows down to its closing quote are the example too. Past that, or with no quote, a row is a line.
   const quotes = (row: string) => row.split('"').length - 1
-  let below = cursorY + 1
+  let below = afterFirst
   if (placeholder) {
     let seen = quotes(first)
-    while (seen < 2 && below < model) seen += quotes(textAt(terminal, below++).slice(inputColumn))
+    while (seen < 2 && below < end) seen += quotes(textAt(terminal, below++).slice(inputColumn))
     if (seen < 2) return "draft"
   }
-  for (let y = below; y < model; y++) if (rowHasText(y)) return "draft"
+  for (let y = below; y < end; y++) if (rowHasText(y)) return "draft"
   return "ready"
 }
