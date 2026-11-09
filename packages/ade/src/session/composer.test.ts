@@ -891,6 +891,15 @@ describe("ragu 0.2.14 in a pane too short for its home (live test 6, FAIL 3)", (
     expect(composerOf(await paint(rows, 8, 4), "ragu")).toBe("draft")
   })
 
+  test("a focus-in over a dialog marks this pane too, whose model's row is off the screen: no Enter for the dialog", async () => {
+    const terminal = await paint(["  Search", "  ┃", "  ┃  uno", FOOTER, "  ┃"], 10, 0)
+    expect(composerOf(terminal, "ragu")).toBe("none")
+    followKeys(terminal, "ragu", "\x1b[I")
+    await writtenTo(terminal, "\x1b[4;11H")
+    expect(composerOf(terminal, "ragu")).toBe("none")
+    expect(enterBlocked(composerOf(terminal, "ragu"), false)).toBe(true)
+  })
+
   test("on the footer's row with nothing written above and no text before the cursor, the box is not read", async () => {
     expect(composerOf(await paint(["  ┃", "  ┃", FOOTER, "  ┃"], 5, 2), "ragu")).toBe("none")
   })

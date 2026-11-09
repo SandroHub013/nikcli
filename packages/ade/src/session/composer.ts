@@ -157,7 +157,7 @@ export function watchCursor(terminal: CursorModes): void {
 export function followKeys(terminal: ComposerTerminal, agentId: string, data: string): void {
   if (!BAR_AGENTS.has(agentId)) return
   if (data === FOCUS_IN) {
-    if (composerOf(terminal, agentId) === "none" && rowsOf(terminal).some((row) => MODEL_ROW.test(row))) {
+    if (composerOf(terminal, agentId) === "none" && rowsOf(terminal).some((row) => MODEL_ROW.test(row) || HOME_FOOTER.test(row))) {
       refocused.add(terminal)
       pressOfTheFocus.add(terminal)
       hintGoneSince.delete(terminal)
