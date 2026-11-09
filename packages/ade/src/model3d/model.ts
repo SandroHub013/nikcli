@@ -52,6 +52,19 @@ export function isModel(path: string): boolean {
  */
 export const MAX_MODEL_BYTES = 256 * 1024 * 1024
 
+/**
+ * The bytes as an `ArrayBuffer` of exactly their length, which is what the loaders take (MOD-14).
+ *
+ * A view that covers its whole buffer hands the buffer itself: copying it would double a model of up to
+ * `MAX_MODEL_BYTES` for as long as the copy lives. A view into part of a buffer (or over a shared one) gets a copy of
+ * just its bytes, as before.
+ */
+export function exactBuffer(bytes: Uint8Array): ArrayBuffer {
+  const { buffer, byteOffset, byteLength } = bytes
+  if (buffer instanceof ArrayBuffer && byteOffset === 0 && byteLength === buffer.byteLength) return buffer
+  return new Uint8Array(bytes).buffer as ArrayBuffer
+}
+
 /** The directory part of a path, keeping the separator style it came with. */
 export function directoryOf(path: string): string {
   const cut = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"))

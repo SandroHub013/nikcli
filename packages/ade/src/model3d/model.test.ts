@@ -4,6 +4,7 @@ import {
   changeStamp,
   decideReload,
   describeModelState,
+  exactBuffer,
   frameDistance,
   gltfResources,
   isModel,
@@ -231,5 +232,42 @@ describe("runModelCommand", () => {
       ok: false,
       reason: "comando sconosciuto; disponibili: open, view, reload, capture, state",
     })
+  })
+})
+
+/*
+ * MOD-14: every loader got `bytes.buffer.slice(...)`, a copy, even when the bytes were the whole buffer: for a model of
+ * up to 256 MB that doubled the memory for as long as the copy lived. A view that covers its buffer hands the buffer
+ * itself; a view into a part of one (a subarray) still gets a copy of exactly its bytes.
+ */
+describe("exactBuffer (MOD-14)", () => {
+  test("a view over a whole buffer returns that same buffer, with no copy", () => {
+    const bytes = new Uint8Array([1, 2, 3, 4])
+    expect(exactBuffer(bytes)).toBe(bytes.buffer as ArrayBuffer)
+  })
+
+  test("a view into part of a buffer returns a copy holding exactly its bytes", () => {
+    const whole = new Uint8Array([9, 9, 1, 2, 3, 9])
+    const part = whole.subarray(2, 5)
+    const copy = exactBuffer(part)
+    expect(copy).not.toBe(whole.buffer as ArrayBuffer)
+    expect(copy.byteLength).toBe(3)
+    expect([...new Uint8Array(copy)]).toEqual([1, 2, 3])
+  })
+
+  test("a view that starts at the start but stops short is a copy too", () => {
+    const whole = new Uint8Array([1, 2, 3, 4])
+    const head = whole.subarray(0, 2)
+    const copy = exactBuffer(head)
+    expect(copy).not.toBe(whole.buffer as ArrayBuffer)
+    expect([...new Uint8Array(copy)]).toEqual([1, 2])
+  })
+
+  test("a view over a SharedArrayBuffer is copied into an ArrayBuffer", () => {
+    const shared = new Uint8Array(new SharedArrayBuffer(3))
+    shared.set([5, 6, 7])
+    const copy = exactBuffer(shared)
+    expect(copy instanceof ArrayBuffer).toBe(true)
+    expect([...new Uint8Array(copy)]).toEqual([5, 6, 7])
   })
 })

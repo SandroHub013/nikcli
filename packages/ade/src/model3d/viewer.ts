@@ -22,6 +22,7 @@ import { OBJLoader } from "three/addons/loaders/OBJLoader.js"
 import { STLLoader } from "three/addons/loaders/STLLoader.js"
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js"
 import {
+  exactBuffer,
   frameDistance,
   gltfResources,
   modelFormat,
@@ -248,7 +249,7 @@ export function createModelViewer(stage: HTMLElement, onLost: (reason: string) =
       if (!resolved) return
       try {
         const data = await read(resolved)
-        const url = URL.createObjectURL(new Blob([toArrayBuffer(data)], type ? { type } : undefined))
+        const url = URL.createObjectURL(new Blob([exactBuffer(data)], type ? { type } : undefined))
         blobUrls.push(url)
         resources.set(uri, url)
         files.push(resolved)
@@ -265,7 +266,7 @@ export function createModelViewer(stage: HTMLElement, onLost: (reason: string) =
       if (format === "glb" || format === "gltf") {
         const loader = new GLTFLoader(manager)
         loader.setMeshoptDecoder(MeshoptDecoder)
-        let data: ArrayBuffer | string = toArrayBuffer(bytes)
+        let data: ArrayBuffer | string = exactBuffer(bytes)
         if (format === "gltf") {
           data = new TextDecoder().decode(bytes)
           for (const uri of gltfResources(data)) await provide(uri)
@@ -292,7 +293,7 @@ export function createModelViewer(stage: HTMLElement, onLost: (reason: string) =
         }
         object = loader.parse(text)
       } else if (format === "stl") {
-        const geometry = new STLLoader().parse(toArrayBuffer(bytes))
+        const geometry = new STLLoader().parse(exactBuffer(bytes))
         geometry.computeVertexNormals()
         const colored = Boolean((geometry as THREE.BufferGeometry & { hasColors?: boolean }).hasColors)
         const material = new THREE.MeshStandardMaterial({
@@ -303,7 +304,7 @@ export function createModelViewer(stage: HTMLElement, onLost: (reason: string) =
         })
         object = new THREE.Mesh(geometry, material)
       } else {
-        const group = new FBXLoader(manager).parse(toArrayBuffer(bytes), "")
+        const group = new FBXLoader(manager).parse(exactBuffer(bytes), "")
         object = group
         animations = group.animations.length
       }
@@ -378,10 +379,6 @@ export function createModelViewer(stage: HTMLElement, onLost: (reason: string) =
   resize()
 
   return { load, view, syncTheme, capture, dispose }
-}
-
-function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
 }
 
 function niceCeil(value: number): number {
