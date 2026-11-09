@@ -152,22 +152,31 @@ impl Drop for PaneJob {
     }
 }
 
+/// The sessions, and how many times they were all taken: see `insert_current`.
 #[derive(Default)]
 pub struct Registry(Mutex<HashMap<String, Session>>, AtomicU64);
 
 impl Registry {
+    /// Read by a spawn before it does anything: see `insert_current`.
     fn generation(&self) -> u64 {
         self.1.load(Ordering::SeqCst)
     }
 
-    fn insert_current(&self, _born: u64, id: String, session: Session) -> Result<(), Session> {
-        self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).insert(id, session);
+    /// Registers a session, unless every session was taken since `born`: then its page is gone, and it comes back.
+    fn insert_current(&self, born: u64, id: String, session: Session) -> Result<(), Session> {
+        let mut sessions = self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if self.1.load(Ordering::SeqCst) != born {
+            return Err(session);
+        }
+        sessions.insert(id, session);
         Ok(())
     }
 
     /// Takes every session out, so nothing can reach them any more.
     fn take_all(&self) -> Vec<Session> {
         let mut sessions = self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        // Under the lock: a spawn is either among what this takes or sees the new count when it inserts.
+        self.1.fetch_add(1, Ordering::SeqCst);
         sessions.drain().map(|(_, session)| session).collect()
     }
 
@@ -1121,6 +1130,7 @@ pub async fn pty_spawn(
     /* Where this session's output and exit go: see `PtyEvent`. */
     events: Channel<PtyEvent>,
 ) -> Result<(), String> {
+    let born = registry.generation();
     if !is_allowed_command(&command) {
         return Err(format!("comando non consentito: {command}"));
     }
@@ -1295,20 +1305,22 @@ pub async fn pty_spawn(
     let flow = Arc::new(Flow::new());
     let sender_flow = Arc::clone(&flow);
 
-    {
-        let mut sessions = match registry.0.lock() {
-            Ok(sessions) => sessions,
-            Err(_) => abort_with!("registro bloccato".to_string()),
-        };
-        sessions.insert(
-            id.clone(),
-            Session {
-                master: master.map(|master| Arc::new(Mutex::new(master))),
-                writer,
-                child,
-                job,
-            },
-        );
+    /*
+     * The page that asked may be gone by now: the keychain, the PATH and the spawn above take seconds, and the load that
+     * replaced it found nothing of this spawn to end. The agent ran on, hidden, until ADE exited (RS2-1).
+     *
+     * What this does not catch: an invoke of the old page that tokio had not started when the load landed reads the new
+     * count. That is microseconds, against the seconds this closes.
+     */
+    let session = Session {
+        master: master.map(|master| Arc::new(Mutex::new(master))),
+        writer,
+        child,
+        job,
+    };
+    if let Err(late) = registry.insert_current(born, id.clone(), session) {
+        std::thread::spawn(move || end_sessions(vec![late], END_WAIT));
+        return Err("pagina ricaricata durante l'avvio".into());
     }
 
     // Not in the registry: the waiter holds its lock across `ClosePseudoConsole` (RS-8), and an acknowledgement that
