@@ -77,6 +77,8 @@ const MARK_ROWS_MAX = 6
 /** The top of ragu's dialogs (`ui/dialog.tsx`): rounded, and centred on the terminal. */
 const DIALOG_TOP = /╭─{8,}╮/
 const FRAME_BOTTOM = /^ *╰─{8,}╯/
+/** The row of steps of ragu's first-run wizard, «1. … · 2. … · 3. …». Before 0.2.17 it has no frame round it. */
+const WIZARD_STEPS = /\b1\. \S.*·.*\b2\. \S.*·.*\b3\. \S/
 
 /** The part of a terminal that says when a program hides or shows the cursor. Off the chunk's road: only those two codes. */
 interface CursorModes {
@@ -138,12 +140,13 @@ export function followKeys(terminal: ComposerTerminal, agentId: string, data: st
 }
 
 /**
- * Whether one of ragu's dialogs is on the screen. Its first-run wizard opens with the box's cursor left where it was: the
- * cursor says nothing there, and in a tall pane the wizard does not reach the box, which reads like any other.
+ * Whether one of ragu's dialogs is on the screen. A dialog with no field of its own, the first-run wizard for one, leaves
+ * the box's cursor where it was: the cursor says nothing there, and a dialog that does not reach the box leaves it whole.
  */
 export function dialogOver(terminal: ComposerTerminal, agentId: string): boolean {
   if (agentId !== "ragu") return false
   return Array.from({ length: terminal.rows }, (_, y) => y).some((y) => {
+    if (WIZARD_STEPS.test(textAt(terminal, y))) return true
     const top = textAt(terminal, y).match(DIALOG_TOP)
     if (!top) return false
     // In cells: a wide character left of the frame takes two.
@@ -154,7 +157,9 @@ export function dialogOver(terminal: ComposerTerminal, agentId: string): boolean
       break
     }
     if (Math.abs(terminal.cols - top[0].length - 2 * left) > 1) return false
-    // Autocomplete has the same frame, stands on the box and is as wide as it: on a box the width of the pane it is centred too.
+    // Autocomplete has the same frame, stands on the box and is as wide as it: on a box the width of the pane it is centred
+    // too. So may a dialog be. But ragu opens its list only on a line, and an empty box under a frame has a dialog over it.
+    if (markedBox(terminal) !== "draft") return true
     let bottom = y + 1
     while (bottom < terminal.rows && !FRAME_BOTTOM.test(textAt(terminal, bottom))) bottom++
     const under = bottom + 1 < terminal.rows ? textAt(terminal, bottom + 1) : ""
@@ -334,6 +339,12 @@ function barBox(terminal: ComposerTerminal): ComposerState {
 }
 
 function markBox(terminal: ComposerTerminal): ComposerState {
+  const state = markedBox(terminal)
+  return state === "ready" && dialogOver(terminal, "ragu") ? "none" : state
+}
+
+/** The box as its own rows draw it, with nothing said yet about what may stand over it. */
+function markedBox(terminal: ComposerTerminal): ComposerState {
   const { cursorY } = terminal.buffer.active
   let top = cursorY
   while (top >= 0 && !MARK_ROW.test(textAt(terminal, top))) {
@@ -350,8 +361,7 @@ function markBox(terminal: ComposerTerminal): ComposerState {
   }
   // The status row under the closing rule says the box is the agent's own.
   if (closing + 1 >= terminal.rows || !textAt(terminal, closing + 1).trim()) return "none"
-  const state = boxText(terminal, inputColumn, top, closing)
-  return state === "ready" && dialogOver(terminal, "ragu") ? "none" : state
+  return boxText(terminal, inputColumn, top, closing)
 }
 
 /** The text of a box whose rows run from `top` to `end` (not included), with the cursor in them. */

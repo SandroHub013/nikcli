@@ -4,6 +4,7 @@ import { Terminal } from "@xterm/xterm"
 import { loadCapture, play, screenText, terminalFor, writtenTo } from "../test-support/live-bytes"
 import { codeOf } from "../test-support/source-text"
 import { disagreement } from "./composer-log"
+import { blindNow } from "./deliver-now"
 import { AGENTS } from "../session-new/agents"
 import {
   composerOf,
@@ -986,8 +987,8 @@ describe("ragu 0.2.17: no bar, the text between two rules (live test 6, FAIL 1 a
 
   const RULE = "─".repeat(60)
   const STATUS = "   Build · Approve · Grok"
-  const screenWith = async (rows: string[], x: number, y: number, hidden = false, cols = 80) => {
-    const terminal = new Terminal({ cols, rows: 12, scrollback: 100, allowProposedApi: true })
+  const screenWith = async (rows: string[], x: number, y: number, hidden = false, cols = 80, height = 12) => {
+    const terminal = new Terminal({ cols, rows: height, scrollback: 100, allowProposedApi: true })
     watchCursor(terminal)
     await writtenTo(terminal, `${rows.join("\r\n")}\x1b[${y + 1};${x + 1}H\x1b[?25${hidden ? "l" : "h"}`)
     return terminal
@@ -1088,6 +1089,51 @@ describe("ragu 0.2.17: no bar, the text between two rules (live test 6, FAIL 1 a
     const terminal = await screenWith([...dialog(24), ...boxOf('› Ask anything... "x"')], 4, 4)
     expect(dialogOver(terminal, "ragu")).toBe(true)
     expect(composerOf(terminal, "ragu")).toBe("none")
+  })
+
+  test.each([
+    ["medium at 60 columns, 8 tall", 60, 56, 8],
+    ["medium at 60 columns, 9 tall", 60, 56, 9],
+    ["small at 44 columns", 44, 40, 8],
+    ["full at 169 columns", 169, 165, 8],
+  ])("a dialog as wide as the box and ending on its top rule is no autocomplete on an empty box: %s", async (_name, cols, width, tall) => {
+    // The real geometry: a rule of cols-4 from column 2, the dialog centred both ways, and the cursor left in the box.
+    const left = Math.floor((cols - width) / 2)
+    const rows = Array<string>(16).fill("")
+    const top = Math.floor((16 - tall) / 2)
+    rows[top] = `${" ".repeat(left)}╭${"─".repeat(width - 2)}╮`
+    for (let y = top + 1; y < top + tall - 1; y++) rows[y] = `${" ".repeat(left)}│ riga${" ".repeat(width - 7)}│`
+    rows[top + tall - 1] = `${" ".repeat(left)}╰${"─".repeat(width - 2)}╯`
+    const rule = `  ${"─".repeat(cols - 4)}`
+    rows[12] = rule
+    rows[13] = '  › Ask anything... "x"'
+    rows[14] = rule
+    rows[15] = STATUS
+    expect(top + tall).toBe(12)
+    const terminal = await screenWith(rows, 4, 13, false, cols, 16)
+    expect(composerOf(terminal, "ragu")).toBe("none")
+    expect(dialogOver(terminal, "ragu")).toBe(true)
+  })
+
+  test.each(["ragu-procedura-guidata", "ragu-avvio"])("ragu 0.2.14's wizard has no frame, and its row of steps says it: %s", async (name) => {
+    let frames = 0
+    await play(name, (shown) => {
+      if (!screenText(shown).includes("2. Filesystem")) return
+      frames++
+      expect(dialogOver(shown, "ragu")).toBe(true)
+      expect(blindNow({ box: composerOf(shown, "ragu"), question: dialogOver(shown, "ragu"), turn: false, nothingDrawn: false })).toBe(false)
+    })
+    expect(frames).toBeGreaterThan(0)
+  })
+
+  test.each(["ragu-avvio-normale", "ragu-017-dopo-risposta"])("no dialog on a session at rest: %s", async (name) => {
+    await play(name, (shown) => expect(dialogOver(shown, "ragu")).toBe(false))
+  })
+
+  test("a numbered list in the transcript is not the wizard's row of steps", async () => {
+    const terminal = await screenWith(["  1. primo 2. secondo 3. terzo", ...boxOf('› Ask anything... "x"')], 4, 2)
+    expect(dialogOver(terminal, "ragu")).toBe(false)
+    expect(composerOf(terminal, "ragu")).toBe("ready")
   })
 
   test("only ragu draws this box and these dialogs", async () => {
