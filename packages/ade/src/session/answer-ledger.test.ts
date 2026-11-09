@@ -107,7 +107,8 @@ describe("the answers ADE wrote (SEC-3)", () => {
     }
   })
 
-  test("the attendi of a design says the same, even with the true answer still in the outbox", () => {
+  // As `design attendi` reads it: the raw file, with no vouching, and a forger chooses the `by` of its line.
+  test.each(["utente", "Master"])("the attendi of a design says the same with the true answer in the outbox, by %s", (by) => {
     const ledger = fresh()
     const told = { type: "risposta", k: "DS-x", at: AT, by: "utente", choice: "1", words: "uno" }
     ledger.remember(DESIGN, told)
@@ -115,11 +116,11 @@ describe("the answers ADE wrote (SEC-3)", () => {
       { type: "aperta", k: "DS-x", at: AT, by: "Master", title: "T", variants: [{ name: "1", description: "d", preview: "" }, { name: "2", description: "d", preview: "" }] },
       told,
       { type: "riaperta", k: "DS-x", at: AT, by: "Master" },
-      { ...told, choice: "2" },
+      { ...told, choice: "2", by },
     ]
-    const proposal = foldProposals(ledger.vouch(DESIGN, parseDesignLog(lines.map((line) => JSON.stringify(line)).join("\n")).events)).proposals[0]!
+    const proposal = foldProposals(parseDesignLog(lines.map((line) => JSON.stringify(line)).join("\n")).events).proposals[0]!
     expect(proposal.answer?.choice).toBe("2")
-    expect(answeredInAde(proposal, DESIGN, [{ path: DESIGN, k: "DS-x", answeredAt: AT }], ledger.has)).toBe(false)
+    expect(answeredInAde(proposal, DESIGN, ledger.has)).toBe(false)
   })
 
   test("what the outbox seeds, with no content to go by, stands for answers only", () => {
@@ -326,7 +327,7 @@ describe("the workbench wires it (SEC-3)", () => {
     const vouch = "vouch: (path, events) => answers.vouch(path, askers.vouch(path, events)),"
     expect(source.split(vouch).length - 1).toBe(2)
     expect(source.split("remember: answers.remember,").length - 1).toBe(2)
-    expect(source.includes("answeredInAde(found, path, designOutbox(), answers.has)")).toBe(true)
+    expect(source.includes("answeredInAde(found, path, answers.has)")).toBe(true)
     expect(source.includes("answers.seed([...decisionsOutbox(), ...designOutbox()])")).toBe(true)
   })
 })

@@ -5090,7 +5090,7 @@ export function Workbench() {
         waitFor(found.k, folder, message.timeout)
         // Chosen already: written now, and the typed line, if still queued, waits for this claim like any other.
         // Only an answer given in ADE is printed as the user's choice: one written into the register is not one.
-        if (found.answer && answeredInAde(found, path, designOutbox(), answers.has)) {
+        if (found.answer && answeredInAde(found, path, answers.has)) {
           answerDesignWaiters(path, found)
           await answer(`ok: ${found.k} ha già una scelta (progetto ${owner.name})`)
         } else if (found.answer)

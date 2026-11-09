@@ -157,7 +157,7 @@ describe("answeredInAde", () => {
     })
     const proposal = file.state().proposals[0]!
     expect(proposal.answer?.by).toBe("Dario")
-    expect(answeredInAde(proposal, PATH, [], () => false)).toBe(false)
+    expect(answeredInAde(proposal, PATH, () => false)).toBe(false)
   })
 
   test("a line written by hand as the user, but from a pane, is not either", () => {
@@ -168,10 +168,10 @@ describe("answeredInAde", () => {
     ]
     const proposal = foldProposals(parseDesignLog(lines.map((line) => JSON.stringify(line)).join("\n")).events)
       .proposals[0]!
-    expect(answeredInAde(proposal, PATH, [], () => false)).toBe(false)
+    expect(answeredInAde(proposal, PATH, () => false)).toBe(false)
   })
 
-  test("an answer given in ADE counts: in the answers' outbox, or in ADE's own record of its clicks once the outbox moved on", async () => {
+  test("an answer given in ADE counts when ADE's own record of its clicks has it, and only then", async () => {
     const file = await opened()
     // What the sheet appends (`answerEvent`): by the user, no pane.
     file.deps.sender = "utente"
@@ -184,16 +184,14 @@ describe("answeredInAde", () => {
     const proposal = file.state().proposals[0]!
     const at = proposal.answer!.at
     const nothing = () => false
-    expect(answeredInAde(proposal, PATH, [{ path: PATH, k: "DS-tasti", answeredAt: at }], nothing)).toBe(true)
     // SEC-3: «by utente, no pane» is only what the file says. Without ADE's own record of that click it does not count.
-    expect(answeredInAde(proposal, PATH, [], nothing)).toBe(false)
-    expect(answeredInAde(proposal, PATH, [], (path, event) => path === PATH && event.k === "DS-tasti" && event.at === at)).toBe(true)
+    expect(answeredInAde(proposal, PATH, nothing)).toBe(false)
+    expect(answeredInAde(proposal, PATH, (path, event) => path === PATH && event.k === "DS-tasti" && event.at === at)).toBe(true)
     // The record vouches only for its own register, key and time.
-    expect(answeredInAde(proposal, PATH, [], (_path, event) => event.k === "DS-altra" && event.at === at)).toBe(false)
-    // The outbox vouches only for its own register and its own answer.
+    expect(answeredInAde(proposal, PATH, (_path, event) => event.k === "DS-altra" && event.at === at)).toBe(false)
+    // Somebody else's line is no click of the user's, whatever the record holds.
     const forged = { ...proposal, answer: { ...proposal.answer!, by: "Dario" } }
-    expect(answeredInAde(forged, PATH, [{ path: "C:/q/.ade/design.jsonl", k: "DS-tasti", answeredAt: at }], nothing)).toBe(false)
-    expect(answeredInAde(forged, PATH, [{ path: PATH, k: "DS-tasti", answeredAt: at }], nothing)).toBe(true)
+    expect(answeredInAde(forged, PATH, () => true)).toBe(false)
   })
 
   test("a json that does not read, or names another key, is refused", () => {
