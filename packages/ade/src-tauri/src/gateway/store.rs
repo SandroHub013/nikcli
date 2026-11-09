@@ -56,6 +56,10 @@ pub struct LinkState {
     /// Strangers' requests waiting for the user, and the limits on them.
     #[serde(default)]
     pub pairing: Pairing,
+    /// When the user last switched it on from off, in epoch ms: a message written before that was written to a bot that
+    /// was off, and is not run (BOT2-1). Not moved by a restart of ADE or a new project on a gateway already on.
+    #[serde(default)]
+    pub enabled_at_ms: Option<u64>,
 }
 
 impl LinkState {
@@ -72,6 +76,7 @@ impl LinkState {
             cursor: None,
             cursor_saved_ms: None,
             pairing: Pairing::default(),
+            enabled_at_ms: None,
         }
     }
 

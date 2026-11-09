@@ -22,7 +22,7 @@ use super::store::{Authorized, LinkState, Store};
 use crate::secrets::Vault;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::watch;
@@ -70,6 +70,11 @@ const PENDING_CAP: usize = 1_000;
 const DISK_PENDING_CAP: usize = 200;
 /// What the panel is told when the pending queue is full and a message was dropped.
 const QUEUE_FULL: &str = "coda_piena";
+/// What a chat reads when what it wrote while the gateway was off is not run (BOT2-1).
+const SENT_WHILE_OFF_MESSAGE: &str = "Il bot era spento: quello che hai scritto nel frattempo non è stato eseguito. Rimanda ciò che ti serve ancora.\nThe bot was off: what you wrote meanwhile was not run. Send again what you still need.";
+/// A platform's dates are in whole seconds and its clock is not this one: a message this close to the switch-on counts
+/// as written after it.
+const OFF_GRACE_MS: u64 = 5_000;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MessageSender {
@@ -696,7 +701,11 @@ impl Hub {
         }
         let adapter = self.connect(bot, platform)?;
         self.halt(bot, platform);
+        let now = self.env.now_ms();
         self.store.update(bot, platform, |link, _| {
+            if !link.enabled {
+                link.enabled_at_ms = Some(now);
+            }
             link.enabled = true;
             link.project = Some(project.to_string());
             Ok(())
@@ -833,6 +842,7 @@ impl Hub {
             backoff: self.backoff,
             started_at,
             halted: stopped.clone(),
+            while_off: Mutex::new(HashSet::new()),
         };
         tokio::spawn(task.run(stopped, self.ready.subscribe()));
         self.links().insert((bot.to_string(), platform), Running { adapter, stop, wake, live, pending });
@@ -857,12 +867,20 @@ impl Hub {
         check_bot(bot)?;
         // «Off» is a kill switch: what was waiting is not delivered later, after a restart or a switch-on.
         // The position moves past it, so the platform does not send it again either (BOT-2).
+        let adapter = self.links().get(&(bot.to_string(), platform)).map(|running| running.adapter.clone());
         let mut furthest: Option<String> = None;
         for entry in self.halt_and_drain(bot, platform, "spento") {
             if let Some(cursor) = entry.cursor {
                 if is_cursor_ahead(furthest.as_deref(), &cursor) {
                     furthest = Some(cursor);
                 }
+            }
+        }
+        // As far as the platform had given: the rest of a batch in hand at «off» goes too (BOT2-1). Asked after the halt,
+        // for what a read still under way took in the meantime.
+        if let Some(cursor) = adapter.and_then(|adapter| adapter.cursor()) {
+            if is_cursor_ahead(furthest.as_deref(), &cursor) {
+                furthest = Some(cursor);
             }
         }
         self.failed().remove(&(bot.to_string(), platform));
@@ -1467,6 +1485,8 @@ struct Task {
     started_at: u64,
     /// The link's stop flag, read where a message is about to be handed on: a gateway switched off delivers nothing more.
     halted: watch::Receiver<bool>,
+    /// The chats of this batch with a message written while the gateway was off, to be told once each (BOT2-1).
+    while_off: Mutex<HashSet<String>>,
 }
 
 
@@ -1560,6 +1580,7 @@ impl Task {
                     if self.pending.lock().unwrap().iter().all(|entry| entry.acked) {
                         self.save_cursor();
                     }
+                    self.tell_written_while_off().await;
                 }
                 Err(AdapterError::Transient(error)) => {
                     let now = self.env.now_ms();
@@ -1627,6 +1648,16 @@ impl Task {
         }
     }
 
+    /// Each chat with a message that was not run because the gateway was off hears it, once for the batch (BOT2-1).
+    async fn tell_written_while_off(&self) {
+        let chats: Vec<String> = self.while_off.lock().unwrap().drain().collect();
+        for chat in chats {
+            if let Err(error) = self.adapter.send(&chat, SENT_WHILE_OFF_MESSAGE).await {
+                self.env.log(&format!("{}: avviso alla chat non mandato: {}", self.tag(), redact(&error.message(), &self.secrets)));
+            }
+        }
+    }
+
     /// The batch was handed on: the platform need not send it again.
     fn save_cursor(&self) {
         let Some(cursor) = self.adapter.cursor() else { return };
@@ -1682,15 +1713,24 @@ impl Task {
                 return Err("mittente non più autorizzato".into());
             }
             link.remember_chat(&message.chat, &message.sender.id);
-            Ok(link.is_owner(&message.sender.id))
+            Ok((link.is_owner(&message.sender.id), link.enabled_at_ms))
         });
-        let owner = match remembered {
-            Ok(owner) => owner,
+        let (owner, enabled_at) = match remembered {
+            Ok(remembered) => remembered,
             Err(error) => {
                 self.env.log(&format!("{tag}: messaggio non consegnato, stato non salvato: {error}"));
                 return;
             }
         };
+        /*
+         * Written while the gateway was off, and held by the platform until now: «off» is a kill switch, so it does not
+         * run at the switch-on, whoever wrote it (BOT2-1). A button is not judged: its date is the question's, not the press's.
+         */
+        if !message.button && message.timestamp_ms.zip(enabled_at).is_some_and(|(sent, on)| sent + OFF_GRACE_MS < on) {
+            self.env.log(&format!("{tag}: un messaggio scritto mentre il gateway era spento: non eseguito"));
+            self.while_off.lock().unwrap().insert(message.chat.clone());
+            return;
+        }
         let at = self.env.now_ms();
         self.env.log(&format!("{tag}: messaggio da un mittente autorizzato ({} caratteri)", message.text.chars().count()));
         let name = redact(&message.sender.name, &self.secrets);
@@ -3048,8 +3088,12 @@ mod tests {
     async fn a_message_sent_while_ade_was_closed_is_marked_as_recovered() {
         let s = setup("recovered-notice");
         authorize(&s, "42");
+        // On for a long time, and ADE opened again: what the gateway was off for is another matter (BOT2-1).
+        let _ = start(&s);
+        s.hub.shutdown();
         s.env.later.store(100_000, std::sync::atomic::Ordering::SeqCst);
-        let (_adapter, feed) = start(&s);
+        s.hub.relaunch(BOT, Platform::Fake);
+        let (_adapter, feed) = last_made(&s);
 
         // A message timestamped earlier than start:
         let old_msg = Inbound {
@@ -3682,6 +3726,66 @@ mod tests {
             s.env.statuses.lock().unwrap().last().is_some_and(|status| status.needs_attention && status.attention_reason.as_deref() == Some(QUEUE_FULL))
         })
         .await;
+    }
+
+    /* BOT2-1: what was written while the gateway was off is not run when it goes back on. */
+    #[tokio::test]
+    async fn a_message_written_while_the_gateway_was_off_is_not_run_and_the_chat_is_told_once() {
+        let s = setup("written-while-off");
+        authorize(&s, "42");
+        let _ = start(&s);
+        s.hub.stop(BOT, Platform::Fake).unwrap();
+        s.env.later.store(3_600_000, std::sync::atomic::Ordering::SeqCst);
+        let (adapter, feed) = start(&s);
+        feed.send(Ok(vec![
+            Inbound { timestamp_ms: Some(3_000_000), ..message("1", "c42", "42", "scritto da spento") },
+            Inbound { timestamp_ms: Some(3_000_500), ..message("2", "c42", "42", "anche questo") },
+            Inbound { timestamp_ms: Some(3_700_000), ..message("3", "c42", "42", "dopo l'accensione") },
+        ]))
+        .unwrap();
+        eventually("il messaggio scritto da acceso", || s.env.messages.lock().unwrap().len() == 1).await;
+        eventually("la chat è avvisata", || !adapter.sent.lock().unwrap().is_empty()).await;
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        let ids: Vec<String> = s.env.messages.lock().unwrap().iter().map(|m| m.id.clone()).collect();
+        assert_eq!(ids, vec!["3".to_string()], "a message written while off was handed on");
+        assert_eq!(adapter.sent.lock().unwrap().clone(), vec![("c42".to_string(), SENT_WHILE_OFF_MESSAGE.to_string())]);
+        assert!(s.env.log.lock().unwrap().iter().all(|line| !line.contains("scritto da spento")), "the text reached the log");
+    }
+
+    #[tokio::test]
+    async fn changing_the_project_of_a_gateway_already_on_does_not_move_when_it_went_on() {
+        let s = setup("on-since-kept");
+        let _ = start(&s);
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().enabled_at_ms, Some(1_000));
+        s.env.later.store(500, std::sync::atomic::Ordering::SeqCst);
+        s.hub.start(BOT, Platform::Fake, "C:/altro").unwrap();
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().enabled_at_ms, Some(1_000), "a message written in between would be refused");
+    }
+
+    #[tokio::test]
+    async fn a_message_written_as_the_gateway_went_on_and_a_button_on_an_old_question_go_through() {
+        let s = setup("on-grace");
+        authorize(&s, "42");
+        s.env.later.store(3_600_000, std::sync::atomic::Ordering::SeqCst);
+        let (_adapter, feed) = start(&s);
+        feed.send(Ok(vec![
+            // Telegram's dates are whole seconds, and its clock is not this one.
+            Inbound { timestamp_ms: Some(3_600_000), ..message("1", "c42", "42", "appena acceso") },
+            // A press carries the date of the question it sits under.
+            Inbound { timestamp_ms: Some(5), ..press("2", "c42", "42", "x:0") },
+        ]))
+        .unwrap();
+        eventually("entrambi", || s.env.messages.lock().unwrap().len() == 2).await;
+    }
+
+    #[tokio::test]
+    async fn switching_off_saves_how_far_the_platform_had_read_so_the_batch_in_hand_does_not_come_back() {
+        let s = setup("off-saves-position");
+        authorize(&s, "42");
+        let (adapter, _feed) = start(&s);
+        *adapter.position.lock().unwrap() = Some("900".into());
+        s.hub.stop(BOT, Platform::Fake).unwrap();
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref(), Some("900"));
     }
 
     /* BOT-10: the page decides by age, so the age must reach it, and survive the pending file. */
