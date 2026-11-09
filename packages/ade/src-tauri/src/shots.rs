@@ -1105,18 +1105,37 @@ pub async fn shot_bytes(watch: tauri::State<'_, Watch>, path: String) -> Result<
 /// throw the file away. It is the user's own file, in their Screenshots folder:
 /// it is never removed from the disk for good.
 #[tauri::command]
-pub async fn shot_delete(watch: tauri::State<'_, Watch>, path: String) -> Result<(), String> {
+pub async fn shot_delete(app: AppHandle, watch: tauri::State<'_, Watch>, path: String) -> Result<(), String> {
     let file = check_shot(&watch, &path)?;
-    to_recycle_bin(&file).map_err(|e| format!("non eliminabile: {e}"))
+    #[cfg(windows)]
+    let owner = app.get_webview_window("main").and_then(|window| window.hwnd().ok()).map_or(0, |hwnd| hwnd.0 as isize);
+    #[cfg(not(windows))]
+    let _ = &app;
+    // Off the async workers: the shell can stop to ask, and it waits for as long as the user does (RS2-7).
+    tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(windows)]
+        {
+            recycle_owned(&file, owner)
+        }
+        #[cfg(not(windows))]
+        {
+            to_recycle_bin(&file)
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| format!("non eliminabile: {e}"))
 }
 
 /// Windows: the shell's own delete with undo. No new crate: `windows` is already a dependency with `Win32_UI_Shell`.
 ///
 /// When the volume has no Recycle Bin, or the file is too big for it, the shell would delete it for good without a
 /// word; `FOF_WANTNUKEWARNING` makes it ask first, and a "no" comes back as an abort, which is reported as a failure.
+/// `owner` is ADE's window: with none the question could open behind it, where nobody would answer.
 #[cfg(windows)]
-fn to_recycle_bin(file: &std::path::Path) -> Result<(), String> {
+fn recycle_owned(file: &std::path::Path, owner: isize) -> Result<(), String> {
     use std::os::windows::ffi::OsStrExt;
+    use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::Shell::{
         SHFileOperationW, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT, FOF_WANTNUKEWARNING, FO_DELETE,
         SHFILEOPSTRUCTW,
@@ -1124,6 +1143,7 @@ fn to_recycle_bin(file: &std::path::Path) -> Result<(), String> {
     // `pFrom` is a list of names, each ending in a NUL, and the list ends in a second one.
     let from: Vec<u16> = file.as_os_str().encode_wide().chain([0, 0]).collect();
     let mut op = SHFILEOPSTRUCTW {
+        hwnd: HWND(owner as _),
         wFunc: FO_DELETE,
         pFrom: windows::core::PCWSTR(from.as_ptr()),
         fFlags: (FOF_ALLOWUNDO.0 | FOF_NOCONFIRMATION.0 | FOF_NOERRORUI.0 | FOF_SILENT.0 | FOF_WANTNUKEWARNING.0) as u16,
