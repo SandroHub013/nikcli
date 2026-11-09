@@ -75,6 +75,12 @@ export function answerLedger(
   cap = ANSWER_LEDGER_CAP,
   budget = ANSWER_LEDGER_BUDGET,
 ): AnswerLedger {
+  /*
+   * What this page's own buttons wrote and its own outbox holds. A click counts for as long as the page lives, even if the
+   * storage refuses it or the budget lets it go: the bots' chats fill the same storage and run at its limit by design, and a
+   * click not vouched for is an answer that is never delivered, with nothing to say so.
+   */
+  const mine = new Set<string>()
   const read = (): string[] => {
     try {
       const parsed: unknown = JSON.parse(store()?.getItem(ANSWER_LEDGER_KEY) ?? "[]")
@@ -92,28 +98,35 @@ export function answerLedger(
       while (size > budget && first < kept.length - 1) size -= JSON.stringify(kept[first++]).length + 1
       store()?.setItem(ANSWER_LEDGER_KEY, JSON.stringify(kept.slice(first)))
     } catch {
-      // No storage: the answer shows as reported by the register, which loses nothing.
+      // Refused: `mine` holds it until the page goes, and after that the outbox, if it was saved, seeds it again.
     }
   }
+
+  const knownNow = () => new Set([...read(), ...mine])
 
   return {
     remember: (path, event) => {
       const id = entryId(path, event)
+      mine.add(id)
       write([...read().filter((known) => known !== id), id])
     },
-    has: (path, event) => vouchedBy(new Set(read()), path, event),
+    has: (path, event) => vouchedBy(knownNow(), path, event),
     seed: (items) => {
       if (items.length === 0) return
       const known = read()
-      const added = items
-        .filter((item) => item.kind !== "riaperta")
-        .map((item) => seededId(item.path, item.k, item.answeredAt))
-        .filter((id) => !known.some((entry) => entry.startsWith(id)))
+      const added: string[] = []
+      for (const item of items) {
+        if (item.kind === "riaperta") continue
+        const id = seededId(item.path, item.k, item.answeredAt)
+        const stored = known.filter((entry) => entry.startsWith(id))
+        for (const entry of stored.length > 0 ? stored : [id]) mine.add(entry)
+        if (stored.length === 0) added.push(id)
+      }
       if (added.length > 0) write([...known, ...added])
     },
     vouch: (path, events) => {
       if (!events.some((event) => event.by === USER_BY && !event.fromPane)) return [...events]
-      const known = new Set(read())
+      const known = knownNow()
       return events.map((event) =>
         event.by === USER_BY && !event.fromPane && !vouchedBy(known, path, event)
           ? { ...event, by: UNVOUCHED_BY }

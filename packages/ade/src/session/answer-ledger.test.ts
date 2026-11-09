@@ -156,12 +156,13 @@ describe("the answers ADE wrote (SEC-3)", () => {
     const ledger = answerLedger(() => store, 2)
     for (const k of ["D1", "D2", "D3"]) ledger.remember(DECISIONS, answerAt(k))
     expect(JSON.parse(store.items.get(ANSWER_LEDGER_KEY)!)).toHaveLength(2)
-    expect(ledger.has(DECISIONS, answerAt("D1"))).toBe(false)
-    expect(ledger.has(DECISIONS, answerAt("D3"))).toBe(true)
+    // The next start, which has only what was saved.
+    const later = answerLedger(() => store, 2)
+    expect(later.has(DECISIONS, answerAt("D1"))).toBe(false)
+    expect(later.has(DECISIONS, answerAt("D3"))).toBe(true)
     store.items.set(ANSWER_LEDGER_KEY, "{rotto")
-    expect(ledger.has(DECISIONS, answerAt("D3"))).toBe(false)
+    expect(later.has(DECISIONS, answerAt("D3"))).toBe(false)
     const none = answerLedger(() => undefined)
-    none.remember(DECISIONS, answerAt("D1"))
     expect(none.vouch(DECISIONS, [{ type: "risposta", k: "D1", at: AT, by: "utente" }])[0]!.by).toBe(UNVOUCHED_BY)
   })
 
@@ -171,8 +172,40 @@ describe("the answers ADE wrote (SEC-3)", () => {
     const long = (k: string) => ({ type: "risposta", k, at: AT, words: "x".repeat(300) })
     for (const k of ["D1", "D2", "D3", "D4", "D5"]) ledger.remember(DECISIONS, long(k))
     expect(store.items.get(ANSWER_LEDGER_KEY)!.length).toBeLessThanOrEqual(1_000)
-    expect(ledger.has(DECISIONS, long("D5"))).toBe(true)
-    expect(ledger.has(DECISIONS, long("D1"))).toBe(false)
+    const later = answerLedger(() => store, 2000, 1_000)
+    expect(later.has(DECISIONS, long("D5"))).toBe(true)
+    expect(later.has(DECISIONS, long("D1"))).toBe(false)
+  })
+
+  // Second pass of the review of seguiti-posta, B2: the bots' chats fill the same storage, and run at its limit by design.
+  test("a click the storage refuses stays the user's for the life of the page, and goes out", () => {
+    const refusing: AnswerStore = {
+      getItem: () => null,
+      setItem: () => {
+        throw new Error("quota")
+      },
+    }
+    const ledger = answerLedger(() => refusing)
+    const told = { type: "risposta", k: "D1", at: AT, by: USER, choice: "A", words: "A" }
+    ledger.remember(DECISIONS, told)
+    expect(ledger.has(DECISIONS, told)).toBe(true)
+    const vouched = ledger.vouch(DECISIONS, [told])[0]!
+    expect(vouched.by).toBe(USER)
+    expect(mayDeliver({}, vouched)).toBe(true)
+    // What it holds is that click, and not whatever comes under its time.
+    expect(ledger.vouch(DECISIONS, [{ ...told, choice: "B" }])[0]!.by).toBe(UNVOUCHED_BY)
+  })
+
+  test("an answer the outbox still holds is not lost to the budget while the page lives", () => {
+    const store = memory()
+    const told = { type: "risposta", k: "D9", at: AT, by: USER, words: "x".repeat(300) }
+    answerLedger(() => store).remember(DECISIONS, told)
+    const page = answerLedger(() => store, 2000, 1_000)
+    page.seed([{ path: DECISIONS, k: "D9", answeredAt: AT }])
+    for (const k of ["D1", "D2", "D3", "D4", "D5"]) page.remember(DECISIONS, { type: "risposta", k, at: AT, words: "y".repeat(300) })
+    expect(store.items.get(ANSWER_LEDGER_KEY)).not.toContain("D9")
+    expect(page.vouch(DECISIONS, [told])[0]!.by).toBe(USER)
+    expect(page.vouch(DECISIONS, [{ ...told, words: "altro" }])[0]!.by).toBe(UNVOUCHED_BY)
   })
 
   test("the newest answer stays, even alone over the budget", () => {
