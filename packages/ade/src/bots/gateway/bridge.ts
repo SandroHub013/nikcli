@@ -17,7 +17,7 @@ import { runBotTurn } from "../serve-turn"
 import { startGatewayController, type GatewayBridge, type GatewayController, type GatewayMessage } from "./controller"
 import type { GatewayPanelApi, GatewayPanelDeps, LinkStatus as LiveStatus, PairingRequest } from "./panel-state"
 import { recheckTrust, scopeOf } from "./policy"
-import { projectOfLink } from "./project-of"
+import { projectOfLink, stopTurnsOfDeadLink } from "./project-of"
 import { localAccountStore } from "../account"
 import { localRemoteStore, remoteKey } from "./remote"
 import { appMemoryStore } from "../memory-app"
@@ -35,6 +35,8 @@ interface LinkStatus {
   readonly platform: string
   readonly project?: string | null
   readonly enabled?: boolean
+  readonly running?: boolean
+  readonly lastError?: string | null
   readonly connected?: boolean
   readonly connectedAtMs?: number | null
 }
@@ -218,6 +220,11 @@ export async function startAppGatewayController(options?: {
     },
   })
   activeController = controller
+  // A token revoked on the platform, another reader, a webhook: nothing can be answered any more, so nothing goes on running (BOT2-2).
+  const stopDeadLinks = await (async () => {
+    const { listen } = await import("@tauri-apps/api/event")
+    return listen<LiveStatus>("gateway:status", (event) => stopTurnsOfDeadLink(event.payload, controller.off))
+  })().catch(() => () => {})
   const attentionSync = syncGatewayAttention({
     approvals: appApprovals,
     api: tauriGatewayPanelApi(),
@@ -261,6 +268,7 @@ export async function startAppGatewayController(options?: {
         window.removeEventListener("online", onOnline)
       }
       if (activeController === controller) activeController = undefined
+      stopDeadLinks()
       attentionSync.stop()
       stopAside()
       stopMenus()
