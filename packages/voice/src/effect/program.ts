@@ -763,7 +763,7 @@ export function makeVoiceProgram(
                 const msg = tr("voice.msg.plan.projectChanged")
                 options.onError?.(msg)
                 yield* say(msg)
-                yield* applyDialogEvent({ type: "command_failed" })
+                yield* applyDialogEvent({ type: "command_failed", error: msg })
                 break
               }
               planProjectRoot = undefined
