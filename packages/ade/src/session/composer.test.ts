@@ -8,6 +8,7 @@ import { AGENTS } from "../session-new/agents"
 import {
   composerOf,
   cursorSaysDialog,
+  dialogOver,
   enterBlocked,
   followKeys,
   forgetRefocus,
@@ -944,6 +945,155 @@ describe("the log of a changed box keeps what it is for (audit SES2-5)", () => {
     expect(disagreement({ box: "none", asked: false, onScreen: false, quiet: true })).toBe("no-box-no-menu")
     expect(disagreement({ box: "none", asked: false, onScreen: false, quiet: false })).toBeUndefined()
     expect(disagreement({ box: "none", asked: true, onScreen: false, quiet: true })).toBeUndefined()
+  })
+})
+
+describe("ragu 0.2.17: no bar, the text between two rules (live test 6, FAIL 1 and 3)", () => {
+  const SIZE = { cols: 169, rows: 16 }
+
+  test("the box it opens on after the trust prompt reads empty, in Italian, and not before the startup has finished", async () => {
+    let ready = 0
+    const terminal = await play(
+      "ragu-017-dopo-risposta",
+      (shown) => {
+        const screen = screenText(shown)
+        if (/Trust project|Loading plugins|Finishing startup/.test(screen)) expect(composerOf(shown, "ragu")).toBe("none")
+        if (composerOf(shown, "ragu") === "ready") ready++
+      },
+      SIZE,
+    )
+    expect(ready).toBeGreaterThan(0)
+    expect(screenText(terminal)).toContain("Chiedi qualsiasi cosa")
+    expect(gate(terminal, "ragu")).toBe(true)
+    expect(dialogOver(terminal, "ragu")).toBe(false)
+  })
+
+  test("the first-run wizard over the box: the cursor stays visible in the box, and the reading stays none", async () => {
+    await shutWhile("ragu-017-procedura-guidata", "ragu", "Welcome to Ragu Code", SIZE)
+    let frames = 0
+    await play(
+      "ragu-017-procedura-guidata",
+      (shown) => {
+        if (!screenText(shown).includes("Welcome to Ragu Code")) return
+        frames++
+        expect(composerOf(shown, "ragu")).toBe("none")
+        expect(dialogOver(shown, "ragu")).toBe(true)
+      },
+      SIZE,
+    )
+    expect(frames).toBeGreaterThan(0)
+  })
+
+  const RULE = "─".repeat(60)
+  const STATUS = "   Build · Approve · Grok"
+  const screenWith = async (rows: string[], x: number, y: number, hidden = false, cols = 80) => {
+    const terminal = new Terminal({ cols, rows: 12, scrollback: 100, allowProposedApi: true })
+    watchCursor(terminal)
+    await writtenTo(terminal, `${rows.join("\r\n")}\x1b[${y + 1};${x + 1}H\x1b[?25${hidden ? "l" : "h"}`)
+    return terminal
+  }
+  const boxOf = (text: string) => [`  ${RULE}`, `  ${text}`, `  ${RULE}`, STATUS]
+  /** A dialog as `ui/dialog.tsx` draws it: centred, with rounded corners. */
+  const dialog = (left: number, prefix = " ".repeat(left)) => [
+    `${prefix}╭${"─".repeat(30)}╮`,
+    `${" ".repeat(left)}│ Welcome${" ".repeat(23)}│`,
+    `${" ".repeat(left)}╰${"─".repeat(30)}╯`,
+  ]
+
+  test.each([
+    ["German", 'Frag etwas... "Beispiel"'],
+    ["Chinese", '随便问... "例"'],
+    ["Arabic", 'اسأل أي شيء... "مثال"'],
+  ])("the placeholder is told by its shape, in %s", async (_language, placeholder) => {
+    expect(composerOf(await screenWith(boxOf(`› ${placeholder}`), 4, 1), "ragu")).toBe("ready")
+  })
+
+  test("a box with no placeholder at all is empty too", async () => {
+    expect(composerOf(await screenWith(boxOf("›"), 4, 1), "ragu")).toBe("ready")
+  })
+
+  test("a line in the box is a line, wherever the cursor is", async () => {
+    expect(composerOf(await screenWith(boxOf("› ciao"), 8, 1), "ragu")).toBe("draft")
+    expect(composerOf(await screenWith(boxOf("› ciao"), 4, 1), "ragu")).toBe("draft")
+  })
+
+  test("a line typed on the second row of the box", async () => {
+    const rows = [`  ${RULE}`, "  › uno", "    due", `  ${RULE}`, STATUS]
+    expect(composerOf(await screenWith(rows, 7, 2), "ragu")).toBe("draft")
+  })
+
+  test("shell mode takes a line as a command: not a box to type into", async () => {
+    expect(composerOf(await screenWith(boxOf('! Esegui un comando... "ls -la"'), 4, 1), "ragu")).toBe("none")
+  })
+
+  test("a hidden cursor says a dialog, as on the bar", async () => {
+    expect(composerOf(await screenWith(boxOf('› Ask anything... "x"'), 4, 1, true), "ragu")).toBe("none")
+  })
+
+  test.each([
+    ["no rule above", ["  altro", '  › Ask anything... "x"', `  ${RULE}`, STATUS]],
+    ["no closing rule", [`  ${RULE}`, '  › Ask anything... "x"', "  altro", STATUS]],
+    ["nothing under the closing rule", [`  ${RULE}`, '  › Ask anything... "x"', `  ${RULE}`]],
+  ])("the frame has to be whole: %s", async (_name, rows) => {
+    expect(composerOf(await screenWith(rows as string[], 4, 1), "ragu")).toBe("none")
+  })
+
+  test("a list drawn between rules is at worst a line: never an empty box", async () => {
+    const terminal = await screenWith([`  ${RULE}`, "  › xAI", "    OpenAI", `  ${RULE}`, "   step 1/5"], 4, 1)
+    expect(composerOf(terminal, "ragu")).not.toBe("ready")
+  })
+
+  test("the cursor in the transcript, on a row that looks like the mark, is not the box", async () => {
+    const rows = ["  › a quoted line", ...boxOf('› Ask anything... "x"')]
+    expect(composerOf(await screenWith(rows, 4, 0), "ragu")).toBe("none")
+  })
+
+  test("a sidebar on the same rows, after a gap, leaves the box the box", async () => {
+    const rows = [`  ${RULE}    Sidebar`, '  › Ask anything... "x"', `  ${RULE}    more`, STATUS]
+    expect(composerOf(await screenWith(rows, 4, 1), "ragu")).toBe("ready")
+  })
+
+  test("a dialog drawn across a rule leaves its frame on the row", async () => {
+    const rows = [`  ${"─".repeat(20)}│ testo │${"─".repeat(20)}`, '  › Chiedi... "Agg╰──────╯', `  ${RULE}`, STATUS]
+    expect(composerOf(await screenWith(rows, 4, 1), "ragu")).toBe("none")
+  })
+
+  test("a tall pane: the wizard does not reach the box, whole under it with the cursor in it, and still none", async () => {
+    const terminal = await screenWith([...dialog(24), "", ...boxOf('› Ask anything... "x"')], 4, 5)
+    expect(composerOf(terminal, "ragu")).toBe("none")
+    expect(dialogOver(terminal, "ragu")).toBe(true)
+  })
+
+  test("a wide character left of the frame takes two columns: still centred", async () => {
+    const terminal = await screenWith([...dialog(24, `漢字${" ".repeat(20)}`), "", ...boxOf('› Ask anything... "x"')], 4, 5)
+    expect(dialogOver(terminal, "ragu")).toBe(true)
+  })
+
+  test("a frame a command printed in the transcript is not a dialog: it sits at the left, and the box stays ready", async () => {
+    const terminal = await screenWith([...dialog(4), "", ...boxOf('› Ask anything... "x"')], 4, 5)
+    expect(dialogOver(terminal, "ragu")).toBe(false)
+    expect(composerOf(terminal, "ragu")).toBe("ready")
+  })
+
+  // As wide as the box and standing on it: on a box the width of the pane it is centred too.
+  const autocomplete = [`  ╭${"─".repeat(58)}╮`, `  │ @file.ts${" ".repeat(49)}│`, `  ╰${"─".repeat(58)}╯`]
+
+  test("autocomplete has a dialog's corners, and a line in the box with it open is still a line and no question", async () => {
+    const terminal = await screenWith([...autocomplete, ...boxOf("› leggi @fi")], 13, 4, false, 64)
+    expect(dialogOver(terminal, "ragu")).toBe(false)
+    expect(composerOf(terminal, "ragu")).toBe("draft")
+  })
+
+  test("a dialog that happens to end on the box, narrower than it, is still a dialog", async () => {
+    const terminal = await screenWith([...dialog(24), ...boxOf('› Ask anything... "x"')], 4, 4)
+    expect(dialogOver(terminal, "ragu")).toBe(true)
+    expect(composerOf(terminal, "ragu")).toBe("none")
+  })
+
+  test("only ragu draws this box and these dialogs", async () => {
+    const terminal = await screenWith([...dialog(24), "", ...boxOf('› Ask anything... "x"')], 4, 5)
+    expect(composerOf(terminal, "opencode")).toBe("none")
+    expect(dialogOver(terminal, "opencode")).toBe(false)
   })
 })
 
