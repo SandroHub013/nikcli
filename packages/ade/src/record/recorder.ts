@@ -116,6 +116,10 @@ export function createRecorder(deps: RecorderDeps): Recorder {
   let voice: VoiceClip[] = []
   let mic: MicTake | undefined
   let closing: Promise<void> | undefined
+  /** The platform's capture is coming up: the state is still `idle`, but a take is on its way (MOD-10). */
+  let starting = false
+  /** A stop was asked while it was coming up: it is done the moment the take is recording. */
+  let stopAsked = false
 
   const settle = (next: RecordState) => {
     state = next
@@ -150,13 +154,44 @@ export function createRecorder(deps: RecorderDeps): Recorder {
     return problems
   }
 
+  /** Ends the take that is recording: the video closed, what was collected written beside it. */
+  const stopTake = async (language: Locale): Promise<string | undefined> => {
+    if (state.status !== "recording") return undefined
+    const { recording } = state
+    const events = log?.text() ?? ""
+    const clips = voice
+    const micTake = mic
+    log = undefined
+    voice = []
+    mic = undefined
+    let closed = () => {}
+    closing = new Promise((resolve) => (closed = resolve))
+    settle({ status: "stopping", recording })
+    try {
+      const stopped = await deps.stop()
+      const problems = await writeTracks(stopped.path ?? recording.path, recording.startedAt, events, clips, micTake)
+      settle({ status: "idle" })
+      return problems.length > 0 ? translate(language, "record.partial", problems.join("; ")) : undefined
+    } catch (error) {
+      // The video may still be on disk: what was collected goes next to it anyway.
+      await writeTracks(recording.path, recording.startedAt, events, clips, micTake).catch(() => {})
+      settle({ status: "idle" })
+      return error instanceof Error ? error.message : String(error)
+    } finally {
+      closing = undefined
+      closed()
+    }
+  }
+
   return {
     async start(target, options = {}) {
       const language = options.language ?? locale()
+      if (starting) return translate(language, "record.busy")
       const problem = startProblem(state, language)
       if (problem) return problem
       const dir = deps.dir()
       if (!dir) return translate(language, "record.chooseFolder")
+      starting = true
 
       const startedAt = deps.now()
       const name = recordingName(startedAt)
@@ -189,6 +224,11 @@ export function createRecorder(deps: RecorderDeps): Recorder {
           status: "recording",
           recording: { target, path: started.path ?? `${dir}/${name}.mp4`, startedAt, mic: mic !== undefined },
         })
+        starting = false
+        if (stopAsked) {
+          stopAsked = false
+          return await stopTake(language)
+        }
         return undefined
       } catch (error) {
         /*
@@ -212,35 +252,19 @@ export function createRecorder(deps: RecorderDeps): Recorder {
           await micTake?.stop().catch(() => undefined)
         }
         return error instanceof Error ? error.message : String(error)
+      } finally {
+        starting = false
+        stopAsked = false
       }
     },
 
     async stop(language = locale()) {
-      if (state.status !== "recording") return undefined
-      const { recording } = state
-      const events = log?.text() ?? ""
-      const clips = voice
-      const micTake = mic
-      log = undefined
-      voice = []
-      mic = undefined
-      let closed = () => {}
-      closing = new Promise((resolve) => (closed = resolve))
-      settle({ status: "stopping", recording })
-      try {
-        const stopped = await deps.stop()
-        const problems = await writeTracks(stopped.path ?? recording.path, recording.startedAt, events, clips, micTake)
-        settle({ status: "idle" })
-        return problems.length > 0 ? translate(language, "record.partial", problems.join("; ")) : undefined
-      } catch (error) {
-        // The video may still be on disk: what was collected goes next to it anyway.
-        await writeTracks(recording.path, recording.startedAt, events, clips, micTake).catch(() => {})
-        settle({ status: "idle" })
-        return error instanceof Error ? error.message : String(error)
-      } finally {
-        closing = undefined
-        closed()
+      // Still coming up: remember it, the take ends as soon as it is recording.
+      if (starting) {
+        stopAsked = true
+        return undefined
       }
+      return stopTake(language)
     },
 
     settled() {

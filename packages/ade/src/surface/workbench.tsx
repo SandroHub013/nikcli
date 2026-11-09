@@ -7665,7 +7665,7 @@ export function Workbench() {
     }
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (pttHandler.isPressed() && pttHandler.shouldReleaseKey(e.key, e.code)) {
+      if (pttHandler.holds() && pttHandler.shouldReleaseKey(e.key, e.code)) {
         e.preventDefault()
         e.stopPropagation()
         void pttHandler.onKeyUp(e.key, e.code)
@@ -7673,7 +7673,7 @@ export function Workbench() {
     }
 
     const handleBlur = () => {
-      if (pttHandler.isPressed()) {
+      if (pttHandler.holds()) {
         void pttHandler.onBlur()
       }
     }

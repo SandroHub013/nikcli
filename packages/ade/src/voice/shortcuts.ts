@@ -197,6 +197,15 @@ export function createPushToTalkHandler(engine: PushToTalkTarget, options: PushT
    */
   let releasing: Promise<void> | undefined
 
+  /**
+   * The chord of a press that is waiting for `releasing` to settle (MOD-7).
+   *
+   * While it waits, `isPressed` is still false, so the key going up in that window found nothing to end and was
+   * dropped: the press then went on to open the microphone for a key nobody was holding. A key-up that ends the
+   * waiting chord, or a blur, cancels it instead.
+   */
+  let waiting: Chord | undefined
+
   /** Ends the press exactly once, whatever ended it. */
   const release = async (): Promise<boolean> => {
     if (!isPressed) {
@@ -231,10 +240,15 @@ export function createPushToTalkHandler(engine: PushToTalkTarget, options: PushT
     }
     // A release still settling owns the microphone until it has finished.
     if (releasing) {
+      waiting = chord
       await releasing
+      // Let go of, or blurred, or taken over by a later press, while it waited: it does not open.
+      if (waiting !== chord) return false
+      waiting = undefined
     }
     isPressed = true
     activeChord = chord
+    stopWatchdog()
     watchdog = setTimer(() => {
       void release()
     }, maxHoldMs)
@@ -272,22 +286,38 @@ export function createPushToTalkHandler(engine: PushToTalkTarget, options: PushT
     return false
   }
 
+  /**
+   * Whether a press is held, or waiting for the earlier release to settle (MOD-7). The window's key-up and blur ask this,
+   * not `isPressed`, or a key let go during the wait never reaches the handler.
+   */
+  const holds = (): boolean => isPressed || waiting !== undefined
+
   const shouldReleaseKey = (key?: string, code?: string): boolean => {
-    if (!isPressed) return false
-    const keyMatches = key !== undefined && endsPress(key, activeChord)
-    const codeMatches = code !== undefined && endsPress(code, activeChord)
+    if (!holds()) return false
+    // The chord that is held, or the one that waits. No key at all (the global hotkey's release, a blur) ends either.
+    const chord = isPressed ? activeChord : waiting
+    const keyMatches = key !== undefined && endsPress(key, chord)
+    const codeMatches = code !== undefined && endsPress(code, chord)
     return (key === undefined && code === undefined) || keyMatches || codeMatches
   }
 
   const onKeyUp = async (key?: string, code?: string): Promise<boolean> => {
     if (!shouldReleaseKey(key, code)) return false
+    if (!isPressed) {
+      waiting = undefined
+      return true
+    }
     return release()
   }
 
-  const onBlur = async (): Promise<boolean> => release()
+  const onBlur = async (): Promise<boolean> => {
+    waiting = undefined
+    return release()
+  }
 
   return {
     isPressed: () => isPressed,
+    holds,
     activeChord: () => activeChord,
     shouldReleaseKey,
     onKeyDown,
