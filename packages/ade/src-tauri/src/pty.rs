@@ -2809,6 +2809,19 @@ mod tests {
         assert!(!tree_alive(pid));
     }
 
+    // RS2-1: the test below proves the registry, this that a spawn uses it.
+    #[test]
+    fn a_spawn_reads_the_count_before_its_slow_work_and_registers_against_it() {
+        let source = include_str!("pty.rs");
+        let spawn = source.split("pub async fn pty_spawn(").nth(1).expect("the command").split("
+}").next().unwrap();
+        let born = spawn.find("registry.generation()").expect("the count");
+        let slow = spawn.find("crate::secrets::env_for(").expect("the keychain");
+        assert!(born < slow, "a reload during the keychain or the spawn would go unseen");
+        assert!(spawn.contains("insert_current(born,"));
+        assert!(!spawn.contains("sessions.insert("), "registered without looking at the count");
+    }
+
     // RS2-1: a reload lands while a pane is still starting.
     #[test]
     fn a_spawn_that_outlives_its_page_is_ended_not_registered() {
