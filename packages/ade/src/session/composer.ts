@@ -117,13 +117,10 @@ export const HINT_GONE_MS = 1_500
 /** Since when no reading has found the hint, on a marked terminal. */
 const hintGoneSince = new WeakMap<object, number>()
 /**
- * What the header of a dialog of opentui's agents draws (`DialogHeader`): `esc`, or `esc/enter to close`. Only that word, at
- * the end of a field, arms the release: the `esc interrupt` under a turn and a «description» in the transcript do not. The
- * transcript shows through a dialog's blanks, so a real header can fail this, and then the mark just waits as it always has.
+ * What every dialog of opentui's agents draws in its header (`DialogHeader`, `esc`, or `esc/enter to close`). Looked for as
+ * letters anywhere on the screen: the transcript shows through the blanks of a dialog, so the cells around it say nothing. A
+ * transcript with those letters in it only keeps the old wait.
  */
-const DIALOG_HINT_WORD = /(?:^| )esc(?: {2}|\/| *$)/
-const hintWordOnScreen = (terminal: ComposerTerminal) => rowsOf(terminal).some((row) => DIALOG_HINT_WORD.test(row))
-/** Once armed the dialog has gone only when the letters have, anywhere on the screen: in the transcript too they keep the wait. */
 const DIALOG_HINT = "esc"
 const hintOnScreen = (terminal: ComposerTerminal) => rowsOf(terminal).some((row) => row.includes(DIALOG_HINT))
 const FOCUS_IN = "\x1b[I"
@@ -164,7 +161,7 @@ export function followKeys(terminal: ComposerTerminal, agentId: string, data: st
       refocused.add(terminal)
       pressOfTheFocus.add(terminal)
       hintGoneSince.delete(terminal)
-      if (hintWordOnScreen(terminal)) hintAtFocus.add(terminal)
+      if (hintOnScreen(terminal)) hintAtFocus.add(terminal)
       else hintAtFocus.delete(terminal)
     }
     return

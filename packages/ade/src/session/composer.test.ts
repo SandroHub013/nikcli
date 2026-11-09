@@ -1145,39 +1145,6 @@ describe("a dialog left open over ragu's box, after a focus-in (audit SES2-2)", 
       expect(composerOf(terminal, "ragu")).toBe("none")
     })
 
-    test("letters in the transcript do not arm the release: the word has to end a field, as in a header", async () => {
-      clockAt(0)
-      const dialog = "\x1b[5;70H│ Scegli           │\x1b[6;79H"
-      const terminal = await drawn(`${box}\x1b[3;3Huna description lunga${dialog}`, 120, 17)
-      followKeys(terminal, "ragu", FOCUS_REPORT)
-      followKeys(terminal, "ragu", PRESS)
-      await writtenTo(terminal, `\x1b[3;3H                     ${dialog}\x1b[10;6H\x1b[?25h`)
-      expect(composerOf(terminal, "ragu")).toBe("none")
-      clockAt(HINT_GONE_MS * 2)
-      expect(composerOf(terminal, "ragu")).toBe("none")
-    })
-
-    test("the bar's «esc interrupt» under a turn does not arm it either", async () => {
-      clockAt(0)
-      const terminal = await drawn(`${box}\x1b[14;3Hesc interrupt\x1b[5;70H│ Scegli           │\x1b[6;79H`, 120, 17)
-      followKeys(terminal, "ragu", FOCUS_REPORT)
-      followKeys(terminal, "ragu", PRESS)
-      await writtenTo(terminal, `\x1b[14;3H             \x1b[10;6H\x1b[?25h`)
-      clockAt(HINT_GONE_MS * 2)
-      expect(composerOf(terminal, "ragu")).toBe("none")
-    })
-
-    test("the help dialog's «esc/enter to close» arms it", async () => {
-      clockAt(0)
-      const terminal = await drawn(`${box}\x1b[5;70H Help   esc/enter to close\x1b[6;79H`, 120, 17)
-      followKeys(terminal, "ragu", FOCUS_REPORT)
-      followKeys(terminal, "ragu", PRESS)
-      await writtenTo(terminal, CLOSED)
-      expect(composerOf(terminal, "ragu")).toBe("none")
-      clockAt(HINT_GONE_MS)
-      expect(composerOf(terminal, "ragu")).toBe("ready")
-    })
-
     test("the next dialog, opened by the same click, still holds", async () => {
       clockAt(0)
       const terminal = await drawn(`${box}${header}`, 120, 17)
