@@ -16,6 +16,7 @@
 import { createEffect, createMemo, createSignal, on, For, Show, onMount } from "solid-js"
 import { EmptyIcon } from "../ui/empty-icon"
 import { t } from "../i18n"
+import { IconButton } from "../ui/controls"
 import type { Agent, ConfigProviders } from "@ragu/sdk/client"
 import type { ChatCatalog } from "./connection"
 import {
@@ -562,15 +563,14 @@ export function Chat(props: ChatProps) {
                 {(file) => (
                   <li data-slot="chat-attachment">
                     <span data-slot="chat-attachment-name">{file.relative}</span>
-                    <button
-                      type="button"
+                    <IconButton
+                      size="sm"
                       data-slot="chat-attachment-remove"
-                      aria-label={t("chat.attach.remove", file.relative)}
-                      title={t("chat.attach.remove", file.relative)}
+                      label={t("chat.attach.remove", file.relative)}
                       onClick={() => setAttachments((list) => list.filter((item) => item.path !== file.path))}
                     >
-                      ×
-                    </button>
+                      <span data-ui="icon-cross" aria-hidden="true" />
+                    </IconButton>
                   </li>
                 )}
               </For>

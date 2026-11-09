@@ -130,6 +130,8 @@ export function DesignSheet(props: {
       onClose={props.onClose}
       // The one sheet of a proposal: every variant at its own size, one under the other or side by side.
       size="xl"
+      // Centred: the overlay's 12vh top padding plus a 94vh surface is 106vh, which cut the bottom edge.
+      place="center"
       ref={(element) => (surface = element)}
       onKeyDown={onKeyDown}
     >
@@ -137,6 +139,9 @@ export function DesignSheet(props: {
         <SheetTitle as="strong">{t("palette.design.open")}</SheetTitle>
         <Show when={open().length > 0}>
           <span data-slot="sheet-count">{t("design.sheet.position", at() + 1, open().length)}</span>
+        </Show>
+        {/* A stepper says which of several: with one item it is a lone dash that reads as a control. */}
+        <Show when={open().length > 1}>
           <span data-slot="sheet-steps" aria-hidden="true">
             <For each={open()}>{(_, i) => <i data-on={i() === at() ? "true" : undefined} />}</For>
           </span>

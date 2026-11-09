@@ -144,8 +144,25 @@ describe("the accent as text has its own token (AA on every ground it sits on)",
     expect(read("index.css")).toContain("--ade-accent: light-dark(#b83321, #e86e48);")
   })
 
-  /** Marks painted with `currentColor`: the filled N of the update dialog and the pot in the voice panel's header. */
-  const MARKS = ['[data-slot="update-dialog-mark"]', '[data-slot="header-mark"]']
+  /** Marks painted with `currentColor`: the pot in the voice panel's header. (The update dialog wears the app's own pot, in its own colours.) */
+  const MARKS = ['[data-slot="header-mark"]']
+
+  test("the update dialog wears the app's own mark, not the old nikcli N (DS2-4)", () => {
+    const dialog = readFileSync(join(src, "update", "update-dialog.tsx"), "utf-8")
+    expect(dialog).toContain('import { RaguPotMark } from "../surface/ragu-pot-mark"')
+    expect(dialog).toContain("<RaguPotMark")
+    // The nikcli «N» was a hand-drawn path in the head; none may come back.
+    expect(dialog).not.toContain("M3.2 13.2V2.8")
+    // And its slot no longer paints a currentColor fill: the pot carries its own colours.
+    let color: string | undefined
+    sheet("index.css").walkRules((rule) => {
+      if (!rule.selector.includes('[data-slot="update-dialog-mark"]')) return
+      rule.walkDecls("color", (decl) => {
+        color = decl.value
+      })
+    })
+    expect(color).toBeUndefined()
+  })
 
   test("the marks that are fills stay on the brand's tomato", () => {
     const colorOf = (file: string, selector: string, root = src) => {
@@ -158,8 +175,7 @@ describe("the accent as text has its own token (AA on every ground it sits on)",
       })
       return value
     }
-    expect(colorOf("index.css", MARKS[0]!)).toBe("var(--ade-accent)")
-    expect(colorOf("ui/voice-settings.css", MARKS[1]!, voice)).toBe("var(--ade-accent)")
+    expect(colorOf("ui/voice-settings.css", MARKS[0]!, voice)).toBe("var(--ade-accent)")
   })
 
   test("no stylesheet sets `color` to the accent itself: text reads --ade-accent-text", () => {

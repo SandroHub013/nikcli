@@ -12,9 +12,10 @@
  * not restyle it. A palette duplicated across a media query drifts the first
  * time someone tunes one copy; this cannot.
  *
- * Type scale: 10px micro labels and footer meta, 11px mono meta and controls,
- * 12px UI base and transcript, 13px emphasis, 16px subheads, 18px/24px display
- * titles. Hierarchy comes from size, weight (400/500/600/700) and the text ramp.
+ * Type scale: 11px for micro labels, footer meta, mono meta and controls (the
+ * floor: `xs` and `sm` are two names for it, `xs` where a label is the smallest
+ * thing on the row), 12px UI base and transcript, 13px emphasis, 16px subheads,
+ * 18px/24px display titles. Hierarchy comes from size, weight (400/500/600/700) and the text ramp.
  *
  * Spacing: 4px base unit, with 2px half-steps for compact rows. Sidebar rows,
  * pane chrome and grid gutters all derive from it so the shell shares one rhythm.
@@ -662,7 +663,8 @@ body[data-theme="glass"] #root,
   --ade-ansi-brightWhite: light-dark(#120d0b, #f4e7cd);
 
   /* ── type scale ─────────────────────────────────────────────────────────── */
-  --ade-font-xs: 11px;
+  /* One size under two names: 11px is the floor (DS-20). `xs` follows `sm`, so a change is made once. */
+  --ade-font-xs: var(--ade-font-sm);
   --ade-font-sm: 11px;
   --ade-font-md: 12px;
   --ade-font-lg: 13px;
@@ -1522,8 +1524,7 @@ body,
  */
 [data-component="update-dialog"] [data-slot="update-dialog-mark"] {
   display: inline-flex;
-  /* A filled N, not words: the brand's tomato (--ade-accent-text is for text). */
-  color: var(--ade-accent);
+  /* The app's own pot (RaguPotMark): it carries its colours, so no `color` here. */
 }
 [data-component="update-dialog"] [data-slot="update-dialog-version"] {
   margin-left: auto;

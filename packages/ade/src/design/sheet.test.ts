@@ -294,4 +294,10 @@ describe("the workbench and the pane", () => {
   test("lint: the sheets' reload rides the registers' pass", () => {
     expect(read("surface/workbench.tsx")).toContain("watchRegisters([decisionsRegister, designRegister, sheetWatch]")
   })
+
+  /* DS2-2: the overlay's 12vh top padding plus a 94vh surface is 106vh, so the bottom was cut on every screen. */
+  test("lint: the design sheet is centred, so its 94vh never start below the window's bottom edge", () => {
+    const tsx = read("design/design-sheet.tsx")
+    expect(tsx).toMatch(/<Sheet[\s\S]*?\n\s*place="center"/)
+  })
 })

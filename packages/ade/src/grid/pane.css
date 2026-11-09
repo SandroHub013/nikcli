@@ -27,7 +27,7 @@
    * the one renderer that needed them most — see `terminal/registry.ts`.
    */
 
-  /* The status hue for this card. Redefined per status below, once, so every
+  /* The status hue for this card. Redefined per state below, once, so every
      rule that needs it — edge, pulse, activity word — reads the same value. */
   --pane-status: var(--ade-text-weak);
 
@@ -40,20 +40,6 @@
    */
   /* Both axes: the width for the header's queries, the height for a short pane's notes (at the end of this file). */
   container-type: size;
-}
-
-[data-component="session-pane"][data-status="working"],
-[data-component="session-pane"][data-status="provisioning"] {
-  --pane-status: var(--ade-working);
-}
-[data-component="session-pane"][data-status="waiting"] {
-  --pane-status: var(--ade-waiting);
-}
-[data-component="session-pane"][data-status="done"] {
-  --pane-status: var(--ade-done);
-}
-[data-component="session-pane"][data-status="error"] {
-  --pane-status: var(--ade-error);
 }
 
 /* ── header ────────────────────────────────────────────────────────────────── */
@@ -215,17 +201,23 @@
   pointer-events: none;
 }
 
-/* ADE's notes over a live terminal: a strip that pushes it down, not a layer over its text. */
+/* ADE's notes over a live terminal: the shared Notice's tone and close, laid flat as a strip that pushes it down. */
 [data-slot="pane-notice"] {
   display: flex;
   flex: 0 0 auto;
   align-items: flex-start;
   gap: 8px;
   padding: 6px 10px;
-  border-bottom: 1px solid var(--ade-border-subtle);
-  background: var(--ade-raised);
-  color: var(--ade-text);
-  font-size: var(--ade-font-xs);
+  border-width: 0 0 1px;
+  border-radius: 0;
+  /* The wash over an opaque layer, as the voice note does: on a short pane the note floats over the terminal's top
+     rows, and the Notice's own wash is about 90% clear. */
+  background: linear-gradient(var(--ade-notice-bg), var(--ade-notice-bg)), var(--ade-overlay);
+}
+
+/* The Notice's close is a 20px button; a note row was about 15px tall there. Take the difference from the margins. */
+[data-slot="pane-notice"] > [data-ui="icon-button"] {
+  margin-block: -2px;
 }
 
 [data-slot="pane-notice-lines"] {
@@ -240,16 +232,6 @@
 
 [data-slot="pane-notice-lines"] > p + p {
   margin-top: 4px;
-}
-
-[data-slot="pane-notice-close"] {
-  flex: 0 0 auto;
-  border: 0;
-  background: none;
-  color: var(--ade-text-weak);
-  cursor: pointer;
-  font-size: var(--ade-font-lg);
-  line-height: 1;
 }
 
 [data-slot="pane-mouse-hint"] {
@@ -603,6 +585,8 @@
   justify-content: flex-end;
   gap: var(--ade-space-3);
   padding: var(--ade-space-2) var(--ade-space-3);
+  /* Clear of the cell's corner grip (14px wide, 2px in): the last button never sits under it. */
+  padding-right: 20px;
   flex: 0 0 auto;
 }
 
@@ -994,9 +978,11 @@
 }
 [data-component="session-pane"][data-state="off"] {
   --st: var(--ade-state-off);
+  --pane-status: var(--ade-state-off);
 }
 [data-component="session-pane"][data-state="closed"] {
   --st: var(--ade-state-closed);
+  --pane-status: var(--ade-state-closed);
 }
 
 /* The state icon is `state-icon.css`; it does not move here (DS-5). */
@@ -1509,16 +1495,17 @@
     top: 0;
     left: 0;
     right: 0;
-    z-index: calc(var(--ade-z-over) - 1);
+    z-index: var(--ade-z-above);
     max-height: 70cqh;
     overflow-y: auto;
   }
 
   [data-slot="pane-terminal"] ~ [data-slot="pane-dock"][data-offer] {
     position: absolute;
+    /* 6px: the answer strip inside it keeps 20px of its own, which clears the corner grip (16px). */
     right: 6px;
     bottom: 6px;
-    z-index: calc(var(--ade-z-over) - 1);
+    z-index: var(--ade-z-above);
     border-top: 0;
     background: none;
   }

@@ -174,3 +174,17 @@ describe("the shell shadows (DS-12)", () => {
     expect(readFileSync(join(dir, "browser/browser.css"), "utf8")).not.toMatch(/wait, rule says|Let's just|better to use something tokenized/)
   })
 })
+
+
+describe("the type scale names (DS2-10)", () => {
+  const raw = readFileSync(join(dir, "index.css"), "utf8")
+
+  test("xs is a name for sm, not a second literal eleven: 297 declarations sat at 11px under two names", () => {
+    expect(raw).toMatch(/--ade-font-xs:\s*var\(--ade-font-sm\);/)
+    expect(raw).toMatch(/--ade-font-sm:\s*11px;/)
+  })
+
+  test("the header does not describe a 10px step the tokens no longer have", () => {
+    expect(raw).not.toMatch(/10px micro labels/)
+  })
+})

@@ -727,22 +727,32 @@
  * «ragu 1.398.0 · ● senza isolamento · 0 sessioni». No capitals spaced
  * out, no chip: the red of the isolation is a dot.
  */
+/*
+ * A line of inline items, not a flex row: `text-overflow` acts on the inline
+ * content of a block, so between 1100 px and the width where the facts fit,
+ * the item that does not fit becomes an ellipsis instead of being cut mid-word
+ * (DS2-11). The «i» takes over below 1100 px.
+ */
 [data-slot="ade-project-meta"] {
-  display: flex;
-  align-items: center;
-  gap: var(--ade-space-3);
+  display: block;
   min-width: 0;
   overflow: hidden;
   color: var(--ade-text-soft);
   font-family: var(--ade-sans);
   font-size: var(--ade-font-sm);
   white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 [data-slot="ade-meta-item"] {
   display: inline-flex;
   align-items: center;
+  vertical-align: middle;
   gap: var(--ade-space-2);
+}
+
+[data-slot="ade-meta-item"] + [data-slot="ade-meta-item"] {
+  margin-left: var(--ade-space-3);
 }
 
 [data-slot="ade-meta-item"] + [data-slot="ade-meta-item"]::before {

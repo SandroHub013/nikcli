@@ -66,7 +66,11 @@ describe("the fonts ADE draws in (DS-15)", () => {
 })
 
 describe("the 10px step, retuned (DS-15, DS-20)", () => {
-  const px = (name: string) => Number(new RegExp(`${name}:\\s*(\\d+)px;`).exec(css)?.[1])
+  /** A size in px; `--ade-font-xs` may be a name for another step (DS2-10), which is followed once. */
+  const px = (name: string): number => {
+    const match = new RegExp(`${name}:\\s*(?:(\\d+)px|var\\((--ade-font-[a-z0-9]+)\\));`).exec(css)
+    return match?.[1] ? Number(match[1]) : match?.[2] ? px(match[2]) : Number.NaN
+  }
 
   test("the smallest text is 11px", () => {
     expect(px("--ade-font-xs")).toBeGreaterThanOrEqual(11)

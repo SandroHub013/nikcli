@@ -62,13 +62,13 @@
   --text: var(--ade-text);
   --dim: var(--ade-text-weak);
   --accent: var(--ade-accent);
-  --work: var(--ade-state-work);
+  --ok: var(--ade-done);
   --perm: var(--ade-state-perm);
   --err: var(--ade-state-err);
   --radius: 6px;
   --radius-lg: 8px;
-  /* The name every ADE sheet draws its focus with; here it is the page's own, since the frame has none of ADE's tokens. */
-  --ade-focus-ring: 0 0 0 2px var(--accent);
+  /* The name every ADE sheet draws its focus with, and the same grey ring (DS-1): the accent is for fills, not for focus. */
+  --ade-focus-ring: 0 0 0 2px var(--ade-text-weak);
 }
 
 * {
@@ -130,8 +130,8 @@ h2 {
 }
 
 .percorsi button[data-attivo="1"] {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: var(--text);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
 }
 
 /* The review button and the first lesson under it were touching (V8). */
@@ -156,7 +156,7 @@ h2 {
 }
 
 .lesson:hover {
-  border-color: var(--accent);
+  border-color: var(--dim);
 }
 
 .lesson .n {
@@ -172,7 +172,7 @@ h2 {
 }
 
 .lesson[data-fatto="1"] .n {
-  background: color-mix(in srgb, var(--work) 28%, transparent);
+  background: color-mix(in srgb, var(--ok) 28%, transparent);
 }
 
 .lesson .testo {
@@ -214,7 +214,7 @@ button {
 }
 
 button:hover {
-  border-color: var(--accent);
+  border-color: var(--dim);
 }
 
 button:focus-visible {
@@ -229,12 +229,12 @@ button[disabled] {
 
 [data-scelta="1"],
 [data-picked="1"] {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: var(--text);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
 }
 
 [data-verdetto="giusta"] {
-  border-color: var(--work);
+  border-color: var(--ok);
 }
 
 [data-verdetto="sbagliata"] {
@@ -347,7 +347,7 @@ button[disabled] {
 }
 
 .verdetto[data-esito="giusta"] {
-  border-left-color: var(--work);
+  border-left-color: var(--ok);
 }
 
 .verdetto[data-esito="sbagliata"] {
@@ -373,8 +373,10 @@ button[disabled] {
 }
 
 .azioni .principale {
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
-  border-color: var(--accent);
+  /* ADE's primary button: a solid accent fill with the accent's own ink (a tinted wash is how its danger button looks). */
+  background: var(--accent);
+  border-color: transparent;
+  color: var(--ade-accent-fg);
   padding: 0.3125rem 0.875rem;
 }
 
@@ -427,7 +429,7 @@ button[disabled] {
 }
 
 .livello:hover {
-  border-color: var(--accent);
+  border-color: var(--dim);
 }
 
 .livello .testo {
@@ -477,7 +479,7 @@ button[disabled] {
 .compito-box {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--dim);
   border-radius: var(--radius);
   padding: 0.75rem 1rem;
   margin-bottom: 1rem;
@@ -546,8 +548,8 @@ button[disabled] {
 }
 
 .spiegazione-riga[data-esito="trovata"] {
-  background: color-mix(in srgb, var(--work) 12%, transparent);
-  border: 1px solid var(--work);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+  border: 1px solid var(--ok);
 }
 
 .spiegazione-riga[data-esito="persa"] {
@@ -561,8 +563,8 @@ button[disabled] {
 }
 
 .righe-gioco button[data-picked="1"] {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: var(--text);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
 }
 
 .esito-titolo {

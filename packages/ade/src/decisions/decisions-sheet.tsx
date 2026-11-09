@@ -139,6 +139,9 @@ export function DecisionsSheet(props: {
         <SheetTitle as="strong">{t("palette.decisions.open")}</SheetTitle>
         <Show when={open().length > 0}>
           <span data-slot="sheet-count">{t("decisions.sheet.position", at() + 1, open().length)}</span>
+        </Show>
+        {/* A stepper says which of several: with one item it is a lone dash that reads as a control. */}
+        <Show when={open().length > 1}>
           <span data-slot="sheet-steps" aria-hidden="true">
             <For each={open()}>{(_, i) => <i data-on={i() === at() ? "true" : undefined} />}</For>
           </span>

@@ -45,7 +45,7 @@ import {
   type JSX,
 } from "solid-js"
 import { t } from "../i18n"
-import { Button } from "../ui/controls"
+import { Button, IconButton } from "../ui/controls"
 import { APPROVAL_TIMEOUT_MS, localAlwaysStore } from "./approval"
 import { askDialog, askYesNo } from "../host/ask"
 import { getHost, type Host } from "../host/shell"
@@ -1845,15 +1845,14 @@ function Thread(props: {
               <li data-slot="bots-attachment" title={picture.name}>
                 <img data-slot="bots-attachment-thumb" src={thumbOf(picture)} alt="" />
                 <span data-slot="bots-attachment-name">{picture.name}</span>
-                <button
-                  type="button"
+                <IconButton
+                  size="sm"
                   data-slot="bots-attachment-remove"
-                  aria-label={t("bots.attach.remove", picture.name)}
-                  title={t("bots.attach.remove", picture.name)}
+                  label={t("bots.attach.remove", picture.name)}
                   onClick={() => setPictures((list) => list.filter((item) => item.id !== picture.id))}
                 >
-                  ×
-                </button>
+                  <span data-ui="icon-cross" aria-hidden="true" />
+                </IconButton>
               </li>
             )}
           </For>
@@ -1863,15 +1862,14 @@ function Thread(props: {
               return (
                 <li data-slot="bots-attachment" title={file.relative}>
                   <span data-slot="bots-attachment-name">{name}</span>
-                  <button
-                    type="button"
+                  <IconButton
+                    size="sm"
                     data-slot="bots-attachment-remove"
-                    aria-label={t("bots.attach.remove", name)}
-                    title={t("bots.attach.remove", name)}
+                    label={t("bots.attach.remove", name)}
                     onClick={() => setAttachments((list) => list.filter((item) => item.path !== file.path))}
                   >
-                    ×
-                  </button>
+                    <span data-ui="icon-cross" aria-hidden="true" />
+                  </IconButton>
                 </li>
               )
             }}

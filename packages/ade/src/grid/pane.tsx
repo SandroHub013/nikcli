@@ -26,6 +26,7 @@ import { StateIcon } from "./state-icon"
 import { t } from "../i18n"
 import { FolderGlyph, PaneActions } from "./pane-actions"
 import { agentLabel } from "../session-new/agents"
+import { Notice } from "../ui/controls"
 
 export { type PaneStatus, type PaneState, STATE_FULL, STATE_SHORT, resolvePaneState, StateIcon }
 
@@ -909,8 +910,8 @@ export function SessionPane(props: SessionPaneProps) {
       </header>
 
       {/* The liveness sweep used to be a 2px lane of its own here. It is now
-          the pane's own top edge, keyed off `data-status`, which says the same
-          thing without taking a row — see `pane.css`. */}
+          the pane's own top edge, keyed off the state's colour, which says the
+          same thing without taking a row — see `pane.css`. */}
 
       {/*
         The live session, drawn by a real terminal emulator.
@@ -924,23 +925,18 @@ export function SessionPane(props: SessionPaneProps) {
       {/* Over the terminal, because the transcript the notes are written to is hidden while it is there. */}
       <Show when={props.terminalId && props.notices?.length ? props.notices : undefined}>
         {(notices) => (
-          <div data-slot="pane-notice" role="status">
+          <Notice
+            tone="working"
+            role="status"
+            data-slot="pane-notice"
+            closeLabel={t("pane.noticeDismiss")}
+            onClose={() => props.onDismissNotices?.()}
+            onClick={(event) => event.stopPropagation()}
+          >
             <div data-slot="pane-notice-lines">
               <For each={notices()}>{(text) => <p>{text}</p>}</For>
             </div>
-            <button
-              type="button"
-              data-slot="pane-notice-close"
-              aria-label={t("pane.noticeDismiss")}
-              title={t("pane.noticeDismiss")}
-              onClick={(event) => {
-                event.stopPropagation()
-                props.onDismissNotices?.()
-              }}
-            >
-              ×
-            </button>
-          </div>
+          </Notice>
         )}
       </Show>
 

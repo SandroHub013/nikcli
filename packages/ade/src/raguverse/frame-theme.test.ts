@@ -111,4 +111,12 @@ describe("the frames wear the ragù palette (DS-25)", () => {
       expect(sheet).toMatch(/--err:\s*var\(--ade-state-err\)/)
     }
   })
+
+  /* DS2-1: the DS-25 port mapped Impara's success by name, so a right answer wore «Al lavoro»'s amber. */
+  test("Impara draws success in the done green, never in the working amber", () => {
+    const body = learn.replace(/\/\*[\s\S]*?\*\//g, "")
+    expect(body).toMatch(/--ok:\s*var\(--ade-done\)/)
+    expect(body).not.toMatch(/var\(--work\)/)
+    expect(body).not.toContain("--work:")
+  })
 })

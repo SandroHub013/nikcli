@@ -911,13 +911,6 @@
   white-space: nowrap;
 }
 
-[data-slot="chat-attachment-remove"] {
-  border: 0;
-  background: transparent;
-  color: var(--ade-text-soft);
-  font-size: var(--ade-font-md);
-  cursor: pointer;
-}
 
 [data-slot="chat-attachment-remove"]:hover {
   color: var(--ade-text);

@@ -69,8 +69,8 @@
   --limit: var(--ade-state-limit);
   --radius: 6px;
   --radius-lg: 8px;
-  /* The name every ADE sheet draws its focus with; here it is the page's own, since the frame has none of ADE's tokens. */
-  --ade-focus-ring: 0 0 0 2px var(--accent);
+  /* The name every ADE sheet draws its focus with, and the same grey ring (DS-1): the accent is for fills, not for focus. */
+  --ade-focus-ring: 0 0 0 2px var(--ade-text-weak);
 }
 
 * {
@@ -201,7 +201,7 @@ button {
 }
 
 button:hover {
-  border-color: var(--accent);
+  border-color: var(--dim);
 }
 
 button:focus-visible {

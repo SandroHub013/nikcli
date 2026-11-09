@@ -66,7 +66,7 @@
 }
 
 [data-slot="sheet-steps"] i[data-on] {
-  background: var(--ade-accent);
+  background: var(--ade-text);
 }
 
 /* Card */
