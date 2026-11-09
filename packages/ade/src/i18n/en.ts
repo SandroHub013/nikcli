@@ -547,6 +547,8 @@ export const en: Messages = {
   "note.deliverNowOffer": (agent: string) =>
     `A message for ${agent} is waiting: ADE doesn't recognise its screen. “Deliver now” types it and presses Enter, even over a question or text already typed.`,
   "note.deliverNowLapsed": "“Deliver now” typed nothing: the screen changed or a question appeared. The message is still queued; the button comes back if needed.",
+  "note.enterWaiting":
+    "The text is typed and ADE hasn't pressed Enter yet: it doesn't recognise the input box. If the text is there and no question is open, you can press Enter yourself.",
   "note.enterStuck": "The text is typed but ADE didn't press Enter: the input box did not come back. If the text is there, press Enter yourself.",
   "task.heldByMenu":
     "The initial task is waiting: ADE sees a question on screen. Answer it in the terminal and it goes; if there is no question, press Enter in the terminal.",

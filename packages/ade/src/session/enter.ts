@@ -93,6 +93,8 @@ export type TextInBox = "shows" | "empty" | "stuck"
 export const TEXT_SHOWS_WITHIN_MS = 3_000
 /** How long an Enter waits for a box that a dialog has covered: the user answers when they answer, but not for ever. */
 export const ENTER_PATIENCE_MS = 120_000
+/** How long a text can wait for its Enter before the pane says so: two minutes of nothing looks like an agent at work. */
+export const ENTER_SAID_AFTER_MS = 15_000
 /** The read's own pace: at most four times a second, and nothing per chunk. */
 export const BOX_READ_MS = 250
 
@@ -100,6 +102,8 @@ export async function textInBox(input: {
   read: () => "ready" | "draft" | "none"
   /** The session has gone, or the user has begun typing: the caller decides, and nothing more is read. */
   stop: () => boolean
+  /** Once, when the box has not been read for `ENTER_SAID_AFTER_MS`: the wait goes on. */
+  waiting?: () => void
   now?: () => number
   sleep?: (ms: number) => Promise<void>
 }): Promise<TextInBox> {
@@ -107,9 +111,14 @@ export async function textInBox(input: {
   const sleep = input.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
   const from = now()
   let emptyFrom: number | undefined
+  let said = false
   while (!input.stop()) {
     const box = input.read()
     if (box === "draft") return "shows"
+    if (!said && now() - from >= ENTER_SAID_AFTER_MS) {
+      said = true
+      input.waiting?.()
+    }
     emptyFrom = box === "ready" ? (emptyFrom ?? now()) : undefined
     if (emptyFrom !== undefined && now() - emptyFrom >= TEXT_SHOWS_WITHIN_MS) return "empty"
     if (now() - from >= ENTER_PATIENCE_MS) return "stuck"

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, setSystemTime, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { Terminal } from "@xterm/xterm"
 import { loadCapture, play, screenText, terminalFor, writtenTo } from "../test-support/live-bytes"
@@ -21,7 +21,7 @@ import {
   watchCursor,
   type ComposerState,
 } from "./composer"
-import { typeThenEnter, textInBox, lineStays, BOX_READ_MS, ENTER_PATIENCE_MS, LINE_STAYS_MS, TEXT_SHOWS_WITHIN_MS } from "./enter"
+import { typeThenEnter, textInBox, lineStays, BOX_READ_MS, ENTER_PATIENCE_MS, ENTER_SAID_AFTER_MS, LINE_STAYS_MS, TEXT_SHOWS_WITHIN_MS } from "./enter"
 import {
   BOX_QUIET_MS,
   formatEnterStuck,
@@ -506,6 +506,43 @@ describe("the Enter: the box that stops being empty is the sign", () => {
   })
 })
 
+describe("a line typed and no Enter yet is said long before the patience runs out (live test 8)", () => {
+  const ticking = () => {
+    let at = 0
+    return { now: () => at, sleep: async (ms: number) => void (at += ms) }
+  }
+
+  test("a box that stays unread says so once, at fifteen seconds, and goes on waiting", async () => {
+    const { now, sleep } = ticking()
+    const said: number[] = []
+    const shown = await textInBox({ read: () => "none", stop: () => false, now, sleep, waiting: () => void said.push(now()) })
+    expect(shown).toBe("stuck")
+    expect(said).toEqual([ENTER_SAID_AFTER_MS])
+  })
+
+  test("a box read in time says nothing", async () => {
+    const { now, sleep } = ticking()
+    let said = 0
+    const reads: ("none" | "draft")[] = ["none", "none", "draft"]
+    const shown = await textInBox({ read: () => reads.shift()!, stop: () => false, now, sleep, waiting: () => void said++ })
+    expect(shown).toBe("shows")
+    expect(said).toBe(0)
+  })
+
+  test("the workbench tells the pane, and takes the note back when the wait is over", () => {
+    const workbench = workbenchSource()
+    expect(workbench).toContain('waiting: () => tellPane(boxPane, t("note.enterWaiting"))')
+    expect(workbench).toContain('dropPaneNote(boxPane, t("note.enterWaiting"))')
+  })
+
+  test("the note goes only after the Enter: its row going back resizes the pane, and an Enter during that is lost", () => {
+    const workbench = workbenchSource()
+    const note = workbench.indexOf('dropPaneNote(boxPane, t("note.enterWaiting"))')
+    expect(note).toBeGreaterThan(workbench.indexOf("enterBlocked: () => enterMustWait(boxPane)"))
+    expect(note).toBeLessThan(workbench.indexOf('if (paneId !== undefined && outcome === "sent")'))
+  })
+})
+
 describe("the id a pane carries is the catalogue's (review B1)", () => {
   const idOf = (command: string) => AGENTS.find((agent) => agent.command === command)!.id
 
@@ -846,6 +883,38 @@ describe("ragu 0.2.14 in a pane too short for its home (live test 6, FAIL 3)", (
     return terminal
   }
 
+  test("real bytes, 30x14 (live test 8): a task of six rows reaches the footer, the cursor on its row, and its Enter goes", async () => {
+    const terminal = await play("ragu-30x14-a-capo", () => {}, { cols: 30, rows: 14 })
+    expect(terminal.buffer.active.cursorY).toBe(12)
+    expect(composerOf(terminal, "ragu")).toBe("draft")
+    expect(enterBlocked(composerOf(terminal, "ragu"), false)).toBe(false)
+  })
+
+  const FOOTER = "  ~\\Documents\\ade   0.2.14"
+
+  test("the line goes on under the footer, and the box off the screen: still a line", async () => {
+    const rows = ["  ┃", "  ┃  uno", "  ┃  due", FOOTER, "  ┃  tre", "  ┃"]
+    expect(composerOf(await paint(rows, 8, 4), "ragu")).toBe("draft")
+  })
+
+  test("a focus-in over a dialog marks this pane too, whose model's row is off the screen: no Enter for the dialog", async () => {
+    const terminal = await paint(["  Search", "  ┃", "  ┃  uno", FOOTER, "  ┃"], 10, 0)
+    expect(composerOf(terminal, "ragu")).toBe("none")
+    followKeys(terminal, "ragu", "\x1b[I")
+    await writtenTo(terminal, "\x1b[4;11H")
+    expect(composerOf(terminal, "ragu")).toBe("none")
+    expect(enterBlocked(composerOf(terminal, "ragu"), false)).toBe(true)
+  })
+
+  test("on the footer's row with nothing written above and no text before the cursor, the box is not read", async () => {
+    expect(composerOf(await paint(["  ┃", "  ┃", FOOTER, "  ┃"], 5, 2), "ragu")).toBe("none")
+  })
+
+  test("the footer's row is the box's only with a bar over it and bars down to the end of the screen", async () => {
+    expect(composerOf(await paint(["  Search", FOOTER, "  ┃"], 10, 1), "ragu")).toBe("none")
+    expect(composerOf(await paint(["  ┃  uno", FOOTER, "altro"], 10, 1), "ragu")).toBe("none")
+  })
+
   test("a draft of two rows with dots and a quote, the cursor at its start: a short first row did not wrap, it is a line", async () => {
     const rows = ["  ┃", "  ┃  uno", '  ┃  dimmi... "ok"', "  ┃", "  ┃  Build · Grok"]
     expect(composerOf(await paint(rows, 5, 1), "ragu")).toBe("draft")
@@ -982,6 +1051,46 @@ describe("a dialog left open over ragu's box, after a focus-in (audit SES2-2)", 
       expect(mayTypeNow({ composer: composerOf(terminal, agent), question: false, nothingDrawn: false })).toBe(false)
     })
   }
+
+  describe("a click on the backdrop closes the dialog and no key follows (live test 8): ADE does not guess", () => {
+    const header = "\x1b[5;70H Select model            esc      \x1b[6;70H Search                         \x1b[6;79H"
+    const closed = `\x1b[2J${box}\x1b[10;6H\x1b[?25h`
+    const FROM = 1_800_000_000_000
+
+    const clicked = async () => {
+      setSystemTime(new Date(FROM))
+      const terminal = await drawn(`${box}${header}`, 120, 17)
+      followKeys(terminal, "ragu", FOCUS_REPORT)
+      followKeys(terminal, "ragu", PRESS)
+      followKeys(terminal, "ragu", RELEASE)
+      await writtenTo(terminal, closed)
+      expect(composerOf(terminal, "ragu")).toBe("none")
+      setSystemTime(new Date(FROM + 600_000))
+      expect(composerOf(terminal, "ragu")).toBe("none")
+      expect(mayTypeNow({ composer: composerOf(terminal, "ragu"), question: false, nothingDrawn: false })).toBe(false)
+      return terminal
+    }
+
+    test("the mark stands with the dialog's «esc» gone from the screen, until a key", async () => {
+      try {
+        const terminal = await clicked()
+        followKeys(terminal, "ragu", "\x1b")
+        expect(composerOf(terminal, "ragu")).toBe("ready")
+      } finally {
+        setSystemTime()
+      }
+    })
+
+    test("or until «Consegna ora», which forgets it", async () => {
+      try {
+        const terminal = await clicked()
+        forgetRefocus(terminal)
+        expect(composerOf(terminal, "ragu")).toBe("ready")
+      } finally {
+        setSystemTime()
+      }
+    })
+  })
 
   test("a later click closes it, and each new return to the pane gets its own free press", async () => {
     const terminal = await drawn(`${box}${picker}`, 120, 17)
