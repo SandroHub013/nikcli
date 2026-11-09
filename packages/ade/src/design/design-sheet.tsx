@@ -130,6 +130,8 @@ export function DesignSheet(props: {
       onClose={props.onClose}
       // The one sheet of a proposal: every variant at its own size, one under the other or side by side.
       size="xl"
+      // Centred: the overlay's 12vh top padding plus a 94vh surface is 106vh, which cut the bottom edge.
+      place="center"
       ref={(element) => (surface = element)}
       onKeyDown={onKeyDown}
     >
