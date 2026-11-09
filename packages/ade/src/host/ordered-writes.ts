@@ -35,3 +35,30 @@ export function orderedWrites(send: (data: string) => Promise<unknown>): (data: 
       if (!sending) next()
     })
 }
+
+/**
+ * A value where only the last one matters, the size of a pane, sent one at a time.
+ *
+ * Two resizes in flight are tasks of their own behind a lock that keeps no order, so the older could land last and leave
+ * the pane with a size it no longer has (RS2-6). One goes at a time, and of those waiting only the newest: the stale sizes
+ * in between are dropped, and the last always lands. A refused one still lets the next go.
+ */
+export function latestOnly<T>(send: (value: T) => Promise<unknown>): (value: T) => void {
+  let sending = false
+  let waiting: { value: T } | undefined
+  const go = (value: T) => {
+    sending = true
+    void send(value)
+      .catch(() => undefined)
+      .then(() => {
+        const next = waiting
+        waiting = undefined
+        if (next) go(next.value)
+        else sending = false
+      })
+  }
+  return (value) => {
+    if (sending) waiting = { value }
+    else go(value)
+  }
+}
