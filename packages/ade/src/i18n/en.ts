@@ -926,6 +926,8 @@ export const en: Messages = {
     "[Recovered message: received while ADE was closed or restarting (may be a duplicate).]",
   "gateway.tooOld": (minutes: number) =>
     `This message is more than ${minutes} minutes old and I did not run it. If you still need it, send it again.`,
+  "gateway.interrupted": (title: string) =>
+    `(interrupted) ADE closed or reloaded during the turn for «${title}»: no answer will come. If you still need it, send /retry.`,
   "gateway.redacted": "I hid a key you wrote: I won't use it or save it.",
   "gateway.queued": (place) => `I'm finishing the previous turn: this message is queued, in place ${place}.`,
   "gateway.stopped": "Stopped. I cleared the queued messages.",

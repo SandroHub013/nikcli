@@ -22,6 +22,7 @@ import { localAccountStore } from "../account"
 import { localRemoteStore, remoteKey } from "./remote"
 import { appMemoryStore } from "../memory-app"
 import { localHistoryStore, localSessionStore } from "./session"
+import { localTurnsUnderWay } from "./turns-under-way"
 import { localChatModelStore } from "./chat-model"
 import { startMenuSync } from "./menu"
 import { appStateAside } from "./state-aside"
@@ -200,6 +201,7 @@ export async function startAppGatewayController(options?: {
       }),
     sessions: localSessionStore(),
     history: localHistoryStore(),
+    underWay: localTurnsUnderWay(),
     threads: localGatewayThreads(),
     remote: (bot, platform) => localRemoteStore().get(remoteKey(bot, platform)),
     account: (bot) => localAccountStore().get(bot),

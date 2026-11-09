@@ -11,6 +11,7 @@ import { chatCommand, chatHeader, MAX_MESSAGE_AGE_MS } from "./policy"
 import { localRemoteStore, memoryRemoteStore, offersRemoteCommands, REMOTE_OFF, remoteKey, remoteTools } from "./remote"
 import { localSessionStore, memorySessionStore, sessionKey } from "./session"
 import { createGatewayThreads, gatewayThreadKey, type ThreadDisk } from "./threads"
+import { localTurnsUnderWay, memoryTurnsUnderWay, TURNS_UNDER_WAY_KEY } from "./turns-under-way"
 import { volatileMemoryStore } from "../memory"
 import { appendMessage, sendMessage } from "../talk"
 
@@ -2253,5 +2254,122 @@ describe("a message that waited too long is not run (BOT-10)", () => {
     b.emit("vecchio di nuovo", { id: "m3", sentMs: OLD })
     await until("detto ancora", () => b.sent.length === 3)
     expect(b.sent[2]!.text).toBe(t("gateway.tooOld", minutes))
+  })
+})
+
+describe("a turn cut by a reload, a crash or the update is not lost silently (BOT-5)", () => {
+  const start = async (b: ReturnType<typeof bridge>, turns: ReturnType<typeof fakeTurns>, underWay: ReturnType<typeof memoryTurnsUnderWay>) =>
+    startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: trusted, sessions: memorySessionStore(), underWay })
+  const interrupted = (title: string) => t("gateway.interrupted", title)
+
+  test("the next page tells the chat, once, and /riprova asks the same thing again", async () => {
+    const underWay = memoryTurnsUnderWay()
+    const before = bridge()
+    const beforeTurns = fakeTurns()
+    await start(before, beforeTurns, underWay)
+    before.emit("cancella il branch vecchio", { id: "m1" })
+    await until("il turno", () => beforeTurns.started.length === 1)
+
+    // The page is gone without a word: nothing of the first controller runs any more.
+    const after = bridge()
+    const afterTurns = fakeTurns()
+    await start(after, afterTurns, underWay)
+    await until("detto", () => after.sent.length === 1)
+    expect(after.sent[0]!.chat).toBe("c42")
+    expect(after.sent[0]!.text).toBe(interrupted("cancella il branch vecchio"))
+    expect(afterTurns.started).toHaveLength(0)
+
+    after.emit("/riprova", { id: "m2" })
+    await until("rifatto", () => afterTurns.started.length === 1)
+    expect(afterTurns.started[0]!.request.message).toContain("cancella il branch vecchio")
+
+    // Told once: a third page has nothing to say.
+    const third = bridge()
+    afterTurns.started[0]!.finish({ text: "fatto" })
+    await until("finito", () => after.sent.some((each) => each.text === "fatto"))
+    await start(third, fakeTurns(), underWay)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(third.sent).toHaveLength(0)
+  })
+
+  test("a turn that ended, however it ended, is not reported as cut", async () => {
+    const underWay = memoryTurnsUnderWay()
+    const b = bridge()
+    const turns = fakeTurns()
+    await start(b, turns, underWay)
+    b.emit("uno", { id: "m1" })
+    await until("il turno", () => turns.started.length === 1)
+    turns.started[0]!.finish({ text: "ok" })
+    await until("la risposta", () => b.sent.length === 1)
+    b.emit("due", { id: "m2" })
+    await until("il secondo", () => turns.started.length === 2)
+    turns.started[1]!.finish({ status: "error", problem: "x" })
+    await until("il fallimento", () => b.sent.length === 2)
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    expect(underWay.take()).toEqual([])
+  })
+
+  test("the controller stopped with a turn running (a reload that cleans up) counts as cut too", async () => {
+    const underWay = memoryTurnsUnderWay()
+    const b = bridge()
+    const turns = fakeTurns()
+    const controller = await start(b, turns, underWay)
+    b.emit("lavoro lungo", { id: "m1" })
+    await until("il turno", () => turns.started.length === 1)
+    controller.stop()
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    const left = underWay.take()
+    expect(left.map(([, message]) => message.text)).toEqual(["lavoro lungo"])
+  })
+
+  test("«off» is not a cut: the turn was stopped on purpose", async () => {
+    const underWay = memoryTurnsUnderWay()
+    const b = bridge()
+    const turns = fakeTurns()
+    const controller = await start(b, turns, underWay)
+    b.emit("uno", { id: "m1" })
+    await until("il turno", () => turns.started.length === 1)
+    controller.off(BOT.path, "telegram")
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    expect(underWay.take()).toEqual([])
+  })
+
+  test("a chat that could not be told at start is told when it writes next", async () => {
+    const underWay = memoryTurnsUnderWay()
+    underWay.note(sessionKey(BOT.path, "telegram", "c42"), {
+      bot: BOT.path,
+      platform: "telegram",
+      chat: "c42",
+      sender: { id: "42", name: "Ale" },
+      text: "domanda",
+      id: "m0",
+      redacted: false,
+      button: false,
+      private: true,
+    })
+    const b = bridge()
+    const send = b.fake.send
+    let down = true
+    b.fake.send = (...args) => (down ? Promise.reject(new Error("rete giù")) : send(...args))
+    const turns = fakeTurns()
+    await start(b, turns, underWay)
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    expect(b.sent).toHaveLength(0)
+    down = false
+    b.emit("ci sei?", { id: "m1" })
+    await until("detto", () => b.sent.some((each) => each.text === interrupted("domanda")))
+  })
+
+  test("in the renderer's storage: it survives, comes out once, and what is not a message is left out", () => {
+    localStorage.removeItem(TURNS_UNDER_WAY_KEY)
+    const store = localTurnsUnderWay()
+    const message = { bot: "b", platform: "telegram", chat: "c", sender: { id: "1", name: "n" }, text: "t", id: "m", redacted: false, button: false, private: true }
+    store.note("k1", message)
+    store.note("k2", message)
+    store.done("k2")
+    localStorage.setItem(TURNS_UNDER_WAY_KEY, JSON.stringify({ ...JSON.parse(localStorage.getItem(TURNS_UNDER_WAY_KEY)!), rotta: { bot: 3 } }))
+    expect(localTurnsUnderWay().take()).toEqual([["k1", message]])
+    expect(localTurnsUnderWay().take()).toEqual([])
+    localStorage.removeItem(TURNS_UNDER_WAY_KEY)
   })
 })

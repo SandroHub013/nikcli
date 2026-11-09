@@ -16,6 +16,7 @@ import { forgetNotice, type NoticeBook } from "./notice"
 import { removeRoutinesOf, type RoutineBook } from "./routine"
 import { SPEND_STORAGE_KEY } from "./spend"
 import { TALK_KEY_PREFIX } from "./talk"
+import { TURNS_UNDER_WAY_KEY } from "./gateway/turns-under-way"
 
 /** What `localStorage` offers to find and take away the keys of a bot. */
 export type KeyedStorage = Pick<Storage, "length" | "key" | "getItem" | "setItem" | "removeItem">
@@ -69,14 +70,16 @@ export function forgetBotTraces(
  * and count (`spend.ts`, one object, a key per bot): a bot made again would find the cap someone else chose.
  */
 export function forgetStoredKeys(path: string, storage: KeyedStorage): void {
-  try {
-    const sessions = JSON.parse(storage.getItem(GATEWAY_SESSIONS_KEY) ?? "{}") as unknown
-    if (sessions && typeof sessions === "object" && !Array.isArray(sessions)) {
-      const kept = Object.fromEntries(Object.entries(sessions).filter(([key]) => !key.startsWith(`${path}:`)))
-      if (Object.keys(kept).length !== Object.keys(sessions).length) storage.setItem(GATEWAY_SESSIONS_KEY, JSON.stringify(kept))
+  for (const perChat of [GATEWAY_SESSIONS_KEY, TURNS_UNDER_WAY_KEY]) {
+    try {
+      const sessions = JSON.parse(storage.getItem(perChat) ?? "{}") as unknown
+      if (sessions && typeof sessions === "object" && !Array.isArray(sessions)) {
+        const kept = Object.fromEntries(Object.entries(sessions).filter(([key]) => !key.startsWith(`${path}:`)))
+        if (Object.keys(kept).length !== Object.keys(sessions).length) storage.setItem(perChat, JSON.stringify(kept))
+      }
+    } catch {
+      // Unreadable or blocked: nothing to take away that could be found.
     }
-  } catch {
-    // Unreadable or blocked: nothing to take away that could be found.
   }
   try {
     const book = JSON.parse(storage.getItem(SPEND_STORAGE_KEY) ?? "{}") as unknown
