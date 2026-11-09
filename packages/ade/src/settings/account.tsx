@@ -124,6 +124,12 @@ export function AccountSection(props: AccountSectionProps): JSX.Element {
           {(runner) => {
             const state = () => states()[runner.id]
             const kind = () => resolveStatusKind(state())
+            // A missing CLI says where to install it, over the check's own «Non installato.». Only when the check
+            // really found it missing ("out"): with no host (browser, dev) there is no New session to install from.
+            const badgeText = () =>
+              kind() === "not-installed" && state()?.login.state === "out"
+                ? t("settings.providers.notInstalled.hint")
+                : (state()?.login.detail ?? statusLabel(kind()))
             const isConfirming = () => confirming() === runner.id
 
             return (
@@ -133,12 +139,10 @@ export function AccountSection(props: AccountSectionProps): JSX.Element {
                   <span
                     data-slot="provider-badge"
                     data-state={kind()}
-                    title={
-                      // A missing CLI says where to install it, over the check's own «Non installato.».
-                      kind() === "not-installed"
-                        ? t("settings.providers.notInstalled.hint")
-                        : (state()?.login.detail ?? statusLabel(kind()))
-                    }
+                    title={badgeText()}
+                    tabindex="0"
+                    role="note"
+                    aria-label={badgeText()}
                   >
                     <span data-slot="status-dot" />
                     <span data-slot="status-label">{statusLabel(kind())}</span>

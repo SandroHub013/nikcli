@@ -190,6 +190,11 @@
   font-size: var(--ade-font-xs);
 }
 
+[data-slot="provider-badge"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
 [data-slot="provider-badge"] [data-slot="status-dot"] {
   width: 8px;
   height: 8px;
