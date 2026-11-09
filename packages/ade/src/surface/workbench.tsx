@@ -6352,8 +6352,8 @@ export function Workbench() {
     permissions,
     isTyping: (id) => lineBegun(id),
     mayType: (id) => mayType(id),
-    typeLine: (session, text, options) => {
-      const real = (session as any)?.session ?? ([...running.values()].find((s) => s === session) ?? session)
+    typeLine: (paneId, session, text, options) => {
+      const real = running.get(paneId) ?? (session as any)?.session ?? session
       return typeLineOutcome(real as SpawnedSession, text, { unlessBusy: true, ...options })
     },
     questionOpen: (id) => questionOpen(id),

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
-import { dispatch, VOCABULARY, type ParseResult, type VoiceIntentSpec } from "@ragu/voice"
+import { dispatch, VOCABULARY, type ParseResult } from "@ragu/voice"
 import { codeOf } from "../test-support/source-text"
 import { resetLocaleForTests } from "../i18n/locale"
 import { createAdeVoiceHost, type AdeVoiceHostDeps } from "./host"
@@ -1260,7 +1260,7 @@ describe("no voice text into a pane asking a permission", () => {
 
     // English locale
     const hostEn = createAdeVoiceHost({ ...deps, locale: () => "en" })
-    await expect(hostEn.sendPrompt("p1", "rifai la migrazione")).rejects.toThrow("that pane isn't ready for text yet; try again in a moment")
+    await expect(hostEn.sendPrompt("p1", "rifai la migrazione")).rejects.toThrow("that panel isn't ready for text yet; try again in a moment")
 
     await host.sendPrompt("p2", "rifai la migrazione")
     expect(writtenLines.length).toBe(1)
@@ -1313,15 +1313,15 @@ describe("the workbench's voice host", () => {
 
 describe("MOD2-2: voice sendPrompt writes through typeLine and lineQueue", () => {
   test("sendPrompt delegates to deps.typeLine with unlessBusy: true and marks working on 'sent'", async () => {
-    const typeLineCalls: { session: any; text: string; options?: any }[] = []
+    const typeLineCalls: { paneId: string; session: any; text: string; options?: any }[] = []
     const { deps, appendedLines, currentWb } = createMockDeps({
       isRunning: () => true,
       getRunningSession: (id) => ({ write: () => {} }),
       permissions: () => ({}),
       isTyping: () => false,
       mayType: () => true,
-      typeLine: async (session, text, options) => {
-        typeLineCalls.push({ session, text, options })
+      typeLine: async (paneId, session, text, options) => {
+        typeLineCalls.push({ paneId, session, text, options })
         return "sent"
       },
     })
@@ -1331,16 +1331,17 @@ describe("MOD2-2: voice sendPrompt writes through typeLine and lineQueue", () =>
     await host.sendPrompt("p1", "fai il build")
 
     expect(typeLineCalls).toHaveLength(1)
+    expect(typeLineCalls[0]!.paneId).toBe("p1")
     expect(typeLineCalls[0]!.text).toBe("fai il build")
     expect(typeLineCalls[0]!.options).toEqual({ unlessBusy: true })
     expect(appendedLines).toContainEqual({ paneId: "p1", text: "> fai il build", kind: "shell" })
     expect(currentWb().panes.find((p) => p.id === "p1")?.status).toBe("working")
   })
 
-  test("sendPrompt refuses and does not mark working when outcome is not 'sent'", async () => {
-    const { deps, appendedLines, currentWb } = createMockDeps({
+  test("B2: sendPrompt on typed-no-enter explains text is in box and Enter was not sent, without repeat", async () => {
+    const { deps, appendedLines, currentWb, told } = createMockDeps({
       isRunning: () => true,
-      getRunningSession: (id) => ({ write: () => {} }),
+      getRunningSession: () => ({ write: () => {} }),
       permissions: () => ({}),
       isTyping: () => false,
       mayType: () => true,
@@ -1348,9 +1349,92 @@ describe("MOD2-2: voice sendPrompt writes through typeLine and lineQueue", () =>
     })
 
     const host = createAdeVoiceHost(deps)
-    await expect(host.sendPrompt("p1", "fai il build")).rejects.toThrow()
+    await expect(host.sendPrompt("p1", "fai il build")).rejects.toThrow(
+      "il testo è nella casella ma l'Invio non è partito; guarda il pannello, non ripetere",
+    )
     expect(appendedLines).toHaveLength(0)
     expect(currentWb().panes.find((p) => p.id === "p1")?.status).not.toBe("working")
+    expect(told).toHaveLength(1)
+    expect(told[0]!.paneId).toBe("p1")
+    expect(told[0]!.text).not.toContain("poi ripeti")
+  })
+
+  test("B2: sendPrompt on typed-no-enter in English explains text is in box and Enter was not sent, without repeat", async () => {
+    const { deps, appendedLines, currentWb, told } = createMockDeps({
+      isRunning: () => true,
+      getRunningSession: () => ({ write: () => {} }),
+      permissions: () => ({}),
+      isTyping: () => false,
+      mayType: () => true,
+      typeLine: async () => "typed-no-enter",
+      locale: () => "en",
+    })
+
+    const host = createAdeVoiceHost(deps)
+    await expect(host.sendPrompt("p1", "build project")).rejects.toThrow(
+      "the text is in the input box but Enter was not sent; check the panel, do not repeat",
+    )
+    expect(appendedLines).toHaveLength(0)
+    expect(currentWb().panes.find((p) => p.id === "p1")?.status).not.toBe("working")
+    expect(told).toHaveLength(1)
+    expect(told[0]!.paneId).toBe("p1")
+    expect(told[0]!.text).not.toContain("say it again")
+  })
+
+  test("B2: sendPrompt on not-typed when user is typing reports half-typed line", async () => {
+    let isUserTyping = false
+    const { deps, told } = createMockDeps({
+      isRunning: () => true,
+      getRunningSession: () => ({ write: () => {} }),
+      permissions: () => ({}),
+      isTyping: () => isUserTyping,
+      mayType: () => true,
+      typeLine: async () => {
+        isUserTyping = true
+        return "not-typed"
+      },
+    })
+
+    const host = createAdeVoiceHost(deps)
+    await expect(host.sendPrompt("p1", "fai il build")).rejects.toThrow("riga scritta a metà")
+    expect(told[0]!.text).toContain("riga scritta a metà")
+  })
+
+  test("B2: sendPrompt on not-typed when question is open reports question/permission", async () => {
+    let questionOpened = false
+    const { deps, told } = createMockDeps({
+      isRunning: () => true,
+      getRunningSession: () => ({ write: () => {} }),
+      permissions: () => ({}),
+      questionOpen: () => questionOpened,
+      mayType: () => true,
+      typeLine: async () => {
+        questionOpened = true
+        return "not-typed"
+      },
+    })
+
+    const host = createAdeVoiceHost(deps)
+    await expect(host.sendPrompt("p1", "fai il build")).rejects.toThrow("permesso")
+    expect(told[0]!.text).toContain("domanda")
+  })
+
+  test("B2: sendPrompt on not-typed when busy or not ready reports not-ready", async () => {
+    const { deps, told } = createMockDeps({
+      isRunning: () => true,
+      getRunningSession: () => ({ write: () => {} }),
+      permissions: () => ({}),
+      isTyping: () => false,
+      questionOpen: () => false,
+      mayType: () => true,
+      typeLine: async () => "not-typed",
+    })
+
+    const host = createAdeVoiceHost(deps)
+    await expect(host.sendPrompt("p1", "fai il build")).rejects.toThrow(
+      "il pannello non è pronto a ricevere testo; riprova tra poco",
+    )
+    expect(told[0]!.text).toContain("non è pronto")
   })
 
   test("mayType gate refuses before typeLine is even called", async () => {

@@ -553,9 +553,12 @@ export const voiceEn: VoiceMessages = {
     `Voice: not sent, the panel is asking a question. Answer it in the terminal, then say it again. The text was: «${text}»`,
   "voice.msg.host.typingHeld": (text) =>
     `Voice: not sent, there is a half-typed line here. Send or clear it, then say it again. The text was: «${text}»`,
-  "voice.msg.host.notReady": "that pane isn't ready for text yet; try again in a moment",
+  "voice.msg.host.notReady": "that panel isn't ready for text yet; try again in a moment",
   "voice.msg.host.notReadyHeld": (text) =>
-    `Voice: not sent, that pane isn't ready for text yet; try again in a moment. The text was: «${text}»`,
+    `Voice: not sent, that panel isn't ready for text yet; try again in a moment. The text was: «${text}»`,
+  "voice.msg.host.typedNoEnter": "the text is in the input box but Enter was not sent; check the panel, do not repeat",
+  "voice.msg.host.typedNoEnterHeld": (text) =>
+    `Voice: the text is in the input box but Enter was not sent; check the panel, do not repeat. The text was: «${text}»`,
   "voice.msg.host.searchDesktopOnly": "searching the project only works in the desktop app",
   "voice.msg.host.searchNoProject": "there is no project open to search in",
   "voice.msg.host.searchUnreadable": (why) => `I can't read the project's files (${why})`,

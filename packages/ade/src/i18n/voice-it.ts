@@ -574,6 +574,9 @@ export const voiceIt = {
   "voice.msg.host.notReady": "il pannello non è pronto a ricevere testo; riprova tra poco",
   "voice.msg.host.notReadyHeld": (text: string) =>
     `Voce: non inviato, il pannello non è pronto a ricevere testo; riprova tra poco. Il testo era: «${text}»`,
+  "voice.msg.host.typedNoEnter": "il testo è nella casella ma l'Invio non è partito; guarda il pannello, non ripetere",
+  "voice.msg.host.typedNoEnterHeld": (text: string) =>
+    `Voce: il testo è nella casella ma l'Invio non è partito; guarda il pannello, non ripetere. Il testo era: «${text}»`,
   "voice.msg.host.searchDesktopOnly": "la ricerca nel progetto funziona solo nell'app desktop",
   "voice.msg.host.searchNoProject": "non c'è nessun progetto aperto in cui cercare",
   "voice.msg.host.searchUnreadable": (why: string) => `non riesco a leggere i file del progetto (${why})`,
