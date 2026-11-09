@@ -9,8 +9,8 @@
  * Several modes can be set at once (`ESC [ ? 1049 ; 2004 h`): the list is searched for 2004.
  */
 
-/** Long enough for the longest switch that matters: `ESC [ ? 1049 ; 2004 h` is 13 characters. */
-const TAIL = 16
+/** Long enough for a switch listing several modes: `ESC [ ? 1000 ; 1006 ; 2004 h` is 18 characters, and a list can be longer. */
+const TAIL = 64
 
 const SWITCH = /\u001b\[\?([\d;]+)([hl])/g
 

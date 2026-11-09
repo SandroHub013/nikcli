@@ -62,6 +62,14 @@ describe("bracketed paste, read across chunks (SES-14)", () => {
     expect(modes.on("p")).toBe(false)
   })
 
+  test("a long list of modes cut late is still read (the tail holds more than a short switch)", () => {
+    const modes = createPasteModes()
+    const whole = `${ESC}[?1000;1006;2004h`
+    modes.note("p", whole.slice(0, 17))
+    modes.note("p", whole.slice(17))
+    expect(modes.on("p")).toBe(true)
+  })
+
   test("each pane has its own mode, and forget clears one", () => {
     const modes = createPasteModes()
     modes.note("a", `${ESC}[?2004h`)
