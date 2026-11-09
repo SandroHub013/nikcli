@@ -797,6 +797,14 @@ body,
   box-shadow: none;
 }
 
+/*
+ * The new session launcher takes focus on mount to handle Enter and Esc without
+ * drawing a focus ring around the entire screen (B4).
+ */
+[data-component="session-new"]:focus-visible {
+  box-shadow: none;
+}
+
 /* A sheet that says `outline: none` on its own control still gets a visible focus when colours are forced. */
 @media (forced-colors: active) {
   :focus-visible {
