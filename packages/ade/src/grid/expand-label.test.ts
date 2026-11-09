@@ -18,7 +18,20 @@ describe("the expanded pane's button says it reduces", () => {
     expect(actions).toContain('props.expanded ? "pane.restore.named" : "pane.expand.named"')
     expect(actions).toContain('props.expanded ? t("pane.restore") : t("pane.expand")')
     expect(pane).toMatch(/<PaneActions onExpand=\{\(\) => props\.onExpand\?\.\(\)\}[^\n]*expanded=\{props\.expanded\}/)
-    expect(pane).toContain('aria-label={props.expanded ? t("pane.restore") : t("pane.expand")}')
+  })
+
+  /*
+   * Review of ade/testi-resto, UX-21: under 400px the header's only button is the «more» one, and it still said
+   * «Ingrandisci» with no pane's name, as the full-width button no longer does.
+   */
+  test("the narrow header's single button names its pane like the full-width one", () => {
+    const more = pane.slice(pane.indexOf('class="act more"'), pane.indexOf("</button>", pane.indexOf('class="act more"')))
+    expect(pane.includes("const expandLabel = ")).toBe(true)
+    expect(pane.includes('props.expanded ? "pane.restore.named" : "pane.expand.named", props.title')).toBe(true)
+    expect(more.includes("aria-label={expandLabel()}")).toBe(true)
+    expect(more.includes("title={expandLabel()}")).toBe(true)
+    expect(more.includes("data-tip={expandLabel()}")).toBe(true)
+    expect(more.includes('t("pane.expand")')).toBe(false)
   })
 
   /*
