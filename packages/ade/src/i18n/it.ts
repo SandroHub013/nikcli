@@ -65,7 +65,8 @@ export const it = {
   "palette.pane.rename": "Rinomina sessione",
   "palette.pane.deliverNow": "Consegna ora la posta in attesa",
   "palette.pane.deliverNow.none": "Il pannello a fuoco non ha posta da consegnare",
-  "lazy.failed": "Questa schermata non si è caricata.",
+  "lazy.failed":
+    "Questa parte di ADE non si è caricata. Premi Riprova; se non basta, chiudi e riapri ADE.",
   "lazy.retry": "Riprova",
   "palette.pane.resize": "Ridimensiona il pannello con la tastiera",
   "palette.noFocusedPane": "Nessun pannello a fuoco",
@@ -110,7 +111,7 @@ export const it = {
   "update.none": "Nessun aggiornamento disponibile.",
   "update.dev": "Questa è una build di sviluppo: non c'è una versione installata da aggiornare.",
   "update.failed": (problem: string) =>
-    `Non sono riuscita a controllare gli aggiornamenti (${problem}). Riprova più tardi da Notifiche → Controlla aggiornamenti.`,
+    `Non sono riuscita a controllare gli aggiornamenti (${problem}). Riprova più tardi da Notifiche › Controlla aggiornamenti.`,
   "presence.off": "Microfono spento",
   "presence.asleep": "In attesa della parola di richiamo",
   "presence.idle": "Pronto",
@@ -365,7 +366,8 @@ export const it = {
     "Non lo trovo ancora. Se il terminale mostra un errore, l'installazione non è finita: correggi e riprova. Se è finita, chiudi e riapri Nuova sessione.",
   "install.paneNote": (agent: string) =>
     `A installazione finita ADE ricontrolla da sola e riapre Nuova sessione con ${agent} pronto. Se l'installazione dà errore, di solito il terminale resta aperto.`,
-  "install.stillMissing": "Non lo trovo ancora. Apri Nuova sessione e premi Ricontrolla sulla sua scheda.",
+  "install.stillMissing":
+    "Non lo trovo ancora. Apri Nuova sessione, clicca la sua scheda e premi Ricontrolla; se non basta, riavvia ADE.",
   "install.readyElsewhere": (agent: string) => `${agent} è installato: apri Nuova sessione (Ctrl+Maiusc+P › Nuova sessione) per avviarlo.`,
   "install.autoFoundElsewhere": (agent: string) => `${agent} installato: apri Nuova sessione (Ctrl+Maiusc+P › Nuova sessione) per avviarlo.`,
   "install.autoFound": (agent: string) => `${agent} installato: ora puoi avviarlo da Nuova sessione.`,
@@ -476,11 +478,11 @@ export const it = {
   "workspace.unreadable":
     "Non sono riuscita a leggere le sessioni salvate (forse sono di una versione più nuova di ADE). Ne ho tenuto una copia: aggiorna ADE per riaverle.",
   "workspace.unreadableBroken": (copy: string) =>
-    `Le sessioni salvate sono danneggiate e nessuna versione di ADE le può leggere: aggiornare non serve. Ne ho tenuto una copia, ma non si ripristina da qui: è nell'archivio di ADE con il nome «${copy}».`,
+    `Le sessioni salvate sono danneggiate e nessuna versione di ADE le può leggere: aggiornare non serve. Ne ho tenuto una copia, ma non si ripristina da qui: è nella cartella dei dati di ADE (Impostazioni › Sistema › Informazioni) con il nome «${copy}».`,
   "workspace.unreadableNoCopy":
     "Non sono riuscita a leggere le sessioni salvate e non ho potuto tenerne una copia (manca spazio). Finché non se ne libera, le sessioni di questa volta non vengono salvate.",
   "workspace.saveFailed":
-    "Non riesco a salvare le sessioni: manca spazio nell'archivio di ADE. Chiudi le sessioni che non servono.",
+    "Non riesco a salvare le sessioni: manca spazio nella cartella dei dati di ADE (Impostazioni › Sistema › Informazioni). Chiudi le sessioni che non servono.",
   "workspace.restore.offer": "Ho una copia delle sessioni salvate che ora riesco a leggere.",
   "workspace.restore.action": "Ripristina le sessioni",
   "workspace.restore.confirm":
@@ -836,7 +838,7 @@ export const it = {
   "record.export.desktopOnly": "L'esportazione funziona solo nell'app desktop.",
   "record.export.done": (path: string) => `Video pronto: ${path}`,
   "record.export.failed": (problem: string) =>
-    `Esportazione non riuscita: ${problem}. La registrazione originale non è stata toccata: riprova da Impostazioni → Registrazione.`,
+    `Esportazione non riuscita: ${problem}. La registrazione originale non è stata toccata: riprova da Impostazioni › Registrazione.`,
   "pane.maybeStuck": (request: string) =>
     `Forse bloccata: al lavoro da oltre un'ora senza output né modifiche (richiesta ${request})`,
 

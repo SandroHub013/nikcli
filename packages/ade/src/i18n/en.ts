@@ -60,8 +60,9 @@ export const en: Messages = {
   "palette.pane.rename": "Rename session",
   "palette.pane.deliverNow": "Deliver the waiting mail now",
   "palette.pane.deliverNow.none": "The focused panel has no mail to deliver",
-  "lazy.failed": "This screen did not load.",
-  "lazy.retry": "Try again",
+  "lazy.failed":
+    "This part of ADE did not load. Press Retry; if that isn't enough, close and reopen ADE.",
+  "lazy.retry": "Retry",
   "palette.pane.resize": "Resize the panel with the keyboard",
   "palette.noFocusedPane": "No panel is focused",
   "palette.view.next": (view) => `Next section (${view})`,
@@ -105,7 +106,7 @@ export const en: Messages = {
   "update.none": "No updates available.",
   "update.dev": "This is a development build, so there's no installed version to update.",
   "update.failed": (problem) =>
-    `Couldn't check for updates (${problem}). Try again later from Notifications → Check for updates.`,
+    `Couldn't check for updates (${problem}). Try again later from Notifications › Check for updates.`,
   "presence.off": "Microphone off",
   "presence.asleep": "Waiting for the wake word",
   "presence.idle": "Ready",
@@ -356,7 +357,8 @@ export const en: Messages = {
     "I can't find it yet. If the terminal shows an error, the install isn't finished: fix it and try again. If it is finished, close and reopen New session.",
   "install.paneNote": (agent) =>
     `When the install ends, ADE checks by itself and reopens New session with ${agent} ready. On an error the terminal usually stays open.`,
-  "install.stillMissing": "I can't find it yet. Open New session and press Check again on its card.",
+  "install.stillMissing":
+    "I can't find it yet. Open New session, click its card and press Check again; if that isn't enough, restart ADE.",
   "install.readyElsewhere": (agent) => `${agent} is installed: open New session (Ctrl+Shift+P › New session) to start it.`,
   "install.autoFoundElsewhere": (agent) => `${agent} installed: open New session (Ctrl+Shift+P › New session) to start it.`,
   "install.autoFound": (agent) => `${agent} is installed: you can start it from New session now.`,
@@ -464,10 +466,11 @@ export const en: Messages = {
   "workspace.unreadable":
     "I could not read the saved sessions (they may come from a newer version of ADE). I kept a copy: update ADE to get them back.",
   "workspace.unreadableBroken": (copy) =>
-    `The saved sessions are damaged and no version of ADE can read them: updating will not help. I kept a copy, but it cannot be restored from here: it is in ADE's storage under the name "${copy}".`,
+    `The saved sessions are damaged and no version of ADE can read them: updating will not help. I kept a copy, but it cannot be restored from here: it is in ADE's data folder (Settings › System › About) under the name "${copy}".`,
   "workspace.unreadableNoCopy":
     "I could not read the saved sessions and could not keep a copy (no room left). Until there is room, this run's sessions are not saved.",
-  "workspace.saveFailed": "I cannot save the sessions: ADE's storage is full. Close the sessions you do not need.",
+  "workspace.saveFailed":
+    "I cannot save the sessions: ADE's data folder (Settings › System › About) is full. Close the sessions you do not need.",
   "workspace.restore.offer": "I have a copy of the saved sessions that I can read now.",
   "workspace.restore.action": "Restore the sessions",
   "workspace.restore.confirm":
@@ -818,7 +821,7 @@ export const en: Messages = {
   "record.export.desktopOnly": "Exporting only works in the desktop app.",
   "record.export.done": (path) => `Video ready: ${path}`,
   "record.export.failed": (problem) =>
-    `Export failed: ${problem}. The original recording was not touched: try again from Settings → Recording.`,
+    `Export failed: ${problem}. The original recording was not touched: try again from Settings › Recording.`,
   "pane.maybeStuck": (request) =>
     `Possibly stuck: working for over an hour with no output or changes (request ${request})`,
 
