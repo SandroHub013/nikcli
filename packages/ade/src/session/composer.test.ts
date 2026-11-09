@@ -535,6 +535,13 @@ describe("a line typed and no Enter yet is said long before the patience runs ou
     expect(workbench).toContain('waiting: () => tellPane(boxPane, t("note.enterWaiting"))')
     expect(workbench).toContain('dropPaneNote(boxPane, t("note.enterWaiting"))')
   })
+
+  test("the note goes only after the Enter: its row going back resizes the pane, and an Enter during that is lost", () => {
+    const workbench = workbenchSource()
+    const note = workbench.indexOf('dropPaneNote(boxPane, t("note.enterWaiting"))')
+    expect(note).toBeGreaterThan(workbench.indexOf("enterBlocked: () => enterMustWait(boxPane)"))
+    expect(note).toBeLessThan(workbench.indexOf('if (paneId !== undefined && outcome === "sent")'))
+  })
 })
 
 describe("the id a pane carries is the catalogue's (review B1)", () => {

@@ -2799,7 +2799,6 @@ export function Workbench() {
                 stop: () => !alive() || typedDuring(),
                 waiting: () => tellPane(boxPane, t("note.enterWaiting")),
               })
-              dropPaneNote(boxPane, t("note.enterWaiting"))
               stuck = shown === "stuck"
               lineAtEnter = boxLine(boxPane)
               return shown
@@ -2808,6 +2807,8 @@ export function Workbench() {
           }
         : {}),
     })
+    // Only now, as for «Consegna ora» below: its row going back resizes the pane, and an Enter during that was lost on ragu.
+    if (boxPane !== undefined) dropPaneNote(boxPane, t("note.enterWaiting"))
     if (paneId !== undefined && outcome === "sent") {
       // A line ADE submits starts a turn exactly as the user's Enter does.
       claims.evidence(paneId)
