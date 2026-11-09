@@ -6344,7 +6344,7 @@ export function Workbench() {
     // Dictated text goes into the line and is not submitted: it counts as typed.
     getRunningSession: (id) => {
       const session = running.get(id)
-      return session && { write: (text: string) => typeAsUser(id, text), kill: () => void closeSuspendedTree(session) }
+      return session && { session, write: (text: string) => typeAsUser(id, text), kill: () => void closeSuspendedTree(session) }
     },
     openFile: (path) => openFile(path),
     appendLine: (id, text, kind) => appendLine(id, text, kind),
@@ -6352,6 +6352,10 @@ export function Workbench() {
     permissions,
     isTyping: (id) => lineBegun(id),
     mayType: (id) => mayType(id),
+    typeLine: (session, text, options) => {
+      const real = (session as any)?.session ?? ([...running.values()].find((s) => s === session) ?? session)
+      return typeLineOutcome(real as SpawnedSession, text, { unlessBusy: true, ...options })
+    },
     questionOpen: (id) => questionOpen(id),
     answerPermission: (id, ans) => answerPermission(id, ans),
     confirmVoiceSend: (id, approved) => {

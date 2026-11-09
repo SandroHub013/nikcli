@@ -9,6 +9,7 @@ import {
   type PermissionAnswer,
   type PermissionRequest,
 } from "../session/permission"
+import type { LineOutcome } from "../session/enter"
 import { AGENTS } from "../session-new/agents"
 import type { AgentStatus } from "../session-new/availability"
 import { asOneLine, asSubmittedLine } from "../session/typing"
@@ -56,6 +57,12 @@ export interface AdeVoiceHostDeps {
   questionOpen?: (paneId: string) => boolean
   /** Whether a line may be typed there now: the gate every line ADE types asks (`mayTypeNow`). */
   mayType?: (paneId: string) => boolean
+  /** Types a line into the session through the workbench line queue and bracketed paste (MOD2-2). */
+  typeLine?: (
+    session: SpawnedSession | { write: (text: string) => void },
+    text: string,
+    options?: { unlessBusy?: boolean },
+  ) => Promise<LineOutcome | boolean>
   answerPermission: (paneId: string, answer: PermissionAnswer) => void
   /**
    * The spoken decision on a `send` the voice agent wrote: deliver it, or
@@ -385,9 +392,14 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
       }
       // A dialog the reading of menus does not know: the box is simply not there, and the Enter would answer it unseen.
       if (deps.mayType && !deps.mayType(paneId)) refuse(paneId, singleLine)
+      if (deps.typeLine) {
+        const outcome = await deps.typeLine(session, singleLine, { unlessBusy: true })
+        if (outcome !== "sent") refuse(paneId, singleLine)
+      } else {
+        session.write(asSubmittedLine(singleLine))
+      }
       deps.setWb((w) => updatePane(w, paneId, { status: "working", activity: "running" }))
       deps.appendLine(paneId, `> ${singleLine}`, "shell")
-      session.write(asSubmittedLine(singleLine))
     },
 
     /*

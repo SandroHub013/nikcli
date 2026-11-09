@@ -1300,4 +1300,70 @@ describe("the workbench's voice host", () => {
   test("asks the workbench's own question gate, screen and hook included (B1)", () => {
     expect(call.slice(0, 1500)).toContain(codeOf("questionOpen: (id) => questionOpen(id),"))
   })
+
+  test("passes typeLine dependency that delegates to typeLineOutcome (MOD2-2)", () => {
+    expect(call.slice(0, 1500)).toContain(codeOf("typeLine:"))
+  })
+})
+
+describe("MOD2-2: voice sendPrompt writes through typeLine and lineQueue", () => {
+  test("sendPrompt delegates to deps.typeLine with unlessBusy: true and marks working on 'sent'", async () => {
+    const typeLineCalls: { session: any; text: string; options?: any }[] = []
+    const { deps, appendedLines, currentWb } = createMockDeps({
+      isRunning: () => true,
+      getRunningSession: (id) => ({ write: () => {} }),
+      permissions: () => ({}),
+      isTyping: () => false,
+      mayType: () => true,
+      typeLine: async (session, text, options) => {
+        typeLineCalls.push({ session, text, options })
+        return "sent"
+      },
+    })
+
+    const host = createAdeVoiceHost(deps)
+    deps.setWb((w) => ({ ...w, panes: [makePane({ id: "p1" })] }))
+    await host.sendPrompt("p1", "fai il build")
+
+    expect(typeLineCalls).toHaveLength(1)
+    expect(typeLineCalls[0]!.text).toBe("fai il build")
+    expect(typeLineCalls[0]!.options).toEqual({ unlessBusy: true })
+    expect(appendedLines).toContainEqual({ paneId: "p1", text: "> fai il build", kind: "shell" })
+    expect(currentWb().panes.find((p) => p.id === "p1")?.status).toBe("working")
+  })
+
+  test("sendPrompt refuses and does not mark working when outcome is not 'sent'", async () => {
+    const { deps, appendedLines, currentWb } = createMockDeps({
+      isRunning: () => true,
+      getRunningSession: (id) => ({ write: () => {} }),
+      permissions: () => ({}),
+      isTyping: () => false,
+      mayType: () => true,
+      typeLine: async () => "typed-no-enter",
+    })
+
+    const host = createAdeVoiceHost(deps)
+    await expect(host.sendPrompt("p1", "fai il build")).rejects.toThrow()
+    expect(appendedLines).toHaveLength(0)
+    expect(currentWb().panes.find((p) => p.id === "p1")?.status).not.toBe("working")
+  })
+
+  test("mayType gate refuses before typeLine is even called", async () => {
+    let typeLineCalled = false
+    const { deps } = createMockDeps({
+      isRunning: () => true,
+      getRunningSession: (id) => ({ write: () => {} }),
+      permissions: () => ({}),
+      isTyping: () => false,
+      mayType: () => false,
+      typeLine: async () => {
+        typeLineCalled = true
+        return "sent"
+      },
+    })
+
+    const host = createAdeVoiceHost(deps)
+    await expect(host.sendPrompt("p1", "fai il build")).rejects.toThrow()
+    expect(typeLineCalled).toBe(false)
+  })
 })
