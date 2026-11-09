@@ -15,6 +15,7 @@ import { STALE_BUSY_MS } from "./mailbox"
 import { OUTPUT_CLAIM_MAX_MS } from "./output-activity"
 import { Terminal } from "@xterm/xterm"
 import { writtenTo } from "../test-support/live-bytes"
+import { workbenchSource } from "../test-support/workbench-source"
 
 const BLIND: BlindHold = { blind: true }
 const CLEAR: BlindHold = { blind: false }
@@ -315,7 +316,7 @@ describe("the click", () => {
   })
 
   const source = (path: string) => codeOf(readFileSync(new URL(path, import.meta.url), "utf8"))
-  const workbench = source("../surface/workbench.tsx")
+  const workbench = codeOf(workbenchSource())
   const between = (from: string, to: string) => {
     const start = workbench.indexOf(from)
     expect(start).toBeGreaterThan(0)

@@ -4,6 +4,7 @@ import { join } from "node:path"
 import { codeOf } from "../test-support/source-text"
 
 import { isAnswerKey, isTyping, questionOpened, submittedSince, typedAfter, type TypedLine } from "./typed-line"
+import { workbenchSource } from "../test-support/workbench-source"
 
 const typeAll = (chunks: string[], from: TypedLine | undefined = undefined): TypedLine | undefined =>
   chunks.reduce((line, chunk, index) => typedAfter(line, chunk, 1_000 + index), from)
@@ -229,7 +230,7 @@ describe("a new question", () => {
 })
 
 test("lint: a question opening, by the hook or by the screen, drops the last answer", () => {
-  const workbench = codeOf(readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf-8"))
+  const workbench = codeOf(workbenchSource())
   const hook = workbench.slice(workbench.indexOf(codeOf('if (next === "waiting") {')))
   expect(hook.slice(0, 300)).toContain(codeOf("records.typed.update(paneId, questionOpened)"))
   const screen = workbench.slice(workbench.indexOf(codeOf("permissions.set(paneId, request)")))
@@ -239,7 +240,7 @@ test("lint: a question opening, by the hook or by the screen, drops the last ans
 test("lint: the terminal asks whether a question is open before it counts a key", () => {
   const renderer = readFileSync(join(import.meta.dir, "../surface/pane-renderer.tsx"), "utf-8")
     expect(renderer).toContain("typedAfter(line, data, Date.now(), menuOpen)")
-  const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf-8")
+  const workbench = workbenchSource()
   // Re-review N16: a line that already has typing in it ignores the answer, so the screen is not read for it.
   expect(renderer).toContain("isAnswerKey(data) && !isTyping(deps.records.typed.get(current().id)) && deps.menuOpen(current().id, data)")
   expect(workbench).toMatch(/promptAnswered,\r?\n\s+menuOpen: menuOnScreen,/)

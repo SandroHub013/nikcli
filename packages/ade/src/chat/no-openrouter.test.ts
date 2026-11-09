@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * C8: the chat talks to ragu only. The OpenRouter path it had before the
@@ -30,10 +31,8 @@ function sources(dir: string): string[] {
   })
 }
 
-const code = (file: string) =>
-  readFileSync(file, "utf8")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/(^|[^:])\/\/.*$/gm, "$1")
+const strip = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1")
+const code = (file: string) => strip(readFileSync(file, "utf8"))
 
 describe("the chat and OpenRouter", () => {
   test("no source in chat/ calls OpenRouter or reads the voice's key", () => {
@@ -46,7 +45,7 @@ describe("the chat and OpenRouter", () => {
   })
 
   test("the workbench hands the chat no key", () => {
-    const workbench = code(join(DIR, "..", "surface", "workbench.tsx"))
+    const workbench = strip(workbenchSource())
     const chat = workbench.match(/<Chat\b[\s\S]*?\/>/)
     expect(chat).not.toBeNull()
     expect(chat![0]).not.toMatch(/apiKey|openRouterApiKey|onOpenSettings/)

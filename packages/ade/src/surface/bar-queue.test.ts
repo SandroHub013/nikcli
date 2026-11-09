@@ -4,6 +4,7 @@ import { join } from "node:path"
 import { localePreference, setLocalePreference } from "../i18n"
 import { createOpenKeyTracker, newlyOpened, queueItemLabel } from "./bar-queue"
 import { codeOf } from "../test-support/source-text"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * DS-polish, piece 1: the bar. The queue buttons speak one grammar, their
@@ -15,7 +16,7 @@ const read = (...path: string[]) => readFileSync(join(import.meta.dir, "..", ...
 
 describe("the queue buttons' words", () => {
   test("the queue buttons group uses PillTabs with role button, always rendered in the bar", () => {
-    const workbench = read("surface", "workbench.tsx")
+    const workbench = workbenchSource()
     expect(workbench).not.toContain("<BarQueueButton")
     expect(workbench).toContain('role="button"')
     expect(workbench).toContain("items={queueItems()}")
@@ -38,13 +39,13 @@ describe("the queue buttons' words", () => {
   })
 
   test("discarded lines do not turn on any badge: badge only reflects waiting items", () => {
-    const workbench = read("surface", "workbench.tsx")
+    const workbench = workbenchSource()
     expect(workbench).toContain("badge: decWaiting > 0 ? decWaiting : undefined")
     expect(workbench).toContain("badge: desWaiting > 0 ? desWaiting : undefined")
   })
 
   test("clicking Decisioni or Design opens the respective sheet or pane", () => {
-    const workbench = read("surface", "workbench.tsx")
+    const workbench = workbenchSource()
     expect(workbench).toContain('if (id === "decisions") handleOpenDecisions()')
     expect(workbench).toContain('else if (id === "design") handleOpenDesign()')
     expect(workbench).toContain("setDecisionsOpen(true)")
@@ -151,7 +152,7 @@ describe("the bar's layout", () => {
 
   test("«Nuovo pannello» keeps its place in every view, unseen where it does nothing", () => {
     expect(rule('[data-slot="ade-menu-anchor"][data-idle]')).toContain("visibility: hidden")
-    const workbench = read("surface", "workbench.tsx")
+    const workbench = workbenchSource()
     expect(codeOf(workbench)).toContain(
       codeOf('data-idle={showsNewPane(wb().view) ? undefined : "true"} inert={!showsNewPane(wb().view)}'),
     )

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { addPane, createWorkbench, fromWorkspaceState, toWorkspaceState } from "./state"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * Review of the frontend, ALTO 5: a bot's flags and a sign-in's subcommand
@@ -9,7 +10,7 @@ import { addPane, createWorkbench, fromWorkspaceState, toWorkspaceState } from "
  * bare agent: without `--agent`, on the default model, which can be paid.
  */
 
-const source = readFileSync(join(import.meta.dir, "workbench.tsx"), "utf8")
+const source = workbenchSource()
 
 function body(start: string): string {
   const at = source.indexOf(start)

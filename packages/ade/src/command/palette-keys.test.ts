@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { paletteStep } from "./palette-keys"
+import { workbenchSource } from "../test-support/workbench-source"
 
 const key = (key: string, extra: Partial<KeyboardEvent> = {}) =>
   ({ key, ctrlKey: true, metaKey: false, altKey: false, shiftKey: false, ...extra }) as KeyboardEvent
@@ -22,7 +23,7 @@ test("Ctrl+N and Ctrl+P walk the palette, nothing else does", () => {
  * workbench and cannot be called from a test.
  */
 test("lint: the window's key handler leaves the palette its Ctrl+N and Ctrl+P", () => {
-  const source = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+  const source = workbenchSource()
   const pass = source.indexOf(`if (target?.closest?.('[data-component="palette"]') && paletteStep(e) !== 0) return`)
   const run = source.indexOf("void runCommand(resolution.commandId)", pass)
   expect(pass).toBeGreaterThan(-1)

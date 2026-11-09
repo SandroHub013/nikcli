@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { computeGatewayBarStatus, createGatewayBarStore, type GatewayLinkSummary } from "./bar-status"
 import type { GatewayStatus, LinkStatus, PairingRequest } from "./panel-state"
 import type { GatewayMessage } from "./controller"
+import { workbenchSource } from "../../test-support/workbench-source"
 
 describe("computeGatewayBarStatus", () => {
   test("returns undefined when no link is enabled", () => {
@@ -145,7 +146,7 @@ describe("the shell draws the gateway bottom bar indicator (Point 4)", () => {
   test("lint: workbench renders gateway status button in footerActions with platforms link", async () => {
     const { readFileSync } = await import("node:fs")
     const { join } = await import("node:path")
-    const workbench = readFileSync(join(import.meta.dir, "../../surface/workbench.tsx"), "utf8")
+    const workbench = workbenchSource()
     expect(workbench).toContain('data-action="gateway-status"')
     expect(workbench).toContain('openWaitingBot(bar().bot, undefined, "platforms")')
     expect(workbench).toContain('<span data-slot="gateway-dot" aria-hidden="true" />')

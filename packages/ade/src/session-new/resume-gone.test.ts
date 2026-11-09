@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { RESUME, raguConversationThere, planRestore, planResume } from "./resume"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * A ragu pane reopened on a conversation deleted from ragu (Verifiche,
@@ -64,7 +65,7 @@ describe("a pane whose ragu conversation is gone", () => {
 })
 
 describe("lint: the workbench asks, and drops a gone id", () => {
-  const workbench = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
+  const workbench = workbenchSource()
 
   test("lint: conversationMissing asks the CLI when there is no transcript file", () => {
     const start = workbench.indexOf("const conversationMissing = async")

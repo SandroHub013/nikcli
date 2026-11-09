@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { LONG_TASK_LOG_MS, watchLongTasks } from "./long-task-log"
+import { workbenchSource } from "../test-support/workbench-source"
 
 class FakeObserver {
   static supportedEntryTypes = ["longtask", "paint"]
@@ -47,7 +48,7 @@ describe("the page's long tasks", () => {
   })
 
   test("lint: the workbench starts it and stops it with the surface", () => {
-    const source = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf-8").replace(/\s+/g, " ")
+    const source = workbenchSource().replace(/\s+/g, " ")
     expect(source).toContain("onCleanup(watchLongTasks((text) => console.error(text)))")
   })
 })

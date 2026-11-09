@@ -6,6 +6,7 @@ import { createLineAccumulator } from "../host/line-stream"
 import { codeOf } from "../test-support/source-text"
 import { parseRequest } from "./protocol"
 import { RESTORED_MS, SCREEN_QUIET_MS, alternateRows, createScreenRequests, newRequests } from "./screen-requests"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * A ragu pane wrote `@ade keys ask …` and ADE never answered (Verifiche,
@@ -169,7 +170,7 @@ describe("the request of an agent that draws its screen with the cursor", () => 
 })
 
 describe("lint: the workbench reads the screen and leaves those lines out of onLine", () => {
-  const workbench = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
+  const workbench = workbenchSource()
 
   test("lint: every chunk fed to a terminal arms the screen reading", () => {
     const start = workbench.indexOf("const feedTerminal = ")

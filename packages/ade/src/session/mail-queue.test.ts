@@ -5,6 +5,7 @@ import { QUEUE_MAX_AGE_MS, RESTORE_GRACE_MS, parseQueue, queueToSave, waitsForRe
 import { suspendedMailToSave } from "./suspend"
 import { codeOf } from "../test-support/source-text"
 import type { Message } from "./mailbox"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * `ade-msg send` answers «ok: in coda» the moment a message is held for a busy session, and its sender stops
@@ -82,7 +83,7 @@ describe("a replayed message waits for its pane's process instead of being dropp
 })
 
 describe("lint: the workbench writes the queue and reads it back", () => {
-  const source = readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8")
+  const source = workbenchSource()
 
   test("written before any delivery starts and again when one ends, and nothing before it was read back", () => {
     // WB-6: the take deleted it from the outbox, so a crash during a long `close` must not lose what was told «in coda».
@@ -126,7 +127,7 @@ describe("the lines held for a running session are saved too, not only those of 
  * their own tests; these pin that the workbench actually uses them, in the order that matters.
  */
 describe("the data-safety wiring in the workbench", () => {
-  const source = readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8")
+  const source = workbenchSource()
   test("the update persists the mail and the mail round waits for the install", () => {
     const run = source.indexOf("const runUpdate = async () => {")
     const flush = source.indexOf("autosave.flush()", run)
@@ -200,7 +201,7 @@ describe("mail for a session on its way back (audit WB2-2)", () => {
   })
 
   test("lint: deliverOne asks about the start, with the receipt of a relaunch, and the boot says what it plans", () => {
-    const source = codeOf(readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8"))
+    const source = codeOf(workbenchSource())
     expect(source).toContain(
       codeOf("if (!session && (running.relaunching(target.pane.id) || waitsForStart({ paneExists: paneExists(target.pane.id), reopening: reopening.busy(target.pane.id), sinceStart: Date.now() - (reopening.startedAt(target.pane.id) ?? Date.now()), plannedAtBoot: restorePlanned.has(target.pane.id), sinceBoot: Date.now() - loadedAt }))) {"),
     )

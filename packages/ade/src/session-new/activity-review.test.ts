@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url"
 import { activityOrFormer, parseActivity } from "../session/mailbox"
 import { acceptsLaterReport, followReports, lastReportedId, parseReport } from "./agent-link"
 import { ACTIVITY_EXTENSION_NAME, ACTIVITY_EXTENSION_SOURCE, reportFamily } from "./agent-hooks"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * The Architect's review of activity-prime-pi (ade-team/results/activity-prime-pi-review.md):
@@ -33,7 +34,7 @@ describe("MEDIO 1: a resumed Prime pane reads the worker that outlived ADE", () 
   })
 
   test("lint: every read of a pane's activity goes through the fallback", () => {
-    const workbench = readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8")
+    const workbench = workbenchSource()
     expect(workbench).not.toContain("parseActivity(")
     expect(workbench.match(/await paneActivity\(host, paneId, /g)).toHaveLength(3)
     // Kept for Prime and pi only, from the nonce saved with the pane.
@@ -88,7 +89,7 @@ describe("MEDIO 2: a later report counts only from the pane's own family", () =>
   })
 
   test("lint: the workbench passes the family to both", () => {
-    const workbench = readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8")
+    const workbench = workbenchSource()
     expect(workbench).toContain("...(family ? { family } : {}),")
     expect(workbench).toContain('pane.resumeId, reportFamily(pane.agent ?? ""))')
   })

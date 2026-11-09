@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { RESUME } from "../session-new/resume"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * Review area 2, MEDIO: agy's `last_conversations.json` was read for the
@@ -11,7 +12,7 @@ import { RESUME } from "../session-new/resume"
  */
 
 test("the latest conversation is looked up for the folder the CLI runs in", () => {
-  const source = readFileSync(join(import.meta.dir, "workbench.tsx"), "utf8")
+  const source = workbenchSource()
   const call = source.slice(source.indexOf("latest.read("), source.indexOf("latest.read(") + 200)
   expect(call).toContain('?? "", workDir)')
   // And that folder is the one the process is started in.

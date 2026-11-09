@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { createCloser } from "./closer"
 import { NOT_FROM_TEXT_FIELDS } from "../keyboard/bindings"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * Review of the frontend, ALTO 6: Ctrl+W typed in a composer closed the pane
@@ -49,7 +50,7 @@ describe("closing an agent at work (ALTO 6)", () => {
 
   test("lint: the keydown handler drops NOT_FROM_TEXT_FIELDS in a text field before running a command (ALTO 6)", () => {
     expect(NOT_FROM_TEXT_FIELDS.has("pane.close")).toBe(true)
-    const source = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+    const source = workbenchSource()
     const keys = source.slice(source.indexOf("const isInput = target.tagName"), source.indexOf("const handleKeyUp = "))
     expect(keys).toContain("NOT_FROM_TEXT_FIELDS.has(resolution.commandId)")
     // Checked before the command runs.
@@ -57,7 +58,7 @@ describe("closing an agent at work (ALTO 6)", () => {
   })
 
   test("lint: the pane.close command closes with confirmRunning (ALTO 6)", () => {
-    const source = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+    const source = workbenchSource()
     const command = source.slice(
       source.indexOf('} else if (id === "pane.close") {'),
       source.indexOf('} else if (id === "pane.expand") {'),

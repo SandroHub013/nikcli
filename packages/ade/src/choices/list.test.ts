@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { waitedFor } from "./list"
+import { workbenchSource } from "../test-support/workbench-source"
 
 const NOW = new Date("2026-09-27T12:00:00.000Z")
 
@@ -14,7 +15,7 @@ describe("choices helpers", () => {
   })
 
   test("lint: the palette commands and voice open the sheets directly", () => {
-    const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+    const workbench = workbenchSource()
     expect(workbench).toContain('} else if (id === "decisions.open") {')
     expect(workbench).toContain('} else if (id === "design.open") {')
     expect(workbench).toContain("start={choiceStart()}")

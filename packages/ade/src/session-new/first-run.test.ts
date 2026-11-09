@@ -5,6 +5,7 @@ import { typedInstallLine, installExit, watchInstall } from "./install-follow"
 import { detectAgents } from "./availability"
 import { INSTALLS, commandFor, isSavedInstallPane, terminalLine } from "./install"
 import { addPane, createWorkbench, toWorkspaceState } from "../surface/state"
+import { workbenchSource } from "../test-support/workbench-source"
 
 compileSolidJsx()
 const { render } = await import("solid-js/web")
@@ -147,7 +148,7 @@ describe("an install pane saved by 0.18.0 is not brought back (R1)", () => {
   })
 
   test("the workbench drops them before either restore path reads the saved list", async () => {
-    const src = await Bun.file(new URL("../surface/workbench.tsx", import.meta.url)).text()
+    const src = workbenchSource()
     const at = src.indexOf("!isSavedInstallPane(pane)")
     expect(at).toBeGreaterThan(-1)
     expect(at).toBeLessThan(src.indexOf("setWb(fromWorkspaceState(state))"))
@@ -157,7 +158,7 @@ describe("an install pane saved by 0.18.0 is not brought back (R1)", () => {
 
 describe("the workbench wiring", () => {
   test("a pane for no agent says so, and install panes are watched", async () => {
-    const src = await Bun.file(new URL("../surface/workbench.tsx", import.meta.url)).text()
+    const src = workbenchSource()
     expect(src).toContain('tellPane(paneId, t("pane.noAgent"))')
     expect(src).toContain("typedInstallLine(input.line)")
     expect(src).toContain("installFor: input.agentId")

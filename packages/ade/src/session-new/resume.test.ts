@@ -29,6 +29,7 @@ import {
   mintMarks,
   startingState,
 } from "./resume"
+import { workbenchSource } from "../test-support/workbench-source"
 
 describe("planStart", () => {
   test("an agent that takes an id is started under one, and the id comes back", () => {
@@ -521,7 +522,7 @@ describe("a restore's claims reach the panes it reopens", () => {
   })
 
   test("lint: the restore hands its claims to the exited panes it reopens", () => {
-    const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+    const workbench = workbenchSource()
     expect(readFileSync(join(import.meta.dir, "resume.ts"), "utf8")).toContain("return restoreClaims(planned)")
     expect(workbench).toContain("reopen(pane, undefined, claims)")
     expect(workbench).toContain(
@@ -553,7 +554,7 @@ describe("the conversation a start opens", () => {
   })
 
   test("lint: the other-folder note is kept for the conversation the start actually reopened", () => {
-    const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+    const workbench = workbenchSource()
     expect(workbench).toContain("const openedId = openedConversation(resume, mintedId, launched?.resumeId)")
     expect(workbench).toContain(
       "if (resumed && launched?.otherDir && openedId !== undefined && openedId === launched.resumeId) {",
@@ -585,7 +586,7 @@ describe("one folder rule, and a source the tools can read", () => {
   })
 
   test("lint: the workbench compares folders with sameFolder and prints the lists with LIST_COLS", () => {
-    const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+    const workbench = workbenchSource()
     expect(workbench).toContain("sameFolder(pane.cwd || p.root, workDir)")
     expect(workbench).not.toContain("(pane.cwd || p.root) === workDir")
     expect(workbench).toContain("cols: LIST_COLS,")
@@ -713,7 +714,7 @@ describe("a conversation being minted is not another pane's «here»", () => {
   })
 
   test("lint: the workbench mints through the ledger and asks «here» beside it", () => {
-    const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+    const workbench = workbenchSource()
     expect(workbench).toContain("const mints = new MintLedger()")
     expect(workbench).toContain("askCli(command, plan.args, cwd, read, timing).then((id) => {")
     expect(workbench).toContain("return id ?? undefined\n      }),\n      paneId,")
@@ -770,7 +771,7 @@ describe("a conversation minted for another open pane is not «here»", () => {
   })
 
   test("lint: the workbench titles a mint with its pane's mark and reads the list by the same marks", () => {
-    const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+    const workbench = workbenchSource()
     expect(workbench).toContain("const title = `${launched?.title || agent.label || agentId}${mintMark(paneId)}`")
     expect(workbench).toContain(".panes.filter((pane) => pane.id !== paneId)\n      .flatMap((pane) => mintMarks(pane.id))")
     expect(workbench).toContain("planLastHere(agentId, cwd, excluded, marks)")
@@ -814,7 +815,7 @@ describe("a resumed start that types nothing is idle, and says it was resumed", 
   })
 
   test("lint: the workbench sets the pane and types the task by the same rule", () => {
-    const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+    const workbench = workbenchSource()
     expect(workbench).toContain("const starting = startingState({ task, resumed, typeIntoResumed })")
     expect(workbench).toContain("status: starting.status,")
     expect(workbench).toContain("if (starting.typesTask) {")
@@ -873,7 +874,7 @@ describe("a restore waits only for the checks of its own agent (audit WB-8)", ()
   })
 
   test("lint: the boot does not wait for the checks, and a pane closed or started meanwhile is left alone", () => {
-    const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8").replace(/\s+/g, "")
+    const workbench = workbenchSource().replace(/\s+/g, "")
     expect(workbench).toContain("constbyAgent=restoreByAgent(")
     expect(workbench).not.toContain("constsessions=awaitPromise.all(sessionsToResume(restored)")
     expect(workbench).toContain("if(!paneExists(session.pane.id)||running.has(session.pane.id)||reopening.busy(session.pane.id)){restorePlanned.delete(session.pane.id)return}")

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import { codeOf } from "../test-support/source-text"
 import { MOST_JOINED, NOTICE_TTL_MS, expiredNotices, gatherNotices, joinNotices } from "./held-notices"
 import { blindNow } from "./deliver-now"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * ADE's own notices to a session wait for it to be free. On a pane whose box it cannot read that never comes, and when it
@@ -93,7 +94,7 @@ describe("expiry", () => {
 })
 
 describe("lint: the workbench", () => {
-  const source = codeOf(readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8"))
+  const source = codeOf(workbenchSource())
 
   test("moveMail expires first, then types one line for all of a pane's notices, through the same gate as mail", () => {
     const move = source.slice(source.indexOf(codeOf("const moveMail = async")), source.indexOf(codeOf("const watchMail = async")))

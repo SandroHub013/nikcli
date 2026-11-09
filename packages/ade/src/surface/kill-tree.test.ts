@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { closeSuspendedTree } from "../session/suspend"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * Full review 2026-10-06, sessioni 3: closing a pane, «Termina processo» and a relaunch killed only the
@@ -10,7 +11,7 @@ import { closeSuspendedTree } from "../session/suspend"
  */
 describe("a pane's process is closed with everything it started", () => {
   test("every kill in the workbench goes through the tree", () => {
-    const source = readFileSync(join(import.meta.dir, "workbench.tsx"), "utf8")
+    const source = workbenchSource()
     // A bare `.kill()` kills the direct child only; the tree goes through `closeSuspendedTree`.
     expect(source.match(/\.kill\(\)/g) ?? []).toEqual([])
     // Closing, killing, relaunching and the voice's kill: the four ways a pane's process ends.

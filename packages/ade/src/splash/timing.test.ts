@@ -8,6 +8,7 @@ import {
   sceneIsWorthBuilding,
   splashRemainingMs,
 } from "./timing"
+import { workbenchSource } from "../test-support/workbench-source"
 
 const source = (file: string) => readFileSync(join(import.meta.dir, "..", file), "utf8")
 
@@ -49,7 +50,7 @@ describe("the startup screen's timing", () => {
   })
 
   test("the workbench reads the floor from here (no second number of its own) and the splash the scene delay", () => {
-    const workbench = source("surface/workbench.tsx")
+    const workbench = workbenchSource()
     expect(workbench).toContain("splashRemainingMs")
     expect(workbench).not.toMatch(/const SPLASH_FLOOR_MS\s*=/)
     const splash = source("splash/splash.tsx")

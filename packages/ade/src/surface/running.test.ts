@@ -4,6 +4,7 @@ import { codeOf } from "../test-support/source-text"
 import { RELAUNCH_MAX_MS, RunningSessions } from "./running"
 import { requestState } from "../session/mailbox"
 import type { SpawnedSession } from "../host/shell"
+import { workbenchSource } from "../test-support/workbench-source"
 
 function session(kills: Array<{ tree?: boolean } | undefined>): SpawnedSession {
   return { kill: (options) => void kills.push(options), write: () => {}, resize: () => {} }
@@ -97,7 +98,7 @@ describe("a pane closed or started again while its process starts", () => {
 })
 
 describe("the workbench's starts", () => {
-  const source = codeOf(readFileSync(new URL("./workbench.tsx", import.meta.url), "utf8"))
+  const source = codeOf(workbenchSource())
 
   test("take their token before the first await, and closing a pane takes it away", () => {
     const body = source.slice(source.indexOf(codeOf("const startProcess = async (")))
@@ -148,7 +149,7 @@ describe("the workbench's starts", () => {
  * owner and `onCleanup` is a silent no-op.
  */
 describe("the workbench", () => {
-  const source = codeOf(readFileSync(new URL("./workbench.tsx", import.meta.url), "utf8"))
+  const source = codeOf(workbenchSource())
 
   /*
    * Right after the map is made, which is in the component's own body: an
@@ -187,7 +188,7 @@ describe("a start the host refused", () => {
   })
 
   test("the local start and the ssh start both say whether the host refused", () => {
-    const source = codeOf(readFileSync(new URL("./workbench.tsx", import.meta.url), "utf8"))
+    const source = codeOf(workbenchSource())
     expect(source.split(codeOf("running.adopt(paneId, start, session, refused)")).length - 1).toBe(2)
   })
 })
@@ -287,7 +288,7 @@ describe("a pane being relaunched", () => {
   })
 
   test("the workbench marks it before the old process goes, and lifts it when the start is over", () => {
-    const source = codeOf(readFileSync(new URL("./workbench.tsx", import.meta.url), "utf8"))
+    const source = codeOf(workbenchSource())
     const branch = source.slice(source.indexOf(codeOf('if (message.kind === "relaunch") {')))
     const body = branch.slice(0, branch.indexOf(codeOf('if (message.kind === "close") {')))
     expect(body.indexOf(codeOf("running.beginRelaunch(pane.id)"))).toBeGreaterThan(0)
@@ -304,7 +305,7 @@ describe("a pane being relaunched", () => {
  * richiesta», a held send was told «non è stato consegnato». The pane was not closed.
  */
 describe("mail held for a pane being relaunched", () => {
-  const source = codeOf(readFileSync(new URL("./workbench.tsx", import.meta.url), "utf8"))
+  const source = codeOf(workbenchSource())
 
   test("stays in the queue until the new process is up, before any held message is closed for a missing session", () => {
     const route = source.slice(source.indexOf(codeOf("const session = running.get(target.pane.id)\n    // Read back from the saved queue")))
@@ -333,7 +334,7 @@ describe("mail held for a pane being relaunched", () => {
  * old process's line behind, so the new one held every message for a line that was gone.
  */
 describe("mail held by a line", () => {
-  const source = codeOf(readFileSync(new URL("./workbench.tsx", import.meta.url), "utf8"))
+  const source = codeOf(workbenchSource())
 
   test("the pane tells its user once, and says it again only after the line has gone", () => {
     expect(source).toContain(codeOf("tellPane(target.pane.id, t(\"note.mailHeldByLine\"))"))

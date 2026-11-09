@@ -6,6 +6,7 @@ import { DEFAULT_BINDINGS, FROM_TERMINALS } from "../keyboard/bindings"
 import { buildCommands } from "./commands"
 import { createWorkbench } from "./state"
 import { t } from "../i18n"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /*
  * «In alto a sinistra, di fianco alle sessioni attive, un tasto per mostrare e
@@ -137,7 +138,7 @@ describe("the palette", () => {
 })
 
 describe("the workbench", () => {
-  const source = codeOf(readFileSync(new URL("./workbench.tsx", import.meta.url), "utf8"))
+  const source = codeOf(workbenchSource())
   const css = codeOf(readFileSync(new URL("../dev.css", import.meta.url), "utf8"))
 
   test("puts the button beside the project's facts, and runs the command", () => {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
+import { workbenchSource } from "../test-support/workbench-source"
 
 /**
  * Handing a screenshot to the focused session from the viewer (UX-17).
@@ -7,7 +8,7 @@ import { readFileSync } from "node:fs"
  * The workbench is too large to mount, so these read the source: what is pinned is the order of the steps and what the
  * function says about whether the text arrived, which a mounted test would have to rebuild the whole shell to see.
  */
-const source = readFileSync(new URL("./workbench.tsx", import.meta.url), "utf8").replace(/\r\n/g, "\n")
+const source = workbenchSource().replace(/\r\n/g, "\n")
 
 function body(start: string, end: string): string {
   const at = source.indexOf(start)

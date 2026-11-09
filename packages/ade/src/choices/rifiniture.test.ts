@@ -13,6 +13,7 @@ import { foldProposals } from "../design/state"
 import { createToast } from "../surface/toast"
 import { compileSolidJsx } from "../test-support/solid-jsx"
 import { askerName, distinctNames, isRecommended } from "./list"
+import { workbenchSource } from "../test-support/workbench-source"
 
 // The cards are `.tsx`: compiled for bun, and imported only after it.
 compileSolidJsx()
@@ -173,7 +174,7 @@ describe("rifiniture 2: the sheet's last line outlives the sheet", () => {
   test("lint: the sheets hand their last line to onDone, and the workbench shows it as a toast", () => {
     for (const path of ["design/design-sheet.tsx", "decisions/decisions-sheet.tsx"])
       expect(read(path)).toContain("props.onDone?.(next, untrack(statusMessage))")
-    const workbench = read("surface/workbench.tsx")
+    const workbench = workbenchSource()
     expect(workbench.split("if (said) toast.show(said)")).toHaveLength(3)
     expect(workbench).toContain('<div data-slot="ade-toast" role="status"')
   })

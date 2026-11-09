@@ -13,6 +13,7 @@ import { foldProposals } from "../design/state"
 import { fitScale, roomFor } from "../design/preview-plan"
 import { compileSolidJsx } from "../test-support/solid-jsx"
 import { afterAnswer, distinctNames } from "./list"
+import { workbenchSource } from "../test-support/workbench-source"
 
 // The cards are `.tsx`: compiled for bun as the hub tests do.
 compileSolidJsx()
@@ -123,7 +124,7 @@ describe("Verifiche, da-scegliere", () => {
       expect(sheet).toContain("afterAnswer(open().length)")
       expect(sheet).toContain("setAnswered(true)")
     }
-    const workbench = read("surface/workbench.tsx")
+    const workbench = workbenchSource()
     expect(workbench).toContain("setDecisionsOpen(false)")
     expect(workbench).toContain("setDesignOpen(false)")
   })
@@ -143,7 +144,7 @@ describe("Verifiche, da-scegliere", () => {
   })
 
   test("lint: «Risposte a» and «→» take the told-apart names", () => {
-    const workbench = read("surface/workbench.tsx")
+    const workbench = workbenchSource()
     expect(workbench.split("title: paneNames().get(pane.id) ?? pane.title")).toHaveLength(3)
   })
 })
