@@ -589,7 +589,33 @@ describe("Claude Code's cursor can stay hidden: a remote flag decides, and posit
     expect(composerOf(await drawn(`\x1b[?25l${dialog}`), CLAUDE)).toBe("none")
   })
 
-  test("on its real bytes the position alone keeps every dialog shut: with the cursor hidden, never the box", async () => {
+  test("real bytes of Claude Code with no variable: the box is read from its rows, blinking caret or not, and a dialog is not", async () => {
+    const capture = loadCapture("claude-senza-variabile")
+    const terminal = terminalFor(capture, { cols: 158, rows: 16 })
+    const seen = { rest: 0, begun: 0, dialog: 0 }
+    for (const [, chunk] of capture.chunks) {
+      const size = [...chunk.matchAll(/\x1b\[8;(\d+);(\d+)t/g)].pop()
+      if (size) terminal.resize(Number(size[2]), Number(size[1]))
+      await writtenTo(terminal, chunk)
+      const text = screenText(terminal)
+      const rows = text.split("\n")
+      if (text.includes("Enter to select")) {
+        seen.dialog++
+        expect(composerOf(terminal, CLAUDE)).toBe("none")
+      } else if (rows.some((row) => /^❯[\s ]h\s*$/.test(row))) {
+        seen.begun++
+        expect(composerOf(terminal, CLAUDE)).toBe("draft")
+      } else if (rows.some((row, y) => /^❯[\s ]*$/.test(row) && /^─{4}/.test(rows[y - 1] ?? "") && /^─{4}/.test(rows[y + 1] ?? ""))) {
+        seen.rest++
+        expect(composerOf(terminal, CLAUDE)).toBe("ready")
+      }
+    }
+    expect(seen.rest).toBeGreaterThan(10)
+    expect(seen.begun).toBeGreaterThan(0)
+    expect(seen.dialog).toBeGreaterThan(0)
+  })
+
+  test("on its real bytes every dialog stays shut: with the cursor hidden, never the box", async () => {
     for (const name of ["claude-fiducia", "claude-fiducia-si", "claude-piano"]) {
       const capture = loadCapture(name)
       const terminal = terminalFor(capture)
@@ -714,13 +740,24 @@ describe("the cursor says a dialog where the reading of menus misses one (re-rev
           expect(screenText(terminal)).toContain(words)
           expect(composerOf(terminal, agent)).toBe("none")
           expect(screenQuestion(terminal, agent)).toBeUndefined()
-          expect(cursorSaysDialog(terminal, agent)).toBe(true)
+          expect(cursorSaysDialog(terminal)).toBe(true)
         },
         size,
       )
       expect(seen).toBe(1)
     })
   }
+
+  test("Claude Code's arrow key under a dialog moves the cursor out of the last column, and it still says so (re-review 7e98498f0)", async () => {
+    let seen = 0
+    await play("claude-fiducia-si", (terminal, at) => {
+      if (at !== 2_135) return
+      seen++
+      expect(terminal.buffer.active.cursorX).toBeLessThan(terminal.cols - 1)
+      expect(cursorSaysDialog(terminal)).toBe(true)
+    })
+    expect(seen).toBe(1)
+  })
 
   test("a box at rest never says it, on any agent's real bytes", async () => {
     for (const [name, agent] of [
@@ -734,26 +771,54 @@ describe("the cursor says a dialog where the reading of menus misses one (re-rev
       await play(name, (terminal) => {
         if (composerOf(terminal, agent) !== "ready") return
         frames++
-        expect(`${name}:${cursorSaysDialog(terminal, agent)}`).toBe(`${name}:false`)
+        expect(`${name}:${cursorSaysDialog(terminal)}`).toBe(`${name}:false`)
       })
       expect(`${name}:${frames > 0}`).toBe(`${name}:true`)
     }
   })
 
-  test("Claude Code without its flag: hidden in the box is at rest, hidden in the last column is a dialog", async () => {
+  test("Claude Code without its flag: at rest it reads ready, so nothing asks the cursor; a dialog anywhere says so", async () => {
     const RULE = "─".repeat(78)
-    const atRest = await drawn(`\x1b[?25l${rowsAt([RULE, "❯ ", RULE], [2, 1])}`)
-    expect(cursorSaysDialog(atRest, "claude-code")).toBe(false)
-    const parked = await drawn(`\x1b[?25l${rowsAt([" ❯ 1. Yes", "   2. No"], [79, 11])}`)
-    expect(cursorSaysDialog(parked, "claude-code")).toBe(true)
-    expect(cursorSaysDialog(await drawn(rowsAt([" ❯ 1. Yes"], [79, 11])), "claude-code")).toBe(false)
+    const atRest = await drawn(`\x1b[?25l${rowsAt([RULE, "❯ ", RULE], [79, 1])}`)
+    expect(composerOf(atRest, "claude-code")).toBe("ready")
+    const notParked = await drawn(`\x1b[?25l${rowsAt([" ❯ 1. Yes", "   2. No"], [33, 11])}`)
+    expect(cursorSaysDialog(notParked)).toBe(true)
+    expect(composerOf(notParked, "claude-code")).toBe("none")
   })
 
-  test("the others: hidden is all it takes", async () => {
-    const hidden = await drawn("\x1b[?25l")
-    for (const agent of ["agy", "ragu", "opencode"]) expect(cursorSaysDialog(hidden, agent)).toBe(true)
-    const shown = await drawn("")
-    for (const agent of ["agy", "ragu", "opencode"]) expect(cursorSaysDialog(shown, agent)).toBe(false)
+  test("hidden is all it takes, on every agent", async () => {
+    expect(cursorSaysDialog(await drawn("\x1b[?25l"))).toBe(true)
+    expect(cursorSaysDialog(await drawn(""))).toBe(false)
+  })
+})
+
+describe("ragu at 36 columns: the example goes to the next row whole (live test 5, FAIL 3)", () => {
+  test("real bytes: an empty box is empty, with the first row ending on the dots", async () => {
+    let frames = 0
+    await play(
+      "ragu-36",
+      (terminal, at) => {
+        if (!screenText(terminal).includes("┃  ") || at < 863) return
+        frames++
+        expect(composerOf(terminal, "ragu")).toBe("ready")
+      },
+      { cols: 36, rows: 15 },
+    )
+    expect(frames).toBeGreaterThan(0)
+  })
+
+  const box = (...input: string[]) => {
+    const rows = ["  ┃", ...input.map((row) => `  ┃  ${row}`), "  ┃", "  ┃  Build · Grok 4.7 · xAI"]
+    return rowsAt(rows, [5, 1])
+  }
+
+  test("dots with no example after them are a line", async () => {
+    expect(composerOf(await drawn(box("Chiedi qualsiasi cosa..."), 36, 15), "ragu")).toBe("draft")
+  })
+
+  test("an example that closes before the model row is the example, and text under it is a line", async () => {
+    expect(composerOf(await drawn(box("Chiedi...", '"Qual e lo stack', 'di questo?"'), 36, 15), "ragu")).toBe("ready")
+    expect(composerOf(await drawn(box("Chiedi...", '"Fix"', "altro"), 36, 15), "ragu")).toBe("draft")
   })
 })
 

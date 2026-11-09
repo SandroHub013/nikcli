@@ -47,17 +47,23 @@ const RULED_PROMPT: Record<string, string> = { "claude-code": "❯", agy: ">" }
 /**
  * Where a hidden cursor says nothing about the box. Claude Code shows its cursor only under a remote flag, or the variable
  * ADE sets (`agent_env` in `pty.rs`), which an older CLI or a second flag can ignore; without it the cursor stays hidden for
- * the whole session. Its dialogs still take the cursor out of the box, so the position tells. For agy and the agents of
- * opentui the hidden cursor is the signal: their dialogs leave it over the box.
+ * the whole session, and it draws its own: an inverse cell that blinks. The real one then stays wherever the last paint
+ * ended, at rest as under a dialog (live test 5), so it says nothing and the box is read from its rows alone. For agy and
+ * the agents of opentui the hidden cursor is the signal: their dialogs leave it over the box.
  */
 const HIDES_ITS_CURSOR = new Set(["claude-code"])
+/** What Claude Code may print under its box: the mode, a warning, a status line. A dialog's rows are more. */
+const FOOTER_ROWS_MAX = 4
 /** The agents of opentui: a bar down the left of the box, its first row the text, with the agent and model below. */
 const BAR_AGENTS = new Set(["ragu", "opencode"])
 const BAR_ROW = /^( *)┃( |$)/
 /** The bar's row that closes the box: «Build · Grok 4.7 · xAI». In a narrow pane opentui squeezes the spaces out of it. */
 const MODEL_ROW = /^ *┃ {2}\S.*·/
-/** What opentui draws in an empty box before the first turn: «Ask anything… "Fix a TODO"». Its colour depends on the theme. */
-const BAR_PLACEHOLDER = /^[^"]*(?:\.{3}|…) +"/
+/**
+ * What opentui draws in an empty box before the first turn: «Ask anything… "Fix a TODO"». Its colour depends on the theme.
+ * At 36 columns or fewer the example goes to the next row whole, and the first row ends on the dots.
+ */
+const BAR_PLACEHOLDER = /^[^"]*(?:\.{3}|…)(?: +"| *$)/
 
 /** The part of a terminal that says when a program hides or shows the cursor. Off the chunk's road: only those two codes. */
 interface CursorModes {
@@ -95,20 +101,21 @@ export function readsComposer(agentId: string): boolean {
 /** The state of the agent's box on `terminal`'s screen, or `undefined` for an agent whose box ADE does not know. */
 export function composerOf(terminal: ComposerTerminal, agentId: string): ComposerState | undefined {
   if (!readsComposer(agentId)) return undefined
-  if (hiddenCursor.has(terminal) && !HIDES_ITS_CURSOR.has(agentId)) return "none"
+  const hidden = hiddenCursor.has(terminal)
+  if (hidden && !HIDES_ITS_CURSOR.has(agentId)) return "none"
   // ragu gives its box the cursor back on a focus-in, with a dialog still open over it: the reading has to say so here.
   if (agentId === "ragu" && confirmDialog(rowsOf(terminal))) return "none"
   const glyph = RULED_PROMPT[agentId]
-  return glyph ? ruledBox(terminal, glyph) : barBox(terminal)
+  if (!glyph) return barBox(terminal)
+  return hidden ? ruledBoxFromRows(terminal, glyph) : ruledBox(terminal, glyph)
 }
 
 /**
- * Whether the cursor says a dialog is up, whatever the reading of menus makes of the screen. Hidden is the signal on agy and
- * the agents of opentui. Claude Code may hide it at rest, in its box, and parks it in the last column under every dialog.
+ * Whether the cursor says a dialog is up, whatever the reading of menus makes of the screen: hidden, on every agent. It only
+ * matters on a box not read as empty. A Claude Code without its cursor reads `ready` at rest from its rows, so it never asks.
  */
-export function cursorSaysDialog(terminal: ComposerTerminal, agentId: string): boolean {
-  if (!hiddenCursor.has(terminal)) return false
-  return !HIDES_ITS_CURSOR.has(agentId) || terminal.buffer.active.cursorX >= terminal.cols - 1
+export function cursorSaysDialog(terminal: ComposerTerminal): boolean {
+  return hiddenCursor.has(terminal)
 }
 
 const lineAt = (terminal: ComposerTerminal, y: number) =>
@@ -125,10 +132,35 @@ export function composerLine(terminal: ComposerTerminal): string {
 /** A row inside a box of many lines: empty, or indented under the prompt. */
 const continues = (row: string) => row === "" || row.startsWith("  ")
 
+// Claude Code puts a no-break space after its prompt.
+const isPromptRow = (row: string, glyph: string) =>
+  row === glyph || row.startsWith(`${glyph} `) || row.startsWith(`${glyph} `)
+
+/**
+ * The box with no cursor to go by: its last rule low on the screen, with only a footer under it, and above that the prompt
+ * with a rule over it. A dialog is drawn in the box's place, so its `❯ 1. Yes` has no such frame round it.
+ */
+function ruledBoxFromRows(terminal: ComposerTerminal, glyph: string): ComposerState {
+  let closing = terminal.rows - 1
+  let footer = 0
+  while (closing >= 0 && !RULE.test(textAt(terminal, closing))) {
+    if (textAt(terminal, closing).trim()) footer++
+    closing--
+  }
+  if (closing < 1 || footer > FOOTER_ROWS_MAX) return "none"
+  let top = closing - 1
+  while (top >= 0 && !isPromptRow(textAt(terminal, top), glyph)) {
+    if (!continues(textAt(terminal, top))) return "none"
+    top--
+  }
+  if (top < 1 || !RULE.test(textAt(terminal, top - 1))) return "none"
+  for (let y = top + 1; y < closing; y++) if (textAt(terminal, y)) return "draft"
+  return afterCursorIsPlaceholder(lineAt(terminal, top), 2) ? "ready" : "draft"
+}
+
 function ruledBox(terminal: ComposerTerminal, glyph: string): ComposerState {
   const { cursorX, cursorY } = terminal.buffer.active
-  // Claude Code puts a no-break space after its prompt.
-  const isPrompt = (row: string) => row === glyph || row.startsWith(`${glyph} `) || row.startsWith(`${glyph} `)
+  const isPrompt = (row: string) => isPromptRow(row, glyph)
   const here = textAt(terminal, cursorY)
   if (RULE.test(here)) return "none"
 
@@ -227,11 +259,12 @@ function barBox(terminal: ComposerTerminal): ComposerState {
   const placeholder = BAR_PLACEHOLDER.test(first)
   if (rowHasText(cursorY) && !placeholder) return "draft"
   // A long example wraps: the rows down to its closing quote are the example too. Past that, or with no quote, a row is a line.
+  const quotes = (row: string) => row.split('"').length - 1
   let below = cursorY + 1
-  if (placeholder && !first.slice(first.indexOf('"') + 1).includes('"')) {
-    while (below < model && !textAt(terminal, below).slice(inputColumn).includes('"')) below++
-    if (below === model) return "draft"
-    below++
+  if (placeholder) {
+    let seen = quotes(first)
+    while (seen < 2 && below < model) seen += quotes(textAt(terminal, below++).slice(inputColumn))
+    if (seen < 2) return "draft"
   }
   for (let y = below; y < model; y++) if (rowHasText(y)) return "draft"
   return "ready"

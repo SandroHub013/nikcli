@@ -3587,7 +3587,7 @@ export function Workbench() {
     return {
       blind: (box === "none" || box === "draft") && !questionOpen(paneId) && !turn,
       ...(box === "draft" ? { line: composerLine(getTerminal(paneId).terminal) } : {}),
-      ...(hasTerminal(paneId) && cursorSaysDialog(getTerminal(paneId).terminal, pane?.agent ?? pane?.model ?? "")
+      ...(hasTerminal(paneId) && cursorSaysDialog(getTerminal(paneId).terminal)
         ? { dialog: true }
         : {}),
     }
