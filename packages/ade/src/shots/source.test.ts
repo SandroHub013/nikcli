@@ -104,8 +104,10 @@ describe("createShotSource with a host", () => {
     await createRoot(async (dispose) => {
       const picture = new Uint8Array([1, 2, 3])
       const ask = (async (command: string) => (command === "shot_bytes" ? picture.buffer : undefined)) as never
-      expect(await createShotSource(true, ask).load("C:/Pictures/Screenshots/a.png")).toEqual(picture)
+      const loading = createShotSource(true, ask).load("C:/Pictures/Screenshots/a.png")
+      // Before the await: the source's listener would otherwise reach for a host this test does not have.
       dispose()
+      expect(await loading).toEqual(picture)
     })
   })
 })
