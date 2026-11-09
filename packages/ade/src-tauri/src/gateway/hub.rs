@@ -760,7 +760,7 @@ impl Hub {
         {
             let links = self.links();
             for ((bot, platform), running) in links.iter() {
-                let mut pending = running.pending.lock().unwrap();
+                let mut pending = running.pending.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
                 let (messages, dropped) = recheck_unacked(&*self.env, &self.store, bot, *platform, &mut pending);
                 again.extend(messages);
                 if dropped {
@@ -959,7 +959,7 @@ impl Hub {
         let path = pending_file_path(self.store.path(), bot, platform);
         let waiting: Vec<PendingEntry> = match queued {
             Some(queue) => {
-                let mut queue = queue.lock().unwrap();
+                let mut queue = queue.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
                 let waiting = queue.drain(..).collect();
                 remove_pending_file(&path);
                 waiting
@@ -1008,7 +1008,7 @@ impl Hub {
         };
         drop(links);
         let cursor_to_save = {
-            let mut pending = pending_lock.lock().unwrap();
+            let mut pending = pending_lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             if let Some(entry) = pending.iter_mut().find(|entry| entry.msg.chat == chat && entry.msg.id == id) {
                 entry.acked = true;
             }
@@ -1387,7 +1387,7 @@ impl Hub {
         match running {
             Some((adapter, queue)) => {
                 let furthest = {
-                    let mut pending = queue.lock().unwrap();
+                    let mut pending = queue.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
                     for entry in pending.iter_mut().filter(|entry| !entry.acked && entry.msg.sender.id == sender) {
                         entry.acked = true;
                         dropped += 1;
@@ -1619,7 +1619,7 @@ impl Task {
                     if *stopped.borrow() {
                         break;
                     }
-                    if self.pending.lock().unwrap().iter().all(|entry| entry.acked) {
+                    if self.pending.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).iter().all(|entry| entry.acked) {
                         self.save_cursor();
                     }
                     self.tell_written_while_off().await;
@@ -1804,7 +1804,7 @@ impl Task {
             sent_ms: Some(message.timestamp_ms.unwrap_or(at)),
         };
         let cursor = message.cursor.clone().or_else(|| self.adapter.cursor());
-        let mut pending = self.pending.lock().unwrap();
+        let mut pending = self.pending.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         // Switched off since the batch was read (B1): `stop` sets the flag before it drains this queue under the same
         // lock, so a message that gets here after it is not written to the file and not handed on.
         let halted = *self.halted.borrow();
