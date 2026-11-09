@@ -62,7 +62,9 @@ describe("the fonts ADE draws in (DS-15)", () => {
       })
     expect(offenders).toEqual([])
     expect(css).not.toMatch(/@font-face/)
-  })
+    // It reads every source file under src (about 550, 5.6 MB): under the whole suite's load that took 5.4 s against
+    // bun's 5 s default, and it failed as a time, not as a font. Alone it is under a second.
+  }, 30_000)
 })
 
 describe("the 10px step, retuned (DS-15, DS-20)", () => {

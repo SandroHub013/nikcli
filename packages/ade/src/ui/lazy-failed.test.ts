@@ -20,6 +20,9 @@ afterEach(() => {
   dispose?.()
   dispose = undefined
   document.body.innerHTML = ""
+  // The UX2-14 tests below end on English. The locale is a global of the whole run, so without this every file that
+  // runs after this one read English («Nessun aggiornamento» of the update watch, the voice agent's texts).
+  resetLocaleForTests("it")
 })
 const mount = (component: () => unknown) => {
   const host = document.createElement("div")
