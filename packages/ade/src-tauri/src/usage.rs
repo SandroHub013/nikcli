@@ -19,7 +19,7 @@ use std::fs;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::Manager;
@@ -79,7 +79,14 @@ struct Files {
 pub struct UsageCache {
     files: Mutex<Files>,
     codex_paths: Mutex<HashMap<String, PathBuf>>,
+    /// When each Codex session was last looked for and not found.
+    codex_misses: Mutex<HashMap<String, Instant>>,
 }
+
+/// How long a Codex session not found is not looked for again: the walk reads every folder of the sessions.
+const CODEX_MISS_TTL: Duration = Duration::from_secs(60);
+/// Past this many, the misses are forgotten: ids do not come back once their session is over.
+const CODEX_MISSES_MAX: usize = 1024;
 
 /// Lets go of the least recently wanted files until at most `cap` are left.
 fn evict_stale(files: &mut HashMap<PathBuf, Slot>, cap: usize) {
@@ -225,7 +232,7 @@ fn usage_now(
     agent: &str,
     session_id: &str,
     cwd: &str,
-    _now: Instant,
+    now: Instant,
 ) -> Result<Option<Usage>, String> {
     let path = match agent {
         "claude-code" => {
@@ -237,7 +244,21 @@ fn usage_now(
             match known.filter(|p| p.is_file()) {
                 Some(path) => path,
                 None => {
+                    let missed = cache
+                        .codex_misses
+                        .lock()
+                        .map_err(|_| "cache bloccata")?
+                        .get(session_id)
+                        .is_some_and(|at| now.saturating_duration_since(*at) < CODEX_MISS_TTL);
+                    if missed {
+                        return Ok(None);
+                    }
                     let Some(found) = find_codex(&home.join(".codex").join("sessions"), session_id, 3) else {
+                        let mut misses = cache.codex_misses.lock().map_err(|_| "cache bloccata")?;
+                        if misses.len() >= CODEX_MISSES_MAX {
+                            misses.clear();
+                        }
+                        misses.insert(session_id.to_string(), now);
                         return Ok(None);
                     };
                     cache
@@ -254,18 +275,22 @@ fn usage_now(
     if !path.is_file() {
         return Ok(None);
     }
-    let mut files = cache.files.lock().map_err(|_| "cache bloccata")?;
-    let files = &mut *files;
-    files.clock += 1;
-    let clock = files.clock;
-    // Before the lookup, and with room for it: the file this call is about
-    // has not been stamped yet, so it must not be counted against the cap.
-    if !files.by_path.contains_key(&path) {
-        evict_stale(&mut files.by_path, MAX_FILES - 1);
-    }
-    let slot = files.by_path.entry(path.clone()).or_default();
-    slot.last_used = clock;
-    let mut state = slot.state.lock().map_err(|_| "cache bloccata")?;
+    // The map only to find the file: a read of megabytes holds its own transcript, and no other.
+    let slot = {
+        let mut files = cache.files.lock().map_err(|_| "cache bloccata")?;
+        let files = &mut *files;
+        files.clock += 1;
+        let clock = files.clock;
+        // Before the lookup, and with room for it: the file this call is about
+        // has not been stamped yet, so it must not be counted against the cap.
+        if !files.by_path.contains_key(&path) {
+            evict_stale(&mut files.by_path, MAX_FILES - 1);
+        }
+        let slot = files.by_path.entry(path.clone()).or_default();
+        slot.last_used = clock;
+        slot.state.clone()
+    };
+    let mut state = slot.lock().map_err(|_| "cache bloccata")?;
     read_new(agent, &path, &mut state)?;
     Ok(Some(state.usage))
 }
