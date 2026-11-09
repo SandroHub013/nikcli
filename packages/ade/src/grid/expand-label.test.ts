@@ -14,7 +14,9 @@ const renderer = readFileSync(join(dir, "..", "surface", "pane-renderer.tsx"), "
 
 describe("the expanded pane's button says it reduces", () => {
   test("the pane actions and the pane's own button pick the label from `expanded`", () => {
-    expect(actions).toContain('aria-label={props.expanded ? t("pane.restore") : t("pane.expand")}')
+    // The actions name the pane too (UX-21, below): the verb still comes from `expanded`.
+    expect(actions).toContain('props.expanded ? "pane.restore.named" : "pane.expand.named"')
+    expect(actions).toContain('props.expanded ? t("pane.restore") : t("pane.expand")')
     expect(pane).toMatch(/<PaneActions onExpand=\{\(\) => props\.onExpand\?\.\(\)\}[^\n]*expanded=\{props\.expanded\}/)
     expect(pane).toContain('aria-label={props.expanded ? t("pane.restore") : t("pane.expand")}')
   })
@@ -35,6 +37,23 @@ describe("the expanded pane's button says it reduces", () => {
     const { translate } = await import("../i18n")
     expect(translate("it", "pane.close.named", "Claude 2")).toBe("Chiudi Claude 2")
     expect(translate("en", "pane.close.named", "Claude 2")).toBe("Close Claude 2")
+  })
+
+  test("Ingrandisci, Riduci and Sospendi name the pane too, as Chiudi does (UX-21)", async () => {
+    const { translate } = await import("../i18n")
+    expect(translate("it", "pane.expand.named", "Claude 2")).toBe("Ingrandisci Claude 2")
+    expect(translate("it", "pane.restore.named", "Claude 2")).toBe("Riduci Claude 2")
+    expect(translate("it", "pane.suspend.named", "Claude 2")).toBe("Sospendi Claude 2")
+    expect(translate("en", "pane.expand.named", "Claude 2")).toBe("Maximize Claude 2")
+    expect(translate("en", "pane.restore.named", "Claude 2")).toBe("Restore Claude 2")
+    expect(translate("en", "pane.suspend.named", "Claude 2")).toBe("Suspend Claude 2")
+  })
+
+  test("the expand button's label and tooltip, and the Sospendi button's label, carry the title when there is one", () => {
+    // `.includes` and booleans: a failed `toContain` would print the whole file.
+    expect(actions.includes("const expandLabel = ")).toBe(true)
+    expect(/aria-label=\{expandLabel\(\)\}\s+title=\{expandLabel\(\)\}/.test(actions)).toBe(true)
+    expect(pane.includes('props.title ? t("pane.suspend.named", props.title) : t("pane.suspend")')).toBe(true)
   })
 
   test("a session pane is told when it fills the grid", () => {

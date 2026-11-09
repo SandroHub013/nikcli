@@ -872,7 +872,7 @@ export function SessionPane(props: SessionPaneProps) {
                 type="button"
                 class="act"
                 data-slot="pane-suspend"
-                aria-label={t("pane.suspend")}
+                aria-label={props.title ? t("pane.suspend.named", props.title) : t("pane.suspend")}
                 aria-disabled={suspend().enabled ? undefined : "true"}
                 title={suspend().enabled ? t("pane.suspend.tip") : t("pane.suspend.no", suspend().reason ?? "")}
                 data-tip={suspend().enabled ? t("pane.suspend.tip") : t("pane.suspend.no", suspend().reason ?? "")}

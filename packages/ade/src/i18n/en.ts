@@ -774,6 +774,9 @@ export const en: Messages = {
     "The program gets the clicks and the wheel. To select and copy text, hold Shift and drag. Ctrl+click opens a link.",
   "pane.close": "Close",
   "pane.close.named": (title: string) => `Close ${title}`,
+  "pane.expand.named": (title: string) => `Maximize ${title}`,
+  "pane.restore.named": (title: string) => `Restore ${title}`,
+  "pane.suspend.named": (title: string) => `Suspend ${title}`,
   "hooks.foreign":
     "From another build of ADE, not this one: this build neither updates nor removes it, because the official ADE's sessions run through that file",
   "bar.meta.ragu": (version) => `CLI Ragù Code ${version}`,

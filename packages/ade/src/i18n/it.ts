@@ -791,6 +791,9 @@ export const it = {
     "Il programma riceve i clic e la rotella. Per selezionare e copiare il testo, tieni Maiusc e trascina. Ctrl+clic apre un link.",
   "pane.close": "Chiudi",
   "pane.close.named": (title: string) => `Chiudi ${title}`,
+  "pane.expand.named": (title: string) => `Ingrandisci ${title}`,
+  "pane.restore.named": (title: string) => `Riduci ${title}`,
+  "pane.suspend.named": (title: string) => `Sospendi ${title}`,
   "hooks.foreign":
     "Di un'altra build di ADE, non di questa: questa non lo aggiorna e non lo rimuove, perché con quel file ci lavorano le sessioni dell'ADE ufficiale",
   "bar.meta.ragu": (version: string) => `CLI Ragù Code ${version}`,
