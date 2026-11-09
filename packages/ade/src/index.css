@@ -1514,8 +1514,7 @@ body,
  */
 [data-component="update-dialog"] [data-slot="update-dialog-mark"] {
   display: inline-flex;
-  /* A filled N, not words: the brand's tomato (--ade-accent-text is for text). */
-  color: var(--ade-accent);
+  /* The app's own pot (RaguPotMark): it carries its colours, so no `color` here. */
 }
 [data-component="update-dialog"] [data-slot="update-dialog-version"] {
   margin-left: auto;

@@ -4,6 +4,7 @@ import { locale, t } from "../i18n"
 import { nextFocusIndex, updateDialogView } from "./dialog-state"
 import { formatMb, progressPercent, type UpdateProgress } from "./progress"
 import { Button } from "../ui/controls"
+import { RaguPotMark } from "../surface/ragu-pot-mark"
 
 /**
  * The question ADE asks before updating itself (S71), drawn in the window.
@@ -115,9 +116,7 @@ export function UpdateDialog(props: {
       >
         <header data-slot="sheet-head">
           <span data-slot="update-dialog-mark" aria-hidden="true">
-            <svg viewBox="0 0 16 16" width="20" height="20">
-              <path d="M3.2 13.2V2.8h1.9l5.7 7.2V2.8h1.9v10.4h-1.9L5.1 6v7.2Z" fill="currentColor" />
-            </svg>
+            <RaguPotMark size={20} />
           </span>
           <strong id="update-dialog-title">{t("update.restart.title")}</strong>
           <span data-slot="update-dialog-version">
