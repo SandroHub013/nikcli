@@ -121,6 +121,16 @@ describe("options a session may choose for its subagent", () => {
     expect("error" in (modelArgs("kimi", "k2") as object)).toBe(true)
   })
 
+  test("a model name that begins with a dash is another flag, and is refused", () => {
+    expect("error" in (modelArgs("claude-code", "--yolo") as object)).toBe(true)
+    expect("error" in (modelArgs("claude-code", "-x") as object)).toBe(true)
+    expect(modelArgs("claude-code", "claude-haiku-5-5")).toEqual(["--model", "claude-haiku-5-5"])
+    expect(modelArgs("opencode", "opencode/deepseek-v4.1-flash-free")).toEqual([
+      "--model",
+      "opencode/deepseek-v4.1-flash-free",
+    ])
+  })
+
   test("agy is told about its worktree, the others start in it", () => {
     expect(worktreeArgs("agy", "C:\\w\\x")).toEqual(["--add-dir", "C:\\w\\x"])
     expect(worktreeArgs("codex", "C:\\w\\x")).toEqual([])

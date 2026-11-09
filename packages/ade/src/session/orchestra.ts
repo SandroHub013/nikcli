@@ -144,7 +144,11 @@ export function descendants(paneId: string, parents: ReadonlyMap<string, string>
  */
 export function modelArgs(agentId: string, model: string): string[] | { error: string } {
   const value = model.trim()
-  if (!/^[A-Za-z0-9._:\-/]{1,80}$/.test(value)) return { error: `modello non valido: ${model}` }
+  // The pattern allows a dash anywhere for provider/model ids, so the first
+  // character is checked on its own: `--yolo` is a flag, not a model, and the
+  // agent would start with its approvals off.
+  if (value.startsWith("-") || !/^[A-Za-z0-9._:\-/]{1,80}$/.test(value))
+    return { error: `modello non valido: ${model}` }
   switch (agentId) {
     case "claude-code":
     case "agy":
