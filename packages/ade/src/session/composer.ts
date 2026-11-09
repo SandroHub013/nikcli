@@ -89,6 +89,9 @@ const FRAME_BOTTOM = /^ *╰─{8,}╯/
 const WIZARD_STEPS = /\b1\. \S.* {2}· {2}2\. \S.* {2}· {2}3\. \S/
 const WIZARD_RULE = /^─{4,}/
 
+/** The right margin of a box's text, more or less: a row that wrapped had no room for the next word. */
+const WRAP_SLACK = 4
+
 /** The part of a terminal that says when a program hides or shows the cursor. Off the chunk's road: only those two codes. */
 interface CursorModes {
   readonly parser: {
@@ -220,6 +223,11 @@ const rowsOf = (terminal: ComposerTerminal) => Array.from({ length: terminal.row
 export function composerLine(terminal: ComposerTerminal): string {
   const { cursorX, cursorY } = terminal.buffer.active
   return `${cursorX},${cursorY}:${textAt(terminal, cursorY)}`
+}
+
+/** The row the cursor is on, wherever that is: the same line after a resize moved it. */
+export function composerRow(terminal: ComposerTerminal): string {
+  return textAt(terminal, terminal.buffer.active.cursorY)
 }
 
 /** A row inside a box of many lines: empty, or indented under the prompt. */
@@ -386,7 +394,11 @@ function boxText(terminal: ComposerTerminal, inputColumn: number, top: number, e
   // At 30 columns the words wrap before the dots: the first row has neither them nor a quote.
   let first = here.slice(inputColumn)
   let afterFirst = cursorY + 1
-  while (!BAR_PLACEHOLDER.test(first) && !first.includes('"') && afterFirst < end && rowHasText(afterFirst)) {
+  const wrapped = () => {
+    const next = textAt(terminal, afterFirst).slice(inputColumn).trimStart().split(" ")[0]!
+    return first.trimEnd().length + 1 + next.length >= terminal.cols - inputColumn - WRAP_SLACK
+  }
+  while (!BAR_PLACEHOLDER.test(first) && !first.includes('"') && afterFirst < end && rowHasText(afterFirst) && wrapped()) {
     first = `${first.trimEnd()} ${textAt(terminal, afterFirst++).slice(inputColumn)}`
   }
   const placeholder = BAR_PLACEHOLDER.test(first)

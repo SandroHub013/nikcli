@@ -5,7 +5,7 @@ import { createLineAccumulator } from "../host/line-stream"
 import { createLineWriter } from "../surface/pane-lines"
 import { codeOf } from "../test-support/source-text"
 import { typeThenEnter } from "./enter"
-import { formatEnterLost, formatHeldByMenu, formatHeldMenuReceipt, formatHeldSilentReceipt, formatSilentStart } from "./mailbox"
+import { waitsForLine, formatEnterLost, formatHeldByMenu, formatHeldMenuReceipt, formatHeldSilentReceipt, formatSilentStart } from "./mailbox"
 import { en as enText } from "../i18n/en"
 import { it as itText } from "../i18n/it"
 import { decideOpening, OPENING_TIMEOUT_MS } from "./opening"
@@ -844,14 +844,15 @@ describe("lint: the workbench's wiring", () => {
   })
 
   test("lint: the line ADE itself is typing is no line begun, and the note about a line goes when the line has", () => {
-    expect(source).toContain(codeOf("const byLine = lineBegun(target.pane.id) && !linesInFlight.has(target.pane.id)"))
+    expect(source).toContain(codeOf("const byLine = waitsForLine(lineBegun(target.pane.id), linesInFlight.has(target.pane.id))"))
     const held = between("const byLine =", "if (message.kind")
     expect(held).toContain(codeOf('if (!byLine && heldByLineNoted.delete(target.pane.id)) dropPaneNote(target.pane.id, t("note.mailHeldByLine"))'))
   })
 
   test("lint: a line that stays after its Enter is said to the pane and to the sender, and no Enter goes by itself", () => {
     const typed = between("const typeLineNow = async (", "const enterStuck = new WeakSet")
-    expect(typed).toContain(codeOf("void watchLineStays(paneId, session, typedAt)"))
+    expect(typed).toContain(codeOf("if (lineAtEnter !== undefined) void watchLineStays(paneId, session, typedAt, lineAtEnter)"))
+    expect(typed).toContain(codeOf("stuck = shown === \"stuck\" lineAtEnter = boxLine(boxPane)"))
     const watch = between("const watchLineStays = async (", "const enterStuck = new WeakSet")
     expect(watch).toContain(codeOf('tellPane(paneId, t("note.enterLost"))'))
     expect(watch).toContain(codeOf("tellSender(sender.from, formatEnterLost(sender.id,"))
@@ -859,6 +860,13 @@ describe("lint: the workbench's wiring", () => {
     expect(watch).not.toContain("pressAgain")
     expect(watch).not.toContain(".write(")
     expect(source).toContain(codeOf('if (outcome === "sent" && meta.from) lineSender.set(session, { from: meta.from, id: meta.id })'))
+  })
+
+  test("mail waits for a line begun, and not for the line ADE itself is typing: a turn comes after that one", () => {
+    expect(waitsForLine(true, false)).toBe(true)
+    expect(waitsForLine(true, true)).toBe(false)
+    expect(waitsForLine(false, false)).toBe(false)
+    expect(waitsForLine(false, true)).toBe(false)
   })
 
   test("the sender hears the message has not gone, and whose box it is in", () => {
