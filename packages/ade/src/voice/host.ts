@@ -9,6 +9,7 @@ import {
   type PermissionAnswer,
   type PermissionRequest,
 } from "../session/permission"
+import type { LineOutcome } from "../session/enter"
 import { AGENTS } from "../session-new/agents"
 import type { AgentStatus } from "../session-new/availability"
 import { asOneLine, asSubmittedLine } from "../session/typing"
@@ -23,10 +24,11 @@ import {
   type AdeView,
   type Workbench as WorkbenchState,
 } from "../surface/state"
+import { belongsTo } from "../surface/pane-project"
 import { awaitPaneReply } from "./await-reply"
 import { createVoiceAgent, VOICE_PLAN_IDLE_MS, type VoiceAgent } from "./agent"
 import { listProjectsFrom, resolveAgentId, resolveProject } from "./resolve"
-import { locale, t } from "../i18n"
+import { locale, t, translate } from "../i18n"
 import { dictatedFile, isRecentRoot } from "./paths"
 
 /**
@@ -55,6 +57,13 @@ export interface AdeVoiceHostDeps {
   questionOpen?: (paneId: string) => boolean
   /** Whether a line may be typed there now: the gate every line ADE types asks (`mayTypeNow`). */
   mayType?: (paneId: string) => boolean
+  /** Types a line into the session through the workbench line queue and bracketed paste (MOD2-2). */
+  typeLine?: (
+    paneId: string,
+    session: SpawnedSession | { write: (text: string) => void },
+    text: string,
+    options?: { unlessBusy?: boolean },
+  ) => Promise<LineOutcome>
   answerPermission: (paneId: string, answer: PermissionAnswer) => void
   /**
    * The spoken decision on a `send` the voice agent wrote: deliver it, or
@@ -162,13 +171,18 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
      * The words over the pane, as for a half-typed line: refused, they would otherwise be gone from the user's
      * view (a menu read off the screen held the write in silence while the voice said «inviata», B1).
      */
-    if (words) deps.tellPane(paneId, t("voice.msg.host.askingHeld", words))
     const currentLocale = deps.locale ? deps.locale() : locale()
+    if (words) deps.tellPane(paneId, translate(currentLocale, "voice.msg.host.askingHeld", words))
     throw new Error(
       currentLocale === "en"
         ? "That panel is asking a permission: answer it first. The text was not sent."
         : "Quel pannello sta chiedendo un permesso: rispondi prima a quello. Il testo non è stato inviato.",
     )
+  }
+  const refuseNotReady = (paneId: string, words?: string): never => {
+    const currentLocale = deps.locale ? deps.locale() : locale()
+    if (words) deps.tellPane(paneId, translate(currentLocale, "voice.msg.host.notReadyHeld", words))
+    throw new Error(translate(currentLocale, "voice.msg.host.notReady"))
   }
 
   /*
@@ -262,7 +276,9 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
     },
 
     listPanes(): PaneSummary[] {
-      return deps.wb().panes.map((pane, index) => ({
+      const open = deps.project()
+      const projectPanes = open ? deps.wb().panes.filter((pane) => belongsTo(pane, open)) : deps.wb().panes
+      return projectPanes.map((pane, index) => ({
         id: pane.id,
         title: pane.title,
         status: pane.status,
@@ -381,10 +397,32 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
         throw new Error(t("voice.msg.host.typingPending"))
       }
       // A dialog the reading of menus does not know: the box is simply not there, and the Enter would answer it unseen.
-      if (deps.mayType && !deps.mayType(paneId)) refuse(paneId, singleLine)
+      if (deps.mayType && !deps.mayType(paneId)) {
+        refuseNotReady(paneId, singleLine)
+      }
+      if (deps.typeLine) {
+        const outcome = await deps.typeLine(paneId, session, singleLine, { unlessBusy: true })
+        if (outcome === "typed-no-enter") {
+          const currentLocale = deps.locale ? deps.locale() : locale()
+          deps.tellPane(paneId, translate(currentLocale, "voice.msg.host.typedNoEnterHeld", singleLine))
+          throw new Error(translate(currentLocale, "voice.msg.host.typedNoEnter"))
+        }
+        if (outcome === "not-typed") {
+          if (deps.isTyping?.(paneId)) {
+            const currentLocale = deps.locale ? deps.locale() : locale()
+            deps.tellPane(paneId, translate(currentLocale, "voice.msg.host.typingHeld", singleLine))
+            throw new Error(translate(currentLocale, "voice.msg.host.typingPending"))
+          }
+          if (deps.permissions()[paneId] || deps.questionOpen?.(paneId)) {
+            refuse(paneId, singleLine)
+          }
+          refuseNotReady(paneId, singleLine)
+        }
+      } else {
+        session.write(asSubmittedLine(singleLine))
+      }
       deps.setWb((w) => updatePane(w, paneId, { status: "working", activity: "running" }))
       deps.appendLine(paneId, `> ${singleLine}`, "shell")
-      session.write(asSubmittedLine(singleLine))
     },
 
     /*
@@ -608,10 +646,11 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
        * and two panels open. `isPanelPane` is the same question the sidebar
        * and the restore ask, and it knows about the panel modes as well.
        */
+      const open = deps.project()
+      const projectPanes = open ? deps.wb().panes.filter((pane) => belongsTo(pane, open)) : deps.wb().panes
       const sessionIds = new Set(
-        deps
-          .wb()
-          .panes.filter((pane) => !isPanelPane(pane))
+        projectPanes
+          .filter((pane) => !isPanelPane(pane))
           .map((pane) => pane.id),
       )
       const sessionPanes = panes.filter((p) => sessionIds.has(p.id))

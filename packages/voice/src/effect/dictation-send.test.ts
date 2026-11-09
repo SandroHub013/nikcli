@@ -405,4 +405,46 @@ describe("a dictation goes to the pane it was started for", () => {
     expect(host.calls).toEqual([])
     expect(kept).toEqual(["rifai la migrazione"])
   })
+
+  test("a plan waiting for confirmation is refused if the project changes before execution", async () => {
+    class PlanProjectHost extends ChangingHost {
+      currentProject = "root-a"
+      override listProjects() {
+        return [
+          { name: "A", root: "root-a", isOpen: this.currentProject === "root-a" },
+          { name: "B", root: "root-b", isOpen: this.currentProject === "root-b" },
+        ]
+      }
+    }
+
+    const host = new PlanProjectHost()
+    const speaker = createFakeSpeaker()
+    const visible: string[] = []
+    const layer = Layer.mergeAll(TranscriberFake(createFakeTranscriber()), SpeakerFake(speaker), VoiceHostLive(host))
+
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const handle = yield* makeVoiceProgram({
+            getSettings: () => ({ ...DEFAULT_VOICE_SETTINGS, activation: "toggle", agentEngine: "auto" }),
+            plan: async () =>
+              JSON.stringify({
+                steps: [{ action: "send_prompt", paneIndex: 1, text: "esegui migrazione" }],
+                refusals: [],
+              }),
+            onError: (error) => visible.push(error),
+          })
+          yield* handle.submitText("pianifica invio migrazione")
+          yield* Effect.sleep(Duration.millis(50))
+          host.currentProject = "root-b"
+          yield* handle.submitText("sì")
+          yield* Effect.sleep(Duration.millis(50))
+        }),
+      ).pipe(Effect.provide(layer)),
+    )
+
+    expect(host.calls.some((c) => c.method === "sendPrompt")).toBe(false)
+    expect(visible).toContain("Il progetto è cambiato: il piano era per un altro progetto e non è stato eseguito.")
+    expect(speaker.spoken).toContain("Il progetto è cambiato: il piano era per un altro progetto e non è stato eseguito.")
+  })
 })

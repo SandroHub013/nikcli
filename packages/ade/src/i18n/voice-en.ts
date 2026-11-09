@@ -198,9 +198,9 @@ export const voiceEn: VoiceMessages = {
   "vui.reply.mai.licence": "Microsoft MAI-Voice, through OpenRouter.",
   // Reply voice on Microsoft MAI, in the OpenRouter card
   "vui.mai.title": "Microsoft MAI",
-  "vui.mai.offer": "New default voice: Rosa (Microsoft)",
-  "vui.mai.offer.use": "Use",
-  "vui.mai.offer.keep": "Keep Ugo",
+  "vui.mai.offer": "Rosa (Microsoft) reads replies with your OpenRouter key: it is paid.",
+  "vui.mai.offer.use": "Use Rosa",
+  "vui.mai.offer.keep": "Keep Ugo (free)",
   "vui.mai.voice": "MAI voice",
   "vui.mai.local": "Local fallback voice",
   "vui.mai.status.active": "MAI active",
@@ -543,6 +543,7 @@ export const voiceEn: VoiceMessages = {
   "voice.msg.plan.serverError": "The service answered with an error. Try again in a moment.",
   "voice.msg.plan.unreachable": "I didn't reach the service. Check the connection and try again.",
   "voice.msg.plan.noPlan": "I couldn't get a plan. Try again in a moment.",
+  "voice.msg.plan.projectChanged": "The project changed: the plan was for another project and was not executed.",
 
   "voice.msg.host.noProject": "There is no project open: tell me which project to start the session in.",
   "voice.msg.host.noProcess": (paneId) => `Panel '${paneId}' has no live process to send the message to.`,
@@ -553,6 +554,12 @@ export const voiceEn: VoiceMessages = {
     `Voice: not sent, the panel is asking a question. Answer it in the terminal, then say it again. The text was: «${text}»`,
   "voice.msg.host.typingHeld": (text) =>
     `Voice: not sent, there is a half-typed line here. Send or clear it, then say it again. The text was: «${text}»`,
+  "voice.msg.host.notReady": "that panel isn't ready for text yet; try again in a moment",
+  "voice.msg.host.notReadyHeld": (text) =>
+    `Voice: not sent, that panel isn't ready for text yet; try again in a moment. The text was: «${text}»`,
+  "voice.msg.host.typedNoEnter": "the text is in the input box but Enter was not sent; check the panel, do not repeat",
+  "voice.msg.host.typedNoEnterHeld": (text) =>
+    `Voice: the text is in the input box but Enter was not sent; check the panel, do not repeat. The text was: «${text}»`,
   "voice.msg.host.searchDesktopOnly": "searching the project only works in the desktop app",
   "voice.msg.host.searchNoProject": "there is no project open to search in",
   "voice.msg.host.searchUnreadable": (why) => `I can't read the project's files (${why})`,

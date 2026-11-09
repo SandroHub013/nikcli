@@ -198,9 +198,9 @@ export const voiceIt = {
   "vui.reply.mai.licence": "Microsoft MAI-Voice, via OpenRouter.",
   // Voce delle risposte su Microsoft MAI, nella scheda OpenRouter
   "vui.mai.title": "Microsoft MAI",
-  "vui.mai.offer": "Nuova voce predefinita: Rosa (Microsoft)",
-  "vui.mai.offer.use": "Usa",
-  "vui.mai.offer.keep": "Tieni Ugo",
+  "vui.mai.offer": "Rosa (Microsoft) legge le risposte con la tua chiave OpenRouter: è a pagamento.",
+  "vui.mai.offer.use": "Usa Rosa",
+  "vui.mai.offer.keep": "Tieni Ugo (gratis)",
   "vui.mai.voice": "Voce MAI",
   "vui.mai.local": "Voce locale di ripiego",
   "vui.mai.status.active": "MAI attivo",
@@ -561,6 +561,7 @@ export const voiceIt = {
   "voice.msg.plan.serverError": "Il servizio ha risposto con un errore. Riprova fra un momento.",
   "voice.msg.plan.unreachable": "Non ho raggiunto il servizio. Controlla la connessione e riprova.",
   "voice.msg.plan.noPlan": "Non sono riuscito a ottenere un piano. Riprova fra un momento.",
+  "voice.msg.plan.projectChanged": "Il progetto è cambiato: il piano era per un altro progetto e non è stato eseguito.",
 
   "voice.msg.host.noProject": "Non c'è nessun progetto aperto: dimmi in quale progetto avviare la sessione.",
   "voice.msg.host.noProcess": (paneId: string) => `Il pannello '${paneId}' non ha un processo vivo a cui inviare il messaggio.`,
@@ -571,6 +572,12 @@ export const voiceIt = {
     `Voce: non inviato, il pannello sta facendo una domanda. Rispondi nel terminale, poi ripeti. Il testo era: «${text}»`,
   "voice.msg.host.typingHeld": (text: string) =>
     `Voce: non inviato, qui c'è una riga scritta a metà. Inviala o cancellala, poi ripeti. Il testo era: «${text}»`,
+  "voice.msg.host.notReady": "il pannello non è pronto a ricevere testo; riprova tra poco",
+  "voice.msg.host.notReadyHeld": (text: string) =>
+    `Voce: non inviato, il pannello non è pronto a ricevere testo; riprova tra poco. Il testo era: «${text}»`,
+  "voice.msg.host.typedNoEnter": "il testo è nella casella ma l'Invio non è partito; guarda il pannello, non ripetere",
+  "voice.msg.host.typedNoEnterHeld": (text: string) =>
+    `Voce: il testo è nella casella ma l'Invio non è partito; guarda il pannello, non ripetere. Il testo era: «${text}»`,
   "voice.msg.host.searchDesktopOnly": "la ricerca nel progetto funziona solo nell'app desktop",
   "voice.msg.host.searchNoProject": "non c'è nessun progetto aperto in cui cercare",
   "voice.msg.host.searchUnreadable": (why: string) => `non riesco a leggere i file del progetto (${why})`,

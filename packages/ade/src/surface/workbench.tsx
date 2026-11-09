@@ -4214,11 +4214,21 @@ export function Workbench() {
       }),
     deadlineOf: (item) => mailDeadline(item.message),
     done: (item) => {
+      voiceSendDecisions.delete(item.id)
+      voiceSendRequested.delete(item.id)
       dropFrom(mailQueue, item)
       persistMail()
     },
-    hung: (item, afterMs) => giveUpOnMail(item, hungReceipt(item.message.kind, item.id, afterMs)),
-    failed: (item, error) => giveUpOnMail(item, failedReceipt(error)),
+    hung: (item, afterMs) => {
+      voiceSendDecisions.delete(item.id)
+      voiceSendRequested.delete(item.id)
+      giveUpOnMail(item, hungReceipt(item.message.kind, item.id, afterMs))
+    },
+    failed: (item, error) => {
+      voiceSendDecisions.delete(item.id)
+      voiceSendRequested.delete(item.id)
+      giveUpOnMail(item, failedReceipt(error))
+    },
   })
 
   /* A round of the mail, in three parts that never wait for each other (`createMailRound`). */
@@ -4621,8 +4631,6 @@ export function Workbench() {
         }
         return false
       }
-      voiceSendDecisions.delete(id)
-      voiceSendRequested.delete(id)
     }
 
     if (message.kind === "reply") {
@@ -6351,7 +6359,7 @@ export function Workbench() {
     // Dictated text goes into the line and is not submitted: it counts as typed.
     getRunningSession: (id) => {
       const session = running.get(id)
-      return session && { write: (text: string) => typeAsUser(id, text), kill: () => void closeSuspendedTree(session) }
+      return session && { session, write: (text: string) => typeAsUser(id, text), kill: () => void closeSuspendedTree(session) }
     },
     openFile: (path) => openFile(path),
     appendLine: (id, text, kind) => appendLine(id, text, kind),
@@ -6359,6 +6367,10 @@ export function Workbench() {
     permissions,
     isTyping: (id) => lineBegun(id),
     mayType: (id) => mayType(id),
+    typeLine: (paneId, session, text, options) => {
+      const real = running.get(paneId) ?? (session as any)?.session ?? session
+      return typeLineOutcome(real as SpawnedSession, text, { unlessBusy: true, ...options })
+    },
     questionOpen: (id) => questionOpen(id),
     answerPermission: (id, ans) => answerPermission(id, ans),
     confirmVoiceSend: (id, approved) => {
