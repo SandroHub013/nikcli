@@ -1237,10 +1237,10 @@ describe("no voice text into a pane asking a permission", () => {
   })
 
   /*
-   * Review of ade/pronto, B5: where the reading of menus misses a dialog the box is simply not there, and «invia» typed
-   * the words and the Enter into it. The voice asks the gate every other line asks.
+   * MOD2-5: where the gate says no line may go and no question is open, the message says
+   * the pane isn't ready, rather than claiming a permission is open.
    */
-  test("sendPrompt refuses where the gate says no line may go, with the same words, and keeps them over the pane", async () => {
+  test("sendPrompt refuses where the gate says no line may go, with the not-ready message when no question is open (MOD2-5)", async () => {
     const writtenLines: string[] = []
     const { deps, told } = createMockDeps({
       isRunning: () => true,
@@ -1252,10 +1252,15 @@ describe("no voice text into a pane asking a permission", () => {
     })
     const host = createAdeVoiceHost(deps)
 
-    await expect(host.sendPrompt("p1", "rifai la migrazione")).rejects.toThrow("permesso")
+    await expect(host.sendPrompt("p1", "rifai la migrazione")).rejects.toThrow("il pannello non è pronto a ricevere testo; riprova tra poco")
     expect(writtenLines).toEqual([])
     expect(told.map((note) => note.paneId)).toEqual(["p1"])
+    expect(told[0]!.text).toContain("il pannello non è pronto a ricevere testo")
     expect(told[0]!.text).toContain("rifai la migrazione")
+
+    // English locale
+    const hostEn = createAdeVoiceHost({ ...deps, locale: () => "en" })
+    await expect(hostEn.sendPrompt("p1", "rifai la migrazione")).rejects.toThrow("that pane isn't ready for text yet; try again in a moment")
 
     await host.sendPrompt("p2", "rifai la migrazione")
     expect(writtenLines.length).toBe(1)

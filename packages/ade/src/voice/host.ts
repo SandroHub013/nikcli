@@ -178,6 +178,15 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
         : "Quel pannello sta chiedendo un permesso: rispondi prima a quello. Il testo non è stato inviato.",
     )
   }
+  const refuseNotReady = (paneId: string, words?: string): never => {
+    if (words) deps.tellPane(paneId, t("voice.msg.host.notReadyHeld", words))
+    const currentLocale = deps.locale ? deps.locale() : locale()
+    throw new Error(
+      currentLocale === "en"
+        ? "that pane isn't ready for text yet; try again in a moment"
+        : "il pannello non è pronto a ricevere testo; riprova tra poco",
+    )
+  }
 
   /*
    * The agent that answers what the grammar cannot, built on first use.
@@ -391,7 +400,13 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
         throw new Error(t("voice.msg.host.typingPending"))
       }
       // A dialog the reading of menus does not know: the box is simply not there, and the Enter would answer it unseen.
-      if (deps.mayType && !deps.mayType(paneId)) refuse(paneId, singleLine)
+      if (deps.mayType && !deps.mayType(paneId)) {
+        if (!deps.permissions()[paneId] && !deps.questionOpen?.(paneId)) {
+          refuseNotReady(paneId, singleLine)
+        } else {
+          refuse(paneId, singleLine)
+        }
+      }
       if (deps.typeLine) {
         const outcome = await deps.typeLine(session, singleLine, { unlessBusy: true })
         if (outcome !== "sent") refuse(paneId, singleLine)
