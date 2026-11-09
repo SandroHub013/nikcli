@@ -177,6 +177,9 @@ describe("the chip says what to do, not what the terminal scraped (UX-8, DS-18)"
     expect(chipDetail({ activity: "ready" })).toBe("")
     expect(chipDetail({ activity: "Disponibile" })).toBe("")
     expect(chipDetail({ activity: "running" })).toBe("")
+    // UX-6: a finished session's report is «done»: «Chiusa · Fatto» said the same thing twice.
+    expect(chipDetail({ activity: "done" })).toBe("")
+    expect(chipDetail({ activity: "Fatto" })).toBe("")
     expect(chipDetail({ activity: "exited:2" })).toBe("Terminata (codice 2)")
     expect(chipDetail({})).toBe("")
   })

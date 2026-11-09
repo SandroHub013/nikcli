@@ -175,7 +175,7 @@ export function cleanStateDetail(raw: string | undefined): string {
 }
 
 /** Activity codes that only restate the state's word: «Pronta · Disponibile» says it twice. */
-const RESTATES_STATE = new Set(["ready", "running", "permission", "starting", "suspended"])
+const RESTATES_STATE = new Set(["ready", "running", "permission", "starting", "suspended", "done"])
 
 /**
  * What the chip says beside the state's word, from what the pane was told.
