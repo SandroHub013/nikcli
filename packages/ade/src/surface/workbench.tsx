@@ -500,7 +500,7 @@ import {
 } from "../session/composer"
 import { COMPOSER_LOG_KEY, composerLogEntry, disagreement, logWith, type ComposerLogReason } from "../session/composer-log"
 import { blindNow, createDeliverNow, turnKnown, type BlindHold, type DeliverNowChange } from "../session/deliver-now"
-import { parseQueue, queueToSave, waitsForRestore } from "../session/mail-queue"
+import { parseQueue, queueToSave, waitsForRestore, waitsForStart } from "../session/mail-queue"
 import {
   clientStoppedReading,
   createMailLanes,
@@ -2600,6 +2600,8 @@ export function Workbench() {
   onCleanup(watchLongTasks((text) => console.error(text)))
   // The panes being started back (`reopen`, the restore): recorded before their awaits, not after (ALTO 3).
   const reopening = oneAtATime()
+  /** The panes the boot means to start and has not finished starting: mail for them waits (`waitsForStart`). */
+  const restorePlanned = new Set<string>()
   /** Why the host refused each pane's last start (`onRefused`), so `ade-msg spawn` can tell its sender. Cleared when a start begins. */
   const startRefusals = new Map<string, string>()
   const [runningTick, setRunningTick] = createSignal(0)
@@ -5630,7 +5632,16 @@ export function Workbench() {
     if (!session && waitsForRestore({ replayed: replayedMail.has(id), paneExists: paneExists(target.pane.id), sinceBoot: Date.now() - loadedAt }))
       return false
     // Between the old process and the new one of a relaunch: not a closed pane, so what was held for it waits (review B4).
-    if (!session && running.relaunching(target.pane.id)) {
+    if (
+      !session &&
+      (running.relaunching(target.pane.id) ||
+        waitsForStart({
+          paneExists: paneExists(target.pane.id),
+          reopening: reopening.busy(target.pane.id),
+          plannedAtBoot: restorePlanned.has(target.pane.id),
+          sinceBoot: Date.now() - loadedAt,
+        }))
+    ) {
       // Fresh mail too: the sender hears now, and `held` makes the branch below tell the truth if the start then fails (re-review B8).
       if (!held.has(id)) {
         held.add(id)
@@ -7420,6 +7431,8 @@ export function Workbench() {
       }
       restored = state
       setWb(fromWorkspaceState(state))
+      for (const pane of sessionsToResume(state)) restorePlanned.add(pane.id)
+      for (const pane of liveToReopen(wb().panes, restorePlanned, state)) restorePlanned.add(pane.id)
       // The suspended sessions' queues, now that their panes are back (P1-C6).
       // Also for a pane resumed just before ADE closed: its mail waits for the session to start again.
       heldLines.push(...parseSuspendedMail(readStored(SUSPENDED_MAIL_KEY)).filter((line) => paneExists(line.paneId)))
@@ -7524,9 +7537,11 @@ export function Workbench() {
             setWb((w) => updatePane(w, session.pane.id, { resumeId: undefined }))
             tellPane(session.pane.id, t("resume.shared", sharedWith.pane.title))
           }
-          void reopening.run(session.pane.id, () =>
-            startProcess(session.pane.id, session.pane.agent, session.pane.task ?? "", plan),
-          )
+          void reopening
+            .run(session.pane.id, () =>
+              startProcess(session.pane.id, session.pane.agent, session.pane.task ?? "", plan),
+            )
+            .finally(() => restorePlanned.delete(session.pane.id))
         }
 
         /*
@@ -7541,9 +7556,10 @@ export function Workbench() {
         // With the claims just handed out: a pane planned `here` has not reported its id yet.
         const claims = restoreClaims(planned)
         const plannedIds = new Set(sessions.map((session) => session.pane.id))
-        for (const pane of liveToReopen(wb().panes, plannedIds, restored)) void reopen(pane, undefined, claims)
-      }
-    }
+        for (const pane of liveToReopen(wb().panes, plannedIds, restored))
+          void reopen(pane, undefined, claims).finally(() => restorePlanned.delete(pane.id))
+      } else restorePlanned.clear()
+    } else restorePlanned.clear()
 
     /*
      * The splash stays up for a moment even when there was nothing to wait

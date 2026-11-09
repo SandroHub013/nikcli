@@ -37,6 +37,20 @@ export function waitsForRestore(input: { replayed: boolean; paneExists: boolean;
   return input.replayed && input.paneExists && input.sinceBoot < RESTORE_GRACE_MS
 }
 
+/**
+ * Whether mail for a pane with no process waits for one that is on its way: «Riprendi» under way, or a start the boot has
+ * planned and not reached yet. It used to be refused as «non è attiva» (WB2-2). A plan that never starts ends with the grace,
+ * and a start under way ends by itself. A pane the user closes meanwhile is refused, as ever.
+ */
+export function waitsForStart(input: {
+  paneExists: boolean
+  reopening: boolean
+  plannedAtBoot: boolean
+  sinceBoot: number
+}): boolean {
+  return input.paneExists && (input.reopening || (input.plannedAtBoot && input.sinceBoot < RESTORE_GRACE_MS))
+}
+
 /** The kinds that wait for a free session: the ones answered «in coda». */
 function isMail(message: Message): message is Message & { kind: "send" | "ask"; to: string } {
   return message.kind === "send" || message.kind === "ask"

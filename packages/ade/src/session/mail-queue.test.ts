@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
-import { QUEUE_MAX_AGE_MS, RESTORE_GRACE_MS, parseQueue, queueToSave, waitsForRestore, type QueuedMessage } from "./mail-queue"
+import { QUEUE_MAX_AGE_MS, RESTORE_GRACE_MS, parseQueue, queueToSave, waitsForRestore, waitsForStart, type QueuedMessage } from "./mail-queue"
 import { suspendedMailToSave } from "./suspend"
+import { codeOf } from "../test-support/source-text"
 import type { Message } from "./mailbox"
 
 /*
@@ -163,5 +164,45 @@ describe("the data-safety wiring in the workbench", () => {
     expect(save).toBeGreaterThan(block)
     expect(caught).toBeGreaterThan(save)
     expect(source).toContain("retryUnreadableCopy(localStorage, Date.now())")
+  })
+})
+
+describe("mail for a session on its way back (audit WB2-2)", () => {
+  const input = { paneExists: true, reopening: false, plannedAtBoot: false, sinceBoot: 1_000 }
+
+  test("«Riprendi» under way: it waits, where it used to be refused as not active", () => {
+    expect(waitsForStart({ ...input, reopening: true })).toBe(true)
+  })
+
+  test("planned at boot and not started yet: it waits", () => {
+    expect(waitsForStart({ ...input, plannedAtBoot: true })).toBe(true)
+  })
+
+  test("a plan that never starts is cut off by the grace", () => {
+    expect(waitsForStart({ ...input, plannedAtBoot: true, sinceBoot: RESTORE_GRACE_MS })).toBe(false)
+  })
+
+  test("a start under way has no grace to run out: it ends by itself", () => {
+    expect(waitsForStart({ ...input, reopening: true, sinceBoot: RESTORE_GRACE_MS * 2 })).toBe(true)
+  })
+
+  test("a pane the user has closed is refused, as before", () => {
+    expect(waitsForStart({ ...input, paneExists: false, reopening: true, plannedAtBoot: true })).toBe(false)
+  })
+
+  test("nothing on its way: refused, as before", () => {
+    expect(waitsForStart(input)).toBe(false)
+  })
+
+  test("lint: deliverOne asks about the start, with the receipt of a relaunch, and the boot says what it plans", () => {
+    const source = codeOf(readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8"))
+    expect(source).toContain(
+      codeOf("if (!session && (running.relaunching(target.pane.id) || waitsForStart({ paneExists: paneExists(target.pane.id), reopening: reopening.busy(target.pane.id), plannedAtBoot: restorePlanned.has(target.pane.id), sinceBoot: Date.now() - loadedAt }))) {"),
+    )
+    expect(source).toContain(codeOf("for (const pane of sessionsToResume(state)) restorePlanned.add(pane.id)"))
+    expect(source).toContain(codeOf("for (const pane of liveToReopen(wb().panes, restorePlanned, state)) restorePlanned.add(pane.id)"))
+    expect(source).toContain(codeOf(".finally(() => restorePlanned.delete(session.pane.id))"))
+    expect(source).toContain(codeOf(".finally(() => restorePlanned.delete(pane.id))"))
+    expect(source).toContain(codeOf("} else restorePlanned.clear()"))
   })
 })
