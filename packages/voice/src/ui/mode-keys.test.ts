@@ -13,37 +13,63 @@ describe("UX2-8: keyboard support for alertsListen switch", () => {
   })
 
   test("settings state exposes alertsListenKeys that updates alertsListen on radio selection", () => {
-    const updates: any[] = []
-    const mockEngine = {
-      isRunning: () => false,
-      status: () => "idle",
-      micLevel: () => 0,
-      partialTranscript: () => "",
-      lastSpoken: () => "",
-      listenSpend: () => ({ current: 0, limit: 0 }),
+    class FakeElement {
+      constructor(
+        public readonly role: string,
+        public readonly attributes: Record<string, string> = {},
+        public readonly parent?: FakeElement,
+      ) {}
+      getAttribute(name: string) {
+        return this.attributes[name] ?? (name === "role" ? this.role : null)
+      }
+      closest(selector: string): FakeElement | null {
+        if (selector === '[role="radio"]' && this.role === "radio") return this
+        if (selector === '[role="radiogroup"]') {
+          if (this.role === "radiogroup") return this
+          return this.parent?.closest(selector) ?? null
+        }
+        return null
+      }
     }
-    const state = createVoiceSettingsState({
-      engine: mockEngine as any,
-      settings: { ...DEFAULT_VOICE_SETTINGS, spokenAlerts: true, alertsListen: false },
-      onChange: (next) => updates.push(next),
-    })
 
-    expect((state as any).alertsListenKeys).toBeDefined()
-    const group = document.createElement("div")
-    group.setAttribute("role", "radiogroup")
-    const radioOn = document.createElement("div")
-    radioOn.setAttribute("role", "radio")
-    radioOn.setAttribute("data-value", "on")
-    group.appendChild(radioOn)
+    const prevHtmlElement = (globalThis as any).HTMLElement
+    ;(globalThis as any).HTMLElement = FakeElement
 
-    const event = {
-      key: " ",
-      currentTarget: group,
-      target: radioOn,
-      preventDefault: () => {},
-    } as unknown as KeyboardEvent
+    try {
+      const updates: any[] = []
+      const mockEngine = {
+        isRunning: () => false,
+        status: () => "idle",
+        micLevel: () => 0,
+        partialTranscript: () => "",
+        lastSpoken: () => "",
+        listenSpend: () => ({ current: 0, limit: 0 }),
+      }
+      const state = createVoiceSettingsState({
+        engine: mockEngine as any,
+        settings: { ...DEFAULT_VOICE_SETTINGS, spokenAlerts: true, alertsListen: false },
+        onChange: (next) => updates.push(next),
+      })
 
-    ;(state as any).alertsListenKeys(event)
-    expect(updates.some((u) => u.alertsListen === true)).toBe(true)
+      expect((state as any).alertsListenKeys).toBeDefined()
+      const group = new FakeElement("radiogroup")
+      const radioOn = new FakeElement("radio", { "data-value": "on" }, group)
+
+      let prevented = false
+      const event = {
+        key: " ",
+        currentTarget: group,
+        target: radioOn,
+        preventDefault: () => {
+          prevented = true
+        },
+      } as unknown as KeyboardEvent
+
+      ;(state as any).alertsListenKeys(event)
+      expect(prevented).toBe(true)
+      expect(updates.some((u) => u.alertsListen === true)).toBe(true)
+    } finally {
+      ;(globalThis as any).HTMLElement = prevHtmlElement
+    }
   })
 })
