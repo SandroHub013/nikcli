@@ -842,6 +842,29 @@ export function confirmDialog(rows: readonly string[]): PermissionRequest | unde
   }
 }
 
+// `@clack/prompts`' confirm, with its Unicode glyphs or its ASCII ones: «│  ○ Yes / ● No» and «|    Yes / > No», then its end.
+const CLACK_YES_NO_RE = /^[│|] +(?:[●○>] +)?Yes \/ +(?:[●○>] +)?No *$/u
+const CLACK_END_RE = /^[└—] *$/u
+
+/**
+ * The «Trust project» prompt ragu asks before its TUI (0.2.15 on, `cli/bootstrap.ts`), the last thing on the screen. Its `y`
+ * and `n` answer at once, and `h j k l` turn the answer round, so the first y of a task («You are ...») would grant the
+ * trust. Read by its two last rows: a reply that quotes them has ragu's own box under it.
+ */
+export function clackConfirm(rows: readonly string[]): PermissionRequest | undefined {
+  let last = rows.length - 1
+  while (last >= 0 && !rows[last]!.trim()) last--
+  if (last < 1 || !CLACK_END_RE.test(rows[last]!) || !CLACK_YES_NO_RE.test(rows[last - 1]!)) return undefined
+  return {
+    what: "Trust this project?",
+    kind: "unknown",
+    answers: [
+      { intent: classifyAnswer("Yes"), label: "Yes", send: "y", tone: "secondary" },
+      { intent: classifyAnswer("No"), label: "No", send: "n", tone: "primary" },
+    ],
+  }
+}
+
 const TRUST_ANSWER_RE = /^\s*[│┃║]?\s*([❯›▶➤>])?\s*(?:\d[.)]\s*)?(yes, i trust this folder|no, exit)\s*[│┃║]?\s*$/i
 
 /**

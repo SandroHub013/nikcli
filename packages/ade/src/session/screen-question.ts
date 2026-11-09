@@ -13,6 +13,7 @@
  */
 
 import {
+  clackConfirm,
   confirmDialog,
   detectPermission,
   menuAboveLines,
@@ -43,7 +44,7 @@ export function bottomRows(terminal: ScreenTerminal): string[] {
 export type ScreenMenu = PermissionRequest & { under: number }
 
 function menuOnRows(rows: readonly string[], agentId: string): ScreenMenu | undefined {
-  const dialog = agentId === "ragu" ? confirmDialog(rows) : undefined
+  const dialog = agentId === "ragu" ? (confirmDialog(rows) ?? clackConfirm(rows)) : undefined
   if (dialog) return { ...dialog, under: 0 }
   const last = detectPermission([...rows], agentId, { screen: true })
   if (last) return { ...last, under: 0 }
