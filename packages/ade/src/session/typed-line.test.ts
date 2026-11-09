@@ -244,3 +244,26 @@ test("lint: the terminal asks whether a question is open before it counts a key"
   expect(renderer).toContain("isAnswerKey(data) && !isTyping(deps.records.typed.get(current().id)) && deps.menuOpen(current().id, data)")
   expect(workbench).toMatch(/promptAnswered,\r?\n\s+menuOpen: menuOnScreen,/)
 })
+
+/*
+ * SES-10: a terminal that reports keys with the kitty protocol sends Ctrl+Enter as CSI 13;5u and Shift+Enter as
+ * CSI 13;2u. Both went to the generic «a sequence» branch, which neither types nor sends, so a draft stayed counted
+ * after Ctrl+Enter had sent it (and the pane looked half-written for ever), and a Shift+Enter newline was not counted.
+ */
+describe("Enter in the kitty keyboard protocol (SES-10)", () => {
+  const draft: TypedLine = { pending: 5, at: 1 }
+
+  test("Ctrl+Enter sends: the draft is gone", () => {
+    expect(isTyping(typedAfter(draft, "\u001b[13;5u", 2))).toBe(false)
+    expect(typedAfter(draft, "\u001b[13;5u", 2)).toBeUndefined()
+  })
+
+  test("Shift+Enter is a newline in the draft: one more", () => {
+    expect(typedAfter(draft, "\u001b[13;2u", 2)).toEqual({ pending: 6, at: 2 })
+  })
+
+  test("any other sequence is still neither typing nor sending", () => {
+    expect(typedAfter(draft, "\u001b[A", 2)?.pending).toBe(5)
+    expect(typedAfter(draft, "\u001b[13;3u", 2)?.pending).toBe(5)
+  })
+})
