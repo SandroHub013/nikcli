@@ -484,6 +484,7 @@ import {
   composerLine,
   composerOf,
   cursorSaysDialog,
+  dialogOver,
   enterBlocked,
   followKeys,
   forgetRefocus,
@@ -3551,8 +3552,15 @@ export function Workbench() {
    * this was reviewed the miss was in `isFree` alone, and the Architect says he had
    * missed the rest here too on the first pass.
    */
+  const dialogUp = (paneId: string) => {
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    return hasTerminal(paneId) && dialogOver(getTerminal(paneId).terminal, pane?.agent ?? pane?.model ?? "")
+  }
   const questionOpen = (paneId: string) =>
-    isQuestionOpen(permissions()[paneId], activityOf.get(paneId)) || modeTracker.heldOpen(paneId) || screenAsks(paneId)
+    isQuestionOpen(permissions()[paneId], activityOf.get(paneId)) ||
+    modeTracker.heldOpen(paneId) ||
+    screenAsks(paneId) ||
+    dialogUp(paneId)
 
   /*
    * The agent's own box, read off the screen when typing is weighed, and never per chunk. What xterm has not parsed may be
@@ -9903,6 +9911,8 @@ export function Workbench() {
         // A menu in front of the task: said once, here and to whoever asked for the task. Its last moment on the screen
         // is where the wait for a drawn screen starts again: what comes after an answer is still being drawn.
         let menuTold = false
+        // One line to the sender, however many questions the opening asks: each is a turn it pays for.
+        let senderHeard = false
         let silenceTold = false
         let menuAt: number | undefined
         // The agent's box, where ADE knows it: read at most four times a second, and steady before the task goes.
@@ -9987,11 +9997,16 @@ export function Workbench() {
             if (!menuTold && drawn) {
               menuTold = true
               if (!trustHandled) tellPane(paneId, t("task.heldByMenu"))
-              if (request) {
+              if (request && !senderHeard) {
+                senderHeard = true
                 const reader = mailPanes().find((pane) => pane.id === paneId)
                 tellSender(request.from, formatHeldByMenu({ id: request.id, kind: "spawn" }, reader))
               }
             }
+          } else if (menuTold && !trustHandled && drawn) {
+            // Answered, and the task may wait on: the note goes at once, as the mail's does.
+            menuTold = false
+            dropPaneNote(paneId, t("task.heldByMenu"))
           }
           const decision = decideOpening({
             ...clockAfterMenu({ startedAt, ...openingBytes }, menuAt),

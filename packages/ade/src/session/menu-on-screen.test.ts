@@ -811,6 +811,19 @@ describe("lint: the workbench's wiring", () => {
     )
   })
 
+  test("lint: a dialog of ragu's holds a line like any question: the offer, the click, the first task and the mail all ask here", () => {
+    expect(source).toContain(codeOf("isQuestionOpen(permissions()[paneId], activityOf.get(paneId)) || modeTracker.heldOpen(paneId) || screenAsks(paneId) || dialogUp(paneId)"))
+    const up = between("const dialogUp =", "const questionOpen =")
+    expect(up).toContain(codeOf('hasTerminal(paneId) && dialogOver(getTerminal(paneId).terminal, pane?.agent ?? pane?.model ?? "")'))
+  })
+
+  test("lint: the note about a question goes when the question has gone, and a later one tells the pane again, but not the sender", () => {
+    const poll = between("if (starting.typesTask) {", "openingPolls.add(poll)")
+    expect(poll).toContain(codeOf("} else if (menuTold && !trustHandled && drawn) {"))
+    expect(poll).toContain(codeOf('menuTold = false dropPaneNote(paneId, t("task.heldByMenu"))'))
+    expect(poll).toContain(codeOf("if (request && !senderHeard) { senderHeard = true"))
+  })
+
   test("lint: the first task asks the screen on every pass, and says what it waits for", () => {
     const poll = between("if (starting.typesTask) {", "openingPolls.add(poll)")
     expect(poll).toContain(codeOf('const asked = box !== "ready" && questionOpen(paneId)'))
