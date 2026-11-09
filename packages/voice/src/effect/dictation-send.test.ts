@@ -444,7 +444,8 @@ describe("a dictation goes to the pane it was started for", () => {
     )
 
     expect(host.calls.some((c) => c.method === "sendPrompt")).toBe(false)
-    expect(visible).toContain("Il progetto è cambiato: il piano era per un altro progetto e non è stato eseguito.")
-    expect(speaker.spoken).toContain("Il progetto è cambiato: il piano era per un altro progetto e non è stato eseguito.")
+    const refusal = "Il progetto è cambiato: il piano era per un altro progetto e non è stato eseguito."
+    expect(visible).toContain(refusal)
+    expect(speaker.spoken.filter((s) => s === refusal).length).toBe(1)
   })
 })
