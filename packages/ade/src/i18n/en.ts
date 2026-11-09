@@ -355,8 +355,8 @@ export const en: Messages = {
   "install.paneNote": (agent) =>
     `When the install ends, ADE checks by itself and reopens New session with ${agent} ready. On an error the terminal usually stays open.`,
   "install.stillMissing": "I can't find it yet. Open New session and press Check again on its card.",
-  "install.readyElsewhere": (agent) => `${agent} is installed: open New session (Ctrl+N) to start it.`,
-  "install.autoFoundElsewhere": (agent) => `${agent} installed: open New session (Ctrl+N) to start it.`,
+  "install.readyElsewhere": (agent) => `${agent} is installed: open New session (Ctrl+Shift+P › New session) to start it.`,
+  "install.autoFoundElsewhere": (agent) => `${agent} installed: open New session (Ctrl+Shift+P › New session) to start it.`,
   "install.autoFound": (agent) => `${agent} is installed: you can start it from New session now.`,
   "install.source": (source, date) => `Source: ${source}, checked on ${date}`,
   "install.caveat.subscription": "Using it needs a GitHub Copilot subscription.",

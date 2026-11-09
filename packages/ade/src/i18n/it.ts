@@ -364,8 +364,8 @@ export const it = {
   "install.paneNote": (agent: string) =>
     `A installazione finita ADE ricontrolla da sola e riapre Nuova sessione con ${agent} pronto. Se l'installazione dà errore, di solito il terminale resta aperto.`,
   "install.stillMissing": "Non lo trovo ancora. Apri Nuova sessione e premi Ricontrolla sulla sua scheda.",
-  "install.readyElsewhere": (agent: string) => `${agent} è installato: apri Nuova sessione (Ctrl+N) per avviarlo.`,
-  "install.autoFoundElsewhere": (agent: string) => `${agent} installato: apri Nuova sessione (Ctrl+N) per avviarlo.`,
+  "install.readyElsewhere": (agent: string) => `${agent} è installato: apri Nuova sessione (Ctrl+Maiusc+P › Nuova sessione) per avviarlo.`,
+  "install.autoFoundElsewhere": (agent: string) => `${agent} installato: apri Nuova sessione (Ctrl+Maiusc+P › Nuova sessione) per avviarlo.`,
   "install.autoFound": (agent: string) => `${agent} installato: ora puoi avviarlo da Nuova sessione.`,
   "install.source": (source: string, date: string) => `Fonte: ${source}, controllata il ${date}`,
   "install.caveat.subscription": "Per usarlo serve un abbonamento GitHub Copilot.",

@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
+import { resetLocaleForTests, t } from "../i18n"
 import { AGENTS } from "./agents"
 import {
   INSTALLS,
@@ -208,5 +209,25 @@ describe("the day a source was read (UX-15)", () => {
 
   test("a day it cannot read is shown as it came, not as «Invalid Date»", () => {
     expect(checkedOn("ieri", "it")).toBe("ieri")
+  })
+
+  describe("UX2-9: install ready advice uses palette shortcut instead of Ctrl+N", () => {
+    afterEach(() => resetLocaleForTests("it"))
+
+    test("tells user to open New session via palette in Italian", () => {
+      resetLocaleForTests("it")
+      expect(t("install.readyElsewhere", "Claude Code")).toContain("Ctrl+Maiusc+P › Nuova sessione")
+      expect(t("install.readyElsewhere", "Claude Code")).not.toContain("Ctrl+N")
+      expect(t("install.autoFoundElsewhere", "Claude Code")).toContain("Ctrl+Maiusc+P › Nuova sessione")
+      expect(t("install.autoFoundElsewhere", "Claude Code")).not.toContain("Ctrl+N")
+    })
+
+    test("tells user to open New session via palette in English", () => {
+      resetLocaleForTests("en")
+      expect(t("install.readyElsewhere", "Claude Code")).toContain("Ctrl+Shift+P › New session")
+      expect(t("install.readyElsewhere", "Claude Code")).not.toContain("Ctrl+N")
+      expect(t("install.autoFoundElsewhere", "Claude Code")).toContain("Ctrl+Shift+P › New session")
+      expect(t("install.autoFoundElsewhere", "Claude Code")).not.toContain("Ctrl+N")
+    })
   })
 })
