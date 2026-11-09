@@ -894,7 +894,11 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
   observer.observe(element)
   applyFit()
 
+  // A detach runs once (SES-13): the pane's cleanup calls it again after a second attach has already run it.
+  let detached = false
   const detach = () => {
+    if (detached) return
+    detached = true
     observer.disconnect()
     stopCellWatch()
     settler.cancel()
@@ -904,6 +908,8 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
     stopMenuClicks?.()
     modeWatch?.dispose()
     if (modeTimer) clearTimeout(modeTimer)
+    // The fields below are the session's, shared by every attach: once another attach has set them they are not ours.
+    if (session.detach !== detach) return
     session.uncover?.()
     session.uncover = undefined
     session.copyBlocked = undefined
