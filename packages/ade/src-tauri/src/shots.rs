@@ -1093,11 +1093,12 @@ fn check_shot(watch: &Watch, path: &str) -> Result<PathBuf, String> {
 ///
 /// Handed over as bytes rather than as a path the page could load directly: the
 /// webview has no access to the filesystem, and opening one up so it could read
-/// a picture would be a far larger grant than reading the picture.
+/// a picture would be a far larger grant than reading the picture. A raw IPC
+/// response and not a `Vec<u8>`, which goes as a JSON array of numbers (RS-18).
 #[tauri::command]
-pub async fn shot_bytes(watch: tauri::State<'_, Watch>, path: String) -> Result<Vec<u8>, String> {
+pub async fn shot_bytes(watch: tauri::State<'_, Watch>, path: String) -> Result<tauri::ipc::Response, String> {
     let file = check_shot(&watch, &path)?;
-    std::fs::read(&file).map_err(|e| format!("non leggibile: {e}"))
+    std::fs::read(&file).map(tauri::ipc::Response::new).map_err(|e| format!("non leggibile: {e}"))
 }
 
 /// Moves a screenshot to the Recycle Bin (the Trash on a Mac). Used by the tray's

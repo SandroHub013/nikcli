@@ -203,7 +203,7 @@ export function createShotSource(inTauri: boolean, ask: typeof call = call): Sho
     },
     load: async (path) => {
       if (!inTauri) return null
-      const bytes = await call<number[] | null>("shot_bytes", { path }).catch(() => null)
+      const bytes = await ask<ArrayBuffer | null>("shot_bytes", { path }).catch(() => null)
       return bytes ? new Uint8Array(bytes) : null
     },
     notice,
