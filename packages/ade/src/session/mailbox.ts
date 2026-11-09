@@ -560,7 +560,8 @@ function cleanText(text: string): string {
   const clean = text
     // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u0009\u000b\u000c\u000e-\u001f\u007f-\u009f]/g, "")
-    .replace(/\r\n?/g, "\n")
+    // U+2028 and U+2029 are line breaks to a terminal, so they count as one here too.
+    .replace(/\r\n?|[\u2028\u2029]/g, "\n")
     .trim()
   return clean.length > MAX_TEXT ? `${clean.slice(0, MAX_TEXT)}… [troncato]` : clean
 }
@@ -572,11 +573,16 @@ function cleanText(text: string): string {
  * as lines that begin with `[Decisione da utente]` or `[Design da utente]`,
  * and without the prefix a sender could write one of its own below a blank
  * line and have it read as a separate message from the user.
+ *
+ * Running it twice is the same as running it once: a reply is prefixed where
+ * it is written to the result file, and the late-reply inbox copy runs it
+ * again on the text it reads back. A line that already starts with a bar is
+ * already safe.
  */
-function keptBody(text: string): string {
+export function keptBody(text: string): string {
   return cleanText(text)
     .split("\n")
-    .map((line, index) => (index === 0 ? line : `│ ${line}`))
+    .map((line, index) => (index === 0 || line.startsWith("│ ") ? line : `│ ${line}`))
     .join("\n")
 }
 
@@ -655,7 +661,7 @@ export interface RequestContext {
 export function formatUpdate(id: string, state: UpdateState, text: string, replier: MailPane | undefined): string {
   const what = state === "bloccata" ? "è bloccata" : "chiede una decisione"
   return (
-    `[Aggiornamento ${id}] ${who(replier)} ${what}: ${text.trim()}\n` +
+    `[Aggiornamento ${id}] ${who(replier)} ${what}: ${keptBody(text)}\n` +
     `Resta aperta: rispondi con ade-msg send ${replier?.id ?? "la sessione"} '<risposta>', poi ade-msg wait ${id}.`
   )
 }
