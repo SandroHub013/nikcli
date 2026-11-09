@@ -102,6 +102,12 @@ export interface PaneRendererDeps {
   menuEnter: (id: string) => void
   /** Whether a menu stands in the pane now and `key` typed into it would be its answer (`menuOnScreen`). */
   menuOpen: (id: string, key: string) => boolean
+  /** Whether the pane offers «Consegna ora»: its agent's box is not recognised (`session/deliver-now.ts`). */
+  deliverNowOffered: (id: string) => boolean
+  /** The click: one message, with its Enter, on what shows now. */
+  deliverNow: (id: string) => void
+  /** The keys and the focus reports on their way to a pane (`followKeys`). */
+  followKeys: (id: string, data: string) => void
   /** An Esc or a Ctrl-C typed in the pane, which Claude Code reports to no hook. */
   interrupted: (id: string) => void
   /** "Riprova" on a session that failed. */
@@ -495,6 +501,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         })()}
         mail={deps.mailWaiting()[current().id]}
         notices={current().notices}
+        deliverNowOffered={deps.deliverNowOffered(current().id)}
         onDismissNotices={() => deps.dismissNotices(current().id)}
         onMail={() => deps.showMail(current().id)}
         onLink={(request) => deps.openLink(current().id, request)}
@@ -508,6 +515,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
            * for every agent in the catalogue and for a plain shell, since it
            * never asks what is running: see `session/typing.ts`.
            */
+          deps.followKeys(current().id, data)
           // Asked before the key is written: a key that answers a menu on screen is not a line begun (F2).
           const menuOpen = isAnswerKey(data) && !isTyping(deps.records.typed.get(current().id)) && deps.menuOpen(current().id, data)
           deps.records.typed.update(current().id, (line) => typedAfter(line, data, Date.now(), menuOpen))
@@ -587,7 +595,9 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
                       onClick: () => deps.restart(current()),
                     },
                   ]
-                : undefined
+                : deps.deliverNowOffered(current().id)
+                  ? [{ label: t("pane.deliverNow"), tone: "primary" as const, onClick: () => deps.deliverNow(current().id) }]
+                  : undefined
         }
         inputHint={current().suspended && !deps.isRunning(current().id) ? t("pane.input.suspended") : undefined}
         lines={current().lines}

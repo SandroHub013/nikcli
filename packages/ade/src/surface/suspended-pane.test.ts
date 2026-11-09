@@ -27,9 +27,9 @@ afterEach(() => {
   cleanup = undefined
 })
 
-function mountSession(pane: { suspended?: true; status: "idle" | "done"; activity?: string }) {
+function mountSession(pane: { suspended?: true; status: "idle" | "done"; activity?: string }, offered = false) {
   resetLocaleForTests("it")
-  const calls = { resume: [] as string[], restart: [] as string[] }
+  const calls = { resume: [] as string[], restart: [] as string[], deliverNow: [] as string[] }
   const host = document.createElement("div")
   document.body.append(host)
   const dispose = createRoot((dispose) => {
@@ -60,6 +60,8 @@ function mountSession(pane: { suspended?: true; status: "idle" | "done"; activit
       isRunning: () => false,
       sessionFor: () => undefined,
       suspendCheck: () => ({ ok: false, reason: "notRunning" }),
+      deliverNowOffered: () => offered,
+      deliverNow: (id: string) => void calls.deliverNow.push(id),
       resume: (id: string) => void calls.resume.push(id),
       restart: (pane: { id: string }) => void calls.restart.push(pane.id),
     } as never)
@@ -107,6 +109,18 @@ test("an exited session that is not suspended keeps its own Riprendi, which rest
   expect(calls.resume).toEqual([])
 })
 
+test("a pane offering «Consegna ora» stays as it is: nobody is asking for a permission (UX2-1)", async () => {
+  const { host, calls } = mountSession({ status: "idle" }, true)
+  await frames()
+  expect(host.querySelector('[data-component="session-pane"]')?.getAttribute("data-state")).toBe("idle")
+  expect(host.textContent).toContain("la posta aspetta te")
+  expect(host.textContent).not.toContain("Permesso")
+  const button = host.querySelector<HTMLButtonElement>('[data-slot="pane-answer"]')!
+  expect(button.textContent).toContain("Consegna ora")
+  button.click()
+  expect(calls.deliverNow).toEqual(["s1"])
+})
+
 test("the header's Sospendi, off, stays visible and says why", async () => {
   const { host } = mountSession({ status: "idle" })
   await frames()
@@ -114,4 +128,19 @@ test("the header's Sospendi, off, stays visible and says why", async () => {
   expect(button).not.toBeNull()
   expect(button!.getAttribute("aria-disabled")).toBe("true")
   expect(button!.title).toBe("Sospendi non disponibile: non ha un processo vivo")
+})
+
+test("the dock says when it holds «Consegna ora», the one action a short pane floats over its terminal", async () => {
+  const dock = async (offered: boolean) => {
+    const { host } = mountSession({ status: "done", activity: "done" }, offered)
+    await frames()
+    const found = host.querySelector('[data-slot="pane-dock"]')
+    expect(found).not.toBeNull()
+    const marked = found!.hasAttribute("data-offer")
+    cleanup?.()
+    cleanup = undefined
+    return marked
+  }
+  expect(await dock(false)).toBe(false)
+  expect(await dock(true)).toBe(true)
 })

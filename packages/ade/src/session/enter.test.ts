@@ -69,10 +69,9 @@ describe("no Enter over what the user started writing during the wait (review ar
       require("node:path").join(import.meta.dir, "../surface/workbench.tsx"),
       "utf8",
     )
+    expect(source).toContain("const typedDuring = () => paneId !== undefined && typedSince(records.typed.get(paneId), typedAt)")
     const call = source.slice(source.indexOf("const outcome = await typeThenEnter({"))
-    expect(call.slice(0, 1_200)).toContain(
-      "typedDuring: () => paneId !== undefined && (records.typed.get(paneId)?.at ?? -1) >= typedAt",
-    )
+    expect(call.slice(0, 1_400)).toContain("typedDuring,")
   })
 })
 

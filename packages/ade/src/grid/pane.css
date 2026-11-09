@@ -38,7 +38,8 @@
    * further down — the terminal ground and the focus ring, both declared with
    * the `--ade-pane-*` variables rather than by overriding the shell.
    */
-  container-type: inline-size;
+  /* Both axes: the width for the header's queries, the height for a short pane's notes (at the end of this file). */
+  container-type: size;
 }
 
 [data-component="session-pane"][data-status="working"],
@@ -1491,4 +1492,34 @@
 .hA .act[aria-disabled="true"]:hover {
   background: transparent;
   color: var(--ade-text-weak);
+}
+
+/*
+ * In a short pane ADE's note and its action float over the terminal instead of taking its rows.
+ *
+ * Six panes at 1440x900 are 76x13. The note and «Consegna ora» took them down to 76x6, and on ragu to 76x4: the agent's box
+ * no longer fitted, the reading said it was not there, and the note that explained the waiting mail kept it waiting (live
+ * test 5, FAIL 1). Floated, the terminal keeps every row with or without them, so nothing resizes under a click either.
+ * The note covers the oldest rows, not the box at the bottom, and the × is still there. 360 px is the top of that case:
+ * two rows of panes on the same window are about 400 px, and there a strip costs rows the box can spare.
+ */
+@container (max-height: 360px) {
+  [data-slot="pane-notice"] {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: calc(var(--ade-z-over) - 1);
+    max-height: 70cqh;
+    overflow-y: auto;
+  }
+
+  [data-slot="pane-terminal"] ~ [data-slot="pane-dock"][data-offer] {
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    z-index: calc(var(--ade-z-over) - 1);
+    border-top: 0;
+    background: none;
+  }
 }

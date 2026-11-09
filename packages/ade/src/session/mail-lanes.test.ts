@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, jest, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { every } from "../host/every"
+import { ENTER_PATIENCE_MS } from "./enter"
+import { PASTE_SETTLE_MAX_MS } from "./typing"
 import {
   CLIENT_READS_RECEIPT_MS,
   MAIL_LONG_MS,
@@ -482,8 +484,8 @@ describe("lint: the workbench's round waits for nothing slow", () => {
   })
 
   test("what is typed checks again after the await, so two parts of the round cannot both type", () => {
-    expect(source).toContain("(await freeNow(host, item.paneId)) && !linesInFlight.has(item.paneId)")
-    expect(source).toContain("!(await freeNow(host, target.pane.id)) || linesInFlight.has(target.pane.id)")
+    expect(source).toContain("(await freeNow(host, item.paneId, !item.notice)) && !linesInFlight.has(item.paneId)")
+    expect(source).toContain("!(await freeNow(host, target.pane.id, true)) || linesInFlight.has(target.pane.id)")
     expect(source).toContain("linesInFlight.track(paneId, deliverTextNow(")
   })
 })
@@ -495,6 +497,17 @@ describe("who hears of a message ADE gave up on", () => {
 
   test("a client within its wait still reads the receipt", () => {
     expect(clientStoppedReading({ ...reading, now: at + 1000 })).toBe(false)
+  })
+
+  test("a typed line's lane outlasts its Enter's wait: otherwise the sender hears «senza esito» with the text in the box (SES2-1)", () => {
+    expect(MAIL_STEP_MS).toBeGreaterThan(PASTE_SETTLE_MAX_MS + ENTER_PATIENCE_MS + 10_000)
+  })
+
+  test("lint: a delivery the lane gave up on reopens nothing", () => {
+    const workbench = readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8")
+    const after = workbench.slice(workbench.indexOf("const delivered = await deliverText("))
+    expect(after.indexOf("if (mailLanes.abandoned(id)) return true")).toBeGreaterThan(-1)
+    expect(after.indexOf("if (mailLanes.abandoned(id)) return true")).toBeLessThan(after.indexOf("openRequests.set(id, {"))
   })
 
   test("every deadline is past the client's wait, so a step that hung has lost its client", () => {

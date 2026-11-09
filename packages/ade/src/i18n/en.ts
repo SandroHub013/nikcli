@@ -58,6 +58,8 @@ export const en: Messages = {
   "palette.pane.shrink": "Restore panel size",
   "palette.pane.expand": "Maximize panel",
   "palette.pane.rename": "Rename session",
+  "palette.pane.deliverNow": "Deliver the waiting mail now",
+  "palette.pane.deliverNow.none": "The focused panel has no mail to deliver",
   "lazy.failed": "This screen did not load.",
   "lazy.retry": "Try again",
   "palette.pane.resize": "Resize the panel with the keyboard",
@@ -298,6 +300,7 @@ export const en: Messages = {
   "shortcuts.other.rowMenu": "Sidebar: the row's menu (rename, restart, close…)",
   "shortcuts.other.decisions": "Decisions: pick the option by its number",
   "shortcuts.other.shot": "Drag a screenshot onto a session to send it to the agent",
+  "shortcuts.other.deliverNow": "From the command search: deliver the waiting mail now, when the focused panel offers it",
   "shortcuts.key.drag": "drag",
   "shortcuts.key.click": "click",
   "shortcuts.voice": "The voice keys are chosen in Voice › Shortcuts.",
@@ -529,10 +532,18 @@ export const en: Messages = {
   "task.notSent": "The initial task hasn't gone yet: the session has written nothing for a minute. It goes as soon as the session writes something.",
   "task.confirmTrust":
     "The session is asking you to trust this folder: confirm it in the terminal and ADE will type the initial task.",
+  "task.exitedUnsent": "The session closed before it got the initial task: ADE did not type it.",
+  "task.exitedOnTrust": "The session closed on the trust question's “No, exit”: the task was not typed. To try again, reopen it with the button below and choose “Yes”.",
+  "pane.deliverNow": "Deliver now: types and presses Enter",
+  "pane.deliverNow.chip": "mail is waiting for you",
+  "note.deliverNowOffer": (agent: string) =>
+    `A message for ${agent} is waiting: ADE doesn't recognise its screen. “Deliver now” types it and presses Enter, even over a question or text already typed.`,
+  "note.deliverNowLapsed": "“Deliver now” typed nothing: the screen changed or a question appeared. The message is still queued; the button comes back if needed.",
+  "note.enterStuck": "The text is typed but ADE didn't press Enter: the input box did not come back. If the text is there, press Enter yourself.",
   "task.heldByMenu":
-    "The initial task waits on the question on screen. If it's not real or you answered, press Enter; if nothing changes, it goes when the session moves on.",
-  "task.notTyped": "ADE didn't type the initial task: a menu opened just then. Answer it and type the task yourself.",
-  "task.trustAccepted": "A work folder ADE made for this session: trust confirmed, then the task.",
+    "The initial task is waiting: ADE sees a question on screen. Answer it in the terminal and it goes; if there is no question, press Enter in the terminal.",
+  "task.notTyped": "The initial task did not arrive: a menu opened just then, or the text did not show in the input box. Check the pane and, if it isn't there, type it yourself.",
+  "task.trustAccepted": "This session runs in a working copy ADE made: ADE answered yes to the trust question, then typed the task.",
   "task.stepHeld": (text) =>
     `ADE hasn't typed “${text}” yet: the session is waiting for an answer, a password or a menu. It types it as soon as that closes.`,
   "task.stepNotSent": (text) => `ADE didn't type “${text}” because the connection never settled. Type it yourself.`,
@@ -1774,11 +1785,11 @@ export const en: Messages = {
   "note.memory": (line) => `Memory: ${line}`,
   "note.subagent": (title) => `Subagent started: ${title}`,
   "note.mailHeldByLine":
-    "A message for this session is waiting: ADE counts a line you started. Send or clear it and the message arrives; if you see no line, press Enter.",
+    "A message for this session is waiting: ADE thinks you have started a line. Send or clear it and the message arrives; if you see no line, press Enter.",
   "note.mailHeldBySilence":
     "A message is waiting: this session hasn't written anything yet. It arrives as soon as it does; if the program doesn't start, restart it.",
   "note.mailHeldByMenu":
-    "A message waits on the question on screen. If it's not real or you answered, press Enter; if nothing changes, it clears when the session moves on or restarts.",
+    "A message is waiting: ADE sees a question on screen. Answer it in the terminal and it arrives; if there is no question, press Enter in the terminal.",
   "note.interruptedBy": (from) => `Interrupted by ${from}`,
   "note.restarted": (from, model) => `Restarted by ${from}${model ? ` with model ${model}` : ""}`,
   "note.restartedFresh": (from, model) => `Restarted from scratch by ${from}${model ? ` with model ${model}` : ""}`,

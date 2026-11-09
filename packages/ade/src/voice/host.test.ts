@@ -1177,6 +1177,42 @@ describe("no voice text into a pane asking a permission", () => {
     expect(told[1]!.text).toContain("e poi i test")
   })
 
+  /*
+   * Review of ade/pronto, B5: where the reading of menus misses a dialog the box is simply not there, and «invia» typed
+   * the words and the Enter into it. The voice asks the gate every other line asks.
+   */
+  test("sendPrompt refuses where the gate says no line may go, with the same words, and keeps them over the pane", async () => {
+    const writtenLines: string[] = []
+    const { deps, told } = createMockDeps({
+      isRunning: () => true,
+      getRunningSession: () => ({ write: (line: string) => void writtenLines.push(line) }),
+      permissions: () => ({}),
+      questionOpen: () => false,
+      isTyping: () => false,
+      mayType: (id) => id !== "p1",
+    })
+    const host = createAdeVoiceHost(deps)
+
+    await expect(host.sendPrompt("p1", "rifai la migrazione")).rejects.toThrow("permesso")
+    expect(writtenLines).toEqual([])
+    expect(told.map((note) => note.paneId)).toEqual(["p1"])
+    expect(told[0]!.text).toContain("rifai la migrazione")
+
+    await host.sendPrompt("p2", "rifai la migrazione")
+    expect(writtenLines.length).toBe(1)
+  })
+
+  test("a line begun is told as a line begun, and not as a permission", async () => {
+    const { deps } = createMockDeps({
+      isRunning: () => true,
+      getRunningSession: () => ({ write: () => {} }),
+      permissions: () => ({}),
+      isTyping: () => true,
+      mayType: () => false,
+    })
+    await expect(createAdeVoiceHost(deps).sendPrompt("p1", "esegui i test")).rejects.toThrow("riga scritta a metà")
+  })
+
   test("insertText into the terminal refuses too", async () => {
     const writtenLines: string[] = []
     const { deps } = createMockDeps({
@@ -1195,7 +1231,11 @@ describe("the workbench's voice host", () => {
   const call = source.slice(source.indexOf(codeOf("const voiceHost = createAdeVoiceHost({")))
 
   test("is told when the user has a line pending, by the rule the mail queue uses (MOD-2)", () => {
-    expect(call.slice(0, 1500)).toContain(codeOf("isTyping: (id) => isTyping(records.typed.get(id)),"))
+    expect(call.slice(0, 1500)).toContain(codeOf("isTyping: (id) => lineBegun(id),"))
+  })
+
+  test("asks the gate every line asks (review of ade/pronto, B5)", () => {
+    expect(call.slice(0, 1500)).toContain(codeOf("mayType: (id) => mayType(id),"))
   })
 
   test("asks the workbench's own question gate, screen and hook included (B1)", () => {

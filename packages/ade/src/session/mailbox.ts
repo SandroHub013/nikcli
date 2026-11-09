@@ -776,6 +776,7 @@ export function formatHeld(entry: Pick<InboxEntry, "id" | "kind">, reader: MailP
 
 /** What a waiter is told, in the state of its request, while its target has a line half-written. */
 export const HELD_BY_LINE: RequestState = "trattenuta: riga a metà"
+export const HELD_BY_SCREEN: RequestState = "trattenuta: schermo non riconosciuto"
 
 /** The receipt a sender gets for mail held back from a half-written line. */
 export function formatHeldReceipt(target: MailPane | undefined): string {
@@ -816,6 +817,30 @@ export function formatHeldSilentReceipt(target: MailPane | undefined): string {
 }
 
 /** Told to the sender, once, of a first task not yet typed because its session has drawn nothing by the deadline. */
+/** Told to the sender when ADE cannot read the screen of the session that holds its mail (`session/deliver-now.ts`). */
+export function formatHeldByScreen(agent: string, reader: MailPane | undefined): string {
+  return (
+    `[ade-msg] ADE non riconosce lo schermo di ${agent} in ${who(reader)} e trattiene il tuo messaggio: ` +
+    `il tasto per consegnarlo è lì, non ti sta ignorando.`
+  )
+}
+
+/** Told to the sender when the Enter of its message waited as long as it may. */
+export function formatEnterStuck(id: string, reader: MailPane | undefined): string {
+  return (
+    `[ade-msg] Il testo del messaggio ${id} è stato scritto in ${who(reader)}, ma ADE non ha premuto Invio: ` +
+    `la casella dove si scrive non è tornata a schermo. Finché nessuno preme Invio, quella sessione non l'ha ricevuto.`
+  )
+}
+
+/** Told to whoever asked for a task, when the session closed before it was typed. `onTrust`: on its trust dialog. */
+export function formatExitedUnsent(id: string, reader: MailPane | undefined, onTrust: boolean): string {
+  return (
+    `[ade-msg] La richiesta ${id} non è stata digitata: ${who(reader)} si è chiusa prima` +
+    (onTrust ? `, sul dialogo di fiducia per la cartella («No, exit»).` : `.`)
+  )
+}
+
 export function formatSilentStart(id: string, reader: MailPane | undefined): string {
   return (
     `[ade-msg] ADE ha la richiesta ${id} per ${who(reader)} ma non l'ha ancora digitata: ` +
@@ -988,6 +1013,7 @@ export function formatTimeNote(
 export type RequestState =
   | "in corso"
   | "trattenuta: riga a metà"
+  | "trattenuta: schermo non riconosciuto"
   | "attende un permesso"
   | "sessione chiusa"
   | "sessione sospesa"
@@ -1085,6 +1111,8 @@ export const QUIET_FREE_MS = 4000
  * silence: not knowing is not knowing it is idle, and a working TUI repaints.
  */
 export const UNKNOWN_FREE_MS = 15_000
+/** How long an empty box must draw nothing before a hook's «busy» over it stops counting (`isFree`). */
+export const BOX_QUIET_MS = 8_000
 /** A "busy" older than this, from a session silent for a minute, is a Stop hook that never ran. */
 export const STALE_BUSY_MS = 30 * 60_000
 /**
@@ -1147,6 +1175,8 @@ export function isFree(
      * drawn.
      */
     nothingDrawn?: boolean
+    /** The agent's own box is on the screen, empty, with the cursor in it (`session/composer.ts`). */
+    boxReady?: boolean
   },
   now: number,
 ): boolean {
@@ -1156,9 +1186,18 @@ export function isFree(
   if (target.quarantined && !target.activity) return true
   const quietFor = target.lastOutputAt === undefined ? Infinity : now - target.lastOutputAt
   if (target.hooked) {
-    // Nothing known at all, neither a turn nor a byte of output: not a reason to type.
-    if (!target.activity) return target.lastOutputAt !== undefined && quietFor >= UNKNOWN_FREE_MS
+    // Nothing known at all, neither a turn nor a byte of output: not a reason to type. An empty box is.
+    if (!target.activity) {
+      if (target.boxReady) return quietFor >= QUIET_FREE_MS
+      return target.lastOutputAt !== undefined && quietFor >= UNKNOWN_FREE_MS
+    }
     if (target.activity.state === "idle") return true
+    /*
+     * A hook that goes on saying busy or permission over an empty box that has stopped drawing: Claude Code writes nothing
+     * when a plan is refused, and the pane held its mail until the next turn ended (live test of 2026-11-03, n. 8). A turn
+     * still going draws its spinner. The hook's word stands wherever the box is not there.
+     */
+    if (target.boxReady && quietFor >= BOX_QUIET_MS) return true
     if (target.activity.state === "permission") {
       // Not free, and not for a length of time: see the note above
       // STALE_BUSY_MS, and the two ways that rule used to be backwards. Only a

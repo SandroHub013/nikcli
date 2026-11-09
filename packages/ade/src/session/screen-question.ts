@@ -13,10 +13,12 @@
  */
 
 import {
+  clackConfirm,
   confirmDialog,
   detectPermission,
   menuAboveLines,
   permissionIdentity,
+  trustDialog,
   type PermissionRequest,
 } from "./permission"
 
@@ -42,12 +44,14 @@ export function bottomRows(terminal: ScreenTerminal): string[] {
 export type ScreenMenu = PermissionRequest & { under: number }
 
 function menuOnRows(rows: readonly string[], agentId: string): ScreenMenu | undefined {
-  const dialog = agentId === "ragu" ? confirmDialog(rows) : undefined
+  const dialog = agentId === "ragu" ? (confirmDialog(rows) ?? clackConfirm(rows)) : undefined
   if (dialog) return { ...dialog, under: 0 }
   const last = detectPermission([...rows], agentId, { screen: true })
   if (last) return { ...last, under: 0 }
   const above = menuAboveLines(rows)
-  return above && { ...above.request, under: above.under }
+  if (above) return { ...above.request, under: above.under }
+  const trust = trustDialog(rows)
+  return trust && { ...trust, under: 0 }
 }
 
 /** The question on `terminal`'s screen, if it is asking one. */
@@ -76,6 +80,12 @@ interface AnsweredMenu {
 export interface MenuHold {
   /** An Enter on its way to the pane: said before it is written. */
   enterTyped(paneId: string, terminal: ScreenTerminal, agentId: string): void
+  /**
+   * A line of ADE's on its way to a screen where a bare prompt says the menu above it no longer waits. Its text ends the
+   * prompt's being bare, and the menu would read as waiting again: the Enter of the line was held back by that change of
+   * mind, and the text stayed without it (live test of 2026-11-03, n. 7).
+   */
+  lineTyped(paneId: string, terminal: ScreenTerminal): void
   /** The menu that waits on the pane's screen now, if one does. */
   waiting(paneId: string, terminal: ScreenTerminal, agentId: string): ScreenMenu | undefined
   forget(paneId: string): void
@@ -112,6 +122,14 @@ export function createMenuHold(): MenuHold {
       const rows = bottomRows(terminal)
       const menu = menuOnRows(rows, agentId)
       if (menu) answered.set(paneId, { identity: identityOf(menu), copies: copiesOf(rows, menu) })
+    },
+    lineTyped(paneId, terminal) {
+      const rows = bottomRows(terminal)
+      if (menuAboveLines(rows)) return
+      const above = menuAboveLines(rows, { overPrompt: true })
+      if (!above) return
+      const menu = { ...above.request, under: above.under }
+      answered.set(paneId, { identity: identityOf(menu), copies: copiesOf(rows, menu) })
     },
     waiting(paneId, terminal, agentId) {
       const rows = bottomRows(terminal)
@@ -180,7 +198,7 @@ export function statusFromScreen(input: {
 const TRUST_RE =
   /\b(?:do you trust the (?:files|contents)|one you trust|trust this folder|allow codex to work in this folder)\b/i
 // The cursor on the first option, and that option a yes: the Enter that confirms it grants the trust.
-const YES_SELECTED_RE = /^\s*[│┃║]?\s*[❯›▶➤]\s*1[.)]\s*yes\b/i
+const YES_SELECTED_RE = /^\s*[│┃║]?\s*[❯›▶➤>]\s*(?:1[.)]\s*)?yes\b/i
 
 /**
  * Whether `rows` are a folder-trust dialog, and whether its selected answer is the yes. Undefined when the screen

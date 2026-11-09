@@ -813,16 +813,25 @@ function boxedMenu(drawn: string[]): PermissionRequest | undefined {
   return drawnRequest(lines, options, first)
 }
 
-// ragu's confirm dialog: its own words, whole, wherever an overlay puts them on the row (`packages/tui/src/ui/dialog-confirm.tsx`).
+// ragu's confirm dialog (`packages/tui/src/ui/dialog-confirm.tsx`), an overlay wherever it falls on the row.
 const CONFIRM_DIALOG_HINT = "Y/N or ←→ to switch, enter to confirm"
+// opentui's blank cells keep the character under them, so the words are read with any character between them.
+const CONFIRM_HINT_RE = /Y\/N.or.←→.to.switch,/u
+const CONFIRM_BUTTONS_RE = /│.*│.*│.*│/
+const CONFIRM_BUTTONS_ABOVE = 4
 
 /**
  * ragu's `DialogConfirm`, if it stands on `rows`. Two boxed buttons and no number, and `Y` and `N` act at once, so the
- * first y or n of a message would answer it. Read only by its hint, the one row of it no session text shares; those same
- * words printed by something else hold mail until they scroll away.
+ * first y or n of a message would answer it. Read by its hint with those buttons above it: the hint alone, quoted in a reply
+ * or in a line being written, would hold mail with nothing that ever clears it.
  */
 export function confirmDialog(rows: readonly string[]): PermissionRequest | undefined {
-  if (!rows.some((row) => row.includes(CONFIRM_DIALOG_HINT))) return undefined
+  const stands = rows.some(
+    (row, y) =>
+      CONFIRM_HINT_RE.test(row) &&
+      rows.slice(Math.max(0, y - CONFIRM_BUTTONS_ABOVE), y).some((above) => CONFIRM_BUTTONS_RE.test(above)),
+  )
+  if (!stands) return undefined
   return {
     what: CONFIRM_DIALOG_HINT,
     kind: "unknown",
@@ -830,6 +839,50 @@ export function confirmDialog(rows: readonly string[]): PermissionRequest | unde
       { intent: classifyAnswer("Confirm"), label: "Confirm", send: "y", tone: "primary" },
       { intent: classifyAnswer("Cancel"), label: "Cancel", send: "n", tone: "secondary" },
     ],
+  }
+}
+
+// `@clack/prompts`' confirm, with its Unicode glyphs or its ASCII ones: «│  ○ Yes / ● No» and «|    Yes / > No», then its end.
+const CLACK_YES_NO_RE = /^[│|] +(?:[●○>] +)?Yes \/ +(?:[●○>] +)?No *$/u
+const CLACK_END_RE = /^[└—] *$/u
+
+/**
+ * The «Trust project» prompt ragu asks before its TUI (0.2.15 on, `cli/bootstrap.ts`), the last thing on the screen. Its `y`
+ * and `n` answer at once, and `h j k l` turn the answer round, so the first y of a task («You are ...») would grant the
+ * trust. Read by its two last rows: a reply that quotes them has ragu's own box under it.
+ */
+export function clackConfirm(rows: readonly string[]): PermissionRequest | undefined {
+  let last = rows.length - 1
+  while (last >= 0 && !rows[last]!.trim()) last--
+  if (last < 1 || !CLACK_END_RE.test(rows[last]!) || !CLACK_YES_NO_RE.test(rows[last - 1]!)) return undefined
+  return {
+    what: "Trust this project?",
+    kind: "unknown",
+    answers: [
+      { intent: classifyAnswer("Yes"), label: "Yes", send: "y", tone: "secondary" },
+      { intent: classifyAnswer("No"), label: "No", send: "n", tone: "primary" },
+    ],
+  }
+}
+
+const TRUST_ANSWER_RE = /^\s*[│┃║]?\s*([❯›▶➤>])?\s*(?:\d[.)]\s*)?(yes, i trust this folder|no, exit)\s*[│┃║]?\s*$/i
+
+/**
+ * The trust dialog of Claude Code and agy, with no number on its answers and, in Claude Code, «No, exit» first: read by
+ * its two answers, one of which carries the cursor (live test of 2026-11-03, n. 1 and 2).
+ */
+export function trustDialog(rows: readonly string[]): PermissionRequest | undefined {
+  const answers = rows.map((row) => row.match(TRUST_ANSWER_RE)).filter((match) => match !== null)
+  if (answers.length !== 2 || answers.filter((match) => match[1]).length !== 1) return undefined
+  const named = new Set(answers.map((match) => match[2]!.toLowerCase()))
+  if (named.size !== 2) return undefined
+  return {
+    what: "Do you trust this folder?",
+    kind: "unknown",
+    answers: answers.map((match) => {
+      const label = match[2]!
+      return { intent: classifyAnswer(label), label, send: "", tone: match[1] ? ("primary" as const) : ("secondary" as const) }
+    }),
   }
 }
 
@@ -849,7 +902,10 @@ const BARE_PROMPT_RE = /^\s*[│┃║]?\s*[>›❯]\s*[│┃║]?\s*$/
  * A menu in a box of its own, with no hint (agy, `permission.test.ts`), says it is one by closing the box round options
  * of which exactly one carries the cursor.
  */
-export function menuAboveLines(rows: readonly string[]): { request: PermissionRequest; under: number } | undefined {
+export function menuAboveLines(
+  rows: readonly string[],
+  options: { overPrompt?: boolean } = {},
+): { request: PermissionRequest; under: number } | undefined {
   const clean = rows.map(stripAnsi)
   for (let last = clean.length - 1; last >= 1; last--) {
     const row = unframe(clean[last]!)
@@ -859,7 +915,9 @@ export function menuAboveLines(rows: readonly string[]): { request: PermissionRe
     const request = closesBox ? boxedMenu(above) : hintedMenu(above)
     if (!request) continue
     const below = clean.slice(last + 1).filter((line) => line.trim())
-    return below.some((row) => BARE_PROMPT_RE.test(row)) ? undefined : { request, under: below.length }
+    return !options.overPrompt && below.some((row) => BARE_PROMPT_RE.test(row))
+      ? undefined
+      : { request, under: below.length }
   }
   return undefined
 }

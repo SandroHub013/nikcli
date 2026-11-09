@@ -1,8 +1,38 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
 import { buildCommands, keepsPaletteOpen, waitsForSheet, type CommandContext } from "./commands"
 import { resetLocaleForTests } from "../i18n"
 import { filterCommands } from "../command/registry"
-import { createWorkbench, VISIBLE_VIEWS, visibleViews, type Pane, type Workbench } from "./state"
+import { addPane, createWorkbench, VISIBLE_VIEWS, visibleViews, type Pane, type Workbench } from "./state"
+
+describe("«Consegna ora» from the keyboard (UX2-2)", () => {
+  const withPane = addPane(createWorkbench(), {
+    id: "s1",
+    title: "Claude",
+    model: "claude-code",
+    agent: "claude-code",
+    mode: "auto",
+    lines: [],
+    workspaceId: "w",
+  } as never)
+  const command = (workbench: Workbench, offered: boolean) =>
+    buildCommands(context({ workbench, deliverNowOffered: offered })).find((c) => c.id === "pane.deliverNow")
+
+  test("it can be used only when the focused pane offers it, and says why not", () => {
+    resetLocaleForTests("it")
+    expect(command(withPane, true)?.enabled).toBe(true)
+    expect(command(withPane, false)?.enabled).toBe(false)
+    expect(command(withPane, false)?.disabledReason).toBe("Il pannello a fuoco non ha posta da consegnare")
+    expect(command(createWorkbench(), true)?.enabled).toBe(false)
+  })
+
+  test("lint: it goes down the click's road, which holds the one message and the question on screen", () => {
+    const workbench = readFileSync(new URL("./workbench.tsx", import.meta.url), "utf8")
+    expect(workbench).toContain('"pane.deliverNow",')
+    const branch = workbench.slice(workbench.indexOf('id === "pane.deliverNow"'), workbench.indexOf('id === "pane.rename"'))
+    expect(branch).toContain("pressDeliverNow(target)")
+  })
+})
 
 function context(overrides: Partial<CommandContext> & { workbench: Workbench }): CommandContext {
   return {

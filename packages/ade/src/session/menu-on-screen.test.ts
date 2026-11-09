@@ -629,7 +629,7 @@ describe("the question dialog of OpenCode, and of ragu without its plugin", () =
 
 describe("ragu's confirm dialog", () => {
   // `packages/tui/src/ui/dialog-confirm.tsx`: an overlay, so the session's own text may stand on the row either side.
-  const DIALOG = ["  Update available", "", "  Install now?", "", "      Cancel      Confirm", "", ""]
+  const DIALOG = ["  Update available", "", "  Install now?", "", "   │    Cancel    │  │    Confirm    │", "", ""]
 
   test("read by its hint: Y or N act at once, and a mail's first letter would be one", async () => {
     const terminal = new Terminal({ cols: 100, rows: 24, allowProposedApi: true })
@@ -650,8 +650,20 @@ describe("ragu's confirm dialog", () => {
 
   test("with the session's text either side of it", async () => {
     const terminal = new Terminal({ cols: 100, rows: 24, allowProposedApi: true })
-    await written(terminal, "old text    Y/N or ←→ to switch, enter to confirm    old text")
+    await written(terminal, "old text  │    Cancel    │  │    Confirm    │  old text\r\n\r\nold text    Y/N or ←→ to switch, enter to confirm    old text")
     expect(screenQuestion(terminal, "ragu")).toBeDefined()
+  })
+
+  test("its blank cells show what is under them, so its words are read with any character between them", async () => {
+    const terminal = new Terminal({ cols: 100, rows: 24, allowProposedApi: true })
+    await written(terminal, "old text  │    Cancel    │  │    Confirm    │  old text\r\n\r\nold textY/Neorc←→ptoiswitch,genter totconfirmold text")
+    expect(screenQuestion(terminal, "ragu")).toBeDefined()
+  })
+
+  test("its words quoted in a ragu reply, with no buttons above them, are no dialog: nothing would ever clear it", async () => {
+    const terminal = new Terminal({ cols: 100, rows: 24, allowProposedApi: true })
+    await written(terminal, "Its hint says: Y/N or ←→ to switch, enter to confirm\r\nmore of the reply")
+    expect(screenQuestion(terminal, "ragu")).toBeUndefined()
   })
 })
 
@@ -757,7 +769,7 @@ describe("lint: the workbench's wiring", () => {
   }
 
   test("lint: a question open answers the sender and tells the pane, before any delivery", () => {
-    const branch = between("if (questionOpen(target.pane.id)) {", "const targetDepth")
+    const branch = between("if (heldByQuestion(target.pane.id)) {", "const targetDepth")
     expect(branch).toContain(codeOf("noteHeldByMenu(target.pane.id)"))
     expect(branch).toContain(codeOf("formatHeldMenuReceipt(target.pane)"))
     expect(branch).toContain(codeOf("return false"))
@@ -801,8 +813,8 @@ describe("lint: the workbench's wiring", () => {
 
   test("lint: the first task asks the screen on every pass, and says what it waits for", () => {
     const poll = between("if (starting.typesTask) {", "openingPolls.add(poll)")
-    expect(poll).toContain(codeOf("const asked = questionOpen(paneId)"))
-    expect(poll).toContain(codeOf("permissionPending: asked || unparsed.behind(paneId)"))
+    expect(poll).toContain(codeOf('const asked = box !== "ready" && questionOpen(paneId)'))
+    expect(poll).toContain(codeOf("permissionPending: boxHolds || asked || unparsed.behind(paneId)"))
     expect(poll).toContain(codeOf('t("task.heldByMenu")'))
   })
 
@@ -828,7 +840,7 @@ describe("lint: the workbench's wiring", () => {
     const over = poll.slice(poll.indexOf(codeOf("if (silenceTold && openingBytes.firstByteAt !== undefined) {")))
     expect(over.startsWith(codeOf('if (silenceTold && openingBytes.firstByteAt !== undefined) { silenceTold = false dropPaneNote(paneId, t("task.notSent")) }'))).toBe(true)
     // Before the question is read: a menu drawn first has its own note.
-    expect(poll.indexOf(codeOf("if (silenceTold && openingBytes.firstByteAt"))).toBeLessThan(poll.indexOf(codeOf("const asked = questionOpen(paneId)")))
+    expect(poll.indexOf(codeOf("if (silenceTold && openingBytes.firstByteAt"))).toBeLessThan(poll.indexOf(codeOf('const asked = box !== "ready" && questionOpen(paneId)')))
     const stopped = poll.slice(poll.indexOf(codeOf("if (running.get(paneId) !== session) {")), poll.indexOf(codeOf("const drawn = screenDrawn")))
     expect(stopped).toContain(codeOf('if (menuTold) dropPaneNote(paneId, t("task.heldByMenu"))'))
     expect(stopped).toContain(codeOf('if (silenceTold) dropPaneNote(paneId, t("task.notSent"))'))
@@ -842,7 +854,7 @@ describe("lint: the workbench's wiring", () => {
     for (const start of [between("const startProcess = async (", "const startRemoteProcess = async ("), between("const startRemoteProcess = async (", "openingPolls.add(poll)")]) {
       expect(start).toContain(codeOf("undrawnSince.set(paneId, Date.now())"))
     }
-    const held = between("const byLine = isTyping(records.typed.get(target.pane.id))", "if (message.kind")
+    const held = between("const byLine = lineBegun(target.pane.id)", "if (message.kind")
     expect(held).toContain(codeOf('tellPane(target.pane.id, t("note.mailHeldBySilence"))'))
     expect(held).toContain(codeOf("(silentFor(target.pane.id) ?? 0) >= OPENING_TIMEOUT_MS"))
     expect(held).toContain(codeOf("formatHeldSilentReceipt(target.pane)"))

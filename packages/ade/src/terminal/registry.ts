@@ -13,6 +13,7 @@
 import { FitAddon } from "@xterm/addon-fit"
 import { ImageAddon, type IImageAddonOptions } from "@xterm/addon-image"
 import { Terminal, type ITheme } from "@xterm/xterm"
+import { watchCursor } from "../session/composer"
 import { DEFAULT_PTY_COLS, DEFAULT_PTY_ROWS } from "./pty-defaults"
 import { registerLinks, type LinkRequest } from "./links"
 import { registerMenuClicks } from "./menu-click"
@@ -531,6 +532,7 @@ export function getTerminal(id: string): SessionTerminal {
      */
     documentOverride: typeof document === "undefined" ? undefined : document,
   })
+  watchCursor(terminal)
 
   const fit = new FitAddon()
   terminal.loadAddon(fit)
