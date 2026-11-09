@@ -568,7 +568,7 @@ export const it = {
     `Un messaggio per ${agent} aspetta: ADE non riconosce il suo schermo. «Consegna ora» lo scrive e preme Invio, anche sopra una domanda o del testo già scritto.`,
   "note.deliverNowLapsed": "«Consegna ora» non ha scritto niente: lo schermo è cambiato o è comparsa una domanda. Il messaggio è ancora in coda; il pulsante torna se serve.",
   "note.enterWaiting":
-    "Il testo è scritto e ADE non ha ancora premuto Invio: non riconosce la casella dove si scrive. Se il testo è lì e non c'è una domanda aperta, puoi premere Invio tu.",
+    "Il testo è scritto e ADE non ha ancora premuto Invio: non riconosce la casella di testo. Se il testo è lì e non c'è una domanda aperta, puoi premere Invio tu.",
   "note.enterStuck": "Il testo è scritto ma ADE non ha premuto Invio: la casella dove si scrive non è tornata. Se il testo è lì, premi Invio tu.",
   "task.trustAccepted": "Sessione in una copia di lavoro creata da ADE: alla domanda di fiducia ADE ha risposto sì, poi ha scritto il compito.",
   "task.stepHeld": (text: string) =>
