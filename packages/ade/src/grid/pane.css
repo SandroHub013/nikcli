@@ -210,6 +210,14 @@
   padding: 6px 10px;
   border-width: 0 0 1px;
   border-radius: 0;
+  /* The wash over an opaque layer, as the voice note does: on a short pane the note floats over the terminal's top
+     rows, and the Notice's own wash is about 90% clear. */
+  background: linear-gradient(var(--ade-notice-bg), var(--ade-notice-bg)), var(--ade-overlay);
+}
+
+/* The Notice's close is a 20px button; a note row was about 15px tall there. Take the difference from the margins. */
+[data-slot="pane-notice"] > [data-ui="icon-button"] {
+  margin-block: -2px;
 }
 
 [data-slot="pane-notice-lines"] {
@@ -1494,8 +1502,8 @@
 
   [data-slot="pane-terminal"] ~ [data-slot="pane-dock"][data-offer] {
     position: absolute;
-    /* 20px, not 6: the corner grip takes the last 16 px, and «Consegna ora» is the button under it. */
-    right: 20px;
+    /* 6px: the answer strip inside it keeps 20px of its own, which clears the corner grip (16px). */
+    right: 6px;
     bottom: 6px;
     z-index: var(--ade-z-above);
     border-top: 0;

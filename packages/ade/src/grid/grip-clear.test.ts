@@ -45,10 +45,13 @@ describe("the resize grip does not sit on the dock's last button (DS2-3)", () =>
     expect(right).toBeGreaterThan(reach)
   })
 
-  test("so does «Consegna ora» when it floats over a short pane's terminal", () => {
+  test("so does «Consegna ora» when it floats over a short pane's terminal: once, not twice", () => {
+    // The floating dock holds the answer strip, which already keeps 20px: the dock adds its own 6px, not another 20.
     const right = px(
       valueOf(pane, '[data-slot="pane-terminal"] ~ [data-slot="pane-dock"][data-offer]', "right", "short"),
     )
-    expect(right).toBeGreaterThan(reach)
+    const inner = px(valueOf(pane, '[data-slot="pane-answers"]', "padding-right"))
+    expect(right).toBe(6)
+    expect(right + inner).toBeGreaterThan(reach)
   })
 })

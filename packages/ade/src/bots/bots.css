@@ -785,16 +785,6 @@
   white-space: nowrap;
 }
 
-[data-slot="bots-attachment-remove"] {
-  padding: 0 var(--ade-space-1);
-  border: 0;
-  border-radius: var(--ade-radius-sm);
-  background: none;
-  color: var(--ade-text-soft);
-  font: inherit;
-  cursor: pointer;
-}
-
 [data-slot="bots-attachment-remove"]:hover {
   color: var(--ade-text);
 }
