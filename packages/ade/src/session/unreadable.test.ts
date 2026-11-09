@@ -3,8 +3,10 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { serializeWorkspace, unreadableReason, type WorkspaceState } from "./persist"
 import {
+  IGNORED_KEY,
   MAX_UNREADABLE,
   WORKSPACE_KEY,
+  dropIgnoredCopies,
   keepUnreadable,
   readSavedWorkspace,
   restorableCopy,
@@ -298,5 +300,56 @@ describe("why a saved workspace does not read", () => {
     const source = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf-8").replace(/\r\n/g, "\n")
     expect(source).toContain('savedWorkspace.reason === "broken" && savedWorkspace.copyKey')
     expect(source).toContain('t("workspace.unreadableBroken", savedWorkspace.copyKey)')
+  })
+})
+
+/*
+ * WB2-3: when the storage is full, the autosave failed and said so, while the copies kept aside (the unreadable ones the
+ * user had already turned down with «Ignora») sat there taking the room. They are the one thing ADE may delete to make
+ * its own save fit: the user said no to them.
+ */
+describe("dropIgnoredCopies (WB2-3)", () => {
+  const copyOf = (title: string) => serializeWorkspace(readable([{ id: "p", title, status: "idle" }]))
+
+  test("removes the ignored copies only, forgets the list, and says how many went", () => {
+    const store = new FakeStore()
+    store.setItem(`${WORKSPACE_KEY}.unreadable.1`, copyOf("kept"))
+    store.setItem(`${WORKSPACE_KEY}.unreadable.2`, copyOf("ignored"))
+    ignoreRestore(store, `${WORKSPACE_KEY}.unreadable.2`)
+
+    expect(dropIgnoredCopies(store)).toBe(1)
+    expect(store.getItem(`${WORKSPACE_KEY}.unreadable.2`)).toBeNull()
+    expect(store.getItem(`${WORKSPACE_KEY}.unreadable.1`)).toBe(copyOf("kept"))
+    expect(store.getItem(IGNORED_KEY)).toBe("[]")
+    expect(restorableCopy(store)?.key).toBe(`${WORKSPACE_KEY}.unreadable.1`)
+  })
+
+  test("with nothing ignored it removes nothing and returns 0", () => {
+    const store = new FakeStore()
+    store.setItem(`${WORKSPACE_KEY}.unreadable.1`, copyOf("kept"))
+    expect(dropIgnoredCopies(store)).toBe(0)
+    expect(store.getItem(`${WORKSPACE_KEY}.unreadable.1`)).toBe(copyOf("kept"))
+  })
+
+  test("two ignored copies: both go", () => {
+    const store = new FakeStore()
+    for (const n of [1, 2]) store.setItem(`${WORKSPACE_KEY}.unreadable.${n}`, copyOf(`c${n}`))
+    for (const n of [1, 2]) ignoreRestore(store, `${WORKSPACE_KEY}.unreadable.${n}`)
+    expect(dropIgnoredCopies(store)).toBe(2)
+    expect(unreadableCopies(store, WORKSPACE_KEY)).toEqual([])
+  })
+})
+
+describe("the autosave drops them and tries once more (WB2-3)", () => {
+  // The workbench cannot be loaded under bun: read from the source. Booleans, so a failure does not print the file.
+  const source = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
+
+  test("the write serialises once, and its catch frees the ignored copies and retries before it reports", () => {
+    const at = source.indexOf('localStorage.setItem("ade.workspace", text)')
+    expect(at).toBeGreaterThan(-1)
+    const around = source.slice(at - 400, at + 1200)
+    expect(around.includes("text = serializeWorkspace(")).toBe(true)
+    expect(around.includes("dropIgnoredCopies(localStorage) > 0")).toBe(true)
+    expect(around.indexOf("dropIgnoredCopies(localStorage)")).toBeLessThan(around.indexOf("workspace.saveFailed"))
   })
 })

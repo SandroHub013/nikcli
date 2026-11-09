@@ -70,7 +70,7 @@ import {
 import { syncOpenRouterKey } from "../host/openrouter-key-sync"
 import { createSttStreamTransport } from "../host/stt-stream"
 import { serializeWorkspace, type WorkspaceState } from "../session/persist"
-import { ignoreRestore, readSavedWorkspace, restorableCopy, restoreCopy, retryUnreadableCopy } from "../session/unreadable"
+import { dropIgnoredCopies, ignoreRestore, readSavedWorkspace, restorableCopy, restoreCopy, retryUnreadableCopy } from "../session/unreadable"
 import {
   DEFAULT_BINDINGS,
   NOT_FROM_TEXT_FIELDS,
@@ -7535,10 +7535,20 @@ export function Workbench() {
       // Unwrapped: serialising walks every pane and every line, and doing that
       // through the store's proxy would subscribe whatever happens to be
       // tracking to the entire workbench.
+      let text = ""
       try {
-        localStorage.setItem("ade.workspace", serializeWorkspace(toWorkspaceState(unwrap(wbStore))))
+        text = serializeWorkspace(toWorkspaceState(unwrap(wbStore)))
+        localStorage.setItem("ade.workspace", text)
         saveFailedTold = false
       } catch {
+        // The copies the user turned down are the room it can take back (WB2-3): once more, before it says so.
+        if (text !== "" && dropIgnoredCopies(localStorage) > 0) {
+          try {
+            localStorage.setItem("ade.workspace", text)
+            saveFailedTold = false
+            return
+          } catch {}
+        }
         // Full storage: said once. It must not escape (a timer or `pagehide` has nobody to catch it, and `runUpdate` would stop).
         if (!saveFailedTold) {
           saveFailedTold = true
