@@ -25,6 +25,9 @@ import { runnerById } from "../runners"
  */
 export const MAX_MESSAGE_AGE_MS = 10 * 60_000
 
+/** How often a chat hears that its messages are refused for their age: not for each of a burst, but not just once. */
+export const TOO_OLD_NOTICE_EVERY_MS = 5 * 60_000
+
 /** Whether a message waited too long to run. One stored by an older ADE says no age: it is not run either. */
 export function tooOldToRun(message: { readonly sentMs?: number | null; readonly recovered?: boolean }, now: number): boolean {
   return typeof message.sentMs === "number" ? now - message.sentMs > MAX_MESSAGE_AGE_MS : message.recovered === true

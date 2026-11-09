@@ -7,7 +7,7 @@ import { runTurn, type Turn, type TurnDeps, type TurnRequest, type TurnResult } 
 import { createApprovalRegistry, decideApproval, mergeApprovals } from "../approvals"
 import { ASK_TIMEOUT_MS, startGatewayController, safePreviewText, RECOVERED_NOTICE, recoveredNotice, type GatewayBridge, type GatewayMessage } from "./controller"
 import { forgetTurnFailures, noteTurnFailure, turnFailureOf } from "./failures"
-import { chatCommand, chatHeader, MAX_MESSAGE_AGE_MS } from "./policy"
+import { chatCommand, chatHeader, MAX_MESSAGE_AGE_MS, TOO_OLD_NOTICE_EVERY_MS } from "./policy"
 import { localRemoteStore, memoryRemoteStore, offersRemoteCommands, REMOTE_OFF, remoteKey, remoteTools } from "./remote"
 import { localSessionStore, memorySessionStore, sessionKey } from "./session"
 import { createGatewayThreads, gatewayThreadKey, type ThreadDisk } from "./threads"
@@ -2254,6 +2254,23 @@ describe("a message that waited too long is not run (BOT-10)", () => {
     b.emit("vecchio di nuovo", { id: "m3", sentMs: OLD })
     await until("detto ancora", () => b.sent.length === 3)
     expect(b.sent[2]!.text).toBe(t("gateway.tooOld", minutes))
+  })
+
+  test("a chat whose messages keep being refused is told again after a few minutes: the bot does not go silent", async () => {
+    const b = bridge()
+    let clock = NOW
+    await startGatewayController({ bridge: b.fake, runTurn: fakeTurns().runTurn, loadBot: trusted, sessions: memorySessionStore(), now: () => clock })
+    b.emit("uno", { id: "m1", sentMs: OLD })
+    await until("detto", () => b.sent.length === 1)
+    clock += TOO_OLD_NOTICE_EVERY_MS - 1
+    b.emit("due", { id: "m2", sentMs: OLD })
+    await until("il secondo ack", () => b.acks.length === 2)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(b.sent).toHaveLength(1)
+    clock += 1
+    b.emit("tre", { id: "m3", sentMs: OLD })
+    await until("detto ancora", () => b.sent.length === 2)
+    expect(b.sent[1]!.text).toBe(t("gateway.tooOld", minutes))
   })
 })
 
