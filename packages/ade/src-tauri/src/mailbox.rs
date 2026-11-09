@@ -683,13 +683,24 @@ if ($file) {
   $text = if ($text) { "$text`n`n$content" } else { $content }
 }
 
-# registro --stdin: the JSON from stdin, as UTF-8, where no quoting can reach it. Through ade-msg.cmd
-# and -File, PowerShell 5.1 drops the inner quotes of a '<json>' argument. A lone '-' cannot say it:
-# PowerShell takes it for a parameter with no name.
-if ($cmd -eq 'registro' -and $fromStdin) {
-  $ms = New-Object IO.MemoryStream
-  [Console]::OpenStandardInput().CopyTo($ms)
-  $text = $utf8.GetString($ms.ToArray()).TrimStart([char]0xFEFF).Trim()
+# --stdin: the text from stdin, as UTF-8, where no quoting can reach it (SEC2-1). In bash a quoted heredoc
+# (<<'EOF') runs nothing, whatever the text holds; an apostrophe in a single-quoted argument would break it, and
+# the double quotes an agent falls back to run backticks and $(...). Through ade-msg.cmd and -File, PowerShell 5.1
+# also drops the inner quotes of a '<json>' argument. A lone '-' cannot say it: PowerShell takes it for a
+# parameter with no name.
+if ($fromStdin -and (@('registro', 'send', 'reply', 'ask', 'spawn', 'update', 'kv', 'memory') -contains $cmd)) {
+  if ([Console]::IsInputRedirected) {
+    # A pipe or a heredoc: the bytes as they are. ($input would do too, but it splits them into lines and loses the CRs.)
+    $ms = New-Object IO.MemoryStream
+    [Console]::OpenStandardInput().CopyTo($ms)
+    $piped = $utf8.GetString($ms.ToArray()).TrimStart([char]0xFEFF).Trim()
+  } else {
+    # No $input anywhere in this script, on purpose: the mere mention makes the host read stdin into the pipeline
+    # before the script starts, and the bytes above are gone (and a pipeline splits them into lines, losing the CRs).
+    Fail "--stdin: nessun testo in ingresso (una pipe, o in bash <<'EOF' ... EOF)"
+  }
+  # registro takes the JSON from here alone; the others join it to the text on the command line, as --file does.
+  $text = if ($cmd -ne 'registro' -and $text) { "$text`n`n$piped" } else { $piped }
 }
 
 function Post($fields) {
@@ -1199,8 +1210,19 @@ $(head -c 1500 "$file")"
 $content"; else text="$content"; fi
 fi
 
-# registro --stdin: the JSON from stdin, where no quoting can reach it.
-if [ "$cmd" = "registro" ] && [ "$stdin" = 1 ]; then text="$(cat)"; fi
+# --stdin: the text from stdin, where no quoting can reach it (SEC2-1): a quoted heredoc (<<'EOF') runs nothing,
+# whatever the text holds. Nothing piped, on a terminal, is said and not waited for.
+case "$cmd" in
+  registro|send|reply|ask|spawn|update|kv|memory)
+    if [ "$stdin" = 1 ]; then
+      [ -t 0 ] && fail "--stdin: nessun testo in ingresso (una pipe, o <<'EOF' ... EOF)"
+      piped="$(cat)"
+      # registro takes the JSON from here alone; the others join it to the text on the command line, as --file does.
+      if [ "$cmd" != "registro" ] && [ -n "$text" ]; then text="$text
+
+$piped"; else text="$piped"; fi
+    fi ;;
+esac
 
 post() {
   need_token
@@ -1819,7 +1841,22 @@ mod tests {
         assert_eq!(from_file["text"], json);
         let from_stdin = posted_by_ps1("stdin", &["registro", "decisioni", "risposta", "--stdin"], Some(json.as_bytes()));
         assert_eq!(from_stdin["text"], json);
-        assert!(SH.contains("--stdin) stdin=1;") && SH.contains("[ \"$cmd\" = \"registro\" ] && [ \"$stdin\" = 1 ]; then text=\"$(cat)\"; fi"));
+        assert!(SH.contains("--stdin) stdin=1;") && SH.contains("registro|send|reply|ask|spawn|update|kv|memory)") && SH.contains("piped=\"$(cat)\""));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn every_text_command_takes_its_text_from_stdin_byte_for_byte() {
+        // The text of a reply is often what an agent was told not to run: a backtick command, $(...), $0, an apostrophe.
+        let hostile = "L'utente ha visto `ragu tunnel` e $(whoami) e $0: niente viene eseguito. è ñ\r\nseconda riga";
+        for (tag, args) in [
+            ("stdin-reply", vec!["reply", "1790000000000-aaaa", "--stdin"]),
+            ("stdin-send", vec!["send", "2", "--stdin"]),
+            ("stdin-update", vec!["update", "1790000000000-aaaa", "bloccata", "--stdin"]),
+        ] {
+            let posted = posted_by_ps1(tag, &args, Some(hostile.as_bytes()));
+            assert_eq!(posted["text"], hostile, "{tag}");
+        }
     }
 
     #[cfg(windows)]

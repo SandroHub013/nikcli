@@ -422,7 +422,7 @@ const script = (name: string) => {
   return source.slice(from, source.indexOf(`"#;`, from))
 }
 
-type Run = (args: string[], extra?: Record<string, string>) => Promise<{ out: string; err: string; code: number }>
+type Run = (args: string[], extra?: Record<string, string>, stdin?: string) => Promise<{ out: string; err: string; code: number }>
 
 function clientSuite(
   label: string,
@@ -442,8 +442,17 @@ function clientSuite(
       for (const sub of ["outbox", "receipts", "results", "inbox/p1"]) fs.mkdirSync(path.join(box, sub), { recursive: true })
       const file = install(dir)
       const env = { ADE_MAILBOX: box, ADE_PANE_ID: "p1", ADE_PANE_TOKEN: TOKEN }
-      call = async (args, extra = {}) => {
-        const proc = Bun.spawn(run(file, args), { env: { ...process.env, ...env, ...extra }, stdout: "pipe", stderr: "pipe" })
+      call = async (args, extra = {}, stdin) => {
+        const proc = Bun.spawn(run(file, args), {
+          env: { ...process.env, ...env, ...extra },
+          ...(stdin === undefined ? {} : { stdin: "pipe" as const }),
+          stdout: "pipe",
+          stderr: "pipe",
+        })
+        if (stdin !== undefined) {
+          proc.stdin!.write(stdin)
+          await proc.stdin!.end()
+        }
         const [out, err] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()])
         return { out, err, code: await proc.exited }
       }
@@ -458,11 +467,19 @@ function clientSuite(
       write: async (name: string, body: string) => put(`inbox/p1/${name}.msg`, await seal(TOKEN, "inbox", name, body)),
     }
     /** ADE's part: what the script posts, taken out of the outbox. */
-    const waitForPost = () =>
-      new Promise<{ id: string; text: string }>((resolve) => {
+    const waitForPost = (limitMs = 60_000) =>
+      new Promise<{ id: string; text: string }>((resolve, reject) => {
+        const started = Date.now()
         const timer = setInterval(() => {
           const name = fs.readdirSync(path.join(box, "outbox")).find((file) => file.endsWith(".json"))
-          if (!name) return
+          if (!name) {
+            // Said and stopped, so a test whose script never posts fails at once and leaves no timer taking the next one's post.
+            if (Date.now() - started > limitMs) {
+              clearInterval(timer)
+              reject(new Error("the script posted nothing"))
+            }
+            return
+          }
           clearInterval(timer)
           const id = name.replace(/\.json$/, "")
           const text = fs.readFileSync(path.join(box, "outbox", name), "utf8")
@@ -648,6 +665,66 @@ function clientSuite(
         // Git Bash's sed drops a CR before esc can escape it. Only there: on Windows the sh hands over to the ps1 at once.
         const arrives = label.includes("sh") && process.platform === "win32" ? said.replace(/\r/g, "") : said
         expect(JSON.parse(sealed.body).text).toBe(arrives)
+      },
+      60_000,
+    )
+
+    // SEC2-1: an apostrophe breaks a single-quoted argument, the agent falls back to double quotes, and backticks and
+    // $(...) run again. In bash a quoted heredoc runs nothing, so every text command takes its text from stdin.
+    const hostile = "L'utente ha visto `ragu tunnel` e $(whoami) e $0: niente viene eseguito. è ñ 😀\r\nseconda riga"
+    // Git Bash's sed drops a CR before esc can escape it. Only there: on Windows the sh hands over to the ps1 at once.
+    const arrivesAs = (text: string) => (label.includes("sh") && process.platform === "win32" ? text.replace(/\r/g, "") : text)
+
+    for (const args of [["send", "dest"], ["reply", "r9"], ["update", "r9", "bloccata"]]) {
+      test(
+        `${args[0]} --stdin posts the text exactly as piped, with nothing in it run or parsed`,
+        async () => {
+          const posted = waitForPost(8000)
+          const running = call([...args, "--stdin"], {}, hostile)
+          const { id, text } = await posted
+          put(`receipts/${id}.txt`, await seal(TOKEN, "receipt", id, "ok"))
+          await running
+          const body = JSON.parse(splitSealed(text)!.body)
+          expect(body.kind).toBe(args[0])
+          expect(JSON.stringify(body.text)).toBe(JSON.stringify(arrivesAs(hostile)))
+        },
+        60_000,
+      )
+    }
+
+    test(
+      "text on the command line and --stdin are joined, as --file does",
+      async () => {
+        const posted = waitForPost(8000)
+        const running = call(["send", "dest", "prima", "--stdin"], {}, "seconda")
+        const { id, text } = await posted
+        put(`receipts/${id}.txt`, await seal(TOKEN, "receipt", id, "ok"))
+        await running
+        expect(JSON.parse(splitSealed(text)!.body).text).toBe("prima\n\nseconda")
+      },
+      60_000,
+    )
+
+    test(
+      "registro takes its JSON from stdin alone, quotes intact",
+      async () => {
+        const json = '{"k":"D1","words":"ha detto \\"sì, ma dopo\\""}'
+        const posted = waitForPost(8000)
+        const running = call(["registro", "decisioni", "risposta", "--stdin"], {}, json)
+        const { id, text } = await posted
+        put(`receipts/${id}.txt`, await seal(TOKEN, "receipt", id, "ok"))
+        await running
+        expect(JSON.parse(splitSealed(text)!.body).text).toBe(json)
+      },
+      60_000,
+    )
+
+    test(
+      "--stdin with empty input posts nothing and is a usage error",
+      async () => {
+        const { code } = await call(["reply", "r9", "--stdin"], {}, "")
+        expect(code).toBe(1)
+        expect(fs.readdirSync(path.join(box, "outbox")).filter((file) => file.endsWith(".json"))).toEqual([])
       },
       60_000,
     )
