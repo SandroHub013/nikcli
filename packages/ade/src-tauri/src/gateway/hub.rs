@@ -766,6 +766,9 @@ impl Hub {
                     }
                 }
             }
+            // Under the lock `launch` publishes its link with: a link either is in the loop above, or finds the page
+            // ready and hands its own file on (BOT2-3).
+            self.ready.send_replace(true);
         }
         for (bot, platform, adapter, cursor) in moved {
             let _ = self.advance_cursor(&bot, platform, Some(&adapter), &cursor);
@@ -773,7 +776,6 @@ impl Hub {
         for msg in again {
             self.env.message(&msg);
         }
-        self.ready.send_replace(true);
     }
 
     /// The page is loading again (a reload, a renderer that crashed): its
@@ -811,46 +813,69 @@ impl Hub {
 
     fn launch(&self, bot: &str, platform: Platform, adapter: Arc<dyn Adapter>) {
         self.failed().remove(&(bot.to_string(), platform));
+        // First, with no lock: it reads the keychain.
+        let secrets = self.secrets();
         let (stop, stopped) = watch::channel(false);
         let live = Arc::new(Mutex::new(Live {
             reconnecting: true,
             ..Live::default()
         }));
-
-        let mut initial_pending: VecDeque<PendingEntry> =
-            read_pending_file(&pending_file_path(self.store.path(), bot, platform)).into();
-        let ready_now = *self.ready.borrow();
-        if ready_now {
-            let (again, dropped) = recheck_unacked(&*self.env, &self.store, bot, platform, &mut initial_pending);
-            if dropped {
-                if let Some(cursor) = settle(&*self.env, self.store.path(), bot, platform, &mut initial_pending) {
-                    let _ = self.advance_cursor(bot, platform, Some(&adapter), &cursor);
+        let wake = Arc::new(tokio::sync::Notify::new());
+        let pending: Arc<Mutex<VecDeque<PendingEntry>>> = Arc::default();
+        /*
+         * The file is read and the link goes in the map under the same lock, and only then is anything handed on: an ack
+         * from a page that answers at once finds the link and its queue. Before, it found no link, took the entry out of
+         * the file, and `launch`'s own copy wrote it back, to run again at the next reload (BOT2-3).
+         */
+        let (again, moved) = {
+            let mut links = self.links();
+            let mut queue = pending.lock().unwrap();
+            *queue = read_pending_file(&pending_file_path(self.store.path(), bot, platform)).into();
+            let mut again = Vec::new();
+            let mut moved = None;
+            if *self.ready.borrow() {
+                let (messages, dropped) = recheck_unacked(&*self.env, &self.store, bot, platform, &mut queue);
+                again = messages;
+                if dropped {
+                    moved = settle(&*self.env, self.store.path(), bot, platform, &mut queue);
                 }
             }
-            for msg in &again {
-                self.env.message(msg);
-            }
+            drop(queue);
+            links.insert(
+                (bot.to_string(), platform),
+                Running {
+                    adapter: adapter.clone(),
+                    stop,
+                    wake: wake.clone(),
+                    live: live.clone(),
+                    pending: pending.clone(),
+                },
+            );
+            (again, moved)
+        };
+        if let Some(cursor) = moved {
+            let _ = self.advance_cursor(bot, platform, Some(&adapter), &cursor);
         }
-        let pending = Arc::new(Mutex::new(initial_pending));
+        for msg in &again {
+            self.env.message(msg);
+        }
         let started_at = self.env.now_ms();
-        let wake = Arc::new(tokio::sync::Notify::new());
         let task = Task {
             env: self.env.clone(),
             store: self.store.clone(),
-            adapter: adapter.clone(),
+            adapter,
             bot: bot.to_string(),
             platform,
-            wake: wake.clone(),
-            live: live.clone(),
-            pending: pending.clone(),
-            secrets: self.secrets(),
+            wake,
+            live,
+            pending,
+            secrets,
             backoff: self.backoff,
             started_at,
             halted: stopped.clone(),
             while_off: Mutex::new(HashSet::new()),
         };
         tokio::spawn(task.run(stopped, self.ready.subscribe()));
-        self.links().insert((bot.to_string(), platform), Running { adapter, stop, wake, live, pending });
         self.env.status(&LinkStatus {
             bot: bot.to_string(),
             platform,
@@ -966,12 +991,15 @@ impl Hub {
     /// The webview acknowledged receipt of a message: advance the cursor up to this message in state.json.
     pub fn ack(&self, bot: &str, platform: Platform, chat: &str, id: &str) -> Result<(), String> {
         check_bot(bot)?;
-        let running = self.links().get(&(bot.to_string(), platform)).map(|r| (r.adapter.clone(), r.pending.clone()));
+        let links = self.links();
+        let running = links.get(&(bot.to_string(), platform)).map(|r| (r.adapter.clone(), r.pending.clone()));
         let Some((adapter, pending_lock)) = running else {
             // No link is running (switched off, or not started yet): the entry still leaves the file,
-            // or it would be handed on again at the next start (BOT-2).
+            // or it would be handed on again at the next start (BOT-2). With the links' lock held: `launch` reads the
+            // file under it, so it sees this change whole or finds it done (BOT2-3).
             return self.ack_in_file(bot, platform, chat, id);
         };
+        drop(links);
         let cursor_to_save = {
             let mut pending = pending_lock.lock().unwrap();
             if let Some(entry) = pending.iter_mut().find(|entry| entry.msg.chat == chat && entry.msg.id == id) {
@@ -2014,10 +2042,16 @@ mod tests {
         later: std::sync::atomic::AtomicU64,
         /// Bots whose file is gone.
         gone: Mutex<Vec<String>>,
+        /// Runs once, as the first message is handed on: a page that answers at once.
+        on_message: Mutex<Option<Box<dyn FnOnce(&GatewayMessage) + Send + Sync>>>,
     }
     impl Env for Recorder {
         fn message(&self, message: &GatewayMessage) {
             self.messages.lock().unwrap().push(message.clone());
+            let hook = self.on_message.lock().unwrap().take();
+            if let Some(hook) = hook {
+                hook(message);
+            }
         }
         fn pairing(&self, request: &PairingRequest) {
             self.pairings.lock().unwrap().push(request.clone());
@@ -3791,6 +3825,32 @@ mod tests {
         *adapter.position.lock().unwrap() = Some("900".into());
         s.hub.stop(BOT, Platform::Fake).unwrap();
         assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref(), Some("900"));
+    }
+
+    /* BOT2-3: `launch` publishes the link before it hands anything on. */
+    #[tokio::test]
+    async fn an_ack_that_lands_while_the_link_starts_is_not_undone_by_it() {
+        let s = setup("ack-while-launching");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        feed.send(Ok(vec![message("1", "c42", "42", "uno")])).unwrap();
+        eventually("il messaggio", || s.env.messages.lock().unwrap().len() == 1).await;
+        s.hub.shutdown();
+
+        let again = setup_vault(s.path.clone(), s.vault.clone());
+        let env = again.env.clone();
+        let hub = Arc::new(again.hub);
+        let acking = hub.clone();
+        // The page acks an idle chat's message at once, before `launch` has returned.
+        *env.on_message.lock().unwrap() = Some(Box::new(move |m: &GatewayMessage| acking.ack(BOT, Platform::Fake, &m.chat, &m.id).unwrap()));
+        hub.relaunch(BOT, Platform::Fake);
+        eventually("riconsegnato", || env.messages.lock().unwrap().len() == 1).await;
+
+        assert!(!pending_file_path(hub.store.path(), BOT, Platform::Fake).exists(), "an acknowledged entry was written back");
+        hub.unready();
+        hub.ready();
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        assert_eq!(env.messages.lock().unwrap().len(), 1, "the message runs twice");
     }
 
     /* BOT2-4: an unreadable state is not an empty one. */
