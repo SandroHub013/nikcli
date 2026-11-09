@@ -448,11 +448,14 @@ export function ShotTray(props: ShotTrayProps) {
                   </Button>
                 </Show>
                 <Show when={asking()}>
-                  <span data-slot="shot-viewer-ask">{t("shots.delete.ask", shot().name)}</span>
+                  <span id="shot-viewer-ask-text" role="alert" data-slot="shot-viewer-ask">
+                    {t("shots.delete.ask", shot().name)}
+                  </span>
                   {/* «Tieni» takes the place «Elimina» had, under the cursor: a double click keeps the file. */}
                   <Button
                     size="sm"
                     data-slot="shot-viewer-keep"
+                    aria-describedby="shot-viewer-ask-text"
                     disabled={deleting()}
                     ref={(button) => queueMicrotask(() => button.focus())}
                     onClick={() => setAsking(false)}
@@ -463,6 +466,7 @@ export function ShotTray(props: ShotTrayProps) {
                     size="sm"
                     variant="danger"
                     data-slot="shot-viewer-confirm"
+                    aria-describedby="shot-viewer-ask-text"
                     disabled={deleting()}
                     onClick={async (event) => {
                       // The second click of a double click on «Elimina» lands here: it is not a yes.

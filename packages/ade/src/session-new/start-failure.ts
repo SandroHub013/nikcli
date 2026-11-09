@@ -75,10 +75,21 @@ export function reasonText(raw: string): string {
   return reason
 }
 
+const REFUSED_KEYS = new Set<ReasonKey>([
+  "pane.reason.optionRefused",
+  "pane.reason.commandRefused",
+  "pane.reason.needsTerminal",
+  "pane.reason.shellArgument",
+  "pane.reason.unsafeArgument",
+])
+
 /** The pane's note when a local session did not start. */
 export function startFailureText(raw: string, agent?: { readonly label: string }): string {
   const missing = /^programma non trovato: (.+?)\.?$/s.exec(plain(raw))
   if (missing) return t("pane.startFailed.notFound", agent?.label ?? missing[1]!, missing[1]!)
+  const cleaned = plain(raw).replace(/\.+$/, "")
+  const isRefused = KNOWN.some(({ match, key }) => REFUSED_KEYS.has(key) && match.test(cleaned))
+  if (isRefused) return t("pane.startFailed.refused", reasonText(raw))
   return t("pane.startFailed", reasonText(raw))
 }
 

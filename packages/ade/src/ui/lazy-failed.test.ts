@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { createComponent, render } from "solid-js/web"
-import { resetLocaleForTests } from "../i18n"
+import { resetLocaleForTests, t } from "../i18n"
 import { compileSolidJsx } from "../test-support/solid-jsx"
 
 compileSolidJsx()
@@ -40,7 +40,7 @@ describe("the box of a screen that did not load", () => {
     const box = host.querySelector('[data-slot="lazy-failed"]')
     expect(box).not.toBeNull()
     expect(box!.getAttribute("data-component")).toBe("lazy-failed")
-    expect(box!.querySelector("h3")?.textContent).toBe("Questa schermata non si è caricata.")
+    expect(box!.querySelector("h3")?.textContent).toBe("Questa parte di ADE non si è caricata. Premi Riprova; se non basta, chiudi e riapri ADE.")
     expect(box!.querySelector('[data-slot="lazy-retry"]')?.textContent).toBe("Riprova")
     const close = box!.querySelector<HTMLButtonElement>('[data-slot="lazy-close"]')
     expect(close?.textContent).toBe("Chiudi")
@@ -52,7 +52,9 @@ describe("the box of a screen that did not load", () => {
     resetLocaleForTests("en")
     const host = mount(() => createComponent(Never, { onClose: () => {} }))
     await settle()
-    expect(host.querySelector('[data-slot="lazy-failed"] h3')?.textContent).toBe("This screen did not load.")
+    expect(host.querySelector('[data-slot="lazy-failed"] h3')?.textContent).toBe(
+      "This part of ADE did not load. Press Retry; if that isn't enough, close and reopen ADE.",
+    )
     expect(host.querySelector('[data-slot="lazy-close"]')?.textContent).toBe("Close")
     resetLocaleForTests("it")
   })
@@ -69,5 +71,61 @@ describe("the box of a screen that did not load", () => {
     expect(css).toContain('[data-slot="lazy-failed"]')
     expect(css).toMatch(/border:\s*1px solid var\(--ade-border/)
     expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(/)
+  })
+
+  describe("UX2-14: consistent place names and instructions", () => {
+    test("lazy.failed uses non-jargon copy and next steps in Italian and English", () => {
+      resetLocaleForTests("it")
+      expect(t("lazy.failed")).toBe(
+        "Questa parte di ADE non si è caricata. Premi Riprova; se non basta, chiudi e riapri ADE.",
+      )
+      resetLocaleForTests("en")
+      expect(t("lazy.failed")).toBe(
+        "This part of ADE did not load. Press Retry; if that isn't enough, close and reopen ADE.",
+      )
+    })
+
+    test("workspace texts refer to cartella dei dati rather than archivio", () => {
+      resetLocaleForTests("it")
+      expect(t("workspace.unreadableBroken", "copy1")).toContain(
+        "nella cartella dei dati di ADE (Impostazioni › Sistema › Informazioni)",
+      )
+      expect(t("workspace.unreadableBroken", "copy1")).not.toContain("archivio")
+      expect(t("workspace.saveFailed")).toContain(
+        "nella cartella dei dati di ADE (Impostazioni › Sistema › Informazioni)",
+      )
+      expect(t("workspace.saveFailed")).not.toContain("archivio")
+
+      resetLocaleForTests("en")
+      expect(t("workspace.unreadableBroken", "copy1")).toContain(
+        "in ADE's data folder (Settings › System › About)",
+      )
+      expect(t("workspace.unreadableBroken", "copy1")).not.toContain("storage")
+      expect(t("workspace.saveFailed")).toContain(
+        "ADE's data folder (Settings › System › About)",
+      )
+    })
+
+    test("install.stillMissing tells user to click card first and restart if needed", () => {
+      resetLocaleForTests("it")
+      expect(t("install.stillMissing")).toBe(
+        "Non lo trovo ancora. Apri Nuova sessione, clicca la sua scheda e premi Ricontrolla; se non basta, riavvia ADE.",
+      )
+
+      resetLocaleForTests("en")
+      expect(t("install.stillMissing")).toBe(
+        "I can't find it yet. Open New session, click its card and press Check again; if that isn't enough, restart ADE.",
+      )
+    })
+
+    test("menu paths use › separator", () => {
+      resetLocaleForTests("it")
+      expect(t("update.failed", "x")).toContain("Notifiche › Controlla aggiornamenti")
+      expect(t("record.export.failed", "x")).toContain("Impostazioni › Registrazione")
+
+      resetLocaleForTests("en")
+      expect(t("update.failed", "x")).toContain("Notifications › Check for updates")
+      expect(t("record.export.failed", "x")).toContain("Settings › Recording")
+    })
   })
 })

@@ -95,8 +95,10 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
 
   return (
     <section
+      ref={(el) => queueMicrotask(() => el.focus({ preventScroll: true }))}
       data-component="session-new"
       tabIndex={-1}
+      aria-labelledby="session-new-title"
       onKeyDown={(event) => {
         if (event.key === "Enter" && !event.shiftKey && (event.target as HTMLElement)?.tagName !== "BUTTON") {
           event.preventDefault()
@@ -111,7 +113,7 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
       <div data-slot="new-column">
         <header data-slot="new-bar">
           <div data-slot="new-heading">
-            <h1 data-slot="new-title">{t("new.title")}</h1>
+            <h1 id="session-new-title" data-slot="new-title">{t("new.title")}</h1>
             <span data-slot="new-where">
               <span data-slot="new-workspace">{props.workspace}</span>
               <Show when={props.path}>{(path) => <span data-slot="new-path">{path()}</span>}</Show>

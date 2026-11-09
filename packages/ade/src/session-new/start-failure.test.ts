@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { resetLocaleForTests } from "../i18n"
+import { resetLocaleForTests, t } from "../i18n"
 import { connectFailureText, errorMessage, reasonText, startFailureText } from "./start-failure"
 
 afterEach(() => resetLocaleForTests("it"))
@@ -24,7 +24,7 @@ describe("a session that did not start says why and what to do (UX-9)", () => {
 
   test("any other reason keeps the system's words, minus «Error: », and says where to look", () => {
     expect(startFailureText("Error: accesso negato.")).toBe(
-      "La sessione non è partita: accesso negato. Premi Riprova; se succede di nuovo, controlla l'accesso in Impostazioni → Agenti e account.",
+      "La sessione non è partita: accesso negato. Premi Riprova; se succede di nuovo, controlla di aver fatto l'accesso all'agente in Impostazioni › Agenti e account.",
     )
   })
 
@@ -91,5 +91,45 @@ describe("the nested Rust reasons and the pty.rs wording (UX-9)", () => {
     ]) {
       expect(rust, literal).toContain(literal)
     }
+  })
+
+  describe("UX2-10: error advice fits the error", () => {
+    test("refusal reasons tell user retrying won't help and to fix the command/option", () => {
+      resetLocaleForTests("it")
+      const refusedReasons = [
+        "opzione di avvio non consentita per claude: --bad",
+        "comando non consentito: dangerous",
+        "claude non si avvia senza terminale",
+        "argomento della shell non consentito: |",
+        "argomento non sicuro per claude: contiene &, che cmd.exe interpreta",
+      ]
+      for (const raw of refusedReasons) {
+        const text = startFailureText(raw)
+        expect(text).toContain("Riprovare non serve: togli quell'opzione o quell'argomento dal comando che l'ha avviata.")
+        expect(text).not.toContain("Premi Riprova")
+      }
+    })
+
+    test("general start failures tell user to check sign-in to the agent with › menu path", () => {
+      resetLocaleForTests("it")
+      const text = startFailureText("Error: accesso negato.")
+      expect(text).toBe(
+        "La sessione non è partita: accesso negato. Premi Riprova; se succede di nuovo, controlla di aver fatto l'accesso all'agente in Impostazioni › Agenti e account.",
+      )
+    })
+
+    test("chat queue full advises off/on and restart without reload window", () => {
+      resetLocaleForTests("it")
+      expect(t("gateway.panel.attentionQueueFull")).toContain(
+        "Spegni e riaccendi il collegamento chat; se ricapita, chiudi e riapri ADE (le sessioni ripartono).",
+      )
+      expect(t("gateway.panel.attentionQueueFull")).not.toContain("Ricarica la finestra")
+
+      resetLocaleForTests("en")
+      expect(t("gateway.panel.attentionQueueFull")).toContain(
+        "Switch the chat connection off and on; if it happens again, close and reopen ADE (sessions restart).",
+      )
+      expect(t("gateway.panel.attentionQueueFull")).not.toContain("Reload ADE's window")
+    })
   })
 })

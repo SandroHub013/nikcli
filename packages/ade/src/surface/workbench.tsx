@@ -3116,12 +3116,12 @@ export function Workbench() {
    */
   const showMail = (paneId: string) => {
     const panes = mailPanes()
-    const named = (from: string | undefined) => panes.find((pane) => pane.id === from)?.title ?? "una sessione"
+    const named = (from: string | undefined) => panes.find((pane) => pane.id === from)?.title ?? t("note.mailUnknownSession")
     const waiting = [
       ...heldLines.filter((held) => held.paneId === paneId).map((held) => held.text),
       ...inboxPending
         .filter((entry) => entry.paneId === paneId)
-        .map((entry) => `${named(entry.from)}: ${entry.chars} caratteri, ${entry.id}`),
+        .map((entry) => t("note.mailLine", named(entry.from), entry.chars)),
     ]
     if (waiting.length === 0) return
     for (const line of waiting) tellPane(paneId, t("note.mailWaiting", clippedForNote(line)))
@@ -4188,7 +4188,7 @@ export function Workbench() {
     held.delete(id)
     heldStates.delete(id)
     console.error(`ADE: posta ${id}: ${text}`)
-    report(t("mail.stuck", message.kind, id))
+    report(t("mail.stuck"))
     void getHost().then((host) => {
       void host?.mailboxReceipt?.(id, text).catch(() => {})
       const notice = hangNotice(message, gone)

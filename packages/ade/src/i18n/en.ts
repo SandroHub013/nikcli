@@ -60,8 +60,9 @@ export const en: Messages = {
   "palette.pane.rename": "Rename session",
   "palette.pane.deliverNow": "Deliver the waiting mail now",
   "palette.pane.deliverNow.none": "The focused panel has no mail to deliver",
-  "lazy.failed": "This screen did not load.",
-  "lazy.retry": "Try again",
+  "lazy.failed":
+    "This part of ADE did not load. Press Retry; if that isn't enough, close and reopen ADE.",
+  "lazy.retry": "Retry",
   "palette.pane.resize": "Resize the panel with the keyboard",
   "palette.noFocusedPane": "No panel is focused",
   "palette.view.next": (view) => `Next section (${view})`,
@@ -105,7 +106,7 @@ export const en: Messages = {
   "update.none": "No updates available.",
   "update.dev": "This is a development build, so there's no installed version to update.",
   "update.failed": (problem) =>
-    `Couldn't check for updates (${problem}). Try again later from Notifications → Check for updates.`,
+    `Couldn't check for updates (${problem}). Try again later from Notifications › Check for updates.`,
   "presence.off": "Microphone off",
   "presence.asleep": "Waiting for the wake word",
   "presence.idle": "Ready",
@@ -116,7 +117,7 @@ export const en: Messages = {
   "paneState.work": "Working",
   "paneState.perm": "Waiting for permission",
   "paneState.ask": "Waiting on another session",
-  "paneState.err": "Stuck",
+  "paneState.err": "Error",
   "paneState.limit": "Limit reached",
   "paneState.idle": "Ready",
   "paneState.off": "Suspended",
@@ -191,6 +192,9 @@ export const en: Messages = {
   "sidebar.elapsed": "Time elapsed",
   "sidebar.spaces": "Projects",
   "sidebar.openProjectSessions": "Open project sessions",
+  "sidebar.pill.working": (count: number) => `${count} working`,
+  "sidebar.pill.waiting": (count: number) => `${count} ${plural(count, { one: "permission", other: "permissions" }, "en")}`,
+  "sidebar.pill.error": (count: number) => `${count} ${plural(count, { one: "error", other: "errors" }, "en")}`,
   "sidebar.addSpace": "Add a project",
   "sidebar.addRemote": "Add a remote environment (ssh)",
   "sidebar.noSpaces": "No projects open.",
@@ -250,7 +254,9 @@ export const en: Messages = {
   "pane.input.none": "no process listening",
   "pane.notDelivered": (text) => `No process is listening, so ${text} wasn't delivered.`,
   "pane.startFailed": (error) =>
-    `The session didn't start: ${error}. Press Retry; if it happens again, check your sign-in in Settings → Agents and accounts.`,
+    `The session didn't start: ${error}. Press Retry; if it happens again, check your sign-in to the agent in Settings › Agents and accounts.`,
+  "pane.startFailed.refused": (error) =>
+    `The session didn't start: ${error}. Retrying won't help: remove that option or argument from the command that started it.`,
   "pane.startFailed.notFound": (agent, command) =>
     `${agent} didn't start: the command “${command}” is not installed on this computer. Install it from its card in New session, then press Retry.`,
   "pane.connectFailed.notFound": (reason) => `The connection failed: ${reason}. Install it, then try again.`,
@@ -351,9 +357,10 @@ export const en: Messages = {
     "I can't find it yet. If the terminal shows an error, the install isn't finished: fix it and try again. If it is finished, close and reopen New session.",
   "install.paneNote": (agent) =>
     `When the install ends, ADE checks by itself and reopens New session with ${agent} ready. On an error the terminal usually stays open.`,
-  "install.stillMissing": "I can't find it yet. Open New session and press Check again on its card.",
-  "install.readyElsewhere": (agent) => `${agent} is installed: open New session (Ctrl+N) to start it.`,
-  "install.autoFoundElsewhere": (agent) => `${agent} installed: open New session (Ctrl+N) to start it.`,
+  "install.stillMissing":
+    "I can't find it yet. Open New session, click its card and press Check again; if that isn't enough, restart ADE.",
+  "install.readyElsewhere": (agent) => `${agent} is installed: open New session (Ctrl+Shift+P › New session) to start it.`,
+  "install.autoFoundElsewhere": (agent) => `${agent} installed: open New session (Ctrl+Shift+P › New session) to start it.`,
   "install.autoFound": (agent) => `${agent} is installed: you can start it from New session now.`,
   "install.source": (source, date) => `Source: ${source}, checked on ${date}`,
   "install.caveat.subscription": "Using it needs a GitHub Copilot subscription.",
@@ -459,10 +466,11 @@ export const en: Messages = {
   "workspace.unreadable":
     "I could not read the saved sessions (they may come from a newer version of ADE). I kept a copy: update ADE to get them back.",
   "workspace.unreadableBroken": (copy) =>
-    `The saved sessions are damaged and no version of ADE can read them: updating will not help. I kept a copy, but it cannot be restored from here: it is in ADE's storage under the name "${copy}".`,
+    `The saved sessions are damaged and no version of ADE can read them: updating will not help. I kept a copy, but it cannot be restored from here: it is in ADE's data folder (Settings › System › About) under the name "${copy}".`,
   "workspace.unreadableNoCopy":
     "I could not read the saved sessions and could not keep a copy (no room left). Until there is room, this run's sessions are not saved.",
-  "workspace.saveFailed": "I cannot save the sessions: ADE's storage is full. Close the sessions you do not need.",
+  "workspace.saveFailed":
+    "I cannot save the sessions: ADE's data folder (Settings › System › About) is full. Close the sessions you do not need.",
   "workspace.restore.offer": "I have a copy of the saved sessions that I can read now.",
   "workspace.restore.action": "Restore the sessions",
   "workspace.restore.confirm":
@@ -767,7 +775,8 @@ export const en: Messages = {
   "pane.close.named": (title: string) => `Close ${title}`,
   "hooks.foreign":
     "From another build of ADE, not this one: this build neither updates nor removes it, because the official ADE's sessions run through that file",
-  "bar.raguVersion": (v) => `Ragù Code ${v}: the program new sessions start, not ADE`,
+  "bar.meta.ragu": (version) => `CLI Ragù Code ${version}`,
+  "bar.raguVersion.tip": "the program new sessions start",
   "bar.sessions": (count) => `${count} ${count === 1 ? "session" : "sessions"}`,
   "bar.meta.ade": (version) => `ADE ${version}`,
   "bar.info": (facts) => `Project details: ${facts}`,
@@ -813,7 +822,7 @@ export const en: Messages = {
   "record.export.desktopOnly": "Exporting only works in the desktop app.",
   "record.export.done": (path) => `Video ready: ${path}`,
   "record.export.failed": (problem) =>
-    `Export failed: ${problem}. The original recording was not touched: try again from Settings → Recording.`,
+    `Export failed: ${problem}. The original recording was not touched: try again from Settings › Recording.`,
   "pane.maybeStuck": (request) =>
     `Possibly stuck: working for over an hour with no output or changes (request ${request})`,
 
@@ -1096,7 +1105,7 @@ export const en: Messages = {
   "gateway.panel.reconnecting": "On · reconnecting",
   "gateway.panel.attentionTimeout": "Could not connect for over 10 minutes",
   "gateway.panel.attentionQueueFull":
-    "Chat messages are piling up faster than ADE handles them, and new ones are being dropped. Reload ADE's window; if it comes back, switch the gateway off and on.",
+    "Chat messages are piling up faster than ADE handles them, and new ones are being dropped. Switch the chat connection off and on; if it happens again, close and reopen ADE (sessions restart).",
   "gateway.panel.retry": "Retry",
   "gateway.panel.changeCode": "Change code",
   "gateway.panel.openPlatforms": "Open platforms",
@@ -1766,9 +1775,13 @@ export const en: Messages = {
   "note.enterHeldFor": (to: string) => `Typed to ${to}, Enter not pressed: a permission prompt is open`,
   "note.inboxLost": (id) => `Message ${id} vanished from the inbox before it was read: the sender is told`,
   "note.rang": (rings) => `Reminder sent again: message not read yet (${rings}/3)`,
-  "note.mailWaiting": (what) => `Mail waiting (the session is typing): ${what}`,
+  "note.mailWaiting": (what: string) => `Pending mail: ${what}`,
+  "note.mailLine": (from: string, chars: number) =>
+    `${from}: ${chars} ${plural(chars, { one: "character", other: "characters" }, "en")}`,
+  "note.mailUnknownSession": "a session",
   "note.mailNotTyped": (what) => `Mail not typed (a shell runs here): ${what}`,
-  "pane.mail": (count) => `${count} waiting: ADE holds mail back while the line is half-written`,
+  "pane.mail": (count: number) =>
+    `${count} pending: will arrive when the session is free. Click to view.`,
   "note.resentRequest": (id) => `Pressed Enter again: request ${id} hadn't been sent`,
   "note.nudged": (id) => `Reminder sent: request ${id} is waiting for a reply`,
   "note.outputWorkGivenUp": () =>
@@ -1777,8 +1790,8 @@ export const en: Messages = {
   "note.replySentTo": (to, ref) => `Reply sent to ${to} (request ${ref})`,
   "note.replyFrom": (from, text) => `Reply from ${from}: ${text}`,
   "note.keptOpen": (problem) => `Kept open: ${problem}`,
-  "mail.stuck": (kind, id) =>
-    `Mail between sessions: ${kind} ${id} gave no result. ADE moved on; the sender will hear of it if still open`,
+  "mail.stuck":
+    "A message between sessions was not delivered and ADE stopped waiting for it. The sender will know, if it is still open.",
   "mail.stepStuck": "Mail between sessions: a step does not finish. ADE keeps trying; if mail stays stuck, restart ADE",
   "note.closedAfterReply": (closed) => `Closed after replying: ${closed}`,
   "note.updateFrom": (from, state, text) => `Update from ${from}: ${state} — ${text}`,

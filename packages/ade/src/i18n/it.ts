@@ -65,7 +65,8 @@ export const it = {
   "palette.pane.rename": "Rinomina sessione",
   "palette.pane.deliverNow": "Consegna ora la posta in attesa",
   "palette.pane.deliverNow.none": "Il pannello a fuoco non ha posta da consegnare",
-  "lazy.failed": "Questa schermata non si è caricata.",
+  "lazy.failed":
+    "Questa parte di ADE non si è caricata. Premi Riprova; se non basta, chiudi e riapri ADE.",
   "lazy.retry": "Riprova",
   "palette.pane.resize": "Ridimensiona il pannello con la tastiera",
   "palette.noFocusedPane": "Nessun pannello a fuoco",
@@ -110,7 +111,7 @@ export const it = {
   "update.none": "Nessun aggiornamento disponibile.",
   "update.dev": "Questa è una build di sviluppo: non c'è una versione installata da aggiornare.",
   "update.failed": (problem: string) =>
-    `Non sono riuscita a controllare gli aggiornamenti (${problem}). Riprova più tardi da Notifiche → Controlla aggiornamenti.`,
+    `Non sono riuscita a controllare gli aggiornamenti (${problem}). Riprova più tardi da Notifiche › Controlla aggiornamenti.`,
   "presence.off": "Microfono spento",
   "presence.asleep": "In attesa della parola di richiamo",
   "presence.idle": "Pronto",
@@ -121,7 +122,7 @@ export const it = {
   "paneState.work": "Al lavoro",
   "paneState.perm": "In attesa di permesso",
   "paneState.ask": "Attende un'altra sessione",
-  "paneState.err": "Bloccata",
+  "paneState.err": "Errore",
   "paneState.limit": "Limite raggiunto",
   "paneState.idle": "Pronta",
   "paneState.off": "Sospesa",
@@ -198,6 +199,9 @@ export const it = {
   "sidebar.elapsed": "Tempo trascorso",
   "sidebar.spaces": "Progetti",
   "sidebar.openProjectSessions": "Apri le sessioni del progetto",
+  "sidebar.pill.working": (count: number) => `${count} al lavoro`,
+  "sidebar.pill.waiting": (count: number) => `${count} ${plural(count, { one: "permesso", other: "permessi" }, "it")}`,
+  "sidebar.pill.error": (count: number) => `${count} ${plural(count, { one: "in errore", other: "in errore" }, "it")}`,
   "sidebar.addSpace": "Aggiungi progetto",
   "sidebar.addRemote": "Aggiungi ambiente remoto (ssh)",
   "sidebar.noSpaces": "Nessun progetto aperto.",
@@ -258,7 +262,9 @@ export const it = {
   "pane.input.none": "nessun processo in ascolto",
   "pane.notDelivered": (text: string) => `Nessun processo in ascolto: ${text} non è stato consegnato.`,
   "pane.startFailed": (error: string) =>
-    `La sessione non è partita: ${error}. Premi Riprova; se succede di nuovo, controlla l'accesso in Impostazioni → Agenti e account.`,
+    `La sessione non è partita: ${error}. Premi Riprova; se succede di nuovo, controlla di aver fatto l'accesso all'agente in Impostazioni › Agenti e account.`,
+  "pane.startFailed.refused": (error: string) =>
+    `La sessione non è partita: ${error}. Riprovare non serve: togli quell'opzione o quell'argomento dal comando che l'ha avviata.`,
   "pane.startFailed.notFound": (agent: string, command: string) =>
     `${agent} non è partito: il comando «${command}» non è installato su questo computer. Installalo dalla sua scheda in Nuova sessione, poi premi Riprova.`,
   "pane.connectFailed.notFound": (reason: string) => `La connessione non è riuscita: ${reason}. Installalo, poi riprova.`,
@@ -360,9 +366,10 @@ export const it = {
     "Non lo trovo ancora. Se il terminale mostra un errore, l'installazione non è finita: correggi e riprova. Se è finita, chiudi e riapri Nuova sessione.",
   "install.paneNote": (agent: string) =>
     `A installazione finita ADE ricontrolla da sola e riapre Nuova sessione con ${agent} pronto. Se l'installazione dà errore, di solito il terminale resta aperto.`,
-  "install.stillMissing": "Non lo trovo ancora. Apri Nuova sessione e premi Ricontrolla sulla sua scheda.",
-  "install.readyElsewhere": (agent: string) => `${agent} è installato: apri Nuova sessione (Ctrl+N) per avviarlo.`,
-  "install.autoFoundElsewhere": (agent: string) => `${agent} installato: apri Nuova sessione (Ctrl+N) per avviarlo.`,
+  "install.stillMissing":
+    "Non lo trovo ancora. Apri Nuova sessione, clicca la sua scheda e premi Ricontrolla; se non basta, riavvia ADE.",
+  "install.readyElsewhere": (agent: string) => `${agent} è installato: apri Nuova sessione (Ctrl+Maiusc+P › Nuova sessione) per avviarlo.`,
+  "install.autoFoundElsewhere": (agent: string) => `${agent} installato: apri Nuova sessione (Ctrl+Maiusc+P › Nuova sessione) per avviarlo.`,
   "install.autoFound": (agent: string) => `${agent} installato: ora puoi avviarlo da Nuova sessione.`,
   "install.source": (source: string, date: string) => `Fonte: ${source}, controllata il ${date}`,
   "install.caveat.subscription": "Per usarlo serve un abbonamento GitHub Copilot.",
@@ -471,11 +478,11 @@ export const it = {
   "workspace.unreadable":
     "Non sono riuscita a leggere le sessioni salvate (forse sono di una versione più nuova di ADE). Ne ho tenuto una copia: aggiorna ADE per riaverle.",
   "workspace.unreadableBroken": (copy: string) =>
-    `Le sessioni salvate sono danneggiate e nessuna versione di ADE le può leggere: aggiornare non serve. Ne ho tenuto una copia, ma non si ripristina da qui: è nell'archivio di ADE con il nome «${copy}».`,
+    `Le sessioni salvate sono danneggiate e nessuna versione di ADE le può leggere: aggiornare non serve. Ne ho tenuto una copia, ma non si ripristina da qui: è nella cartella dei dati di ADE (Impostazioni › Sistema › Informazioni) con il nome «${copy}».`,
   "workspace.unreadableNoCopy":
     "Non sono riuscita a leggere le sessioni salvate e non ho potuto tenerne una copia (manca spazio). Finché non se ne libera, le sessioni di questa volta non vengono salvate.",
   "workspace.saveFailed":
-    "Non riesco a salvare le sessioni: manca spazio nell'archivio di ADE. Chiudi le sessioni che non servono.",
+    "Non riesco a salvare le sessioni: manca spazio nella cartella dei dati di ADE (Impostazioni › Sistema › Informazioni). Chiudi le sessioni che non servono.",
   "workspace.restore.offer": "Ho una copia delle sessioni salvate che ora riesco a leggere.",
   "workspace.restore.action": "Ripristina le sessioni",
   "workspace.restore.confirm":
@@ -785,7 +792,8 @@ export const it = {
   "pane.close.named": (title: string) => `Chiudi ${title}`,
   "hooks.foreign":
     "Di un'altra build di ADE, non di questa: questa non lo aggiorna e non lo rimuove, perché con quel file ci lavorano le sessioni dell'ADE ufficiale",
-  "bar.raguVersion": (v: string) => `Ragù Code ${v}: è il programma con cui partono le sessioni, non ADE`,
+  "bar.meta.ragu": (version: string) => `CLI Ragù Code ${version}`,
+  "bar.raguVersion.tip": "il programma con cui partono le sessioni",
   "bar.sessions": (count: number) => `${count} ${count === 1 ? "sessione" : "sessioni"}`,
   "bar.meta.ade": (version: string) => `ADE ${version}`,
   "bar.info": (facts: string) => `Dettagli del progetto: ${facts}`,
@@ -831,7 +839,7 @@ export const it = {
   "record.export.desktopOnly": "L'esportazione funziona solo nell'app desktop.",
   "record.export.done": (path: string) => `Video pronto: ${path}`,
   "record.export.failed": (problem: string) =>
-    `Esportazione non riuscita: ${problem}. La registrazione originale non è stata toccata: riprova da Impostazioni → Registrazione.`,
+    `Esportazione non riuscita: ${problem}. La registrazione originale non è stata toccata: riprova da Impostazioni › Registrazione.`,
   "pane.maybeStuck": (request: string) =>
     `Forse bloccata: al lavoro da oltre un'ora senza output né modifiche (richiesta ${request})`,
 
@@ -1118,7 +1126,7 @@ export const it = {
   "gateway.panel.reconnecting": "Acceso · riconnessione in corso",
   "gateway.panel.attentionTimeout": "Impossibile connettersi da oltre 10 minuti",
   "gateway.panel.attentionQueueFull":
-    "I messaggi della chat si accumulano più in fretta di quanto ADE li gestisca, e i nuovi vengono scartati. Ricarica la finestra di ADE; se ricapita, spegni e riaccendi il collegamento chat.",
+    "I messaggi della chat si accumulano più in fretta di quanto ADE li gestisca, e i nuovi vengono scartati. Spegni e riaccendi il collegamento chat; se ricapita, chiudi e riapri ADE (le sessioni ripartono).",
   "gateway.panel.retry": "Riprova",
   "gateway.panel.changeCode": "Cambia il codice",
   "gateway.panel.openPlatforms": "Apri piattaforme",
@@ -1810,9 +1818,13 @@ export const it = {
   "note.inboxLost": (id: string) =>
     `Messaggio ${id} sparito dalla casella prima di essere letto: il mittente è avvisato`,
   "note.rang": (rings: number) => `Avviso ripetuto: messaggio non ancora letto (${rings}/3)`,
-  "note.mailWaiting": (what: string) => `Posta in attesa (la sessione sta scrivendo): ${what}`,
+  "note.mailWaiting": (what: string) => `Posta in attesa: ${what}`,
+  "note.mailLine": (from: string, chars: number) =>
+    `${from}: ${chars} ${plural(chars, { one: "carattere", other: "caratteri" }, "it")}`,
+  "note.mailUnknownSession": "una sessione",
   "note.mailNotTyped": (what: string) => `Posta non digitata (qui gira una shell): ${what}`,
-  "pane.mail": (count: number) => `${count} in attesa: ADE non consegna finché la riga è a metà`,
+  "pane.mail": (count: number) =>
+    `${count} in attesa: arrivano quando la sessione è libera. Clic per vederli.`,
   "note.resentRequest": (id: string) => `Invio ripetuto: la richiesta ${id} non era partita`,
   "note.nudged": (id: string) => `Promemoria inviato: la richiesta ${id} aspetta una risposta`,
   "note.outputWorkGivenUp": () =>
@@ -1821,8 +1833,8 @@ export const it = {
   "note.replySentTo": (to: string, ref: string) => `Risposta inviata a ${to} (richiesta ${ref})`,
   "note.replyFrom": (from: string, text: string) => `Risposta ricevuta da ${from}: ${text}`,
   "note.keptOpen": (problem: string) => `Resta aperta: ${problem}`,
-  "mail.stuck": (kind: string, id: string) =>
-    `Posta tra le sessioni: ${kind} ${id} non ha dato esito. ADE è andata avanti; il mittente lo saprà, se è ancora aperto`,
+  "mail.stuck":
+    "Un messaggio tra sessioni non è stato consegnato e ADE ha smesso di aspettarlo. Chi l'ha mandato lo saprà, se è ancora aperto.",
   "mail.stepStuck": "Posta tra le sessioni: un passo non finisce. ADE lo riprova; se la posta resta ferma, riavvia ADE",
   "note.closedAfterReply": (closed: string) => `Chiusa dopo la risposta: ${closed}`,
   "note.updateFrom": (from: string, state: string, text: string) => `Aggiornamento da ${from}: ${state} — ${text}`,

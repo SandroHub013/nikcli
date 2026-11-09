@@ -1267,7 +1267,7 @@ export function Sidebar(props: SidebarProps) {
                 {(pill) => (
                   <span data-slot="sidebar-pill" data-tone={pill.tone}>
                     <i data-slot="sidebar-pill-dot" />
-                    {pill.count} {pill.label}
+                    {pill.label}
                   </span>
                 )}
               </For>

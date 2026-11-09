@@ -63,6 +63,10 @@ describe("V3: the focus ring", () => {
   test("a dialog's frame, which holds the focus without being a control, has none", () => {
     expect(rule(read("index.css"), '[data-layout="frame"]:focus-visible')).toMatch(/box-shadow:\s*none/)
   })
+
+  test("the new session launcher section, which holds the focus on mount, has none (B4)", () => {
+    expect(rule(read("index.css"), '[data-component="session-new"]:focus-visible')).toMatch(/box-shadow:\s*none/)
+  })
 })
 
 describe("V5: the disabled primary", () => {

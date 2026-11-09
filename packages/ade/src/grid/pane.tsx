@@ -25,6 +25,7 @@ import {
 import { StateIcon } from "./state-icon"
 import { t } from "../i18n"
 import { FolderGlyph, PaneActions } from "./pane-actions"
+import { agentLabel } from "../session-new/agents"
 
 export { type PaneStatus, type PaneState, STATE_FULL, STATE_SHORT, resolvePaneState, StateIcon }
 
@@ -525,7 +526,7 @@ export function SessionPane(props: SessionPaneProps) {
   const stateDetail = createMemo(() => {
     const detail = chipDetail({ activity: props.activity }) || undefined
     if (answerInTerminal()) return detail ? `${t("paneState.perm.tip")}\n${detail}` : t("paneState.perm.tip")
-    return detail ?? STATE_FULL[state()]
+    return detail ?? ""
   })
 
   const tipAll = createMemo(() => {
@@ -533,12 +534,16 @@ export function SessionPane(props: SessionPaneProps) {
     const quotaLines = q && !(isQuotaUnavailable(q) && q.sourceless) ? `\n${q.tooltip}` : ""
     const branchLine = props.tree ? `\n${t("pane.tree.branch", props.tree.branch)}` : ""
     const tokLine = props.tokens ? `\n${props.tokens}` : ""
-    return `${props.title}\n${props.agent ?? props.model ?? t("pane.session")} · ${STATE_FULL[state()]}\n${stateDetail()}${quotaLines}${branchLine}${tokLine}`
+    const agent = (props.agent ? agentLabel(props.agent) : undefined) ?? props.model ?? t("pane.session")
+    const detail = stateDetail()
+    const detailLine = detail ? `\n${detail}` : ""
+    return `${props.title}\n${agent} · ${STATE_FULL[state()]}${detailLine}${quotaLines}${branchLine}${tokLine}`
   })
 
   const tipState = createMemo(() => {
     const elText = props.elapsed ? t("pane.elapsed", props.elapsed) : ""
-    return `${STATE_FULL[state()]}\n${stateDetail()}${elText}`
+    const detail = stateDetail()
+    return detail ? `${STATE_FULL[state()]}\n${detail}${elText}` : `${STATE_FULL[state()]}${elText}`
   })
 
   return (
@@ -624,7 +629,7 @@ export function SessionPane(props: SessionPaneProps) {
       }}
     >
       <header class="pill hA" data-slot="pane-header">
-        <span class="logo" data-slot="pane-identity" title={props.agent}>
+        <span class="logo" data-slot="pane-identity" title={props.agent ? agentLabel(props.agent) : undefined}>
           {props.glyph ?? (
             <span data-slot="pane-glyph" aria-hidden="true">
               •
@@ -701,7 +706,7 @@ export function SessionPane(props: SessionPaneProps) {
           tabIndex={0}
           title={tipState()}
           data-tip={tipState()}
-          aria-label={`${STATE_FULL[state()]}: ${stateDetail()}`}
+          aria-label={stateDetail() ? `${STATE_FULL[state()]}: ${stateDetail()}` : STATE_FULL[state()]}
         >
           <StateIcon state={state()} />
           <span class="lbl">{STATE_SHORT[state()]}</span>

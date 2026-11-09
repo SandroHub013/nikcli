@@ -167,4 +167,13 @@ describe("the workbench wiring", () => {
     expect(done.indexOf("wb().focusedId === paneId")).toBeLessThan(done.indexOf("setStarting(true)"))
     expect(src).toContain('if (!key && voiceSettings().replyBackend === "mai") key = await copyRaguKey(host)')
   })
+
+  test("UX2-4: on mount, SessionNew focuses the section and sets aria-labelledby to its h1", async () => {
+    const { root } = await mount(["claude"])
+    const section = root.querySelector<HTMLElement>('section[data-component="session-new"]')!
+    expect(section.getAttribute("aria-labelledby")).toBe("session-new-title")
+    const title = root.querySelector<HTMLElement>("#session-new-title")!
+    expect(title).not.toBeNull()
+    expect(document.activeElement).toBe(section)
+  })
 })

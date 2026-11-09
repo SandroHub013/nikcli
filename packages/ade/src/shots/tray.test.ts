@@ -171,6 +171,21 @@ describe("deleting a screenshot from the viewer", () => {
     expect(byText(host, t("shots.delete.keep"))).toBeDefined()
   })
 
+  test("UX2-13: delete question is accessible to screen readers via role alert and aria-describedby", () => {
+    const host = open(async () => true)
+    byText(host, t("shots.delete"))!.click()
+
+    const ask = document.querySelector('[data-slot="shot-viewer-ask"]')!
+    expect(ask.getAttribute("role")).toBe("alert")
+    expect(ask.id).toBe("shot-viewer-ask-text")
+
+    const keep = document.querySelector('[data-slot="shot-viewer-keep"]')!
+    expect(keep.getAttribute("aria-describedby")).toBe("shot-viewer-ask-text")
+
+    const confirm = document.querySelector('[data-slot="shot-viewer-confirm"]')!
+    expect(confirm.getAttribute("aria-describedby")).toBe("shot-viewer-ask-text")
+  })
+
   test("«Tieni» goes back and deletes nothing", () => {
     const deleted: string[] = []
     const host = open(async (path) => (deleted.push(path), true))
