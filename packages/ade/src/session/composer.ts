@@ -78,6 +78,8 @@ interface CursorModes {
 const hiddenCursor = new WeakSet<object>()
 /** A bar agent's terminal that had a focus-in with something open over its box: see `followKeys`. */
 const refocused = new WeakSet<object>()
+/** A marked terminal whose next press is taken for the click that brought the focus back: see `followKeys`. */
+const pressOfTheFocus = new WeakSet<object>()
 const FOCUS_IN = "\x1b[I"
 /** A mouse report: `ESC [ < button ; x ; y M`. A button of 32 up is a motion or the wheel, and closes nothing. */
 const MOUSE_PRESS = /^\x1b\[<(\d+);\d+;\d+M$/
@@ -104,15 +106,22 @@ export function watchCursor(terminal: CursorModes): void {
  * cursor says «box» and an Enter would be the dialog's. Each frame of opentui hides and shows the cursor, so nothing after
  * it tells them apart. The focus-in does: a box drawn and not read, at that moment, has something over it. It holds until a
  * key or a click that can close a dialog. If there was none to close, the pane waits and «Consegna ora» is the way out.
+ * A click that returns to the pane sends the focus-in and then its press, and a press on the dialog's own panel leaves the
+ * dialog open: the first press after a focus-in says nothing, however late it comes, since the box already has the cursor.
  */
 export function followKeys(terminal: ComposerTerminal, agentId: string, data: string): void {
   if (!BAR_AGENTS.has(agentId)) return
   if (data === FOCUS_IN) {
-    if (composerOf(terminal, agentId) === "none" && rowsOf(terminal).some((row) => MODEL_ROW.test(row))) refocused.add(terminal)
+    if (composerOf(terminal, agentId) === "none" && rowsOf(terminal).some((row) => MODEL_ROW.test(row))) {
+      refocused.add(terminal)
+      pressOfTheFocus.add(terminal)
+    }
     return
   }
   const mouse = data.match(MOUSE_PRESS)
-  if (data === "\x1b" || data.includes("\r") || (mouse && Number(mouse[1]) < 32)) refocused.delete(terminal)
+  const press = mouse !== null && Number(mouse[1]) < 32
+  if (press && pressOfTheFocus.delete(terminal)) return
+  if (data === "\x1b" || data.includes("\r") || press) refocused.delete(terminal)
 }
 
 /** A new process on the same terminal: what stood over the old one's box has gone with it. */

@@ -847,6 +847,8 @@ describe("a click means nothing on a pane that has drawn nothing (audit SES2-3)"
 
 describe("a dialog left open over ragu's box, after a focus-in (audit SES2-2)", () => {
   const FOCUS_REPORT = "\x1b[I"
+  const PRESS = "\x1b[<0;70;5M"
+  const RELEASE = "\x1b[<0;70;5m"
   /** What ragu writes on a focus-in: the cursor back on the box, with the dialog still there. */
   const BACK_ON_BOX = "\x1b[?1000h\x1b[?1004h\x1b[?2004h\x1b[10;6H\x1b[?25h"
   const box = "\x1b[?1049h\x1b[2J\x1b[9;3H┃\x1b[10;3H┃\x1b[11;3H┃  Build · Grok 4.7 · xAI\x1b[12;3H┃"
@@ -867,14 +869,37 @@ describe("a dialog left open over ragu's box, after a focus-in (audit SES2-2)", 
     })
   }
 
-  test("an Enter or a press closes it as well as an Esc", async () => {
-    for (const key of ["\r", "\x1b[<0;10;10M"]) {
+  test("an Enter closes it as well as an Esc", async () => {
+    const terminal = await drawn(`${box}${picker}`, 120, 17)
+    followKeys(terminal, "ragu", FOCUS_REPORT)
+    followKeys(terminal, "ragu", "\r")
+    await writtenTo(terminal, BACK_ON_BOX)
+    expect(composerOf(terminal, "ragu")).toBe("ready")
+  })
+
+  for (const agent of ["ragu", "opencode"]) {
+    test(`${agent}: the click that brings the focus back is not the click that closes the dialog`, async () => {
+      // xterm answers a mousedown with the focus report and then the press, and a press on the dialog's own panel leaves it open.
       const terminal = await drawn(`${box}${picker}`, 120, 17)
-      followKeys(terminal, "ragu", FOCUS_REPORT)
-      followKeys(terminal, "ragu", key)
+      followKeys(terminal, agent, FOCUS_REPORT)
+      followKeys(terminal, agent, PRESS)
+      followKeys(terminal, agent, RELEASE)
       await writtenTo(terminal, BACK_ON_BOX)
-      expect(composerOf(terminal, "ragu")).toBe("ready")
-    }
+      expect(composerOf(terminal, agent)).toBe("none")
+      expect(mayTypeNow({ composer: composerOf(terminal, agent), question: false, nothingDrawn: false })).toBe(false)
+    })
+  }
+
+  test("a later click closes it, and each new return to the pane gets its own free press", async () => {
+    const terminal = await drawn(`${box}${picker}`, 120, 17)
+    followKeys(terminal, "ragu", FOCUS_REPORT)
+    followKeys(terminal, "ragu", PRESS)
+    await writtenTo(terminal, BACK_ON_BOX)
+    followKeys(terminal, "ragu", FOCUS_REPORT)
+    followKeys(terminal, "ragu", PRESS)
+    expect(composerOf(terminal, "ragu")).toBe("none")
+    followKeys(terminal, "ragu", PRESS)
+    expect(composerOf(terminal, "ragu")).toBe("ready")
   })
 
   test("a box at rest is not touched by a focus-in", async () => {
