@@ -834,7 +834,7 @@ impl Hub {
          */
         let (again, moved) = {
             let mut links = self.links();
-            let mut queue = pending.lock().unwrap();
+            let mut queue = pending.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             *queue = read_pending_file(&pending_file_path(self.store.path(), bot, platform)).into();
             let mut again = Vec::new();
             let mut moved = None;
@@ -1696,7 +1696,7 @@ impl Task {
 
     /// Each chat with a message that was not run because the gateway was off hears it, once for the batch (BOT2-1).
     async fn tell_written_while_off(&self) {
-        let chats: Vec<String> = self.while_off.lock().unwrap().drain().collect();
+        let chats: Vec<String> = self.while_off.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).drain().collect();
         for chat in chats {
             if let Err(error) = self.adapter.send(&chat, SENT_WHILE_OFF_MESSAGE).await {
                 self.env.log(&format!("{}: avviso alla chat non mandato: {}", self.tag(), redact(&error.message(), &self.secrets)));
@@ -1774,7 +1774,7 @@ impl Task {
          */
         if !message.button && message.timestamp_ms.zip(enabled_at).is_some_and(|(sent, on)| sent + OFF_GRACE_MS < on) {
             self.env.log(&format!("{tag}: un messaggio scritto mentre il gateway era spento: non eseguito"));
-            self.while_off.lock().unwrap().insert(message.chat.clone());
+            self.while_off.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).insert(message.chat.clone());
             return;
         }
         let at = self.env.now_ms();
