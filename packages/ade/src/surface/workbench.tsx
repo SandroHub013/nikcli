@@ -2797,7 +2797,9 @@ export function Workbench() {
               const shown = await textInBox({
                 read: () => composerNow(boxPane) ?? "none",
                 stop: () => !alive() || typedDuring(),
+                waiting: () => tellPane(boxPane, t("note.enterWaiting")),
               })
+              dropPaneNote(boxPane, t("note.enterWaiting"))
               stuck = shown === "stuck"
               lineAtEnter = boxLine(boxPane)
               return shown

@@ -21,7 +21,7 @@ import {
   watchCursor,
   type ComposerState,
 } from "./composer"
-import { typeThenEnter, textInBox, lineStays, BOX_READ_MS, ENTER_PATIENCE_MS, LINE_STAYS_MS, TEXT_SHOWS_WITHIN_MS } from "./enter"
+import { typeThenEnter, textInBox, lineStays, BOX_READ_MS, ENTER_PATIENCE_MS, ENTER_SAID_AFTER_MS, LINE_STAYS_MS, TEXT_SHOWS_WITHIN_MS } from "./enter"
 import {
   BOX_QUIET_MS,
   formatEnterStuck,
@@ -503,6 +503,36 @@ describe("the Enter: the box that stops being empty is the sign", () => {
     expect(enterBlocked("none", false)).toBe(true)
     expect(enterBlocked(undefined, false)).toBe(false)
     expect(enterBlocked(undefined, true)).toBe(true)
+  })
+})
+
+describe("a line typed and no Enter yet is said long before the patience runs out (live test 8)", () => {
+  const ticking = () => {
+    let at = 0
+    return { now: () => at, sleep: async (ms: number) => void (at += ms) }
+  }
+
+  test("a box that stays unread says so once, at fifteen seconds, and goes on waiting", async () => {
+    const { now, sleep } = ticking()
+    const said: number[] = []
+    const shown = await textInBox({ read: () => "none", stop: () => false, now, sleep, waiting: () => void said.push(now()) })
+    expect(shown).toBe("stuck")
+    expect(said).toEqual([ENTER_SAID_AFTER_MS])
+  })
+
+  test("a box read in time says nothing", async () => {
+    const { now, sleep } = ticking()
+    let said = 0
+    const reads: ("none" | "draft")[] = ["none", "none", "draft"]
+    const shown = await textInBox({ read: () => reads.shift()!, stop: () => false, now, sleep, waiting: () => void said++ })
+    expect(shown).toBe("shows")
+    expect(said).toBe(0)
+  })
+
+  test("the workbench tells the pane, and takes the note back when the wait is over", () => {
+    const workbench = workbenchSource()
+    expect(workbench).toContain('waiting: () => tellPane(boxPane, t("note.enterWaiting"))')
+    expect(workbench).toContain('dropPaneNote(boxPane, t("note.enterWaiting"))')
   })
 })
 
