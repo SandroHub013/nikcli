@@ -139,6 +139,25 @@ describe("a deleted bot's traces (full review 2026-10-06, bots 17)", () => {
     expect(Object.keys(JSON.parse(storage.data.get("ade.gateway.underWay")!))).toEqual([sessionKey("C:/a/altro.md", "telegram", "c1")])
   })
 
+  test("the past sessions and the model chosen for its chats go too; another bot's stay (BOT-9)", () => {
+    const gone = "C:/a/news.md"
+    const kept = "C:/a/other.md"
+    const storage = memoryStorage({
+      "ade.gateway.history": JSON.stringify({
+        [sessionKey(gone, "telegram", "c1")]: [{ project: "P", runner: "ragu", sessionId: "s1" }],
+        [sessionKey(kept, "telegram", "c1")]: [{ project: "P", runner: "ragu", sessionId: "s2" }],
+      }),
+      "ade.gateway.models": JSON.stringify({
+        [sessionKey(gone, "telegram", "c1")]: { runner: "ragu", model: "m1" },
+        [sessionKey(kept, "telegram", "c1")]: { runner: "ragu", model: "m2" },
+      }),
+    })
+    forgetStoredKeys(gone, storage)
+    for (const key of ["ade.gateway.history", "ade.gateway.models"]) {
+      expect(Object.keys(JSON.parse(storage.data.get(key)!))).toEqual([sessionKey(kept, "telegram", "c1")])
+    }
+  })
+
   test("storage that fails takes nothing down", () => {
     const broken: KeyedStorage = {
       length: 1,

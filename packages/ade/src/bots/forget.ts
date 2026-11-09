@@ -16,6 +16,8 @@ import { forgetNotice, type NoticeBook } from "./notice"
 import { removeRoutinesOf, type RoutineBook } from "./routine"
 import { SPEND_STORAGE_KEY } from "./spend"
 import { TALK_KEY_PREFIX } from "./talk"
+import { GATEWAY_MODELS_KEY } from "./gateway/chat-model"
+import { GATEWAY_HISTORY_KEY } from "./gateway/session"
 import { TURNS_UNDER_WAY_KEY } from "./gateway/turns-under-way"
 
 /** What `localStorage` offers to find and take away the keys of a bot. */
@@ -64,13 +66,13 @@ export function forgetBotTraces(
 
 /**
  * The conversations kept under a bot's path, by prefix (review of the bots, S9): its chats' CLI sessions (one object,
- * a key per `bot:platform:chat`), their threads (`ade.gateway.talk`, a key each), and the thread of the panel
+ * a key per `bot:platform:chat`, and so are their past sessions and the model chosen for each), their threads (`ade.gateway.talk`, a key each), and the thread of the panel
  * (`ade.bots.talk:<project>`, a line break and `<path>`, or the older form with no project). A bot made again at the same path would
  * otherwise continue them. The transcripts the CLIs keep on disk are theirs, and stay. So is its money a day, cap
  * and count (`spend.ts`, one object, a key per bot): a bot made again would find the cap someone else chose.
  */
 export function forgetStoredKeys(path: string, storage: KeyedStorage): void {
-  for (const perChat of [GATEWAY_SESSIONS_KEY, TURNS_UNDER_WAY_KEY]) {
+  for (const perChat of [GATEWAY_SESSIONS_KEY, GATEWAY_HISTORY_KEY, GATEWAY_MODELS_KEY, TURNS_UNDER_WAY_KEY]) {
     try {
       const sessions = JSON.parse(storage.getItem(perChat) ?? "{}") as unknown
       if (sessions && typeof sessions === "object" && !Array.isArray(sessions)) {
