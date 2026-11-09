@@ -20,7 +20,7 @@ describe("the install hint on a runner's badge (UX-16, review)", () => {
     const tag = source.slice(at, source.indexOf("</span>", at))
     expect(tag.includes('tabindex="0"')).toBe(true)
     expect(tag.includes('role="note"')).toBe(true)
-    expect(tag.includes("aria-label={")).toBe(true)
+    expect(tag.includes("aria-label={badgeName()}")).toBe(true)
   })
 
   test("a focused badge shows the focus ring", () => {

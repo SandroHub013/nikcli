@@ -130,6 +130,13 @@ export function AccountSection(props: AccountSectionProps): JSX.Element {
               kind() === "not-installed" && state()?.login.state === "out"
                 ? t("settings.providers.notInstalled.hint")
                 : (state()?.login.detail ?? statusLabel(kind()))
+            // The accessible name starts with the visible word (WCAG 2.5.3): the state, then what the CLI said, so a
+            // screen reader does not lose «Collegato» to «anthropic, openai» or «???».
+            const badgeName = () => {
+              const word = statusLabel(kind())
+              const text = badgeText()
+              return text.startsWith(word) ? text : `${word}: ${text}`
+            }
             const isConfirming = () => confirming() === runner.id
 
             return (
@@ -142,7 +149,7 @@ export function AccountSection(props: AccountSectionProps): JSX.Element {
                     title={badgeText()}
                     tabindex="0"
                     role="note"
-                    aria-label={badgeText()}
+                    aria-label={badgeName()}
                   >
                     <span data-slot="status-dot" />
                     <span data-slot="status-label">{statusLabel(kind())}</span>
