@@ -3891,6 +3891,9 @@ export function Workbench() {
     void getHost()
       .then((host) => host?.mailboxTaken?.([id]))
       .catch(() => {})
+  /** Whether this page still has it to deliver: with storage refusing it exists only in memory, and the outbox's copy must stay. */
+  const waitingHere = (id: string) =>
+    mailQueue.some((item) => item.id === id) || heldLines.some((line) => line.inbox?.id === id)
   // The asker first: a message's id is the sender's to choose, and one posted with the id of an open request must not get its answer.
   const paneOfMail = (id: string) =>
     openRequests.get(id)?.from || mailSenders.get(id) || designWaiters().find((waiter) => waiter.id === id)?.from
@@ -4302,8 +4305,9 @@ export function Workbench() {
       voiceSendDecisions.delete(item.id)
       voiceSendRequested.delete(item.id)
       dropFrom(mailQueue, item)
-      persistMail()
-      confirmTaken(item.id)
+      // A line held for a suspended session has been told «in coda» and exists only here if the save failed: its copy stays until it leaves.
+      // One case is accepted, with nowhere durable to note it: storage refusing, the message typed, and a reload before it is confirmed types it again.
+      if (persistMail() || !waitingHere(item.id)) confirmTaken(item.id)
     },
     hung: (item, afterMs) => {
       voiceSendDecisions.delete(item.id)
@@ -4344,8 +4348,13 @@ export function Workbench() {
     if (!mailRestored) return
     const taken = (await host.mailboxTake?.().catch(() => [])) ?? []
     if (taken.length === 0) return
+    const settled: string[] = []
     for (const { id, body } of taken) {
-      if (takenMail.isCopy(id, body)) continue
+      if (takenMail.isCopy(id, body)) {
+        // Back here with nothing left to do: its own end, or a refusal, found no claim to confirm, and this is the next chance.
+        if (!waitingHere(id)) settled.push(id)
+        continue
+      }
       takenMail.handled(id, body)
       const sealed = splitSealed(body)
       if (!sealed) {
@@ -4373,6 +4382,7 @@ export function Workbench() {
     // The native side has kept them until it hears this: every one, the refused and the copies too, or they come back in 30 s.
     // Only with them on disk, or a crash loses what was told «in coda», and before any delivery: what has run must not come back.
     if (persistMail()) await host.mailboxTaken?.(taken.map(({ id }) => id)).catch(() => {})
+    else if (settled.length > 0) await host.mailboxTaken?.(settled).catch(() => {})
     mailLanes.start(mailQueue)
   }
 

@@ -146,6 +146,20 @@ describe("a message is confirmed only once the page has it on disk (RS2-5 B)", (
     expect(source.indexOf("confirmTaken(item.id)", done)).toBeGreaterThan(done)
     expect(source.indexOf("confirmTaken(item.id)", done)).toBeLessThan(source.indexOf("hung: (item, afterMs)", done))
   })
+
+  test("storage refusing: a line held only in memory keeps its outbox copy until it has left (review F1)", () => {
+    const done = source.slice(source.indexOf("done: (item) => {"), source.indexOf("hung: (item, afterMs)"))
+    expect(done).toContain("if (persistMail() || !waitingHere(item.id)) confirmTaken(item.id)")
+    expect(source).toContain("mailQueue.some((item) => item.id === id) || heldLines.some((line) => line.inbox?.id === id)")
+  })
+
+  test("storage refusing: a copy of what has already ended is confirmed, since nothing else ever will (review F2)", () => {
+    const copy = take.slice(take.indexOf("if (takenMail.isCopy(id, body))"), take.indexOf("takenMail.handled(id, body)"))
+    expect(copy).toContain("if (!waitingHere(id)) settled.push(id)")
+    const refused = take.indexOf("else if (settled.length > 0) await host.mailboxTaken?.(settled)")
+    expect(refused).toBeGreaterThan(take.indexOf("if (persistMail()) await"))
+    expect(refused).toBeLessThan(take.indexOf("mailLanes.start(mailQueue)"))
+  })
 })
 
 describe("the lines held for a running session are saved too, not only those of a suspended one", () => {
