@@ -2,7 +2,7 @@
  * The mail round's look at the long messages left in the inboxes: which were read, which were lost, which ring again.
  *
  * Out of the workbench so that a test can go through the round itself: the list it keeps is what the seal of a pane's
- * new process starts from (`inboxNamesOf`, `resealUnread`).
+ * new process starts from (`inboxEntriesOf`, `resealUnread`).
  */
 import { dropFrom } from "./mail-lanes"
 import { inboxAction, type InboxEntry } from "./mailbox"

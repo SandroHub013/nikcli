@@ -367,8 +367,9 @@ describe("lint: the workbench keeps the mail's keys in order", () => {
     const deliver = workbench.slice(workbench.indexOf("const entry: InboxEntry = {"))
     expect(deliver.slice(0, 400).includes("sha256: await bodyHash(full),")).toBe(true)
     // What was taken as it was, for want of a hash, gets one: the entry is kept with it.
-    const fresh = workbench.slice(workbench.indexOf("const freshPaneToken = async"))
-    expect(fresh.slice(0, 1200).includes("sha256")).toBe(true)
+    const fresh = workbench.slice(workbench.indexOf("const freshPaneToken = async")).slice(0, 3000)
+    expect(fresh.includes("if (kept) kept.sha256 = sha256")).toBe(true)
+    expect(fresh.includes("if (adopted.length > 0) saveInbox()")).toBe(true)
     const kept = parseInbox(JSON.stringify([{ ...inboxEntry("p1", "m1"), sha256: "ab".repeat(32) }]))
     expect(kept[0]?.sha256).toBe("ab".repeat(32))
   })

@@ -1306,7 +1306,7 @@ describe("the gate and what it does not touch", () => {
     const poll = between("if(starting.typesTask){", "openingPolls.add(poll)")
     const gone = poll.slice(poll.indexOf("if(running.get(paneId)!==session){"), poll.indexOf("constdrawn=screenDrawn"))
     expect(gone).toContain('tellPane(paneId,t(trustSeen?"task.exitedOnTrust":"task.exitedUnsent"))')
-    expect(gone).toContain("tellSender(asked.from,formatExitedUnsent(asked.id,reader,trustSeen))")
+    expect(gone).toContain("tellSender(asked.from,formatExitedUnsent(asked.id,reader,trustSeen),{lost:true})")
   })
 
   test("lint: «No, exit» ends the request, and the trust note leaves on the way out and when the task goes", () => {

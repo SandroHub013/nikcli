@@ -1,12 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot } from "solid-js"
-import { isUsersOwnAnswer, USER } from "../decisions/answer"
+import { isUsersOwnAnswer, mayDeliver, USER } from "../decisions/answer"
 import { parseDecisionLog } from "../decisions/log"
 import { createDecisionsRegister } from "../decisions/register"
 import { foldDecisions } from "../decisions/state"
 import { createDesignRegister } from "../design/register"
 import { parseDesignLog } from "../design/log"
 import { foldProposals } from "../design/state"
+import { answeredInAde } from "../design/propose"
 import { answerLedger, ANSWER_LEDGER_KEY, UNVOUCHED_BY, type AnswerStore } from "./answer-ledger"
 import { askerLedger } from "./asker-ledger"
 import { workbenchSource } from "../test-support/workbench-source"
@@ -44,6 +45,9 @@ const asked = JSON.stringify({
 })
 const handWritten = JSON.stringify({ type: "risposta", k: "D1", at: ANSWERED_AT, by: "utente", words: "A", choice: "A" })
 
+const handWrittenEvent = JSON.parse(handWritten)
+const answerAt = (k: string) => ({ type: "risposta", k, at: AT })
+
 const decisionOf = (text: string, ledger: ReturnType<typeof answerLedger>) =>
   foldDecisions(ledger.vouch(DECISIONS, parseDecisionLog(text).events), new Date(AT)).decisions[0]!
 
@@ -58,7 +62,7 @@ describe("the answers ADE wrote (SEC-3)", () => {
 
   test("the same line, once ADE has remembered writing it, stays the user's", () => {
     const ledger = fresh()
-    ledger.remember(DECISIONS, "D1", ANSWERED_AT)
+    ledger.remember(DECISIONS, handWrittenEvent)
     const decision = decisionOf(`${asked}\n${handWritten}`, ledger)
     expect(decision.answer?.by).toBe(USER)
     expect(isUsersOwnAnswer(decision.answer!)).toBe(true)
@@ -66,22 +70,79 @@ describe("the answers ADE wrote (SEC-3)", () => {
 
   test("it vouches for one register and one time only", () => {
     const ledger = fresh()
-    ledger.remember(DECISIONS, "D1", ANSWERED_AT)
+    ledger.remember(DECISIONS, handWrittenEvent)
     const elsewhere = ledger.vouch("C:/altro/.ade/decisions.jsonl", parseDecisionLog(`${asked}\n${handWritten}`).events)
     expect(foldDecisions(elsewhere, new Date(AT)).decisions[0]!.answer?.by).toBe(UNVOUCHED_BY)
     const later = JSON.stringify({ ...JSON.parse(handWritten), at: "2026-11-09T11:00:00.000Z" })
     expect(decisionOf(`${asked}\n${later}`, ledger).answer?.by).toBe(UNVOUCHED_BY)
-    expect(ledger.has(DECISIONS, "D1", ANSWERED_AT)).toBe(true)
-    expect(ledger.has(DECISIONS, "D1", "2026-11-09T11:00:00.000Z")).toBe(false)
+    expect(ledger.has(DECISIONS, handWrittenEvent)).toBe(true)
+    expect(ledger.has(DECISIONS, { ...handWrittenEvent, at: "2026-11-09T11:00:00.000Z" })).toBe(false)
   })
 
   test("a session's line, and a line with a pane, are left as they are", () => {
     const ledger = fresh()
     const events = [
-      { k: "D1", at: AT, by: "Master" },
-      { k: "D2", at: AT, by: "utente", fromPane: "p-1" },
+      { type: "risposta", k: "D1", at: AT, by: "Master" },
+      { type: "risposta", k: "D2", at: AT, by: "utente", fromPane: "p-1" },
     ]
     expect(ledger.vouch(DECISIONS, events)).toEqual(events)
+  })
+
+  // N1 of the review of sicurezza-due: the time of a true event is in the file for anyone to copy.
+  test("a line with the time of a reopening ADE wrote is not an answer ADE wrote", () => {
+    const ledger = fresh()
+    ledger.remember(DESIGN, { type: "riaperta", k: "DS-x", at: AT })
+    const forged = { type: "risposta", k: "DS-x", at: AT, by: "utente", choice: "2", words: "2" }
+    expect(ledger.vouch(DESIGN, [forged])[0]!.by).toBe(UNVOUCHED_BY)
+    expect(ledger.has(DESIGN, forged)).toBe(false)
+  })
+
+  test("nor is a line with the time of a true answer, when it says something else", () => {
+    const ledger = fresh()
+    const told = { type: "risposta", k: "DS-x", at: AT, by: "utente", choice: "1", words: "uno" }
+    ledger.remember(DESIGN, told)
+    expect(ledger.vouch(DESIGN, [told])[0]!.by).toBe(USER)
+    for (const other of [{ choice: "2" }, { words: "due" }, { note: "e poi" }, { choices: ["1", "2"] }, { again: true as const }, { until: AT }]) {
+      expect(ledger.vouch(DESIGN, [{ ...told, ...other }])[0]!.by).toBe(UNVOUCHED_BY)
+    }
+  })
+
+  // As `design attendi` reads it: the raw file, with no vouching, and a forger chooses the `by` of its line.
+  test.each(["utente", "Master"])("the attendi of a design says the same with the true answer in the outbox, by %s", (by) => {
+    const ledger = fresh()
+    const told = { type: "risposta", k: "DS-x", at: AT, by: "utente", choice: "1", words: "uno" }
+    ledger.remember(DESIGN, told)
+    const lines = [
+      { type: "aperta", k: "DS-x", at: AT, by: "Master", title: "T", variants: [{ name: "1", description: "d", preview: "" }, { name: "2", description: "d", preview: "" }] },
+      told,
+      { type: "riaperta", k: "DS-x", at: AT, by: "Master" },
+      { ...told, choice: "2", by },
+    ]
+    const proposal = foldProposals(parseDesignLog(lines.map((line) => JSON.stringify(line)).join("\n")).events).proposals[0]!
+    expect(proposal.answer?.choice).toBe("2")
+    expect(answeredInAde(proposal, DESIGN, ledger.has)).toBe(false)
+  })
+
+  test("what the outbox seeds, with no content to go by, stands for answers only", () => {
+    const ledger = fresh()
+    ledger.seed([{ path: DESIGN, k: "DS-1", answeredAt: AT }])
+    expect(ledger.vouch(DESIGN, [{ type: "risposta", k: "DS-1", at: AT, by: "utente", words: "x" }])[0]!.by).toBe(USER)
+    expect(ledger.vouch(DESIGN, [{ type: "riaperta", k: "DS-1", at: AT, by: "utente" }])[0]!.by).toBe(UNVOUCHED_BY)
+  })
+
+  // N2 of the review of sicurezza-due: its `answeredAt` is the time of the reopening, and a reopening is no answer.
+  test("a reopening in the outbox seeds nothing", () => {
+    const ledger = fresh()
+    ledger.seed([{ path: DESIGN, k: "DS-1", answeredAt: AT, kind: "riaperta" }])
+    expect(ledger.vouch(DESIGN, [{ type: "risposta", k: "DS-1", at: AT, by: "utente", words: "x" }])[0]!.by).toBe(UNVOUCHED_BY)
+  })
+
+  test("an answer ADE wrote and remembers is not loosened by the seed of the next start", () => {
+    const ledger = fresh()
+    const told = { type: "risposta", k: "DS-x", at: AT, by: "utente", choice: "1", words: "uno" }
+    ledger.remember(DESIGN, told)
+    ledger.seed([{ path: DESIGN, k: "DS-x", answeredAt: AT }])
+    expect(ledger.vouch(DESIGN, [{ ...told, choice: "2" }])[0]!.by).toBe(UNVOUCHED_BY)
   })
 
   test("every kind of line the user's buttons write is covered, not only the answer", () => {
@@ -93,15 +154,66 @@ describe("the answers ADE wrote (SEC-3)", () => {
   test("the record is kept to the newest entries, and a broken or missing one vouches for nothing", () => {
     const store = memory()
     const ledger = answerLedger(() => store, 2)
-    for (const k of ["D1", "D2", "D3"]) ledger.remember(DECISIONS, k, AT)
+    for (const k of ["D1", "D2", "D3"]) ledger.remember(DECISIONS, answerAt(k))
     expect(JSON.parse(store.items.get(ANSWER_LEDGER_KEY)!)).toHaveLength(2)
-    expect(ledger.has(DECISIONS, "D1", AT)).toBe(false)
-    expect(ledger.has(DECISIONS, "D3", AT)).toBe(true)
+    // The next start, which has only what was saved.
+    const later = answerLedger(() => store, 2)
+    expect(later.has(DECISIONS, answerAt("D1"))).toBe(false)
+    expect(later.has(DECISIONS, answerAt("D3"))).toBe(true)
     store.items.set(ANSWER_LEDGER_KEY, "{rotto")
-    expect(ledger.has(DECISIONS, "D3", AT)).toBe(false)
+    expect(later.has(DECISIONS, answerAt("D3"))).toBe(false)
     const none = answerLedger(() => undefined)
-    none.remember(DECISIONS, "D1", AT)
-    expect(none.vouch(DECISIONS, [{ k: "D1", at: AT, by: "utente" }])[0]!.by).toBe(UNVOUCHED_BY)
+    expect(none.vouch(DECISIONS, [{ type: "risposta", k: "D1", at: AT, by: "utente" }])[0]!.by).toBe(UNVOUCHED_BY)
+  })
+
+  test("the record keeps to a budget of characters, the oldest going first: it shares its storage with the mail", () => {
+    const store = memory()
+    const ledger = answerLedger(() => store, 2000, 1_000)
+    const long = (k: string) => ({ type: "risposta", k, at: AT, words: "x".repeat(300) })
+    for (const k of ["D1", "D2", "D3", "D4", "D5"]) ledger.remember(DECISIONS, long(k))
+    expect(store.items.get(ANSWER_LEDGER_KEY)!.length).toBeLessThanOrEqual(1_000)
+    const later = answerLedger(() => store, 2000, 1_000)
+    expect(later.has(DECISIONS, long("D5"))).toBe(true)
+    expect(later.has(DECISIONS, long("D1"))).toBe(false)
+  })
+
+  // Second pass of the review of seguiti-posta, B2: the bots' chats fill the same storage, and run at its limit by design.
+  test("a click the storage refuses stays the user's for the life of the page, and goes out", () => {
+    const refusing: AnswerStore = {
+      getItem: () => null,
+      setItem: () => {
+        throw new Error("quota")
+      },
+    }
+    const ledger = answerLedger(() => refusing)
+    const told = { type: "risposta", k: "D1", at: AT, by: USER, choice: "A", words: "A" }
+    ledger.remember(DECISIONS, told)
+    expect(ledger.has(DECISIONS, told)).toBe(true)
+    const vouched = ledger.vouch(DECISIONS, [told])[0]!
+    expect(vouched.by).toBe(USER)
+    expect(mayDeliver({}, vouched)).toBe(true)
+    // What it holds is that click, and not whatever comes under its time.
+    expect(ledger.vouch(DECISIONS, [{ ...told, choice: "B" }])[0]!.by).toBe(UNVOUCHED_BY)
+  })
+
+  test("an answer the outbox still holds is not lost to the budget while the page lives", () => {
+    const store = memory()
+    const told = { type: "risposta", k: "D9", at: AT, by: USER, words: "x".repeat(300) }
+    answerLedger(() => store).remember(DECISIONS, told)
+    const page = answerLedger(() => store, 2000, 1_000)
+    page.seed([{ path: DECISIONS, k: "D9", answeredAt: AT }])
+    for (const k of ["D1", "D2", "D3", "D4", "D5"]) page.remember(DECISIONS, { type: "risposta", k, at: AT, words: "y".repeat(300) })
+    expect(store.items.get(ANSWER_LEDGER_KEY)).not.toContain("D9")
+    expect(page.vouch(DECISIONS, [told])[0]!.by).toBe(USER)
+    expect(page.vouch(DECISIONS, [{ ...told, words: "altro" }])[0]!.by).toBe(UNVOUCHED_BY)
+  })
+
+  test("the newest answer stays, even alone over the budget", () => {
+    const store = memory()
+    const ledger = answerLedger(() => store, 2000, 100)
+    const long = { type: "risposta", k: "D1", at: AT, words: "x".repeat(300) }
+    ledger.remember(DECISIONS, long)
+    expect(ledger.has(DECISIONS, long)).toBe(true)
   })
 
   test("storage that refuses the write does not stop the answer", () => {
@@ -111,7 +223,7 @@ describe("the answers ADE wrote (SEC-3)", () => {
         throw new Error("quota")
       },
     }
-    expect(() => answerLedger(() => refusing).remember(DECISIONS, "D1", AT)).not.toThrow()
+    expect(() => answerLedger(() => refusing).remember(DECISIONS, answerAt("D1"))).not.toThrow()
   })
 
   test("seeding puts the answers ADE gave and that still stand in the record", () => {
@@ -120,8 +232,8 @@ describe("the answers ADE wrote (SEC-3)", () => {
       { path: DECISIONS, k: "D1", answeredAt: AT },
       { path: DESIGN, k: "DS-1", answeredAt: AT },
     ])
-    expect(ledger.has(DECISIONS, "D1", AT)).toBe(true)
-    expect(ledger.has(DESIGN, "DS-1", AT)).toBe(true)
+    expect(ledger.has(DECISIONS, answerAt("D1"))).toBe(true)
+    expect(ledger.has(DESIGN, answerAt("DS-1"))).toBe(true)
   })
 
   test("with the pane vouch first, a line of the user's naming an unknown pane is reported too", () => {
@@ -184,6 +296,22 @@ describe("the registers remember what their own append writes (SEC-3)", () => {
     })
   })
 
+  test("the record is of the line as the file holds it: the parser tidies spaces, and the answer stays the user's", async () => {
+    const file = fileIo(`${asked}\n`)
+    const ledger = fresh()
+    await createRoot(async (dispose) => {
+      const register = createDecisionsRegister({
+        path: () => DECISIONS,
+        io: async () => file.io,
+        vouch: ledger.vouch,
+        remember: ledger.remember,
+      })
+      await register.append({ type: "risposta", k: "D1", at: ANSWERED_AT, by: USER, words: "  A  ", choice: "A", note: " con  spazi " })
+      expect(register.state()!.decisions[0]!.answer?.by).toBe(USER)
+      dispose()
+    })
+  })
+
   test("design: the same", async () => {
     const proposal = (k: string, by: string) =>
       JSON.stringify({
@@ -242,6 +370,17 @@ describe("the design register read straight from the file (SEC-3)", () => {
   })
 })
 
+describe("what the outbox may type as the user's word (review of seguiti-posta, N2)", () => {
+  test("a reopening always; an answer only while the register's answer is the user's own click", () => {
+    expect(mayDeliver({ kind: "riaperta" }, undefined)).toBe(true)
+    expect(mayDeliver({}, { by: USER })).toBe(true)
+    expect(mayDeliver({}, { by: UNVOUCHED_BY })).toBe(false)
+    expect(mayDeliver({}, { by: "Master" })).toBe(false)
+    expect(mayDeliver({}, { by: USER, fromPane: "p-1" })).toBe(false)
+    expect(mayDeliver({}, undefined)).toBe(false)
+  })
+})
+
 describe("the workbench wires it (SEC-3)", () => {
   // The workbench cannot be loaded under bun: read from the source. Booleans, so a failure does not print the file.
   const source = workbenchSource()
@@ -250,7 +389,9 @@ describe("the workbench wires it (SEC-3)", () => {
     const vouch = "vouch: (path, events) => answers.vouch(path, askers.vouch(path, events)),"
     expect(source.split(vouch).length - 1).toBe(2)
     expect(source.split("remember: answers.remember,").length - 1).toBe(2)
-    expect(source.includes("answeredInAde(found, path, designOutbox(), answers.has)")).toBe(true)
+    expect(source.includes("answeredInAde(found, path, answers.has)")).toBe(true)
+    expect(source.includes("if (!mayDeliver(item, decision.answer)) continue")).toBe(true)
+    expect(source.includes("if (!mayDeliver(item, proposal.answer)) continue")).toBe(true)
     expect(source.includes("answers.seed([...decisionsOutbox(), ...designOutbox()])")).toBe(true)
   })
 })

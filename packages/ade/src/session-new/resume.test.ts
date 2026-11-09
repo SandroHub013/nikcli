@@ -10,6 +10,7 @@ import {
   planMint,
   planRestore,
   restoreByAgent,
+  restoreFolder,
   planResume,
   planStart,
   lostConversation,
@@ -524,9 +525,9 @@ describe("a restore's claims reach the panes it reopens", () => {
   test("lint: the restore hands its claims to the exited panes it reopens", () => {
     const workbench = workbenchSource()
     expect(readFileSync(join(import.meta.dir, "resume.ts"), "utf8")).toContain("return restoreClaims(planned)")
-    expect(workbench).toContain("reopen(pane, undefined, claims)")
+    expect(workbench).toContain("reopen(pane, undefined, claimedByRestore(claims,")
     expect(workbench).toContain(
-      "lastTakenFor(pane, wb().panes) || claimedByRestore(claims, agentId, pane.cwd || project()?.root)",
+      "lastTakenFor(pane, wb().panes) || Boolean(claimed)",
     )
   })
 })
@@ -823,6 +824,21 @@ describe("a resumed start that types nothing is idle, and says it was resumed", 
   })
 })
 
+describe("the folder a restored pane counts under (reviews N5 and N7)", () => {
+  test("its own first, then the project open at the boot, then the one it belonged to", () => {
+    expect(restoreFolder({ cwd: "C:/a", projectRoot: "C:/c" }, "C:/b")).toBe("C:/a")
+    expect(restoreFolder({ cwd: "", projectRoot: "C:/c" }, "C:/b")).toBe("C:/b")
+    expect(restoreFolder({ cwd: "", projectRoot: "C:/c" }, undefined)).toBe("C:/c")
+    expect(restoreFolder({}, undefined)).toBe("")
+  })
+
+  test("with no project open, a live pane finds the claim of the restore", () => {
+    const pane = { cwd: "", projectRoot: "C:/c" }
+    const planned = planRestore([{ agentId: "claude-code", cwd: restoreFolder(pane, undefined) }])
+    expect(claimedByRestore(restoreClaims(planned), "claude-code", restoreFolder(pane, undefined))).toBe(true)
+  })
+})
+
 describe("a restore waits only for the checks of its own agent (audit WB-8)", () => {
   type Saved = { id: string; agentId: string; cwd: string; resumeId?: string }
   const checked = (saved: Saved) => ({ ...saved, missing: false })
@@ -881,6 +897,8 @@ describe("a restore waits only for the checks of its own agent (audit WB-8)", ()
     // A check that throws must not stop its agent's sessions: whatever the folder is called.
     expect(workbench).toMatch(/conversationMissing\(pane\.agent,pane\.resumeId,[^)]*\)\.catch\(\(\)=>false\)/)
     expect(workbench).toContain("adoptLastReport(saved).catch(()=>undefined)")
-    expect(workbench).toContain("paneExists(pane.id)?reopen(pane,undefined,claims):undefined")
+    expect(workbench).toContain('paneExists(pane.id)?reopen(pane,undefined,claimedByRestore(claims,pane.agent??pane.model??"",restoreFolder(pane,p?.root))):undefined')
+    expect(workbench).toContain("lastTaken:lastTakenFor(pane,wb().panes)||Boolean(claimed),")
+    expect(workbench).not.toContain("pane.cwd||project()?.root)")
   })
 })

@@ -22,6 +22,17 @@ export function isUsersOwnAnswer(answer: { readonly by: string; readonly fromPan
   return answer.by === USER && !answer.fromPane
 }
 
+/**
+ * Whether an outbox item may go out: a reopening always, an answer only while the register's standing answer is the user's
+ * own click. The item goes by the time alone, and the time can be copied under another choice (SEC-3).
+ */
+export function mayDeliver(
+  item: { readonly kind?: string },
+  answer: { readonly by: string; readonly fromPane?: string } | undefined,
+): boolean {
+  return item.kind === "riaperta" || (answer !== undefined && isUsersOwnAnswer(answer))
+}
+
 /** Who answered, as the panel says it: a session is only ever reporting. */
 export function answerByline(answer: { readonly by: string; readonly fromPane?: string }, day: string): string {
   return t(isUsersOwnAnswer(answer) ? "decisions.delivery.by" : "decisions.delivery.relayed", answer.by, day)

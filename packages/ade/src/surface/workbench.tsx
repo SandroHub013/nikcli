@@ -134,6 +134,7 @@ import {
   MintLedger,
   lastHereBesideMints,
   restoreByAgent,
+  restoreFolder,
   claimedByRestore,
   openedConversation,
   LIST_COLS,
@@ -646,6 +647,7 @@ import { watchRegisters } from "../host/register-watch"
 import { designPath } from "../design/store"
 import { foldProposals, type DesignProposal } from "../design/state"
 import { parseDesignLog } from "../design/log"
+import { mayDeliver } from "../decisions/answer"
 import { answered as answeredProposal, answeredInAde, choiceLine, proposalEvent } from "../design/propose"
 import {
   WAITERS_KEY as DESIGN_WAITERS_KEY,
@@ -1814,6 +1816,7 @@ export function Workbench() {
       for (const item of pending) {
         const decision = state.decisions.find((entry) => entry.k === item.k)
         if (!decision) continue
+        if (!mayDeliver(item, decision.answer)) continue
         const target = resolveDeliveryTarget(item, candidates, currentTarget)
         if (!target || !running.has(target.id) || !(await freeNow(host, target.id))) continue
         // Through the inbox when the line is long (a note of a few paragraphs), like every other message.
@@ -2076,6 +2079,7 @@ export function Workbench() {
       for (const item of pending) {
         const proposal = state.proposals.find((entry) => entry.k === item.k)
         if (!proposal) continue
+        if (!mayDeliver(item, proposal.answer)) continue
         const target = resolveDesignDeliveryTarget(item, candidates, currentTarget)
         if (!target || !running.has(target.id) || !(await freeNow(host, target.id))) continue
         if (
@@ -2841,7 +2845,7 @@ export function Workbench() {
     if (!(await lineStays({ read, before, stop }))) return
     tellPane(paneId, t("note.enterLost"))
     const sender = lineSender.get(session)
-    if (sender) tellSender(sender.from, formatEnterLost(sender.id, mailPanes().find((pane) => pane.id === paneId)))
+    if (sender) tellSender(sender.from, formatEnterLost(sender.id, mailPanes().find((pane) => pane.id === paneId)), { lost: true })
     // Until the line has gone, whoever sent it: the user's Enter, or the user's clearing it.
     while (alive() && read() !== undefined) await new Promise((resolve) => setTimeout(resolve, 1000))
     dropPaneNote(paneId, t("note.enterLost"))
@@ -3083,6 +3087,8 @@ export function Workbench() {
     notice?: true
     /** When a notice was written: it expires (`session/held-notices.ts`). */
     at?: number
+    /** A notice that tells of a message not delivered: it never expires, nor is it cut. */
+    lost?: true
     full?: string
     suspended?: true
   }[] = []
@@ -3407,7 +3413,7 @@ export function Workbench() {
       if (outcome === "sent" && meta.from) lineSender.set(session, { from: meta.from, id: meta.id })
       // The Enter gave up waiting for the box: said to the session that sent it, which a note in its pane does not reach.
       if (enterStuck.delete(session) && meta.from) {
-        tellSender(meta.from, formatEnterStuck(meta.id, mailPanes().find((pane) => pane.id === paneId)))
+        tellSender(meta.from, formatEnterStuck(meta.id, mailPanes().find((pane) => pane.id === paneId)), { lost: true })
       }
       return deliveryResult(outcome, running.get(paneId) === session, stored)
     }
@@ -3448,10 +3454,10 @@ export function Workbench() {
   }
 
   /** A notice for whoever sent a message: its session, or the window's notices when none is behind it (`noticeTarget`). */
-  const tellSender = (from: string | undefined, text: string) => {
+  const tellSender = (from: string | undefined, text: string, mark?: { lost: true }) => {
     const target = noticeTarget(from, (paneId) => running.has(paneId))
     if (target === "window") report(text, "info")
-    else if (target) heldLines.push({ paneId: target.pane, text, notice: true, at: Date.now() })
+    else if (target) heldLines.push({ paneId: target.pane, text, notice: true, at: Date.now(), ...mark })
   }
 
   /** Rings again for unread inbox messages, and tells the sender of one never read. */
@@ -4399,7 +4405,7 @@ export function Workbench() {
           if (notices.length === 0) continue
           for (const notice of notices) dropFrom(heldLines, notice)
           dropHeldByMenu(item.paneId)
-          void typeLineOutcome(session, joinNotices(notices.map((notice) => notice.text)), { mail: false }).then((outcome) => {
+          void typeLineOutcome(session, joinNotices(notices), { mail: false }).then((outcome) => {
             if (deliveryResult(outcome, running.get(item.paneId) === session) === "held") heldLines.push(...notices)
           })
           continue
@@ -5087,7 +5093,7 @@ export function Workbench() {
         waitFor(found.k, folder, message.timeout)
         // Chosen already: written now, and the typed line, if still queued, waits for this claim like any other.
         // Only an answer given in ADE is printed as the user's choice: one written into the register is not one.
-        if (found.answer && answeredInAde(found, path, designOutbox(), answers.has)) {
+        if (found.answer && answeredInAde(found, path, answers.has)) {
           answerDesignWaiters(path, found)
           await answer(`ok: ${found.k} ha già una scelta (progetto ${owner.name})`)
         } else if (found.answer)
@@ -7560,7 +7566,7 @@ export function Workbench() {
             const pane = reported ? { ...saved, resumeId: reported } : saved
             // The pane's own folder first: with the last project gone there is no open project, and each pane still
             // restarts in its own (`startProcess` finds its project and says when its folder is missing).
-            const folder = pane.cwd || p?.root || pane.projectRoot || ""
+            const folder = restoreFolder(pane, p?.root)
             return {
               agentId: pane.agent,
               cwd: folder,
@@ -7601,7 +7607,11 @@ export function Workbench() {
         const plannedIds = new Set(toResume.map((saved) => saved.id))
         for (const pane of liveToReopen(wb().panes, plannedIds, restored)) {
           void (byAgent.get(pane.agent ?? pane.model ?? "") ?? Promise.resolve(new Set<string>()))
-            .then((claims) => (paneExists(pane.id) ? reopen(pane, undefined, claims) : undefined))
+            .then((claims) =>
+              paneExists(pane.id)
+                ? reopen(pane, undefined, claimedByRestore(claims, pane.agent ?? pane.model ?? "", restoreFolder(pane, p?.root)))
+                : undefined,
+            )
             .finally(() => restorePlanned.delete(pane.id))
         }
       } else restorePlanned.clear()
@@ -9358,13 +9368,13 @@ export function Workbench() {
    * pane had no way to reach it. Now the pane reopens it by id when it can,
    * and `line`, when the user typed one, is sent once the agent is ready.
    */
-  const reopen = async (given: Pane, line?: string, claims?: ReadonlySet<string>) => {
+  const reopen = async (given: Pane, line?: string, claimed?: boolean) => {
     if (running.has(given.id)) return
     // One at a time: its awaits left room for a second one to start the same pane twice (ALTO 3).
-    await reopening.run(given.id, () => reopenPane(given, line, claims))
+    await reopening.run(given.id, () => reopenPane(given, line, claimed))
   }
 
-  const reopenPane = async (given: Pane, line?: string, claims?: ReadonlySet<string>) => {
+  const reopenPane = async (given: Pane, line?: string, claimed?: boolean) => {
     const agentId = given.agent ?? given.model
     // A sign-in runs its sign-in again: the bare agent would start a session, on the default model.
     const restart = restartOf(given)
@@ -9389,7 +9399,7 @@ export function Workbench() {
       ...(pane.resumeId ? { resumeId: pane.resumeId } : {}),
       // "The most recent one here" unless another pane of this folder may be
       // in it: per folder, and for ragu only a pane without an id of its own.
-      lastTaken: lastTakenFor(pane, wb().panes) || claimedByRestore(claims, agentId, pane.cwd || project()?.root),
+      lastTaken: lastTakenFor(pane, wb().panes) || Boolean(claimed),
       missing,
     })
     // A `here` plan may start a new conversation, which then gets the task; a found one is not typed into.
@@ -10054,7 +10064,7 @@ export function Workbench() {
               const asked = [...openRequests.values()].find((other) => other.kind === "spawn" && other.to === paneId)
               if (asked) {
                 const reader = mailPanes().find((pane) => pane.id === paneId)
-                tellSender(asked.from, formatExitedUnsent(asked.id, reader, trustSeen))
+                tellSender(asked.from, formatExitedUnsent(asked.id, reader, trustSeen), { lost: true })
                 // Nothing will answer it now: `ade-msg wait` stops saying it is starting.
                 const said = formatExitedUnsent(asked.id, reader, trustSeen)
                 void getHost().then((host) => {

@@ -354,11 +354,11 @@ describe("the click", () => {
     expect(workbench).toContain("typeLine(session,handled.reply,{unlessBusy:true})")
     expect(between("constfreeNow=", "constisHooked=")).toContain("if(mail&&deliverNow.armed(")
     // ADE's own notices wait among the held lines too, and are no message: they neither bring the action nor spend it.
-    expect(workbench).toContain("heldLines.push({paneId:target.pane,text,notice:true,at:Date.now()})")
+    expect(workbench).toContain("heldLines.push({paneId:target.pane,text,notice:true,at:Date.now(),...mark})")
     expect(workbench).toContain("heldLines.push({paneId:item.inbox.from,text,told:true,notice:true,at:Date.now()})")
     expect(workbench).toContain("freeNow(host,item.paneId,!item.notice)")
     expect(workbench).toContain("typeLineOutcome(session,item.text,{mail:true})")
-    expect(workbench).toContain("joinNotices(notices.map((notice)=>notice.text)),{mail:false})")
+    expect(workbench).toContain("joinNotices(notices),{mail:false})")
     expect(workbench).toContain("if(!item.notice)noteMailHeld(item.paneId,item.inbox?.from)")
     // `told` says the sender has heard of a message, and it stays a message: an update, a late reply, a first task.
     expect(workbench).not.toContain("freeNow(host,item.paneId,!item.told)")
