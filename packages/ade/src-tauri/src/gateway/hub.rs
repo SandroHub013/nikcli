@@ -239,9 +239,8 @@ struct Running {
     wake: Arc<tokio::sync::Notify>,
     live: Arc<Mutex<Live>>,
     pending: Arc<Mutex<VecDeque<PendingEntry>>>,
-    /// Set before the stop flag when the stop is «off», a cleared token or a deleted bot: what is in hand is dropped.
-    /// Unset, ADE is closing or the link is starting again, and it is kept for the next start (BOT2-5).
-    switched_off: Arc<AtomicBool>,
+    /// Set before the stop flag when ADE is closing: only then can what is in hand stay for the next start (BOT2-5).
+    closing: Arc<AtomicBool>,
 }
 
 
@@ -825,7 +824,7 @@ impl Hub {
             ..Live::default()
         }));
         let wake = Arc::new(tokio::sync::Notify::new());
-        let switched_off = Arc::new(AtomicBool::new(false));
+        let closing = Arc::new(AtomicBool::new(false));
         let pending: Arc<Mutex<VecDeque<PendingEntry>>> = Arc::default();
         /*
          * The file is read and the link goes in the map under the same lock, and only then is anything handed on: an ack
@@ -854,7 +853,7 @@ impl Hub {
                     wake: wake.clone(),
                     live: live.clone(),
                     pending: pending.clone(),
-                    switched_off: switched_off.clone(),
+                    closing: closing.clone(),
                 },
             );
             (again, moved)
@@ -879,7 +878,7 @@ impl Hub {
             backoff: self.backoff,
             started_at,
             halted: stopped.clone(),
-            switched_off,
+            closing,
             while_off: Mutex::new(HashSet::new()),
         };
         tokio::spawn(task.run(stopped, self.ready.subscribe()));
@@ -955,10 +954,7 @@ impl Hub {
     /// after sees the flag and writes nothing, so no message read before the switch-off is handed on after it.
     /// Used by «off» and by clearing the token (and so by deleting a bot). The count goes to the log.
     fn halt_and_drain(&self, bot: &str, platform: Platform, why: &str) -> Vec<PendingEntry> {
-        let queued = self.links().get(&(bot.to_string(), platform)).map(|running| {
-            running.switched_off.store(true, Ordering::SeqCst);
-            running.pending.clone()
-        });
+        let queued = self.links().get(&(bot.to_string(), platform)).map(|running| running.pending.clone());
         self.halt(bot, platform);
         let path = pending_file_path(self.store.path(), bot, platform);
         let waiting: Vec<PendingEntry> = match queued {
@@ -994,6 +990,7 @@ impl Hub {
     /// ADE is closing: every task ends, and each gateway stays as the user left it.
     pub fn shutdown(&self) {
         for (_, running) in self.links().drain() {
+            running.closing.store(true, Ordering::SeqCst);
             let _ = running.stop.send(true);
         }
     }
@@ -1528,8 +1525,8 @@ struct Task {
     started_at: u64,
     /// The link's stop flag, read where a message is about to be handed on: a gateway switched off delivers nothing more.
     halted: watch::Receiver<bool>,
-    /// Why it stopped, set before the flag: true for «off», false for ADE closing or a relaunch (BOT2-5).
-    switched_off: Arc<AtomicBool>,
+    /// ADE is closing, set before the flag. See `keeps_in_hand` (BOT2-5).
+    closing: Arc<AtomicBool>,
     /// The chats of this batch with a message written while the gateway was off, to be told once each (BOT2-1).
     while_off: Mutex<HashSet<String>>,
 }
@@ -1611,8 +1608,7 @@ impl Task {
                     // is counted as left behind, like a batch that was stopped on its way in.
                     let mut batch = batch.into_iter();
                     while let Some(message) = batch.next() {
-                        // Only «off» gives up the rest: ADE closing or a relaunch keeps it on disk for the next start (BOT2-5).
-                        if *stopped.borrow() && self.switched_off.load(Ordering::SeqCst) {
+                        if *stopped.borrow() && !self.keeps_in_hand() {
                             left_behind = 1 + batch.len();
                             break;
                         }
@@ -1692,6 +1688,14 @@ impl Task {
         if left > 0 {
             self.env.log(&format!("{}: fermato con {left} messaggi già confermati e non consegnati: la piattaforma non li rimanda", self.tag()));
         }
+    }
+
+    /// Whether a message in hand when the stop came stays in the pending file: only with ADE closing, and only on a
+    /// platform with no position to read from again (Slack). Telegram sends it again by itself, so a copy in the file
+    /// would run twice. A restart never keeps it: the new task owns that file from the moment it starts, and the old
+    /// one would write its stale queue over it (BOT-11).
+    fn keeps_in_hand(&self) -> bool {
+        self.closing.load(Ordering::SeqCst) && self.adapter.cursor().is_none()
     }
 
     /// Each chat with a message that was not run because the gateway was off hears it, once for the batch (BOT2-1).
@@ -1804,7 +1808,7 @@ impl Task {
         // Switched off since the batch was read (B1): `stop` sets the flag before it drains this queue under the same
         // lock, so a message that gets here after it is not written to the file and not handed on.
         let halted = *self.halted.borrow();
-        if halted && self.switched_off.load(Ordering::SeqCst) {
+        if halted && !self.keeps_in_hand() {
             self.env.log(&format!("{tag}: messaggio non consegnato: il gateway è stato spento"));
             return;
         }
@@ -1824,8 +1828,7 @@ impl Task {
         }
         pending.push_back(PendingEntry { msg: msg.clone(), cursor, acked: false });
         save_pending_to_disk(&*self.env, self.store.path(), &self.bot, self.platform, &pending);
-        // ADE closing or the link starting again: it stays in the file, for the next start to hand on. Slack, which has
-        // no position to read from again, would never send it twice (BOT2-5).
+        // ADE is closing and the platform would not send it again: it stays in the file for the next start (BOT2-5).
         if halted {
             self.env.log(&format!("{tag}: messaggio tenuto per il prossimo avvio"));
             return;
@@ -3954,6 +3957,82 @@ mod tests {
         assert!(env.messages.lock().unwrap().is_empty());
         assert_eq!(read_pending_file(&file)[0].msg.id, "1");
         assert!(env.log.lock().unwrap().iter().all(|line| !line.contains("spento")));
+    }
+
+    /* BOT2-5, after the review: only ADE closing keeps what is in hand, and only where the platform would not send it again. */
+    #[tokio::test]
+    async fn a_link_started_again_mid_batch_keeps_its_file_and_the_message_runs_once() {
+        let s = setup("restart-mid-batch");
+        authorize(&s, "42");
+        let (old, feed) = start(&s);
+        s.hub.pairing_open(BOT, Platform::Fake).unwrap();
+        old.hold_sends.store(true, std::sync::atomic::Ordering::SeqCst);
+        feed.send(Ok(vec![message("1", "c7", "7", "uno sconosciuto"), message("2", "c42", "42", "M1")])).unwrap();
+        eventually("l'invio allo sconosciuto è in corso", || old.send_attempts.load(std::sync::atomic::Ordering::SeqCst) == 1).await;
+
+        // A new project on a gateway already on. The platform gives the new task what was not confirmed, and one more.
+        s.hub.start(BOT, Platform::Fake, "C:/altro").unwrap();
+        let (_new, new_feed) = last_made(&s);
+        new_feed.send(Ok(vec![message("2", "c42", "42", "M1"), message("3", "c42", "42", "M2")])).unwrap();
+        eventually("i due messaggi", || s.env.messages.lock().unwrap().len() == 2).await;
+        // M1's turn starts, and M2 waits behind it.
+        s.hub.ack(BOT, Platform::Fake, "c42", "2").unwrap();
+
+        old.hold_sends.store(false, std::sync::atomic::Ordering::SeqCst);
+        tokio::time::sleep(Duration::from_millis(80)).await;
+
+        let file = pending_file_path(s.hub.store.path(), BOT, Platform::Fake);
+        let on_disk: Vec<String> = read_pending_file(&file).iter().map(|entry| entry.msg.id.clone()).collect();
+        assert_eq!(on_disk, vec!["3".to_string()], "the old task wrote over the new one's file");
+        assert_eq!(s.env.messages.lock().unwrap().len(), 2, "the old task handed something on");
+
+        // ADE crashes during M1's turn.
+        s.hub.shutdown();
+        let again = setup_vault(s.path.clone(), s.vault.clone());
+        again.hub.resume();
+        eventually("M2 torna", || again.env.messages.lock().unwrap().len() == 1).await;
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        let back: Vec<String> = again.env.messages.lock().unwrap().iter().map(|m| m.id.clone()).collect();
+        assert_eq!(back, vec!["3".to_string()], "M1 runs a second time");
+    }
+
+    #[tokio::test]
+    async fn closing_on_a_platform_that_sends_it_again_keeps_no_copy_and_saves_no_position_past_it() {
+        let s = setup("close-with-position");
+        authorize(&s, "42");
+        let (adapter, feed) = start(&s);
+        *adapter.position.lock().unwrap() = Some("900".into());
+        s.hub.pairing_open(BOT, Platform::Fake).unwrap();
+        adapter.hold_sends.store(true, std::sync::atomic::Ordering::SeqCst);
+        feed.send(Ok(vec![message("1", "c7", "7", "uno sconosciuto"), message("2", "c42", "42", "autorizzato")])).unwrap();
+        eventually("l'invio allo sconosciuto è in corso", || adapter.send_attempts.load(std::sync::atomic::Ordering::SeqCst) == 1).await;
+
+        s.hub.shutdown();
+        adapter.hold_sends.store(false, std::sync::atomic::Ordering::SeqCst);
+        tokio::time::sleep(Duration::from_millis(80)).await;
+
+        assert!(!pending_file_path(s.hub.store.path(), BOT, Platform::Fake).exists(), "a second copy of what the platform sends again");
+        assert!(s.env.messages.lock().unwrap().is_empty());
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().cursor, None, "the platform would not send it again");
+    }
+
+    /* R2-1: a restart gives up the rest of the batch, so the position must stay before it. */
+    #[tokio::test]
+    async fn a_restart_mid_batch_saves_no_position_past_what_it_gave_up() {
+        let s = setup("restart-position");
+        authorize(&s, "42");
+        let (old, feed) = start(&s);
+        *old.position.lock().unwrap() = Some("900".into());
+        s.hub.pairing_open(BOT, Platform::Fake).unwrap();
+        old.hold_sends.store(true, std::sync::atomic::Ordering::SeqCst);
+        feed.send(Ok(vec![message("1", "c7", "7", "uno sconosciuto"), message("2", "c42", "42", "autorizzato")])).unwrap();
+        eventually("l'invio allo sconosciuto è in corso", || old.send_attempts.load(std::sync::atomic::Ordering::SeqCst) == 1).await;
+
+        s.hub.start(BOT, Platform::Fake, "C:/altro").unwrap();
+        old.hold_sends.store(false, std::sync::atomic::Ordering::SeqCst);
+        tokio::time::sleep(Duration::from_millis(80)).await;
+
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().cursor, None, "the rest of the batch would never come back");
     }
 
     /* Section 3 of the audit: the checks B1 added, each proven on its own. */
