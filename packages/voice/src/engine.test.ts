@@ -1727,7 +1727,7 @@ describe("always-on listening", () => {
 
     await engine.start("agent", { waitForName: true })
     expect(engine.isRunning()).toBe(true)
-    expect(engine.lastSpoken()).not.toContain("sveglio")
+    expect(engine.lastSpoken()).not.toContain("sveglia")
     await hear("apri la tavolozza")
     expect(ran(host)).toHaveLength(0)
     await hear("ei ragù apri la tavolozza")

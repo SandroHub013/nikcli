@@ -64,7 +64,7 @@ describe("groupIntoTurns", () => {
   })
 
   test("what the assistant said before any prompt becomes a leading turn with no prompt", () => {
-    const turns = groupIntoTurns([assistant("Sono sveglio e in ascolto."), user("ciao")])
+    const turns = groupIntoTurns([assistant("Sono sveglia e in ascolto."), user("ciao")])
     expect(turns).toHaveLength(2)
     expect(turns[0].prompt).toBeUndefined()
     expect(turns[0].replies).toHaveLength(1)

@@ -204,7 +204,7 @@ describe("announceExecution", () => {
     const spoken = announceExecution({
       execution: {
         done: [{ action: "start_session", agent: "claude-code" }],
-        failures: ["Non sono riuscito ad avviare codex: manca il binario."],
+        failures: ["Non sono riuscita ad avviare codex: manca il binario."],
         openedPaneIds: [],
       },
       refusals: ["Non conosco il progetto «pippo»."],

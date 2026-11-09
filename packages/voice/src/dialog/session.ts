@@ -647,13 +647,13 @@ export function transition(
   if (state.status === "asleep") {
     if (event.type === "wake") {
       const woken = { ...state, status: "idle" as const }
-      return promoteQueued(woken, now, ctx, effects) ?? withSpoken(woken, "Sono sveglio e in ascolto.")
+      return promoteQueued(woken, now, ctx, effects) ?? withSpoken(woken, "Sono sveglia e in ascolto.")
     }
 
     if (event.type === "utterance") {
       const parsed = parseUtterance(event.text, ctx)
       if (parsed.outcome === "matched" && parsed.intent?.intent === "voice.wake") {
-        return withSpoken({ ...state, status: "idle" }, "Sono sveglio e in ascolto.")
+        return withSpoken({ ...state, status: "idle" }, "Sono sveglia e in ascolto.")
       }
     }
 

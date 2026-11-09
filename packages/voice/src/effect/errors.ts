@@ -238,7 +238,7 @@ export function spokenMessage(error: unknown, lang: "it" | "en" = "it"): string 
         case "ModelLoadFailed":
           return "Non riesco a caricare il riconoscimento vocale sul computer."
         case "TranscriptionFailed":
-          return plainProblem(messageOf(tagged), lang) ?? "Non sono riuscito a capire l'audio: riprova."
+          return plainProblem(messageOf(tagged), lang) ?? "Non sono riuscita a capire l'audio: riprova."
         case "ApiKeyMissing":
           return "Mi manca la chiave OpenRouter: aggiungila nelle impostazioni della voce."
         case "ApiKeyInvalid":
@@ -249,7 +249,7 @@ export function spokenMessage(error: unknown, lang: "it" | "en" = "it"): string 
           return "Il servizio che trascrive la voce non risponde: riprova tra poco."
         case "HostActionFailed":
           // Its message can carry anything, a key included: never said.
-          return "Non sono riuscito a farlo in ADE."
+          return "Non sono riuscita a farlo in ADE."
       }
     }
   }

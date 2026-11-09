@@ -679,10 +679,10 @@ export function plainFailure(message: string | undefined, lang: "it" | "en" = "i
     if (message && writtenForPeople(message)) return `Could not complete action: ${message.trim()}`
     return "Could not complete action in ADE: see console for details."
   }
-  if (plain) return `Non sono riuscito a farlo. ${plain}`
+  if (plain) return `Non sono riuscita a farlo. ${plain}`
   // A host that threw a sentence meant for the user («non c'è nessun progetto aperto») is read as it is.
-  if (message && writtenForPeople(message)) return `Non sono riuscito a farlo: ${message.trim()}`
-  return "Non sono riuscito a farlo in ADE: trovi il dettaglio nella console."
+  if (message && writtenForPeople(message)) return `Non sono riuscita a farlo: ${message.trim()}`
+  return "Non sono riuscita a farlo in ADE: trovi il dettaglio nella console."
 }
 
 /* Short, and nothing of a program's own vocabulary in it. */
