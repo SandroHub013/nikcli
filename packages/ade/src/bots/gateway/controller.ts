@@ -46,11 +46,12 @@ import type { ApprovalRegistry } from "../approvals"
 import { permissionAnswerer, type AskDetail } from "./approval"
 import { forgetTurnFailuresOf, noteTurnFailure } from "./failures"
 import { botForChat, modelChoices, type ChatModelStore } from "./chat-model"
-import { chatCommand, countMessage, CHAT_MESSAGES_PER_HOUR, framedMessage, mayRun } from "./policy"
+import { chatCommand, countMessage, CHAT_MESSAGES_PER_HOUR, framedMessage, MAX_MESSAGE_AGE_MS, mayRun, TOO_OLD_NOTICE_EVERY_MS, tooOldToRun } from "./policy"
 import type { BotAccount } from "../account"
 import { offersRemoteCommands, REMOTE_OFF, remoteTools, type RemoteSetting } from "./remote"
 import { resumable, sessionKey, sessionTitle, type ChatSession, type HistoryStore, type SessionStore } from "./session"
 import { gatewayThreadKey, keptThread, type GatewayThreads } from "./threads"
+import type { TurnsUnderWay } from "./turns-under-way"
 
 /** `gateway:message`, as Rust emits it. */
 export interface GatewayMessage {
@@ -73,6 +74,8 @@ export interface GatewayMessage {
   readonly owner?: boolean
   /** The message was recovered after an ADE restart or reload. */
   readonly recovered?: boolean
+  /** When it was written, or else when ADE first got it, in epoch ms. Absent on one stored by an older ADE. */
+  readonly sentMs?: number | null
 }
 
 /**
@@ -130,6 +133,10 @@ export interface GatewayControllerDeps {
   readonly sessions: SessionStore
   /** The conversations a chat left behind, for `/sessioni`. Absent, `/nuova` leaves none to resume. */
   readonly history?: HistoryStore
+  /** The turns running now, kept across a reload or a crash so the chat can be told one was cut (BOT-5). */
+  readonly underWay?: TurnsUnderWay
+  /** Stops on ragu's server a session the last page left working (BOT-5). Absent, it goes on by itself. */
+  readonly abortCut?: (project: string, sessionId: string) => Promise<void>
   /** The chat's thread on disk, apart from the panel's. Absent in a test that does not keep one. */
   readonly threads?: GatewayThreads
   /** The bot's remote commands as saved (`remote.ts`); off when absent. */
@@ -237,6 +244,8 @@ interface ChatState {
   times: number[]
   /** The limit was already said in this chat: said once, then silence. */
   limited: boolean
+  /** When this chat last heard that a message was too old to run: not for each of a burst, but not just once either. */
+  tooOldSaidAt: number
   /** The last message that became a turn: what `/riprova` asks again. */
   last?: GatewayMessage
   /**
@@ -382,7 +391,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
   const stateOf = (key: string): ChatState => {
     let state = chats.get(key)
     if (!state) {
-      state = { queue: [], starting: false, cancelled: false, times: [], limited: false, fresh: 0, retries: 0 }
+      state = { queue: [], starting: false, cancelled: false, times: [], limited: false, tooOldSaidAt: Number.NEGATIVE_INFINITY, fresh: 0, retries: 0 }
       chats.set(key, state)
     }
     return state
@@ -392,13 +401,14 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     message: GatewayMessage,
     text: string,
     options?: { final?: boolean; previewFallback?: string },
-  ) => {
+  ): Promise<string | undefined> => {
     try {
       await deps.bridge.send(message.bot, message.platform, message.chat, text, options)
+      return undefined
     } catch (error) {
-      warn(
-        `ADE: risposta del gateway non mandata (${message.platform}): ${error instanceof Error ? error.message : String(error)}`,
-      )
+      const why = error instanceof Error ? error.message : String(error)
+      warn(`ADE: risposta del gateway non mandata (${message.platform}): ${why}`)
+      return why
     }
   }
 
@@ -618,6 +628,8 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     if (closed || state.turn || state.starting) return
     const message = state.queue.shift()
     if (!message) return
+    // Written down before the acknowledgement: from there the turn is all that is left of the message (BOT-5).
+    deps.underWay?.note(key, message)
     if (!message.id.includes(RETRY_MARK))
       void deps.bridge.ack?.(message.bot, message.platform, message.chat, message.id)?.catch?.(() => {})
     state.last = message
@@ -646,6 +658,14 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       // `/ferma` while the bot was being read: nothing starts.
       if (closed || state.cancelled) return
       const sessionId = resumable(deps.sessions.get(key), project, runner)
+      // Written down as soon as it is known: the next page stops it on the server. Only ragu has a server to ask (BOT-5).
+      let noted: string | undefined
+      const noteSession = (id: string | undefined) => {
+        if (runner !== "ragu" || !id || id === noted) return
+        noted = id
+        deps.underWay?.note(key, { ...message, session: { project, sessionId: id } })
+      }
+      noteSession(sessionId)
       const sendTyping = () => void deps.bridge.typing(message.bot, message.platform, message.chat).catch(() => {})
       sendTyping()
       typing = setInterval(sendTyping, deps.typingEveryMs ?? TYPING_EVERY_MS)
@@ -769,6 +789,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
         account: deps.account?.(message.bot) ?? { mode: "plan" },
         partial: true,
         onUpdate: (talk) => {
+          noteSession(talk.sessionId)
           const raw = answerSoFar(talk)
           if (raw) {
             const text = safePreviewText(takeMemoryOps(raw).text)
@@ -825,10 +846,15 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       }
       // The bot works: what the panel kept of an earlier failure goes (N7).
       forgetTurnFailuresOf(message.bot)
-      await reply(message, text.trim() ? text : t("gateway.empty"), {
+      const notSent = await reply(message, text.trim() ? text : t("gateway.empty"), {
         final: true,
         previewFallback: t("gateway.preview.sentBelow"),
       })
+      // The first pieces of a long answer may be in the chat already, and the rest is not (BOT-8).
+      if (notSent) {
+        failure(message, notSent)
+        await reply(message, t("gateway.replyCut"))
+      }
     } catch (error) {
       failure(message, error instanceof Error ? error.message : String(error))
       await reply(message, t("gateway.failed"), {
@@ -851,6 +877,8 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       state.turn = undefined
       state.starting = false
       state.current = undefined
+      // Closed: the page is going with the turn still unanswered, and the next page says so.
+      if (!closed) deps.underWay?.done(key)
       void next(key)
     }
   }
@@ -903,8 +931,29 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     return false
   }
 
+  /** What the last page left running, by chat: each is told, once, when it can be. */
+  const cut = new Map<string, GatewayMessage>()
+  for (const [key, { session, ...message }] of deps.underWay?.take() ?? []) {
+    cut.set(key, message)
+    stateOf(key).last = message
+    if (session) void deps.abortCut?.(session.project, session.sessionId)?.catch?.(() => {})
+  }
+
+  const tellCut = async (key: string) => {
+    const message = cut.get(key)
+    if (!message) return
+    cut.delete(key)
+    try {
+      await deps.bridge.send(message.bot, message.platform, message.chat, t("gateway.interrupted", sessionTitle(message.text)))
+    } catch {
+      // The gateway is not up yet, or the network is down: told when this chat writes next.
+      cut.set(key, message)
+    }
+  }
+
   const receive = async (message: GatewayMessage) => {
     if (closed) return
+    void tellCut(sessionKey(message.bot, message.platform, message.chat))
     const ack = () => void deps.bridge.ack?.(message.bot, message.platform, message.chat, message.id)?.catch?.(() => {})
     if (isDuplicate(message)) return
     // A press answers a question; it never starts a turn.
@@ -913,6 +962,17 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       return press(message)
     }
     const key = sessionKey(message.bot, message.platform, message.chat)
+    // Before anything acts on it: a command written an hour ago is as stale as a request (BOT-10).
+    if (tooOldToRun(message, now())) {
+      ack()
+      warn(`gateway ${message.platform}: message ${message.id} not run: older than the limit`)
+      const state = stateOf(key)
+      if (now() - state.tooOldSaidAt >= TOO_OLD_NOTICE_EVERY_MS) {
+        state.tooOldSaidAt = now()
+        void reply(message, t("gateway.tooOld", MAX_MESSAGE_AGE_MS / 60_000))
+      }
+      return
+    }
     const which = chatCommand(message.text)
     if (which) {
       ack()
@@ -951,6 +1011,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       return
     }
     state.limited = false
+    state.tooOldSaidAt = Number.NEGATIVE_INFINITY
     if (message.redacted) void reply(message, t("gateway.redacted"))
     state.queue.push(message)
     const busy = state.turn !== undefined || state.starting
@@ -960,6 +1021,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
 
   const unlisten = await deps.bridge.listen((message) => void receive(message))
   await deps.bridge.ready()
+  for (const key of [...cut.keys()]) void tellCut(key)
 
   return {
     stop: () => {

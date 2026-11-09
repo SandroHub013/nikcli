@@ -960,6 +960,11 @@ export const it = {
   // A bot's gateway, in the chat it answers (G4): what the bot says there on its own.
   "gateway.recoveredNotice":
     "[Messaggio recuperato: ricevuto mentre ADE era chiusa o in riavvio (può essere un duplicato).]",
+  "gateway.tooOld": (minutes: number) =>
+    `Questo messaggio ha più di ${minutes} minuti e non l'ho eseguito. Se ti serve ancora, rimandalo.`,
+  "gateway.interrupted": (title: string) =>
+    `(interrotto) ADE si è chiusa o ricaricata durante il turno per «${title}»: la risposta non arriverà. Se ti serve ancora, scrivi /riprova.`,
+  "gateway.replyCut": "(risposta tagliata) La mia risposta non è arrivata tutta: l'invio si è fermato a metà. Il testo intero è in ADE.",
   "gateway.redacted": "Ho nascosto una chiave che hai scritto: non la uso e non la salvo.",
   "gateway.queued": (place: number) => `Sto finendo il turno di prima: questo messaggio è in coda, al posto ${place}.`,
   "gateway.stopped": "Fermato. I messaggi in coda li ho tolti.",

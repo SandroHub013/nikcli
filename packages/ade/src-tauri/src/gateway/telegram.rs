@@ -26,9 +26,9 @@ use super::markdown_v2::to_markdown_v2;
 use async_trait::async_trait;
 use reqwest::Client;
 use serde_json::{json, Value};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub const API: &str = "https://api.telegram.org";
 const POLL_SECS: u64 = 30;
@@ -54,6 +54,8 @@ pub struct Telegram {
     webhook_checked: AtomicBool,
     /// The menu of commands Telegram has from this adapter (a hash of it): the same list is not sent again.
     menu: Mutex<Option<u64>>,
+    /// How far this computer's clock is ahead of Telegram's, from the `Date` of its last answer.
+    ahead_ms: AtomicI64,
 }
 
 /// Telegram's menu takes a command of 1 to 32 characters, `a-z`, `0-9` and `_`, and 1 to 256 for what it does; at most 100.
@@ -191,6 +193,27 @@ fn forwarded_text(from: &str, text: &str) -> String {
     )
 }
 
+fn now_ms() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |since| since.as_millis() as u64)
+}
+
+/// An HTTP date, `Sun, 06 Nov 1994 08:49:37 GMT`, in epoch ms. Only that form: it is the one servers send.
+fn http_date_ms(text: &str) -> Option<u64> {
+    const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    let fields: Vec<&str> = text.split_whitespace().collect();
+    let [_, day, month, year, clock, "GMT"] = fields.as_slice() else { return None };
+    let day: i64 = day.parse().ok()?;
+    let month = MONTHS.iter().position(|name| name == month)? as i64 + 1;
+    let year: i64 = year.parse().ok()?;
+    let mut clock = clock.split(':').map(|part| part.parse::<i64>().ok());
+    let (hour, minute, second) = (clock.next()??, clock.next()??, clock.next()??);
+    // Days since the epoch, on years that start in March: the leap day comes last.
+    let (y, m) = if month > 2 { (year, month - 3) } else { (year - 1, month + 9) };
+    let of_era = y.rem_euclid(400);
+    let days = y.div_euclid(400) * 146_097 + of_era * 365 + of_era / 4 - of_era / 100 + (153 * m + 2) / 5 + day - 1 - 719_468;
+    u64::try_from((days * 86_400 + hour * 3_600 + minute * 60 + second) * 1_000).ok()
+}
+
 /// An update as the hub sees it; `None` for what the gateway does not take
 /// (no text, an edit, a channel post).
 fn inbound(update: &Value) -> Option<Inbound> {
@@ -270,6 +293,7 @@ impl Telegram {
             next: Mutex::new(cursor.and_then(|cursor| cursor.parse().ok())),
             webhook_checked: AtomicBool::new(false),
             menu: Mutex::new(None),
+            ahead_ms: AtomicI64::new(0),
         })
     }
 
@@ -286,6 +310,9 @@ impl Telegram {
             .send()
             .await
             .map_err(network)?;
+        if let Some(server) = response.headers().get(reqwest::header::DATE).and_then(|date| date.to_str().ok()).and_then(http_date_ms) {
+            self.ahead_ms.store(now_ms() as i64 - server as i64, Ordering::SeqCst);
+        }
         let status = response.status().as_u16();
         let bytes = response.bytes().await.map_err(network)?;
         let reply: Value = serde_json::from_slice(&bytes).map_err(|_| Failure::Api {
@@ -386,6 +413,9 @@ impl Adapter for Telegram {
             }
             Err(failure) => return Err(failure.for_reading()),
         };
+        // A message's date is on Telegram's clock, and all it is compared with is on this computer's (BOT-10): a clock
+        // ten minutes fast would refuse every message as too old.
+        let ahead = self.ahead_ms.load(Ordering::SeqCst);
         let mut batch = Vec::new();
         for update in updates.as_array().map(Vec::as_slice).unwrap_or_default() {
             if let Some(id) = update["update_id"].as_i64() {
@@ -396,7 +426,8 @@ impl Adapter for Telegram {
                 // Stops the button spinning; who pressed it is the hub's to judge.
                 let _ = self.call(&self.calls, "answerCallbackQuery", &json!({ "callback_query_id": press["id"] })).await;
             }
-            if let Some(message) = inbound(update) {
+            if let Some(mut message) = inbound(update) {
+                message.timestamp_ms = message.timestamp_ms.map(|sent| sent.saturating_add_signed(ahead));
                 batch.push(message);
             }
         }
@@ -623,6 +654,8 @@ mod tests {
         calls: Arc<Mutex<Vec<(String, Value)>>>,
         script: Arc<Mutex<HashMap<String, VecDeque<Reply>>>>,
         pending_updates: Arc<Mutex<Vec<Value>>>,
+        /// The `Date` header of every answer, when there is to be one.
+        date: Arc<Mutex<Option<String>>>,
     }
 
     impl FakeApi {
@@ -707,9 +740,10 @@ mod tests {
                 _ => (200, json!({ "ok": true, "result": true }).to_string(), 0),
             });
             std::thread::sleep(Duration::from_millis(delay));
+            let date = self.date.lock().unwrap().as_deref().map(|date| format!("Date: {date}\r\n")).unwrap_or_default();
             let _ = write!(
                 stream,
-                "HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
+                "HTTP/1.1 {status} X\r\n{date}Content-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
                 reply.len()
             );
         }
@@ -725,6 +759,40 @@ mod tests {
             "chat": { "id": from, "type": chat_type },
             "from": { "id": from, "is_bot": false, "first_name": "Ale", "last_name": "B" }
         }})
+    }
+
+    /* BOT-10: a message's age does not depend on this computer's clock being right. */
+    #[test]
+    fn an_http_date_is_read_as_the_server_wrote_it() {
+        assert_eq!(http_date_ms("Sun, 06 Nov 1994 08:49:37 GMT"), Some(784_111_777_000));
+        assert_eq!(http_date_ms("Thu, 01 Jan 1970 00:00:01 GMT"), Some(1_000));
+        assert_eq!(http_date_ms("Sun, 06 Foo 1994 08:49:37 GMT"), None);
+        assert_eq!(http_date_ms("ieri alle tre"), None);
+    }
+
+    fn dated_update(id: i64, date: i64) -> Value {
+        let mut update = text_update(id, "private", 42, "ciao");
+        update["message"]["date"] = json!(date);
+        update
+    }
+
+    #[tokio::test]
+    async fn a_message_date_is_put_on_this_computers_clock_with_the_servers() {
+        let api = FakeApi::start();
+        // The server says 1994: whatever this computer says, the message was written five seconds before the answer.
+        *api.date.lock().unwrap() = Some("Sun, 06 Nov 1994 08:49:37 GMT".into());
+        api.then("getUpdates", 200, json!({ "ok": true, "result": [dated_update(10, 784_111_772)] }));
+        let batch = adapter(&api, None).receive().await.unwrap();
+        let age = now_ms().saturating_sub(batch[0].timestamp_ms.unwrap());
+        assert!((4_000..8_000).contains(&age), "{age} ms");
+    }
+
+    #[tokio::test]
+    async fn an_answer_with_no_date_leaves_a_message_as_telegram_dated_it() {
+        let api = FakeApi::start();
+        api.then("getUpdates", 200, json!({ "ok": true, "result": [dated_update(10, 784_111_772)] }));
+        let batch = adapter(&api, None).receive().await.unwrap();
+        assert_eq!(batch[0].timestamp_ms, Some(784_111_772_000));
     }
 
     #[tokio::test]

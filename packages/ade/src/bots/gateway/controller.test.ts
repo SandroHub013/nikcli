@@ -7,10 +7,11 @@ import { runTurn, type Turn, type TurnDeps, type TurnRequest, type TurnResult } 
 import { createApprovalRegistry, decideApproval, mergeApprovals } from "../approvals"
 import { ASK_TIMEOUT_MS, startGatewayController, safePreviewText, RECOVERED_NOTICE, recoveredNotice, type GatewayBridge, type GatewayMessage } from "./controller"
 import { forgetTurnFailures, noteTurnFailure, turnFailureOf } from "./failures"
-import { chatCommand, chatHeader } from "./policy"
+import { chatCommand, chatHeader, MAX_MESSAGE_AGE_MS, TOO_OLD_NOTICE_EVERY_MS } from "./policy"
 import { localRemoteStore, memoryRemoteStore, offersRemoteCommands, REMOTE_OFF, remoteKey, remoteTools } from "./remote"
 import { localSessionStore, memorySessionStore, sessionKey } from "./session"
 import { createGatewayThreads, gatewayThreadKey, type ThreadDisk } from "./threads"
+import { localTurnsUnderWay, memoryTurnsUnderWay, TURNS_UNDER_WAY_KEY } from "./turns-under-way"
 import { volatileMemoryStore } from "../memory"
 import { appendMessage, sendMessage } from "../talk"
 
@@ -219,7 +220,7 @@ describe("the gateways' controller", () => {
       loadBot: trusted,
       sessions: memorySessionStore(),
     })
-    b.emit("domanda salvata", { id: "m42", bot: BOT.path, platform: "telegram", chat: "c42", recovered: true })
+    b.emit("domanda salvata", { id: "m42", bot: BOT.path, platform: "telegram", chat: "c42", recovered: true, sentMs: Date.now() })
     await until("il turno è partito", () => turns.started.length === 1)
     const request = turns.started[0]!.request
     expect(request.message).toContain(recoveredNotice())
@@ -1204,7 +1205,7 @@ describe("the gateways' controller", () => {
       loadBot: trusted,
       sessions: memorySessionStore(),
     })
-    b.emit("messaggio recuperato", { recovered: true, id: "msg-rec-1" })
+    b.emit("messaggio recuperato", { recovered: true, id: "msg-rec-1", sentMs: Date.now() })
     await until("il turno è partito", () => turns.started.length === 1)
     const turn = turns.started[0]!
 
@@ -2174,3 +2175,341 @@ describe("the failure shown in the panel goes away when the bot works again (N7)
   })
 })
 
+
+describe("a message that waited too long is not run (BOT-10)", () => {
+  const NOW = 1_800_000_000_000
+  const OLD = NOW - MAX_MESSAGE_AGE_MS - 1
+  const minutes = MAX_MESSAGE_AGE_MS / 60_000
+  const started = async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: trusted, sessions: memorySessionStore(), now: () => NOW })
+    return { b, turns }
+  }
+
+  test("older than the limit: no turn, acknowledged so it does not come back, and the chat is told once", async () => {
+    const { b, turns } = await started()
+    b.emit("cancella il branch vecchio", { id: "m1", recovered: true, sentMs: OLD })
+    b.emit("e fai il deploy", { id: "m2", sentMs: OLD })
+    await until("i due ack", () => b.acks.length === 2)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(turns.started).toHaveLength(0)
+    expect(b.acks.map((ack) => ack.id)).toEqual(["m1", "m2"])
+    expect(b.sent.map((each) => each.text)).toEqual([t("gateway.tooOld", minutes)])
+  })
+
+  test("inside the limit a recovered message still runs", async () => {
+    const { b, turns } = await started()
+    b.emit("appena scritto", { id: "m1", recovered: true, sentMs: NOW - MAX_MESSAGE_AGE_MS })
+    await until("il turno", () => turns.started.length === 1)
+    expect(b.sent).toHaveLength(0)
+  })
+
+  test("a stored message with no age (kept by an older ADE) is not run: nobody can say how old it is", async () => {
+    const { b, turns } = await started()
+    b.emit("senza età", { id: "m1", recovered: true })
+    await until("l'ack", () => b.acks.length === 1)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(turns.started).toHaveLength(0)
+    expect(b.sent.map((each) => each.text)).toEqual([t("gateway.tooOld", minutes)])
+  })
+
+  test("a live message with no age runs", async () => {
+    const { b, turns } = await started()
+    b.emit("adesso", { id: "m1" })
+    await until("il turno", () => turns.started.length === 1)
+  })
+
+  test("an old command does nothing: /nuova written an hour ago does not drop today's conversation", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    const sessions = memorySessionStore()
+    const key = sessionKey(BOT.path, "telegram", "c42")
+    sessions.set(key, { project: PROJECT, runner: "claude", sessionId: "s1" })
+    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: trusted, sessions, now: () => NOW })
+    b.emit("/nuova", { id: "m1", recovered: true, sentMs: OLD })
+    await until("l'ack", () => b.acks.length === 1)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(sessions.get(key)?.sessionId).toBe("s1")
+    expect(b.sent.map((each) => each.text)).toEqual([t("gateway.tooOld", minutes)])
+  })
+
+  test("a button press is not judged by age: its date is the date of the question it sits under", async () => {
+    const b = bridge()
+    await startGatewayController({ bridge: b.fake, runTurn: fakeTurns().runTurn, loadBot: trusted, sessions: memorySessionStore(), now: () => NOW })
+    b.emit("x:0", { id: "p1", button: true, sentMs: OLD })
+    await until("l'ack", () => b.acks.length === 1)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(b.sent).toHaveLength(0)
+  })
+
+  test("after a message that runs, a later old one is told again", async () => {
+    const { b, turns } = await started()
+    b.emit("vecchio", { id: "m1", sentMs: OLD })
+    await until("detto", () => b.sent.length === 1)
+    b.emit("fresco", { id: "m2", sentMs: NOW })
+    await until("il turno", () => turns.started.length === 1)
+    turns.started[0]!.finish({ text: "fatto" })
+    await until("la risposta", () => b.sent.length === 2)
+    b.emit("vecchio di nuovo", { id: "m3", sentMs: OLD })
+    await until("detto ancora", () => b.sent.length === 3)
+    expect(b.sent[2]!.text).toBe(t("gateway.tooOld", minutes))
+  })
+
+  test("a chat whose messages keep being refused is told again after a few minutes: the bot does not go silent", async () => {
+    const b = bridge()
+    let clock = NOW
+    await startGatewayController({ bridge: b.fake, runTurn: fakeTurns().runTurn, loadBot: trusted, sessions: memorySessionStore(), now: () => clock })
+    b.emit("uno", { id: "m1", sentMs: OLD })
+    await until("detto", () => b.sent.length === 1)
+    clock += TOO_OLD_NOTICE_EVERY_MS - 1
+    b.emit("due", { id: "m2", sentMs: OLD })
+    await until("il secondo ack", () => b.acks.length === 2)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(b.sent).toHaveLength(1)
+    clock += 1
+    b.emit("tre", { id: "m3", sentMs: OLD })
+    await until("detto ancora", () => b.sent.length === 2)
+    expect(b.sent[1]!.text).toBe(t("gateway.tooOld", minutes))
+  })
+})
+
+describe("a turn cut by a reload, a crash or the update is not lost silently (BOT-5)", () => {
+  const start = async (b: ReturnType<typeof bridge>, turns: ReturnType<typeof fakeTurns>, underWay: ReturnType<typeof memoryTurnsUnderWay>) =>
+    startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: trusted, sessions: memorySessionStore(), underWay })
+  const interrupted = (title: string) => t("gateway.interrupted", title)
+
+  test("the next page tells the chat, once, and /riprova asks the same thing again", async () => {
+    const underWay = memoryTurnsUnderWay()
+    const before = bridge()
+    const beforeTurns = fakeTurns()
+    await start(before, beforeTurns, underWay)
+    before.emit("cancella il branch vecchio", { id: "m1" })
+    await until("il turno", () => beforeTurns.started.length === 1)
+
+    // The page is gone without a word: nothing of the first controller runs any more.
+    const after = bridge()
+    const afterTurns = fakeTurns()
+    await start(after, afterTurns, underWay)
+    await until("detto", () => after.sent.length === 1)
+    expect(after.sent[0]!.chat).toBe("c42")
+    expect(after.sent[0]!.text).toBe(interrupted("cancella il branch vecchio"))
+    expect(afterTurns.started).toHaveLength(0)
+
+    after.emit("/riprova", { id: "m2" })
+    await until("rifatto", () => afterTurns.started.length === 1)
+    expect(afterTurns.started[0]!.request.message).toContain("cancella il branch vecchio")
+
+    // Told once: a third page has nothing to say.
+    const third = bridge()
+    afterTurns.started[0]!.finish({ text: "fatto" })
+    await until("finito", () => after.sent.some((each) => each.text === "fatto"))
+    await start(third, fakeTurns(), underWay)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(third.sent).toHaveLength(0)
+  })
+
+  test("a turn that ended, however it ended, is not reported as cut", async () => {
+    const underWay = memoryTurnsUnderWay()
+    const b = bridge()
+    const turns = fakeTurns()
+    await start(b, turns, underWay)
+    b.emit("uno", { id: "m1" })
+    await until("il turno", () => turns.started.length === 1)
+    turns.started[0]!.finish({ text: "ok" })
+    await until("la risposta", () => b.sent.length === 1)
+    b.emit("due", { id: "m2" })
+    await until("il secondo", () => turns.started.length === 2)
+    turns.started[1]!.finish({ status: "error", problem: "x" })
+    await until("il fallimento", () => b.sent.length === 2)
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    expect(underWay.take()).toEqual([])
+  })
+
+  test("the controller stopped with a turn running (a reload that cleans up) counts as cut too", async () => {
+    const underWay = memoryTurnsUnderWay()
+    const b = bridge()
+    const turns = fakeTurns()
+    const controller = await start(b, turns, underWay)
+    b.emit("lavoro lungo", { id: "m1" })
+    await until("il turno", () => turns.started.length === 1)
+    controller.stop()
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    const left = underWay.take()
+    expect(left.map(([, message]) => message.text)).toEqual(["lavoro lungo"])
+  })
+
+  describe("a ragu turn left running", () => {
+    const ragu = async () => ({ ok: true as const, bot: { ...BOT, runner: "ragu" } })
+    const page = (
+      b: ReturnType<typeof bridge>,
+      turns: ReturnType<typeof fakeTurns>,
+      underWay: ReturnType<typeof memoryTurnsUnderWay>,
+      abortCut?: (project: string, sessionId: string) => Promise<void>,
+      sessions = memorySessionStore(),
+    ) => startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: ragu, sessions, underWay, ...(abortCut ? { abortCut } : {}) })
+
+    test("is stopped on the server by the next page, so /riprova is not a second agent in the folder", async () => {
+      const underWay = memoryTurnsUnderWay()
+      const before = bridge()
+      const beforeTurns = fakeTurns()
+      await page(before, beforeTurns, underWay)
+      before.emit("lavoro lungo", { id: "m1" })
+      await until("il turno", () => beforeTurns.started.length === 1)
+      beforeTurns.started[0]!.request.onUpdate!({ ...emptyTalk(), sessionId: "ses_nuova" })
+
+      const stopped: string[][] = []
+      const after = bridge()
+      await page(after, fakeTurns(), underWay, async (project, session) => void stopped.push([project, session]))
+      await until("detto", () => after.sent.length === 1)
+      expect(stopped).toEqual([[PROJECT, "ses_nuova"]])
+    })
+
+    test("a session resumed from the chat is stopped too, and a server that refuses does not keep the chat from being told", async () => {
+      const underWay = memoryTurnsUnderWay()
+      const sessions = memorySessionStore()
+      sessions.set(sessionKey(BOT.path, "telegram", "c42"), { project: PROJECT, runner: "ragu", sessionId: "s-vecchia" })
+      const before = bridge()
+      const beforeTurns = fakeTurns()
+      await page(before, beforeTurns, underWay, undefined, sessions)
+      before.emit("continua", { id: "m1" })
+      await until("il turno", () => beforeTurns.started.length === 1)
+
+      const stopped: string[] = []
+      const after = bridge()
+      await page(after, fakeTurns(), underWay, async (_project, session) => {
+        stopped.push(session)
+        throw new Error("il server non risponde")
+      })
+      await until("detto", () => after.sent.length === 1)
+      expect(stopped).toEqual(["s-vecchia"])
+    })
+
+    test("/riprova after it starts clean: the stopped session is not noted again for the new turn", async () => {
+      const underWay = memoryTurnsUnderWay()
+      const before = bridge()
+      const beforeTurns = fakeTurns()
+      await page(before, beforeTurns, underWay)
+      before.emit("lavoro lungo", { id: "m1" })
+      await until("il turno", () => beforeTurns.started.length === 1)
+      beforeTurns.started[0]!.request.onUpdate!({ ...emptyTalk(), sessionId: "ses_nuova" })
+
+      const after = bridge()
+      const afterTurns = fakeTurns()
+      await page(after, afterTurns, underWay, async () => {})
+      await until("detto", () => after.sent.length === 1)
+      after.emit("/riprova", { id: "m2" })
+      await until("rifatto", () => afterTurns.started.length === 1)
+      expect(underWay.take().map(([, turn]) => turn.session)).toEqual([undefined])
+    })
+  })
+
+  test("another runner has no server to ask: nothing is stopped for it", async () => {
+    const underWay = memoryTurnsUnderWay()
+    const before = bridge()
+    const beforeTurns = fakeTurns()
+    await start(before, beforeTurns, underWay)
+    before.emit("lavoro", { id: "m1" })
+    await until("il turno", () => beforeTurns.started.length === 1)
+    beforeTurns.started[0]!.request.onUpdate!({ ...emptyTalk(), sessionId: "claude-1" })
+
+    const stopped: string[] = []
+    const after = bridge()
+    await startGatewayController({
+      bridge: after.fake,
+      runTurn: fakeTurns().runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+      underWay,
+      abortCut: async (_project, session) => void stopped.push(session),
+    })
+    await until("detto", () => after.sent.length === 1)
+    expect(stopped).toEqual([])
+  })
+
+  test("«off» is not a cut: the turn was stopped on purpose", async () => {
+    const underWay = memoryTurnsUnderWay()
+    const b = bridge()
+    const turns = fakeTurns()
+    const controller = await start(b, turns, underWay)
+    b.emit("uno", { id: "m1" })
+    await until("il turno", () => turns.started.length === 1)
+    controller.off(BOT.path, "telegram")
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    expect(underWay.take()).toEqual([])
+  })
+
+  test("a chat that could not be told at start is told when it writes next", async () => {
+    const underWay = memoryTurnsUnderWay()
+    underWay.note(sessionKey(BOT.path, "telegram", "c42"), {
+      bot: BOT.path,
+      platform: "telegram",
+      chat: "c42",
+      sender: { id: "42", name: "Ale" },
+      text: "domanda",
+      id: "m0",
+      redacted: false,
+      button: false,
+      private: true,
+    })
+    const b = bridge()
+    const send = b.fake.send
+    let down = true
+    b.fake.send = (...args) => (down ? Promise.reject(new Error("rete giù")) : send(...args))
+    const turns = fakeTurns()
+    await start(b, turns, underWay)
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    expect(b.sent).toHaveLength(0)
+    down = false
+    b.emit("ci sei?", { id: "m1" })
+    await until("detto", () => b.sent.some((each) => each.text === interrupted("domanda")))
+  })
+
+  test("in the renderer's storage: it survives, comes out once, and what is not a message is left out", () => {
+    localStorage.removeItem(TURNS_UNDER_WAY_KEY)
+    const store = localTurnsUnderWay()
+    const message = { bot: "b", platform: "telegram", chat: "c", sender: { id: "1", name: "n" }, text: "t", id: "m", redacted: false, button: false, private: true }
+    store.note("k1", message)
+    store.note("k2", message)
+    store.done("k2")
+    localStorage.setItem(TURNS_UNDER_WAY_KEY, JSON.stringify({ ...JSON.parse(localStorage.getItem(TURNS_UNDER_WAY_KEY)!), rotta: { bot: 3 } }))
+    expect(localTurnsUnderWay().take()).toEqual([["k1", message]])
+    expect(localTurnsUnderWay().take()).toEqual([])
+    localStorage.removeItem(TURNS_UNDER_WAY_KEY)
+  })
+})
+
+describe("a reply cut halfway is said in the chat (BOT-8)", () => {
+  const failingFinal = (b: ReturnType<typeof bridge>) => {
+    const send = b.fake.send
+    b.fake.send = (bot, platform, chat, text, options) =>
+      options?.final ? Promise.reject(new Error("Telegram: pezzo 2 rifiutato")) : send(bot, platform, chat, text, options)
+  }
+
+  test("the chat reads that the answer did not arrive whole, and the panel keeps why", async () => {
+    forgetTurnFailures()
+    const b = bridge()
+    failingFinal(b)
+    const turns = fakeTurns()
+    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: trusted, sessions: memorySessionStore(), warn: () => {} })
+    b.emit("fammi un riassunto lungo", { id: "m1" })
+    await until("il turno", () => turns.started.length === 1)
+    turns.started[0]!.finish({ text: "una risposta molto lunga" })
+    await until("detto", () => b.sent.length === 1)
+    expect(b.sent[0]!.text).toBe(t("gateway.replyCut"))
+    expect(turnFailureOf(BOT.path, "telegram")?.detail).toContain("pezzo 2 rifiutato")
+    forgetTurnFailures()
+  })
+
+  test("an answer that went out adds nothing", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: trusted, sessions: memorySessionStore() })
+    b.emit("ciao", { id: "m1" })
+    await until("il turno", () => turns.started.length === 1)
+    turns.started[0]!.finish({ text: "risposta" })
+    await until("la risposta", () => b.sent.length === 1)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(b.sent.map((each) => each.text)).toEqual(["risposta"])
+  })
+})

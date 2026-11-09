@@ -13,15 +13,17 @@ import { admitProject, projectSurface, PROJECT_TRUST_KEY } from "../project-trus
 import { runnerById } from "../runners"
 import { listModels, localGatewayThreads, projectFs, readBotText, resolveRoots } from "../store"
 import { admit, localTrustStore } from "../trust"
-import { runBotTurn } from "../serve-turn"
+import { abortLeftSession, appServeTurnDeps, runBotTurn } from "../serve-turn"
 import { startGatewayController, type GatewayBridge, type GatewayController, type GatewayMessage } from "./controller"
 import type { GatewayPanelApi, GatewayPanelDeps, LinkStatus as LiveStatus, PairingRequest } from "./panel-state"
 import { recheckTrust, scopeOf } from "./policy"
-import { projectOfLink } from "./project-of"
+import { projectOfLink, stopTurnsOfDeadLink } from "./project-of"
+import { offSwitches } from "./off-switches"
 import { localAccountStore } from "../account"
 import { localRemoteStore, remoteKey } from "./remote"
 import { appMemoryStore } from "../memory-app"
 import { localHistoryStore, localSessionStore } from "./session"
+import { localTurnsUnderWay } from "./turns-under-way"
 import { localChatModelStore } from "./chat-model"
 import { startMenuSync } from "./menu"
 import { appStateAside } from "./state-aside"
@@ -35,6 +37,8 @@ interface LinkStatus {
   readonly platform: string
   readonly project?: string | null
   readonly enabled?: boolean
+  readonly running?: boolean
+  readonly lastError?: string | null
   readonly connected?: boolean
   readonly connectedAtMs?: number | null
 }
@@ -91,32 +95,11 @@ export function tauriGatewayPanelApi(): GatewayPanelApi {
     status: () => invoke("gateway_status"),
     setToken: (bot, platform, token, kind) => invoke("gateway_set_token", { bot, platform, token, kind: kind ?? null }),
     slackManifest: (name) => invoke("gateway_slack_manifest", { name }),
-    clearToken: async (bot, platform) => {
-      try {
-        await invoke("gateway_clear_token", { bot, platform })
-      } finally {
-        // Rust halts the link before it touches the keychain: no token, no gateway, so what it had queued or
-        // running here stops whether or not the clearing succeeded (BOT-2).
-        activeController?.off(bot, platform)
-      }
-    },
+    ...offSwitches(invoke, () => activeController),
     probe: (bot, platform) => invoke("gateway_probe", { bot, platform }),
-    setEnabled: async (bot, platform, enabled, project) => {
-      try {
-        await invoke("gateway_set_enabled", { bot, platform, enabled, project: project ?? null })
-      } finally {
-        // «Off» is a kill switch: Rust dropped its pending store, and the queued and running turns here stop (BOT-2).
-        if (!enabled) activeController?.off(bot, platform)
-      }
-    },
     pairingList: (bot, platform) => invoke("gateway_pairing_list", { bot, platform }),
     pairingApprove: (bot, platform, code) => invoke("gateway_pairing_approve", { bot, platform, code }),
     pairingReject: (bot, platform, request) => invoke("gateway_pairing_reject", { bot, platform, request }),
-    pairingRevoke: async (bot, platform, sender) => {
-      await invoke("gateway_pairing_revoke", { bot, platform, sender })
-      // Rust no longer hears the sender; what was already queued here stops too.
-      activeController?.revoke(bot, platform, sender)
-    },
     pairingOpen: (bot, platform) => invoke("gateway_pairing_open", { bot, platform }),
     pairingLink: (bot, platform) => invoke("gateway_pairing_link", { bot, platform }),
     pairingLinkCancel: (bot, platform) => invoke("gateway_pairing_link_cancel", { bot, platform }),
@@ -198,6 +181,12 @@ export async function startAppGatewayController(options?: {
       }),
     sessions: localSessionStore(),
     history: localHistoryStore(),
+    underWay: localTurnsUnderWay(),
+    abortCut: (project, sessionId) =>
+      abortLeftSession(project, sessionId, {
+        serverIsUp: async () => (await invoke<unknown>("ragu_serve_status")) !== null,
+        connect: appServeTurnDeps().connect,
+      }),
     threads: localGatewayThreads(),
     remote: (bot, platform) => localRemoteStore().get(remoteKey(bot, platform)),
     account: (bot) => localAccountStore().get(bot),
@@ -218,6 +207,11 @@ export async function startAppGatewayController(options?: {
     },
   })
   activeController = controller
+  // A token revoked on the platform, another reader, a webhook: nothing can be answered any more, so nothing goes on running (BOT2-2).
+  const stopDeadLinks = await (async () => {
+    const { listen } = await import("@tauri-apps/api/event")
+    return listen<LiveStatus>("gateway:status", (event) => stopTurnsOfDeadLink(event.payload, controller.off))
+  })().catch(() => () => {})
   const attentionSync = syncGatewayAttention({
     approvals: appApprovals,
     api: tauriGatewayPanelApi(),
@@ -261,6 +255,7 @@ export async function startAppGatewayController(options?: {
         window.removeEventListener("online", onOnline)
       }
       if (activeController === controller) activeController = undefined
+      stopDeadLinks()
       attentionSync.stop()
       stopAside()
       stopMenus()

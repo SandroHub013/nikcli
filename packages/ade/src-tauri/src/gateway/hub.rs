@@ -22,7 +22,8 @@ use super::store::{Authorized, LinkState, Store};
 use crate::secrets::Vault;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::watch;
@@ -51,6 +52,10 @@ pub struct GatewayMessage {
     /// disk before this field was made by such an account, so it reads as true; the page reads the lack of it as false.
     #[serde(default = "owner_by_default")]
     pub owner: bool,
+    /// When it was written (on the platform's clock), or else when ADE first got it: the page does not run a message
+    /// that waited too long (BOT-10). None on one kept on disk by an older ADE, and the page does not run that either.
+    #[serde(default)]
+    pub sent_ms: Option<u64>,
 }
 
 fn owner_by_default() -> bool {
@@ -66,6 +71,11 @@ const PENDING_CAP: usize = 1_000;
 const DISK_PENDING_CAP: usize = 200;
 /// What the panel is told when the pending queue is full and a message was dropped.
 const QUEUE_FULL: &str = "coda_piena";
+/// What a chat reads when what it wrote while the gateway was off is not run (BOT2-1).
+const SENT_WHILE_OFF_MESSAGE: &str = "Il bot era spento: quello che hai scritto nel frattempo non è stato eseguito. Rimanda ciò che ti serve ancora.\nThe bot was off: what you wrote meanwhile was not run. Send again what you still need.";
+/// A platform's dates are in whole seconds and its clock is not this one: a message this close to the switch-on counts
+/// as written after it.
+const OFF_GRACE_MS: u64 = 5_000;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MessageSender {
@@ -229,6 +239,8 @@ struct Running {
     wake: Arc<tokio::sync::Notify>,
     live: Arc<Mutex<Live>>,
     pending: Arc<Mutex<VecDeque<PendingEntry>>>,
+    /// Set before the stop flag when ADE is closing: only then can what is in hand stay for the next start (BOT2-5).
+    closing: Arc<AtomicBool>,
 }
 
 
@@ -388,7 +400,12 @@ fn recheck_unacked(
     platform: Platform,
     pending: &mut VecDeque<PendingEntry>,
 ) -> (Vec<GatewayMessage>, bool) {
-    let link = store.link(bot, platform);
+    // Cannot be read for now: neither handed on nor dropped, and the next `ready` tries again. Read as empty it would
+    // say every sender was revoked and lose every waiting message for good (BOT2-4).
+    let Ok(link) = store.try_link(bot, platform) else {
+        env.log(&format!("gateway {} {}: stato non leggibile: i messaggi in coda restano in attesa", platform.id(), &bot_key(bot)[..8]));
+        return (Vec::new(), false);
+    };
     let mut again = Vec::new();
     let mut dropped = 0;
     for entry in pending.iter_mut().filter(|entry| !entry.acked) {
@@ -692,7 +709,11 @@ impl Hub {
         }
         let adapter = self.connect(bot, platform)?;
         self.halt(bot, platform);
+        let now = self.env.now_ms();
         self.store.update(bot, platform, |link, _| {
+            if !link.enabled {
+                link.enabled_at_ms = Some(now);
+            }
             link.enabled = true;
             link.project = Some(project.to_string());
             Ok(())
@@ -748,6 +769,9 @@ impl Hub {
                     }
                 }
             }
+            // Under the lock `launch` publishes its link with: a link either is in the loop above, or finds the page
+            // ready and hands its own file on (BOT2-3).
+            self.ready.send_replace(true);
         }
         for (bot, platform, adapter, cursor) in moved {
             let _ = self.advance_cursor(&bot, platform, Some(&adapter), &cursor);
@@ -755,7 +779,6 @@ impl Hub {
         for msg in again {
             self.env.message(&msg);
         }
-        self.ready.send_replace(true);
     }
 
     /// The page is loading again (a reload, a renderer that crashed): its
@@ -793,45 +816,72 @@ impl Hub {
 
     fn launch(&self, bot: &str, platform: Platform, adapter: Arc<dyn Adapter>) {
         self.failed().remove(&(bot.to_string(), platform));
+        // First, with no lock: it reads the keychain.
+        let secrets = self.secrets();
         let (stop, stopped) = watch::channel(false);
         let live = Arc::new(Mutex::new(Live {
             reconnecting: true,
             ..Live::default()
         }));
-
-        let mut initial_pending: VecDeque<PendingEntry> =
-            read_pending_file(&pending_file_path(self.store.path(), bot, platform)).into();
-        let ready_now = *self.ready.borrow();
-        if ready_now {
-            let (again, dropped) = recheck_unacked(&*self.env, &self.store, bot, platform, &mut initial_pending);
-            if dropped {
-                if let Some(cursor) = settle(&*self.env, self.store.path(), bot, platform, &mut initial_pending) {
-                    let _ = self.advance_cursor(bot, platform, Some(&adapter), &cursor);
+        let wake = Arc::new(tokio::sync::Notify::new());
+        let closing = Arc::new(AtomicBool::new(false));
+        let pending: Arc<Mutex<VecDeque<PendingEntry>>> = Arc::default();
+        /*
+         * The file is read and the link goes in the map under the same lock, and only then is anything handed on: an ack
+         * from a page that answers at once finds the link and its queue. Before, it found no link, took the entry out of
+         * the file, and `launch`'s own copy wrote it back, to run again at the next reload (BOT2-3).
+         */
+        let (again, moved) = {
+            let mut links = self.links();
+            let mut queue = pending.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            *queue = read_pending_file(&pending_file_path(self.store.path(), bot, platform)).into();
+            let mut again = Vec::new();
+            let mut moved = None;
+            if *self.ready.borrow() {
+                let (messages, dropped) = recheck_unacked(&*self.env, &self.store, bot, platform, &mut queue);
+                again = messages;
+                if dropped {
+                    moved = settle(&*self.env, self.store.path(), bot, platform, &mut queue);
                 }
             }
-            for msg in &again {
-                self.env.message(msg);
-            }
+            drop(queue);
+            links.insert(
+                (bot.to_string(), platform),
+                Running {
+                    adapter: adapter.clone(),
+                    stop,
+                    wake: wake.clone(),
+                    live: live.clone(),
+                    pending: pending.clone(),
+                    closing: closing.clone(),
+                },
+            );
+            (again, moved)
+        };
+        if let Some(cursor) = moved {
+            let _ = self.advance_cursor(bot, platform, Some(&adapter), &cursor);
         }
-        let pending = Arc::new(Mutex::new(initial_pending));
+        for msg in &again {
+            self.env.message(msg);
+        }
         let started_at = self.env.now_ms();
-        let wake = Arc::new(tokio::sync::Notify::new());
         let task = Task {
             env: self.env.clone(),
             store: self.store.clone(),
-            adapter: adapter.clone(),
+            adapter,
             bot: bot.to_string(),
             platform,
-            wake: wake.clone(),
-            live: live.clone(),
-            pending: pending.clone(),
-            secrets: self.secrets(),
+            wake,
+            live,
+            pending,
+            secrets,
             backoff: self.backoff,
             started_at,
             halted: stopped.clone(),
+            closing,
+            while_off: Mutex::new(HashSet::new()),
         };
         tokio::spawn(task.run(stopped, self.ready.subscribe()));
-        self.links().insert((bot.to_string(), platform), Running { adapter, stop, wake, live, pending });
         self.env.status(&LinkStatus {
             bot: bot.to_string(),
             platform,
@@ -853,12 +903,20 @@ impl Hub {
         check_bot(bot)?;
         // «Off» is a kill switch: what was waiting is not delivered later, after a restart or a switch-on.
         // The position moves past it, so the platform does not send it again either (BOT-2).
+        let adapter = self.links().get(&(bot.to_string(), platform)).map(|running| running.adapter.clone());
         let mut furthest: Option<String> = None;
         for entry in self.halt_and_drain(bot, platform, "spento") {
             if let Some(cursor) = entry.cursor {
                 if is_cursor_ahead(furthest.as_deref(), &cursor) {
                     furthest = Some(cursor);
                 }
+            }
+        }
+        // As far as the platform had given: the rest of a batch in hand at «off» goes too (BOT2-1). Asked after the halt,
+        // for what a read still under way took in the meantime.
+        if let Some(cursor) = adapter.and_then(|adapter| adapter.cursor()) {
+            if is_cursor_ahead(furthest.as_deref(), &cursor) {
+                furthest = Some(cursor);
             }
         }
         self.failed().remove(&(bot.to_string(), platform));
@@ -932,6 +990,7 @@ impl Hub {
     /// ADE is closing: every task ends, and each gateway stays as the user left it.
     pub fn shutdown(&self) {
         for (_, running) in self.links().drain() {
+            running.closing.store(true, Ordering::SeqCst);
             let _ = running.stop.send(true);
         }
     }
@@ -939,12 +998,15 @@ impl Hub {
     /// The webview acknowledged receipt of a message: advance the cursor up to this message in state.json.
     pub fn ack(&self, bot: &str, platform: Platform, chat: &str, id: &str) -> Result<(), String> {
         check_bot(bot)?;
-        let running = self.links().get(&(bot.to_string(), platform)).map(|r| (r.adapter.clone(), r.pending.clone()));
+        let links = self.links();
+        let running = links.get(&(bot.to_string(), platform)).map(|r| (r.adapter.clone(), r.pending.clone()));
         let Some((adapter, pending_lock)) = running else {
             // No link is running (switched off, or not started yet): the entry still leaves the file,
-            // or it would be handed on again at the next start (BOT-2).
+            // or it would be handed on again at the next start (BOT-2). With the links' lock held: `launch` reads the
+            // file under it, so it sees this change whole or finds it done (BOT2-3).
             return self.ack_in_file(bot, platform, chat, id);
         };
+        drop(links);
         let cursor_to_save = {
             let mut pending = pending_lock.lock().unwrap();
             if let Some(entry) = pending.iter_mut().find(|entry| entry.msg.chat == chat && entry.msg.id == id) {
@@ -1463,6 +1525,10 @@ struct Task {
     started_at: u64,
     /// The link's stop flag, read where a message is about to be handed on: a gateway switched off delivers nothing more.
     halted: watch::Receiver<bool>,
+    /// ADE is closing, set before the flag. See `keeps_in_hand` (BOT2-5).
+    closing: Arc<AtomicBool>,
+    /// The chats of this batch with a message written while the gateway was off, to be told once each (BOT2-1).
+    while_off: Mutex<HashSet<String>>,
 }
 
 
@@ -1542,7 +1608,7 @@ impl Task {
                     // is counted as left behind, like a batch that was stopped on its way in.
                     let mut batch = batch.into_iter();
                     while let Some(message) = batch.next() {
-                        if *stopped.borrow() {
+                        if *stopped.borrow() && !self.keeps_in_hand() {
                             left_behind = 1 + batch.len();
                             break;
                         }
@@ -1556,6 +1622,7 @@ impl Task {
                     if self.pending.lock().unwrap().iter().all(|entry| entry.acked) {
                         self.save_cursor();
                     }
+                    self.tell_written_while_off().await;
                 }
                 Err(AdapterError::Transient(error)) => {
                     let now = self.env.now_ms();
@@ -1623,6 +1690,24 @@ impl Task {
         }
     }
 
+    /// Whether a message in hand when the stop came stays in the pending file: only with ADE closing, and only on a
+    /// platform with no position to read from again (Slack). Telegram sends it again by itself, so a copy in the file
+    /// would run twice. A restart never keeps it: the new task owns that file from the moment it starts, and the old
+    /// one would write its stale queue over it (BOT-11).
+    fn keeps_in_hand(&self) -> bool {
+        self.closing.load(Ordering::SeqCst) && self.adapter.cursor().is_none()
+    }
+
+    /// Each chat with a message that was not run because the gateway was off hears it, once for the batch (BOT2-1).
+    async fn tell_written_while_off(&self) {
+        let chats: Vec<String> = self.while_off.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).drain().collect();
+        for chat in chats {
+            if let Err(error) = self.adapter.send(&chat, SENT_WHILE_OFF_MESSAGE).await {
+                self.env.log(&format!("{}: avviso alla chat non mandato: {}", self.tag(), redact(&error.message(), &self.secrets)));
+            }
+        }
+    }
+
     /// The batch was handed on: the platform need not send it again.
     fn save_cursor(&self) {
         let Some(cursor) = self.adapter.cursor() else { return };
@@ -1678,15 +1763,24 @@ impl Task {
                 return Err("mittente non più autorizzato".into());
             }
             link.remember_chat(&message.chat, &message.sender.id);
-            Ok(link.is_owner(&message.sender.id))
+            Ok((link.is_owner(&message.sender.id), link.enabled_at_ms))
         });
-        let owner = match remembered {
-            Ok(owner) => owner,
+        let (owner, enabled_at) = match remembered {
+            Ok(remembered) => remembered,
             Err(error) => {
                 self.env.log(&format!("{tag}: messaggio non consegnato, stato non salvato: {error}"));
                 return;
             }
         };
+        /*
+         * Written while the gateway was off, and held by the platform until now: «off» is a kill switch, so it does not
+         * run at the switch-on, whoever wrote it (BOT2-1). A button is not judged: its date is the question's, not the press's.
+         */
+        if !message.button && message.timestamp_ms.zip(enabled_at).is_some_and(|(sent, on)| sent + OFF_GRACE_MS < on) {
+            self.env.log(&format!("{tag}: un messaggio scritto mentre il gateway era spento: non eseguito"));
+            self.while_off.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).insert(message.chat.clone());
+            return;
+        }
         let at = self.env.now_ms();
         self.env.log(&format!("{tag}: messaggio da un mittente autorizzato ({} caratteri)", message.text.chars().count()));
         let name = redact(&message.sender.name, &self.secrets);
@@ -1707,12 +1801,14 @@ impl Task {
             private: message.private,
             recovered,
             owner,
+            sent_ms: Some(message.timestamp_ms.unwrap_or(at)),
         };
         let cursor = message.cursor.clone().or_else(|| self.adapter.cursor());
         let mut pending = self.pending.lock().unwrap();
         // Switched off since the batch was read (B1): `stop` sets the flag before it drains this queue under the same
         // lock, so a message that gets here after it is not written to the file and not handed on.
-        if *self.halted.borrow() {
+        let halted = *self.halted.borrow();
+        if halted && !self.keeps_in_hand() {
             self.env.log(&format!("{tag}: messaggio non consegnato: il gateway è stato spento"));
             return;
         }
@@ -1732,6 +1828,11 @@ impl Task {
         }
         pending.push_back(PendingEntry { msg: msg.clone(), cursor, acked: false });
         save_pending_to_disk(&*self.env, self.store.path(), &self.bot, self.platform, &pending);
+        // ADE is closing and the platform would not send it again: it stays in the file for the next start (BOT2-5).
+        if halted {
+            self.env.log(&format!("{tag}: messaggio tenuto per il prossimo avvio"));
+            return;
+        }
         drop(pending);
         self.env.message(&msg);
         self.report(|live| {
@@ -1964,10 +2065,18 @@ mod tests {
         later: std::sync::atomic::AtomicU64,
         /// Bots whose file is gone.
         gone: Mutex<Vec<String>>,
+        /// Runs once, as the first message is handed on: a page that answers at once.
+        on_message: Mutex<Option<Box<dyn FnOnce(&GatewayMessage) + Send + Sync>>>,
+        /// Runs once, at the first line of the log holding the text: something that lands at that very moment.
+        on_log: Mutex<Option<(String, Box<dyn FnOnce() + Send + Sync>)>>,
     }
     impl Env for Recorder {
         fn message(&self, message: &GatewayMessage) {
             self.messages.lock().unwrap().push(message.clone());
+            let hook = self.on_message.lock().unwrap().take();
+            if let Some(hook) = hook {
+                hook(message);
+            }
         }
         fn pairing(&self, request: &PairingRequest) {
             self.pairings.lock().unwrap().push(request.clone());
@@ -1977,6 +2086,12 @@ mod tests {
         }
         fn log(&self, line: &str) {
             self.log.lock().unwrap().push(line.into());
+            let mut hook = self.on_log.lock().unwrap();
+            if hook.as_ref().is_some_and(|(wanted, _)| line.contains(wanted.as_str())) {
+                let (_, run) = hook.take().unwrap();
+                drop(hook);
+                run();
+            }
         }
         fn secrets(&self) -> Vec<String> {
             vec![KEY.into()]
@@ -3043,8 +3158,12 @@ mod tests {
     async fn a_message_sent_while_ade_was_closed_is_marked_as_recovered() {
         let s = setup("recovered-notice");
         authorize(&s, "42");
+        // On for a long time, and ADE opened again: what the gateway was off for is another matter (BOT2-1).
+        let _ = start(&s);
+        s.hub.shutdown();
         s.env.later.store(100_000, std::sync::atomic::Ordering::SeqCst);
-        let (_adapter, feed) = start(&s);
+        s.hub.relaunch(BOT, Platform::Fake);
+        let (_adapter, feed) = last_made(&s);
 
         // A message timestamped earlier than start:
         let old_msg = Inbound {
@@ -3495,6 +3614,7 @@ mod tests {
                         private: true,
                         recovered: false,
                         owner: true,
+                        sent_ms: None,
                     },
                     cursor: None,
                     acked: false,
@@ -3664,6 +3784,7 @@ mod tests {
                         private: true,
                         recovered: false,
                         owner: true,
+                        sent_ms: None,
                     },
                     cursor: None,
                     acked: false,
@@ -3675,6 +3796,391 @@ mod tests {
             s.env.statuses.lock().unwrap().last().is_some_and(|status| status.needs_attention && status.attention_reason.as_deref() == Some(QUEUE_FULL))
         })
         .await;
+    }
+
+    /* BOT2-1: what was written while the gateway was off is not run when it goes back on. */
+    #[tokio::test]
+    async fn a_message_written_while_the_gateway_was_off_is_not_run_and_the_chat_is_told_once() {
+        let s = setup("written-while-off");
+        authorize(&s, "42");
+        let _ = start(&s);
+        s.hub.stop(BOT, Platform::Fake).unwrap();
+        s.env.later.store(3_600_000, std::sync::atomic::Ordering::SeqCst);
+        let (adapter, feed) = start(&s);
+        feed.send(Ok(vec![
+            Inbound { timestamp_ms: Some(3_000_000), ..message("1", "c42", "42", "scritto da spento") },
+            Inbound { timestamp_ms: Some(3_000_500), ..message("2", "c42", "42", "anche questo") },
+            Inbound { timestamp_ms: Some(3_700_000), ..message("3", "c42", "42", "dopo l'accensione") },
+        ]))
+        .unwrap();
+        eventually("il messaggio scritto da acceso", || s.env.messages.lock().unwrap().len() == 1).await;
+        eventually("la chat è avvisata", || !adapter.sent.lock().unwrap().is_empty()).await;
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        let ids: Vec<String> = s.env.messages.lock().unwrap().iter().map(|m| m.id.clone()).collect();
+        assert_eq!(ids, vec!["3".to_string()], "a message written while off was handed on");
+        assert_eq!(adapter.sent.lock().unwrap().clone(), vec![("c42".to_string(), SENT_WHILE_OFF_MESSAGE.to_string())]);
+        assert!(s.env.log.lock().unwrap().iter().all(|line| !line.contains("scritto da spento")), "the text reached the log");
+    }
+
+    #[tokio::test]
+    async fn changing_the_project_of_a_gateway_already_on_does_not_move_when_it_went_on() {
+        let s = setup("on-since-kept");
+        let _ = start(&s);
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().enabled_at_ms, Some(1_000));
+        s.env.later.store(500, std::sync::atomic::Ordering::SeqCst);
+        s.hub.start(BOT, Platform::Fake, "C:/altro").unwrap();
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().enabled_at_ms, Some(1_000), "a message written in between would be refused");
+    }
+
+    #[tokio::test]
+    async fn a_message_written_as_the_gateway_went_on_and_a_button_on_an_old_question_go_through() {
+        let s = setup("on-grace");
+        authorize(&s, "42");
+        s.env.later.store(3_600_000, std::sync::atomic::Ordering::SeqCst);
+        let (_adapter, feed) = start(&s);
+        feed.send(Ok(vec![
+            // Telegram's dates are whole seconds, and its clock is not this one.
+            Inbound { timestamp_ms: Some(3_600_000), ..message("1", "c42", "42", "appena acceso") },
+            // A press carries the date of the question it sits under.
+            Inbound { timestamp_ms: Some(5), ..press("2", "c42", "42", "x:0") },
+        ]))
+        .unwrap();
+        eventually("entrambi", || s.env.messages.lock().unwrap().len() == 2).await;
+    }
+
+    #[tokio::test]
+    async fn switching_off_saves_how_far_the_platform_had_read_so_the_batch_in_hand_does_not_come_back() {
+        let s = setup("off-saves-position");
+        authorize(&s, "42");
+        let (adapter, _feed) = start(&s);
+        *adapter.position.lock().unwrap() = Some("900".into());
+        s.hub.stop(BOT, Platform::Fake).unwrap();
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref(), Some("900"));
+    }
+
+    /* BOT2-3: `launch` publishes the link before it hands anything on. */
+    #[tokio::test]
+    async fn an_ack_that_lands_while_the_link_starts_is_not_undone_by_it() {
+        let s = setup("ack-while-launching");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        feed.send(Ok(vec![message("1", "c42", "42", "uno")])).unwrap();
+        eventually("il messaggio", || s.env.messages.lock().unwrap().len() == 1).await;
+        s.hub.shutdown();
+
+        let again = setup_vault(s.path.clone(), s.vault.clone());
+        let env = again.env.clone();
+        let hub = Arc::new(again.hub);
+        let acking = hub.clone();
+        // The page acks an idle chat's message at once, before `launch` has returned.
+        *env.on_message.lock().unwrap() = Some(Box::new(move |m: &GatewayMessage| acking.ack(BOT, Platform::Fake, &m.chat, &m.id).unwrap()));
+        hub.relaunch(BOT, Platform::Fake);
+        eventually("riconsegnato", || env.messages.lock().unwrap().len() == 1).await;
+
+        assert!(!pending_file_path(hub.store.path(), BOT, Platform::Fake).exists(), "an acknowledged entry was written back");
+        hub.unready();
+        hub.ready();
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        assert_eq!(env.messages.lock().unwrap().len(), 1, "the message runs twice");
+    }
+
+    /* BOT2-4: an unreadable state is not an empty one. */
+    #[tokio::test]
+    async fn a_state_that_cannot_be_read_for_a_moment_drops_nothing() {
+        let s = setup("state-unreadable");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        feed.send(Ok(vec![with_cursor("800", message("1", "c42", "42", "uno"))])).unwrap();
+        eventually("il messaggio", || s.env.messages.lock().unwrap().len() == 1).await;
+        let aside = s.path.with_extension("tenuto");
+        std::fs::rename(&s.path, &aside).unwrap();
+        // A folder where the file was: the read fails whatever the system.
+        std::fs::create_dir(&s.path).unwrap();
+
+        s.hub.unready();
+        s.hub.ready();
+        tokio::time::sleep(Duration::from_millis(30)).await;
+
+        assert_eq!(s.env.messages.lock().unwrap().len(), 1);
+        let on_disk = read_pending_file(&pending_file_path(s.hub.store.path(), BOT, Platform::Fake));
+        assert_eq!(on_disk.len(), 1, "a moment's unreadable file lost the message");
+        assert!(s.env.log.lock().unwrap().iter().all(|line| !line.contains("non più autorizzato")), "a revocation that never happened");
+
+        std::fs::remove_dir(&s.path).unwrap();
+        std::fs::rename(&aside, &s.path).unwrap();
+        s.hub.unready();
+        s.hub.ready();
+        eventually("riconsegnato quando si legge", || s.env.messages.lock().unwrap().len() == 2).await;
+    }
+
+    /* BOT2-5: closing and starting again are not «off». */
+    #[tokio::test]
+    async fn the_rest_of_a_batch_in_hand_when_ade_closes_is_kept_for_the_next_start() {
+        let s = setup("close-mid-batch");
+        authorize(&s, "42");
+        let (adapter, feed) = start(&s);
+        s.hub.pairing_open(BOT, Platform::Fake).unwrap();
+        adapter.hold_sends.store(true, std::sync::atomic::Ordering::SeqCst);
+        feed.send(Ok(vec![message("1", "c7", "7", "uno sconosciuto"), message("2", "c42", "42", "autorizzato")])).unwrap();
+        eventually("l'invio allo sconosciuto è in corso", || adapter.send_attempts.load(std::sync::atomic::Ordering::SeqCst) == 1).await;
+
+        s.hub.shutdown();
+        adapter.hold_sends.store(false, std::sync::atomic::Ordering::SeqCst);
+        let path = pending_file_path(s.hub.store.path(), BOT, Platform::Fake);
+        eventually("resta su disco", || path.exists()).await;
+
+        assert!(s.env.messages.lock().unwrap().is_empty(), "handed on to a page that is closing");
+        assert_eq!(read_pending_file(&path).iter().map(|entry| entry.msg.id.as_str().to_string()).collect::<Vec<_>>(), vec!["2".to_string()]);
+        assert!(s.env.log.lock().unwrap().iter().all(|line| !line.contains("spento")), "closing is not «off»");
+
+        let again = setup_vault(s.path.clone(), s.vault.clone());
+        again.hub.resume();
+        eventually("la riconsegna al riavvio", || again.env.messages.lock().unwrap().len() == 1).await;
+        assert_eq!(again.env.messages.lock().unwrap()[0].id, "2");
+    }
+
+    #[tokio::test]
+    async fn a_message_being_delivered_in_the_instant_ade_closes_is_kept_for_the_next_start() {
+        let s = setup("close-in-deliver");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        let env = s.env.clone();
+        let path = s.path.clone();
+        let hub = Arc::new(s.hub);
+        let closing = hub.clone();
+        *env.on_log.lock().unwrap() = Some(("messaggio da un mittente autorizzato".into(), Box::new(move || closing.shutdown()) as Box<dyn FnOnce() + Send + Sync>));
+
+        feed.send(Ok(vec![message("1", "c42", "42", "proprio ora")])).unwrap();
+        let file = pending_file_path(&path, BOT, Platform::Fake);
+        eventually("resta su disco", || file.exists()).await;
+
+        assert!(env.messages.lock().unwrap().is_empty());
+        assert_eq!(read_pending_file(&file)[0].msg.id, "1");
+        assert!(env.log.lock().unwrap().iter().all(|line| !line.contains("spento")));
+    }
+
+    /* BOT2-5, after the review: only ADE closing keeps what is in hand, and only where the platform would not send it again. */
+    #[tokio::test]
+    async fn a_link_started_again_mid_batch_keeps_its_file_and_the_message_runs_once() {
+        let s = setup("restart-mid-batch");
+        authorize(&s, "42");
+        let (old, feed) = start(&s);
+        s.hub.pairing_open(BOT, Platform::Fake).unwrap();
+        old.hold_sends.store(true, std::sync::atomic::Ordering::SeqCst);
+        feed.send(Ok(vec![message("1", "c7", "7", "uno sconosciuto"), message("2", "c42", "42", "M1")])).unwrap();
+        eventually("l'invio allo sconosciuto è in corso", || old.send_attempts.load(std::sync::atomic::Ordering::SeqCst) == 1).await;
+
+        // A new project on a gateway already on. The platform gives the new task what was not confirmed, and one more.
+        s.hub.start(BOT, Platform::Fake, "C:/altro").unwrap();
+        let (_new, new_feed) = last_made(&s);
+        new_feed.send(Ok(vec![message("2", "c42", "42", "M1"), message("3", "c42", "42", "M2")])).unwrap();
+        eventually("i due messaggi", || s.env.messages.lock().unwrap().len() == 2).await;
+        // M1's turn starts, and M2 waits behind it.
+        s.hub.ack(BOT, Platform::Fake, "c42", "2").unwrap();
+
+        old.hold_sends.store(false, std::sync::atomic::Ordering::SeqCst);
+        tokio::time::sleep(Duration::from_millis(80)).await;
+
+        let file = pending_file_path(s.hub.store.path(), BOT, Platform::Fake);
+        let on_disk: Vec<String> = read_pending_file(&file).iter().map(|entry| entry.msg.id.clone()).collect();
+        assert_eq!(on_disk, vec!["3".to_string()], "the old task wrote over the new one's file");
+        assert_eq!(s.env.messages.lock().unwrap().len(), 2, "the old task handed something on");
+
+        // ADE crashes during M1's turn.
+        s.hub.shutdown();
+        let again = setup_vault(s.path.clone(), s.vault.clone());
+        again.hub.resume();
+        eventually("M2 torna", || again.env.messages.lock().unwrap().len() == 1).await;
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        let back: Vec<String> = again.env.messages.lock().unwrap().iter().map(|m| m.id.clone()).collect();
+        assert_eq!(back, vec!["3".to_string()], "M1 runs a second time");
+    }
+
+    #[tokio::test]
+    async fn closing_on_a_platform_that_sends_it_again_keeps_no_copy_and_saves_no_position_past_it() {
+        let s = setup("close-with-position");
+        authorize(&s, "42");
+        let (adapter, feed) = start(&s);
+        *adapter.position.lock().unwrap() = Some("900".into());
+        s.hub.pairing_open(BOT, Platform::Fake).unwrap();
+        adapter.hold_sends.store(true, std::sync::atomic::Ordering::SeqCst);
+        feed.send(Ok(vec![message("1", "c7", "7", "uno sconosciuto"), message("2", "c42", "42", "autorizzato")])).unwrap();
+        eventually("l'invio allo sconosciuto è in corso", || adapter.send_attempts.load(std::sync::atomic::Ordering::SeqCst) == 1).await;
+
+        s.hub.shutdown();
+        adapter.hold_sends.store(false, std::sync::atomic::Ordering::SeqCst);
+        tokio::time::sleep(Duration::from_millis(80)).await;
+
+        assert!(!pending_file_path(s.hub.store.path(), BOT, Platform::Fake).exists(), "a second copy of what the platform sends again");
+        assert!(s.env.messages.lock().unwrap().is_empty());
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().cursor, None, "the platform would not send it again");
+    }
+
+    /* R2-1: a restart gives up the rest of the batch, so the position must stay before it. */
+    #[tokio::test]
+    async fn a_restart_mid_batch_saves_no_position_past_what_it_gave_up() {
+        let s = setup("restart-position");
+        authorize(&s, "42");
+        let (old, feed) = start(&s);
+        *old.position.lock().unwrap() = Some("900".into());
+        s.hub.pairing_open(BOT, Platform::Fake).unwrap();
+        old.hold_sends.store(true, std::sync::atomic::Ordering::SeqCst);
+        feed.send(Ok(vec![message("1", "c7", "7", "uno sconosciuto"), message("2", "c42", "42", "autorizzato")])).unwrap();
+        eventually("l'invio allo sconosciuto è in corso", || old.send_attempts.load(std::sync::atomic::Ordering::SeqCst) == 1).await;
+
+        s.hub.start(BOT, Platform::Fake, "C:/altro").unwrap();
+        old.hold_sends.store(false, std::sync::atomic::Ordering::SeqCst);
+        tokio::time::sleep(Duration::from_millis(80)).await;
+
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().cursor, None, "the rest of the batch would never come back");
+    }
+
+    /* Section 3 of the audit: the checks B1 added, each proven on its own. */
+    #[tokio::test]
+    async fn the_rest_of_a_batch_stops_at_the_loop_when_the_gateway_goes_off() {
+        let s = setup("off-loop-check");
+        authorize(&s, "42");
+        let (adapter, feed) = start(&s);
+        s.hub.pairing_open(BOT, Platform::Fake).unwrap();
+        adapter.hold_sends.store(true, std::sync::atomic::Ordering::SeqCst);
+        feed.send(Ok(vec![message("1", "c7", "7", "uno sconosciuto"), message("2", "c42", "42", "autorizzato")])).unwrap();
+        eventually("l'invio allo sconosciuto è in corso", || adapter.send_attempts.load(std::sync::atomic::Ordering::SeqCst) == 1).await;
+
+        s.hub.stop(BOT, Platform::Fake).unwrap();
+        adapter.hold_sends.store(false, std::sync::atomic::Ordering::SeqCst);
+        tokio::time::sleep(Duration::from_millis(80)).await;
+
+        assert!(s.env.messages.lock().unwrap().is_empty());
+        // Stopped by the loop, before `deliver` looked at it: that one says so in the log.
+        assert!(s.env.log.lock().unwrap().iter().all(|line| !line.contains("il gateway è stato spento")), "the loop let it through");
+    }
+
+    #[tokio::test]
+    async fn off_landing_inside_deliver_still_hands_nothing_on() {
+        let s = setup("off-in-deliver");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        let env = s.env.clone();
+        let path = s.path.clone();
+        let hub = Arc::new(s.hub);
+        let stopping = hub.clone();
+        *env.on_log.lock().unwrap() =
+            Some(("messaggio da un mittente autorizzato".into(), Box::new(move || stopping.stop(BOT, Platform::Fake).unwrap()) as Box<dyn FnOnce() + Send + Sync>));
+
+        feed.send(Ok(vec![message("1", "c42", "42", "proprio ora")])).unwrap();
+        eventually("il controllo in deliver", || env.log.lock().unwrap().iter().any(|line| line.contains("il gateway è stato spento"))).await;
+
+        assert!(env.messages.lock().unwrap().is_empty());
+        assert!(!pending_file_path(&path, BOT, Platform::Fake).exists());
+    }
+
+    /* BOT-3: the re-check on the other way a message is handed on again. */
+    #[tokio::test]
+    async fn a_message_kept_on_disk_from_a_sender_no_longer_authorized_is_dropped_when_the_link_starts() {
+        let s = setup("recheck-at-launch");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        feed.send(Ok(vec![with_cursor("810", message("1", "c42", "42", "uno"))])).unwrap();
+        eventually("il messaggio", || s.env.messages.lock().unwrap().len() == 1).await;
+        s.hub.shutdown();
+        s.hub
+            .store
+            .update(BOT, Platform::Fake, |link, _| {
+                link.authorized.clear();
+                Ok(())
+            })
+            .unwrap();
+
+        let again = setup_vault(s.path.clone(), s.vault.clone());
+        again.hub.resume();
+        tokio::time::sleep(Duration::from_millis(40)).await;
+
+        assert!(again.env.messages.lock().unwrap().is_empty(), "a revoked sender's message came back at launch");
+        assert!(!pending_file_path(again.hub.store.path(), BOT, Platform::Fake).exists());
+        assert_eq!(again.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref(), Some("810"));
+        assert!(again.env.log.lock().unwrap().iter().any(|line| line.contains("non riconsegnati")));
+    }
+
+    #[tokio::test]
+    async fn revoking_a_sender_while_the_gateway_is_off_takes_their_messages_out_of_the_file() {
+        let s = setup("revoke-with-no-link");
+        authorize(&s, "42");
+        authorize(&s, "43");
+        let (_adapter, feed) = start(&s);
+        feed.send(Ok(vec![message("1", "c42", "42", "del revocato"), message("2", "c43", "43", "di un altro")])).unwrap();
+        eventually("i messaggi", || s.env.messages.lock().unwrap().len() == 2).await;
+        s.hub.shutdown();
+
+        s.hub.pairing_revoke(BOT, Platform::Fake, "42").unwrap();
+
+        let on_disk = read_pending_file(&pending_file_path(s.hub.store.path(), BOT, Platform::Fake));
+        assert_eq!(on_disk.iter().map(|entry| entry.msg.id.as_str().to_string()).collect::<Vec<_>>(), vec!["2".to_string()]);
+    }
+
+    /* BOT-4: the panel stops saying the queue is full once a message is accepted again. */
+    #[tokio::test]
+    async fn the_full_queue_attention_goes_when_a_message_is_accepted_again() {
+        let s = setup("pending-full-clears");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        {
+            let links = s.hub.links();
+            let running = links.get(&(BOT.to_string(), Platform::Fake)).unwrap();
+            let mut pending = running.pending.lock().unwrap();
+            for i in 0..PENDING_CAP {
+                pending.push_back(PendingEntry {
+                    msg: GatewayMessage {
+                        bot: BOT.to_string(),
+                        platform: Platform::Fake,
+                        chat: "c42".into(),
+                        sender: MessageSender { id: "42".into(), name: "utente".into() },
+                        text: format!("msg {i}"),
+                        id: format!("m{i}"),
+                        redacted: false,
+                        button: false,
+                        private: true,
+                        recovered: false,
+                        owner: true,
+                        sent_ms: None,
+                    },
+                    cursor: None,
+                    acked: false,
+                });
+            }
+        }
+        let full = || s.env.statuses.lock().unwrap().last().is_some_and(|status| status.attention_reason.as_deref() == Some(QUEUE_FULL));
+        feed.send(Ok(vec![message("troppo", "c42", "42", "troppo")])).unwrap();
+        eventually("la coda piena è segnalata", full).await;
+
+        s.hub.ack(BOT, Platform::Fake, "c42", "m0").unwrap();
+        feed.send(Ok(vec![message("dopo", "c42", "42", "c'è posto")])).unwrap();
+        eventually("accettato", || s.env.messages.lock().unwrap().iter().any(|m| m.id == "dopo")).await;
+        eventually("l'avviso se ne va", || !full()).await;
+    }
+
+    /* BOT-10: the page decides by age, so the age must reach it, and survive the pending file. */
+    #[tokio::test]
+    async fn every_message_says_when_it_was_written_and_one_kept_by_an_older_ade_says_nothing() {
+        let s = setup("sent-ms");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        feed.send(Ok(vec![
+            Inbound { timestamp_ms: Some(777), ..message("1", "c42", "42", "datato") },
+            message("2", "c42", "42", "senza data"),
+        ]))
+        .unwrap();
+        eventually("i messaggi", || s.env.messages.lock().unwrap().len() == 2).await;
+        let seen = s.env.messages.lock().unwrap().clone();
+        assert_eq!(seen[0].sent_ms, Some(777));
+        assert!(seen[1].sent_ms.is_some(), "a platform with no date counts from when ADE got it");
+        let on_disk = read_pending_file(&pending_file_path(s.hub.store.path(), BOT, Platform::Fake));
+        assert_eq!(on_disk[0].msg.sent_ms, Some(777), "the age is lost at a restart");
+        assert!(serde_json::to_string(&seen[0]).unwrap().contains("\"sentMs\":777"));
+        let old: GatewayMessage = serde_json::from_str(
+            r#"{"bot":"b","platform":"fake","chat":"c","sender":{"id":"1","name":"n"},"text":"t","id":"9","redacted":false,"button":false,"private":true}"#,
+        )
+        .unwrap();
+        assert_eq!(old.sent_ms, None);
     }
 
     /* B1 (review of bot-ack): «off» while a batch is in hand. The rest of the batch is not handed on after it. */

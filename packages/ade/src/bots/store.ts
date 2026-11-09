@@ -13,6 +13,7 @@
  * they are looking at.
  */
 
+import { forgetBotGateways } from "./gateway/off-switches"
 import { t } from "../i18n"
 import { getHost, type Host, type RunResult } from "../host/shell"
 import type { ProjectFs } from "./project-trust"
@@ -451,13 +452,8 @@ export type ForgetGateways = (bot: string) => Promise<void>
 
 const forgetGateways: ForgetGateways = async (bot) => {
   const { invoke } = await import("@tauri-apps/api/core")
-  try {
-    await invoke("gateway_forget_bot", { bot })
-  } finally {
-    // Rust stopped the links before it touched the keychain, so what the page had queued or running for them
-    // stops whether or not the clearing succeeded. Loaded here, not at the top: the bridge imports this file.
-    ;(await import("./gateway/bridge")).switchOffBotGateways(bot)
-  }
+  // The bridge is loaded here, not at the top: it imports this file.
+  await forgetBotGateways(invoke, bot, async () => (await import("./gateway/bridge")).switchOffBotGateways(bot))
 }
 
 /**

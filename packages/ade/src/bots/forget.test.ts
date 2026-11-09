@@ -128,6 +128,17 @@ describe("a deleted bot's traces (full review 2026-10-06, bots 17)", () => {
     expect(Object.keys(JSON.parse(storage.data.get("ade.gateway.sessions")!))).toHaveLength(1)
   })
 
+  test("the turn a deleted bot had running goes too: its chat text is not kept, and a bot made again is told of nothing (BOT-5)", () => {
+    const storage = memoryStorage({
+      "ade.gateway.underWay": JSON.stringify({
+        [sessionKey("C:/a/news.md", "telegram", "c1")]: { text: "segreto" },
+        [sessionKey("C:/a/altro.md", "telegram", "c1")]: { text: "suo" },
+      }),
+    })
+    forgetStoredKeys("C:/a/news.md", storage)
+    expect(Object.keys(JSON.parse(storage.data.get("ade.gateway.underWay")!))).toEqual([sessionKey("C:/a/altro.md", "telegram", "c1")])
+  })
+
   test("storage that fails takes nothing down", () => {
     const broken: KeyedStorage = {
       length: 1,
