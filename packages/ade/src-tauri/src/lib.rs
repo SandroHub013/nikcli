@@ -2284,11 +2284,7 @@ fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
         .on_page_load(|window, payload| {
             if payload.event() == tauri::webview::PageLoadEvent::Started {
                 use tauri::Manager;
-                window.state::<pty::Registry>().end_all_in_background();
-                // Nor any listener for the chats' messages: they wait for the new page.
-                window.state::<gateway::Gateway>().page_loading();
-                // Nor the chat's streams to `ragu serve`: their channels are gone with the old page.
-                window.state::<serve_proxy::Requests>().abort_all();
+                page_gone(window.app_handle());
             }
         })
         .inner_size(1440.0, 900.0)
@@ -2872,6 +2868,16 @@ pub fn run() {
                 end_everything(app);
             }
         });
+}
+
+/// The page has gone, to a load or for good after a crash (`renderer.rs`), and what only it owned goes with it.
+pub(crate) fn page_gone(app: &tauri::AppHandle) {
+    use tauri::Manager;
+    app.state::<pty::Registry>().end_all_in_background();
+    // Nor any listener for the chats' messages: they wait for the new page.
+    app.state::<gateway::Gateway>().page_loading();
+    // Nor the chat's streams to `ragu serve`: their channels are gone with the old page.
+    app.state::<serve_proxy::Requests>().abort_all();
 }
 
 /// What ADE ends on its way out: on `RunEvent::Exit`, and before an update's installer takes over (`update.rs`), where

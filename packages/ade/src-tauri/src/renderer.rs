@@ -68,7 +68,7 @@ pub(crate) fn watch(window: &tauri::WebviewWindow) {
             };
             if !reloaded {
                 eprintln!("ADE: la pagina non si riprende (processo di tipo {}): chiudo le sessioni", kind.0);
-                app.state::<crate::pty::Registry>().end_all_in_background();
+                crate::page_gone(&app);
             }
             Ok(())
         }));
@@ -138,6 +138,23 @@ mod tests {
             assert_eq!(after_failure(kind.0, &mut recent, Instant::now()), AfterFailure::Nothing);
             assert!(recent.is_empty(), "it used up a reload");
         }
+    }
+
+    // Inbound chat messages went on to a dead page, and the streams to `ragu serve` to channels nobody reads.
+    #[test]
+    fn giving_up_does_what_a_page_load_does() {
+        let lib = include_str!("lib.rs");
+        let gone = lib.split("fn page_gone(").nth(1).expect("the common step").split("
+}").next().unwrap();
+        for step in [
+            "pty::Registry>().end_all_in_background()",
+            "gateway::Gateway>().page_loading()",
+            "serve_proxy::Requests>().abort_all()",
+        ] {
+            assert!(gone.contains(step), "{step}");
+        }
+        assert!(lib.contains("page_gone(window.app_handle())"));
+        assert!(include_str!("renderer.rs").contains(concat!("crate::page_gone", "(&app)")));
     }
 
     #[test]
