@@ -846,6 +846,29 @@ describe("ragu 0.2.14 in a pane too short for its home (live test 6, FAIL 3)", (
     return terminal
   }
 
+  test("real bytes, 30x14 (live test 8): a task of six rows reaches the footer, the cursor on its row, and its Enter goes", async () => {
+    const terminal = await play("ragu-30x14-a-capo", () => {}, { cols: 30, rows: 14 })
+    expect(terminal.buffer.active.cursorY).toBe(12)
+    expect(composerOf(terminal, "ragu")).toBe("draft")
+    expect(enterBlocked(composerOf(terminal, "ragu"), false)).toBe(false)
+  })
+
+  const FOOTER = "  ~\\Documents\\ade   0.2.14"
+
+  test("the line goes on under the footer, and the box off the screen: still a line", async () => {
+    const rows = ["  ┃", "  ┃  uno", "  ┃  due", FOOTER, "  ┃  tre", "  ┃"]
+    expect(composerOf(await paint(rows, 8, 4), "ragu")).toBe("draft")
+  })
+
+  test("on the footer's row with nothing written above and no text before the cursor, the box is not read", async () => {
+    expect(composerOf(await paint(["  ┃", "  ┃", FOOTER, "  ┃"], 5, 2), "ragu")).toBe("none")
+  })
+
+  test("the footer's row is the box's only with a bar over it and bars down to the end of the screen", async () => {
+    expect(composerOf(await paint(["  Search", FOOTER, "  ┃"], 10, 1), "ragu")).toBe("none")
+    expect(composerOf(await paint(["  ┃  uno", FOOTER, "altro"], 10, 1), "ragu")).toBe("none")
+  })
+
   test("a draft of two rows with dots and a quote, the cursor at its start: a short first row did not wrap, it is a line", async () => {
     const rows = ["  ┃", "  ┃  uno", '  ┃  dimmi... "ok"', "  ┃", "  ┃  Build · Grok"]
     expect(composerOf(await paint(rows, 5, 1), "ragu")).toBe("draft")

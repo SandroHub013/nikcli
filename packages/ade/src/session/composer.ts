@@ -340,7 +340,7 @@ function barBox(terminal: ComposerTerminal): ComposerState {
   const { cursorX, cursorY } = terminal.buffer.active
   const here = textAt(terminal, cursorY)
   const bar = here.match(BAR_ROW)
-  if (!bar) return "none"
+  if (!bar) return HOME_FOOTER.test(here) ? boxPastFooter(terminal) : "none"
   const indent = bar[1]!.length
 
   // Down to the row that names the agent and the model: a question drawn in the same column has none.
@@ -349,11 +349,35 @@ function barBox(terminal: ComposerTerminal): ComposerState {
     if (!BAR_ROW.test(textAt(terminal, model))) return "none"
     model++
   }
-  if (model >= terminal.rows || model === cursorY) return "none"
+  if (model >= terminal.rows) return boxPastFooter(terminal)
+  if (model === cursorY) return "none"
 
   let top = cursorY
   while (top > 0 && BAR_ROW.test(textAt(terminal, top - 1))) top--
   return boxText(terminal, indent + 3, top, model)
+}
+
+/**
+ * A line of many rows in a pane too short for the home. The box runs on under the footer painted over it and off the screen,
+ * so the cursor can be on the footer's own row, where the text behind it cannot be read, or below it with no model's row in
+ * sight. The rows above still say it: a footer with the box's bar over it and bars down to the end of the screen, and something
+ * written. The home asks no questions, and nothing more is claimed than a line: an empty box here stays unread.
+ */
+function boxPastFooter(terminal: ComposerTerminal): ComposerState {
+  const { cursorX, cursorY } = terminal.buffer.active
+  let footer = cursorY
+  while (footer >= 0 && BAR_ROW.test(textAt(terminal, footer))) footer--
+  if (footer < 1 || !HOME_FOOTER.test(textAt(terminal, footer))) return "none"
+  for (let y = cursorY + 1; y < terminal.rows; y++) if (!BAR_ROW.test(textAt(terminal, y))) return "none"
+  const bar = textAt(terminal, footer - 1).match(BAR_ROW)
+  if (!bar) return "none"
+  const inputColumn = bar[1]!.length + 3
+  if (cursorX < inputColumn) return "none"
+  if (cursorX > inputColumn) return "draft"
+  for (let y = footer - 1; y >= 0 && BAR_ROW.test(textAt(terminal, y)); y--) {
+    if (textAt(terminal, y).charAt(inputColumn).trim()) return "draft"
+  }
+  return "none"
 }
 
 function markBox(terminal: ComposerTerminal): ComposerState {
