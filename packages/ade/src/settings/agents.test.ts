@@ -170,6 +170,10 @@ describe("Agenti e account › Account", () => {
 
     expect(card("codex")?.getAttribute("data-state")).toBe("not-installed")
     expect(card("codex")?.querySelector('[data-slot="status-label"]')?.textContent).toBe("Non installato")
+    // UX-16: the short word is the label; where to install it is in the tooltip.
+    expect(card("codex")?.querySelector('[data-slot="provider-badge"]')?.getAttribute("title")).toBe(
+      "Non installato: lo installi da Nuova sessione",
+    )
     expect(buttons("codex")).toEqual([])
 
     expect(card("claude")?.getAttribute("data-state")).toBe("unverified")

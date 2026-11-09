@@ -669,7 +669,7 @@ export const en: Messages = {
   "settings.skills.without": (tools) => `without ${tools}`,
   "settings.howItWorks": "How it works",
   "settings.account.intro":
-    "The runners bots can run on, each using its own CLI account.",
+    "The agents your sessions and bots run on, each with its own CLI account.",
   "settings.providers.desc1":
     "The runners a bot can use, each with its own CLI account: Anthropic subscriptions go through Claude Code, ChatGPT through Codex, and keys and other subscriptions through Ragù Code. The engine, model, and reasoning effort are set in each bot's card.",
   "settings.providers.desc2Before": (max) =>
@@ -677,6 +677,7 @@ export const en: Messages = {
   "settings.providers.desc2After": ").",
   "settings.providers.checking": "Checking…",
   "settings.providers.notInstalled": "Not installed",
+  "settings.providers.notInstalled.hint": "Not installed: install it from New session",
   "settings.providers.connected": "Connected",
   "settings.providers.notConnected": "Not connected",
   "settings.providers.unverified": "Unverified",

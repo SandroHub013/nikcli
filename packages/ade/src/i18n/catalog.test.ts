@@ -231,6 +231,16 @@ describe("the words of the glossary (UX-11, UX-12, UX-27)", () => {
     expect(italian.filter(([, text]) => /Scarta l'avviso/.test(text)).map(([key]) => key)).toEqual([])
   })
 
+  test("the Account page says the agents are for sessions as well as bots, and a missing one says where to install it (UX-16)", () => {
+    expect(it["settings.account.intro"]).toContain("sessioni")
+    expect(en["settings.account.intro"]).toContain("sessions")
+    expect(it["settings.providers.notInstalled.hint"]).toBe("Non installato: lo installi da Nuova sessione")
+    expect(en["settings.providers.notInstalled.hint"]).toBe("Not installed: install it from New session")
+    // The chip keeps its short word; the hint rides in the tooltip.
+    expect(it["settings.providers.notInstalled"]).toBe("Non installato")
+    expect(en["settings.providers.notInstalled"]).toBe("Not installed")
+  })
+
   test("ADE speaks in the feminine in Italian: never «non sono riuscito» or «ADE non è riuscito»", () => {
     expect(italian.filter(([, text]) => /[Nn]on sono riuscito|ADE non è riuscito/.test(text)).map(([key]) => key)).toEqual([])
   })

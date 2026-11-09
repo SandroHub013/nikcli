@@ -686,7 +686,7 @@ export const it = {
   "settings.skills.without": (tools: string) => `senza ${tools}`,
   "settings.howItWorks": "Come funziona",
   "settings.account.intro":
-    "I programmi su cui possono girare i bot, ognuno con l'account della propria CLI.",
+    "Gli agenti con cui partono le sessioni e i bot, ognuno con l'account della propria CLI.",
   "settings.providers.desc1":
     "I programmi su cui può girare un bot, ognuno con l'account della propria CLI: l'abbonamento Anthropic passa da Claude Code, quello ChatGPT da Codex, le chiavi e gli altri abbonamenti da Ragù Code. Il motore, il modello e lo sforzo si scelgono nella scheda di ogni bot.",
   "settings.providers.desc2Before": (max: number) =>
@@ -694,6 +694,7 @@ export const it = {
   "settings.providers.desc2After": ").",
   "settings.providers.checking": "Controllo…",
   "settings.providers.notInstalled": "Non installato",
+  "settings.providers.notInstalled.hint": "Non installato: lo installi da Nuova sessione",
   "settings.providers.connected": "Collegato",
   "settings.providers.notConnected": "Non collegato",
   "settings.providers.unverified": "Da verificare",
