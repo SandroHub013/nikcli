@@ -1853,6 +1853,8 @@ export const it = {
     "Un messaggio aspetta: questa sessione non ha ancora scritto niente. Arriva appena scrive; se il programma non parte, riavviala.",
   "note.mailHeldByMenu":
     "Un messaggio aspetta: ADE vede una domanda a schermo. Rispondi nel terminale e arriva; se non c'è nessuna domanda, premi Invio nel terminale.",
+  "note.noticesExpired": (count: number) =>
+    `${count} ${plural(count, { one: "avviso", other: "avvisi" }, "it")} di ADE per questa sessione ${plural(count, { one: "è scaduto", other: "sono scaduti" }, "it")}: non si è liberata in tempo.`,
   "note.mailHeldByDialog":
     "Un messaggio aspetta: ADE vede una finestra aperta nel terminale. Completala, o chiudila con Esc, e arriva.",
   "note.interruptedBy": (from: string) => `Interrotta da ${from}`,

@@ -501,6 +501,7 @@ import {
 import { COMPOSER_LOG_KEY, composerLogEntry, disagreement, logWith, type ComposerLogReason } from "../session/composer-log"
 import { blindNow, createDeliverNow, turnKnown, type BlindHold, type DeliverNowChange } from "../session/deliver-now"
 import { parseQueue, queueToSave, waitsForRestore, waitsForStart } from "../session/mail-queue"
+import { expiredNotices, gatherNotices, joinNotices } from "../session/held-notices"
 import {
   clientStoppedReading,
   createMailLanes,
@@ -3076,6 +3077,8 @@ export function Workbench() {
     told?: boolean
     /** A notice from ADE, and no message of anyone's: «Consegna ora» is not for it. */
     notice?: true
+    /** When a notice was written: it expires (`session/held-notices.ts`). */
+    at?: number
     full?: string
     suspended?: true
   }[] = []
@@ -3442,7 +3445,7 @@ export function Workbench() {
   const tellSender = (from: string | undefined, text: string) => {
     const target = noticeTarget(from, (paneId) => running.has(paneId))
     if (target === "window") report(text, "info")
-    else if (target) heldLines.push({ paneId: target.pane, text, notice: true })
+    else if (target) heldLines.push({ paneId: target.pane, text, notice: true, at: Date.now() })
   }
 
   /** Rings again for unread inbox messages, and tells the sender of one never read. */
@@ -4358,6 +4361,11 @@ export function Workbench() {
       }
     }
 
+    for (const [paneId, notices] of expiredNotices(heldLines, Date.now())) {
+      for (const notice of notices) dropFrom(heldLines, notice)
+      if (running.has(paneId)) tellPane(paneId, t("note.noticesExpired", notices.length))
+    }
+
     for (const item of [...heldLines]) {
       const session = running.get(item.paneId)
       if (!session) {
@@ -4373,6 +4381,17 @@ export function Workbench() {
         tellPane(item.paneId, t("note.mailNotTyped", clippedForNote(item.text)))
         // Read again after the await: a lane may have started a line for this pane in the meantime.
       } else if ((await freeNow(host, item.paneId, !item.notice)) && !linesInFlight.has(item.paneId)) {
+        if (item.notice) {
+          // All that ADE has to say to this pane, in one turn. A later notice of the snapshot finds the line going, and waits.
+          const notices = gatherNotices(heldLines, item.paneId)
+          if (notices.length === 0) continue
+          for (const notice of notices) dropFrom(heldLines, notice)
+          dropHeldByMenu(item.paneId)
+          void typeLineOutcome(session, joinNotices(notices.map((notice) => notice.text)), { mail: false }).then((outcome) => {
+            if (deliveryResult(outcome, running.get(item.paneId) === session) === "held") heldLines.push(...notices)
+          })
+          continue
+        }
         if (!dropFrom(heldLines, item)) continue
         if (item.suspended) saveSuspendedMail()
         dropHeldByMenu(item.paneId)
@@ -4391,7 +4410,7 @@ export function Workbench() {
                 }
                 return result === "held"
               })
-            : typeLineOutcome(session, item.text, { mail: !item.notice }).then(
+            : typeLineOutcome(session, item.text, { mail: true }).then(
                 (outcome) => deliveryResult(outcome, running.get(item.paneId) === session) === "held",
               )
         ).then((again) => {
@@ -4415,7 +4434,7 @@ export function Workbench() {
           if (running.has(item.inbox.from)) {
             const reader = mailPanes().find((pane) => pane.id === item.paneId)
             const text = byMenu ? formatHeldByMenu(item.inbox, reader) : formatHeld(item.inbox, reader)
-            heldLines.push({ paneId: item.inbox.from, text, told: true, notice: true })
+            heldLines.push({ paneId: item.inbox.from, text, told: true, notice: true, at: Date.now() })
           }
         }
       }
@@ -4476,6 +4495,7 @@ export function Workbench() {
               now,
             ),
             notice: true,
+            at: now,
           })
         }
         tellPane(request.to, t("pane.maybeStuck", request.id))
