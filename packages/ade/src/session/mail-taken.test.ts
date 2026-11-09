@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { createTakenMail } from "./mail-taken"
+import { createChangeWriter } from "./change-writer"
+import { createTakenMail, idsToConfirm, mayConfirmEnded, waitingIn } from "./mail-taken"
 
 /*
  * RS2-5 B: the native side keeps a message until the page says it has it, and gives it back if the word does not come. So
@@ -61,5 +62,122 @@ describe("a message given back is not carried out twice", () => {
     taken.handled("m6", sealed("a", '{"kind":"send"}'))
     expect(taken.isCopy("m6", sealed("a", '{"kind":"send"}'))).toBe(true)
     expect(taken.isCopy("m6", sealed("b", '{"kind":"send"}'))).toBe(false)
+  })
+})
+
+/** What the native side does with its claims (`take_outbox`, `confirm_taken`, `give_back_all`). */
+function nativeClaims() {
+  const files = new Map<string, { body: string; handed: boolean }>()
+  return {
+    post: (id: string, body: string) => void files.set(id, { body, handed: false }),
+    take() {
+      const out: { id: string; body: string }[] = []
+      for (const [id, file] of files) {
+        if (file.handed) continue
+        file.handed = true
+        out.push({ id, body: file.body })
+      }
+      return out
+    },
+    /** The 30 s are over, or the page has gone: what was handed and not confirmed is back in the outbox. */
+    giveBack: () => files.forEach((file) => (file.handed = false)),
+    /** A confirm counts only for what is handed out now: on a message back in the outbox it finds no claim. */
+    confirm(ids: string[]) {
+      for (const id of ids) if (files.get(id)?.handed) files.delete(id)
+    },
+    has: (id: string) => files.has(id),
+  }
+}
+
+/** The page's real decisions, on a queue and held lines of its own and a storage that may refuse every write. */
+function pageOn(native: ReturnType<typeof nativeClaims>, storage = { works: false }) {
+  const writer = createChangeWriter(() => {})
+  const ledger = createTakenMail()
+  const queue: { id: string }[] = []
+  const held: { inbox: { id: string } }[] = []
+  const waiting = waitingIn(queue, held)
+  const saved = () => writer.save(JSON.stringify([queue, held]), () => storage.works)
+  const out = <T extends object>(list: T[], at: (item: T) => boolean) => void list.splice(list.findIndex(at), 1)
+  const ended = (id: string) => {
+    if (mayConfirmEnded(saved(), waiting(id))) native.confirm([id])
+  }
+  return {
+    /** A take, as `takeMail` does it: the ids that are new here. */
+    take() {
+      const handed = native.take()
+      const { fresh, settled } = ledger.sort(handed, waiting)
+      queue.push(...fresh)
+      native.confirm(idsToConfirm(saved(), handed, settled))
+      return fresh.map(({ id }) => id)
+    },
+    typed(id: string) {
+      out(queue, (item) => item.id === id)
+      ended(id)
+    },
+    heldForSuspended(id: string) {
+      out(queue, (item) => item.id === id)
+      held.push({ inbox: { id } })
+      ended(id)
+    },
+    heldTyped: (id: string) => out(held, (line) => line.inbox.id === id),
+    refused: (id: string) => out(queue, (item) => item.id === id),
+  }
+}
+
+describe("storage refusing every write: nothing lost, nothing typed twice", () => {
+  const id = "m1"
+  const posted = () => {
+    const native = nativeClaims()
+    native.post(id, "{}")
+    return native
+  }
+
+  test("with storage working, a take confirms at once", () => {
+    const native = posted()
+    expect(pageOn(native, { works: true }).take()).toEqual([id])
+    expect(native.has(id)).toBe(false)
+  })
+
+  test("a line held for a suspended session keeps its outbox copy, and a reload gets it back", () => {
+    const native = posted()
+    const page = pageOn(native)
+    page.take()
+    page.heldForSuspended(id)
+    expect(native.has(id)).toBe(true)
+    native.giveBack()
+    expect(pageOn(native).take()).toEqual([id])
+  })
+
+  test("once the held line has been typed, the next hand-out lets the copy go", () => {
+    const native = posted()
+    const page = pageOn(native)
+    page.take()
+    page.heldForSuspended(id)
+    page.heldTyped(id)
+    native.giveBack()
+    expect(page.take()).toEqual([])
+    expect(native.has(id)).toBe(false)
+  })
+
+  test("a confirm that found the message back in the outbox is made good at the next hand-out, so a reload does not type it again", () => {
+    const native = posted()
+    const page = pageOn(native)
+    page.take()
+    native.giveBack()
+    page.typed(id)
+    expect(native.has(id)).toBe(true)
+    expect(page.take()).toEqual([])
+    expect(native.has(id)).toBe(false)
+    expect(pageOn(native).take()).toEqual([])
+  })
+
+  test("a message refused at first sight goes at its first copy: its error is not sent again after a reload", () => {
+    const native = posted()
+    const page = pageOn(native)
+    page.take()
+    page.refused(id)
+    native.giveBack()
+    expect(page.take()).toEqual([])
+    expect(native.has(id)).toBe(false)
   })
 })

@@ -302,7 +302,7 @@ import type { Runner } from "../bots/runners"
 import { senderToken } from "../session/senders"
 import { followInboxRound, inboxEntriesOf, rearmInbox } from "../session/mail-inbox"
 import { bodyHash, firstTime, resealUnread, sealedBy, splitSealed, useMailKeys } from "../session/mail-seal"
-import { createTakenMail } from "../session/mail-taken"
+import { createTakenMail, idsToConfirm, mayConfirmEnded, waitingIn } from "../session/mail-taken"
 import { createActivityReads, type ActivityReads } from "../session/activity-reads"
 import { boardCandidates, parseOwners, whoOwns } from "../session/owners"
 import { mayReroute, pickProvider, setProviderPicker } from "../session/provider-pick"
@@ -3891,9 +3891,7 @@ export function Workbench() {
     void getHost()
       .then((host) => host?.mailboxTaken?.([id]))
       .catch(() => {})
-  /** Whether this page still has it to deliver: with storage refusing it exists only in memory, and the outbox's copy must stay. */
-  const waitingHere = (id: string) =>
-    mailQueue.some((item) => item.id === id) || heldLines.some((line) => line.inbox?.id === id)
+  const waitingHere = waitingIn(mailQueue, heldLines)
   // The asker first: a message's id is the sender's to choose, and one posted with the id of an open request must not get its answer.
   const paneOfMail = (id: string) =>
     openRequests.get(id)?.from || mailSenders.get(id) || designWaiters().find((waiter) => waiter.id === id)?.from
@@ -4307,7 +4305,7 @@ export function Workbench() {
       dropFrom(mailQueue, item)
       // A line held for a suspended session has been told «in coda» and exists only here if the save failed: its copy stays until it leaves.
       // One case is accepted, with nowhere durable to note it: storage refusing, the message typed, and a reload before it is confirmed types it again.
-      if (persistMail() || !waitingHere(item.id)) confirmTaken(item.id)
+      if (mayConfirmEnded(persistMail(), waitingHere(item.id))) confirmTaken(item.id)
     },
     hung: (item, afterMs) => {
       voiceSendDecisions.delete(item.id)
@@ -4348,16 +4346,10 @@ export function Workbench() {
     if (!mailRestored) return
     const taken = (await host.mailboxTake?.().catch(() => [])) ?? []
     if (taken.length === 0) return
-    const settled: string[] = []
+    const { fresh, settled } = takenMail.sort(taken, waitingHere)
     // Into the queue together, after the last proof: during those awaits a round could start the lanes and type a message not yet saved.
     const arrived: typeof mailQueue = []
-    for (const { id, body } of taken) {
-      if (takenMail.isCopy(id, body)) {
-        // Back here with nothing left to do: its own end, or a refusal, found no claim to confirm, and this is the next chance.
-        if (!waitingHere(id)) settled.push(id)
-        continue
-      }
-      takenMail.handled(id, body)
+    for (const { id, body } of fresh) {
       const sealed = splitSealed(body)
       if (!sealed) {
         void host.mailboxReceipt?.(id, UNSEALED_MAIL).catch(() => {})
@@ -4385,8 +4377,8 @@ export function Workbench() {
     // The native side has kept them until it hears this: every one, the refused and the copies too, or they come back in 30 s.
     // Only with them saved, or a crash loses what was told «in coda», and before any delivery: what has run must not come back.
     // Saved means `send` and `ask` (`queueToSave`): the other kinds are lost if the page goes first, as a `spawn` run twice would be worse.
-    if (persistMail()) await host.mailboxTaken?.(taken.map(({ id }) => id)).catch(() => {})
-    else if (settled.length > 0) await host.mailboxTaken?.(settled).catch(() => {})
+    const confirmed = idsToConfirm(persistMail(), taken, settled)
+    if (confirmed.length > 0) await host.mailboxTaken?.(confirmed).catch(() => {})
     mailLanes.start(mailQueue)
   }
 

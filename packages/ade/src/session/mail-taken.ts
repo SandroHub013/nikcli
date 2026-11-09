@@ -23,5 +23,35 @@ export function createTakenMail(cap = 5000) {
     restored(id: string): void {
       restored.add(id)
     },
+    /**
+     * A take sorted: what is new here, and which copies have nothing left to do. A message that ended while it was back in
+     * the outbox, or that was refused at first sight, had no claim to confirm then, and this is the next chance.
+     */
+    sort<T extends { id: string; body: string }>(taken: readonly T[], waiting: (id: string) => boolean) {
+      const fresh: T[] = []
+      const settled: string[] = []
+      for (const item of taken) {
+        if (this.isCopy(item.id, item.body)) {
+          if (!waiting(item.id)) settled.push(item.id)
+          continue
+        }
+        this.handled(item.id, item.body)
+        fresh.push(item)
+      }
+      return { fresh, settled }
+    },
   }
 }
+
+/** Whether this page still has the message to deliver: with storage refusing it exists only here, and its outbox copy must stay. */
+export const waitingIn =
+  (queue: readonly { id: string }[], held: readonly { inbox?: { id: string } }[]) =>
+  (id: string): boolean =>
+    queue.some((item) => item.id === id) || held.some((line) => line.inbox?.id === id)
+
+/** Whether a message whose delivery has ended can leave the outbox: it is saved, or there is nothing of it left to lose. */
+export const mayConfirmEnded = (saved: boolean, waiting: boolean): boolean => saved || !waiting
+
+/** What a take confirms: all it was handed once that is saved, otherwise only the copies with nothing left to do. */
+export const idsToConfirm = (saved: boolean, taken: readonly { id: string }[], settled: readonly string[]): string[] =>
+  saved ? taken.map(({ id }) => id) : [...settled]

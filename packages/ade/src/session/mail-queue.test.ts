@@ -120,8 +120,8 @@ describe("a message is confirmed only once the page has it on disk (RS2-5 B)", (
   })
 
   test("every id taken is confirmed, only after a save that worked, and before any delivery starts", () => {
-    const saved = take.indexOf("if (persistMail()) await")
-    const confirmed = take.indexOf("host.mailboxTaken?.(taken.map(({ id }) => id))")
+    const saved = take.indexOf("idsToConfirm(persistMail(), taken, settled)")
+    const confirmed = take.indexOf("host.mailboxTaken?.(confirmed)")
     const started = take.indexOf("mailLanes.start(mailQueue)")
     expect(saved).toBeGreaterThan(-1)
     expect(confirmed).toBeGreaterThan(saved)
@@ -134,10 +134,9 @@ describe("a message is confirmed only once the page has it on disk (RS2-5 B)", (
   })
 
   test("a copy goes before anything is done with it, and what the saved queue held counts as taken", () => {
-    const copy = take.indexOf("takenMail.isCopy(id, body)")
+    const copy = take.indexOf("takenMail.sort(taken, waitingHere)")
     expect(copy).toBeGreaterThan(-1)
     expect(copy).toBeLessThan(take.indexOf("splitSealed(body)"))
-    expect(take).toContain("takenMail.handled(id, body)")
     expect(source).toContain("takenMail.restored(item.id)")
   })
 
@@ -145,27 +144,14 @@ describe("a message is confirmed only once the page has it on disk (RS2-5 B)", (
     const done = source.indexOf("done: (item) => {")
     expect(source.indexOf("confirmTaken(item.id)", done)).toBeGreaterThan(done)
     expect(source.indexOf("confirmTaken(item.id)", done)).toBeLessThan(source.indexOf("hung: (item, afterMs)", done))
+    expect(source.slice(done)).toContain("if (mayConfirmEnded(persistMail(), waitingHere(item.id))) confirmTaken(item.id)")
   })
 
   test("the messages of one take join the queue together, after the last proof: a round cannot type the first before the save", () => {
     const joined = take.indexOf("mailQueue.push(...arrived)")
     expect(take).toContain("if (message) arrived.push({ id, message, at: Date.now() })")
     expect(joined).toBeGreaterThan(take.lastIndexOf("await sealedBy("))
-    expect(joined).toBeLessThan(take.indexOf("if (persistMail()) await"))
-  })
-
-  test("storage refusing: a line held only in memory keeps its outbox copy until it has left (review F1)", () => {
-    const done = source.slice(source.indexOf("done: (item) => {"), source.indexOf("hung: (item, afterMs)"))
-    expect(done).toContain("if (persistMail() || !waitingHere(item.id)) confirmTaken(item.id)")
-    expect(source).toContain("mailQueue.some((item) => item.id === id) || heldLines.some((line) => line.inbox?.id === id)")
-  })
-
-  test("storage refusing: a copy of what has already ended is confirmed, since nothing else ever will (review F2)", () => {
-    const copy = take.slice(take.indexOf("if (takenMail.isCopy(id, body))"), take.indexOf("takenMail.handled(id, body)"))
-    expect(copy).toContain("if (!waitingHere(id)) settled.push(id)")
-    const refused = take.indexOf("else if (settled.length > 0) await host.mailboxTaken?.(settled)")
-    expect(refused).toBeGreaterThan(take.indexOf("if (persistMail()) await"))
-    expect(refused).toBeLessThan(take.indexOf("mailLanes.start(mailQueue)"))
+    expect(joined).toBeLessThan(take.indexOf("idsToConfirm(persistMail(), taken, settled)"))
   })
 })
 
