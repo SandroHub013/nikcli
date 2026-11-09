@@ -133,8 +133,7 @@ import {
   mintMarks,
   MintLedger,
   lastHereBesideMints,
-  planRestore,
-  restoreClaims,
+  restoreByAgent,
   claimedByRestore,
   openedConversation,
   LIST_COLS,
@@ -7536,33 +7535,41 @@ export function Workbench() {
          * an id nobody recorded — on every restart, forever. The agent runs in
          * `p.root` (see `startProcess`), so that is where its transcript is.
          */
-        const sessions = await Promise.all(
-          sessionsToResume(restored).map(async (saved) => {
+        // Per agent, and not awaited: no session waits for another agent's check, and the window does not wait for any (WB-8).
+        const toResume = sessionsToResume(restored)
+        const byAgent = restoreByAgent(
+          toResume,
+          (saved) => saved.agent,
+          async (saved) => {
             // The conversation the pane last switched to, when ADE closed before reading it.
-            const reported = await adoptLastReport(saved)
+            const reported = await adoptLastReport(saved).catch(() => undefined)
             const pane = reported ? { ...saved, resumeId: reported } : saved
             return {
               agentId: pane.agent,
               cwd: pane.cwd || p.root,
               ...(pane.resumeId !== undefined ? { resumeId: pane.resumeId } : {}),
-              missing: await conversationMissing(pane.agent, pane.resumeId, pane.cwd || p.root),
+              missing: await conversationMissing(pane.agent, pane.resumeId, pane.cwd || p.root).catch(() => false),
               pane,
             }
-          }),
+          },
+          ({ session, plan, sharedWith }) => {
+            // The panes are on the screen while their checks run: the user may have closed this one, or pressed «Riprendi».
+            if (!paneExists(session.pane.id) || running.has(session.pane.id)) {
+              restorePlanned.delete(session.pane.id)
+              return
+            }
+            if (sharedWith) {
+              // The conversation stays with the other pane: this one must not reopen it by its saved id.
+              setWb((w) => updatePane(w, session.pane.id, { resumeId: undefined }))
+              tellPane(session.pane.id, t("resume.shared", sharedWith.pane.title))
+            }
+            void reopening
+              .run(session.pane.id, () =>
+                startProcess(session.pane.id, session.pane.agent, session.pane.task ?? "", plan),
+              )
+              .finally(() => restorePlanned.delete(session.pane.id))
+          },
         )
-        const planned = planRestore(sessions)
-        for (const { session, plan, sharedWith } of planned) {
-          if (sharedWith) {
-            // The conversation stays with the other pane: this one must not reopen it by its saved id.
-            setWb((w) => updatePane(w, session.pane.id, { resumeId: undefined }))
-            tellPane(session.pane.id, t("resume.shared", sharedWith.pane.title))
-          }
-          void reopening
-            .run(session.pane.id, () =>
-              startProcess(session.pane.id, session.pane.agent, session.pane.task ?? "", plan),
-            )
-            .finally(() => restorePlanned.delete(session.pane.id))
-        }
 
         /*
          * And the sessions that were alive but had nothing to resume (a terminal).
@@ -7573,11 +7580,13 @@ export function Workbench() {
          * item 12). `reopen` asks for the conversation by id when there is one,
          * and starts the agent fresh when there is not.
          */
-        // With the claims just handed out: a pane planned `here` has not reported its id yet.
-        const claims = restoreClaims(planned)
-        const plannedIds = new Set(sessions.map((session) => session.pane.id))
-        for (const pane of liveToReopen(wb().panes, plannedIds, restored))
-          void reopen(pane, undefined, claims).finally(() => restorePlanned.delete(pane.id))
+        // With its own agent's claims, once handed out: a pane planned `here` has not reported its id yet.
+        const plannedIds = new Set(toResume.map((saved) => saved.id))
+        for (const pane of liveToReopen(wb().panes, plannedIds, restored)) {
+          void (byAgent.get(pane.agent ?? pane.model ?? "") ?? Promise.resolve(new Set<string>()))
+            .then((claims) => (paneExists(pane.id) ? reopen(pane, undefined, claims) : undefined))
+            .finally(() => restorePlanned.delete(pane.id))
+        }
       } else restorePlanned.clear()
     } else restorePlanned.clear()
 

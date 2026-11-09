@@ -822,6 +822,34 @@ export function restoreClaims(
   return claims
 }
 
+/**
+ * The restore, one agent at a time. A check can take 8 s (ragu is asked, and its service has to come up) and every session
+ * waited for the slowest of them, whatever its agent (WB-8). `planRestore`'s claims and holders are per agent, so planning
+ * each agent's sessions apart gives the plans of planning them all together. Returns each agent's claims, once its checks
+ * are done and its sessions started.
+ */
+export function restoreByAgent<S, T extends { agentId: string; cwd: string; resumeId?: string; missing?: boolean }>(
+  saved: readonly S[],
+  agentOf: (session: S) => string,
+  check: (session: S) => Promise<T>,
+  start: (planned: { session: T; plan: ResumePlan; sharedWith?: T }) => void,
+): Map<string, Promise<Set<string>>> {
+  const groups = new Map<string, S[]>()
+  for (const session of saved) groups.set(agentOf(session), [...(groups.get(agentOf(session)) ?? []), session])
+  const claims = new Map<string, Promise<Set<string>>>()
+  for (const [agent, group] of groups) {
+    claims.set(
+      agent,
+      Promise.all(group.map(check)).then((sessions) => {
+        const planned = planRestore(sessions)
+        planned.forEach(start)
+        return restoreClaims(planned)
+      }),
+    )
+  }
+  return claims
+}
+
 /** Whether a restore already handed out this folder's "most recent conversation" (`restoreClaims`). */
 export function claimedByRestore(
   claims: ReadonlySet<string> | undefined,
