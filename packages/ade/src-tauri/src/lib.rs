@@ -2833,6 +2833,7 @@ pub fn run() {
             ade_cancel_close,
             ade_close_ack,
             tray::ade_tray_take,
+            tray::ade_tray_labels,
             tray::ade_hide_to_tray,
             write_clipboard,
             secrets::secret_list,

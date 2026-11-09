@@ -30,6 +30,7 @@ import {
   isWorkingAgentPane,
 } from "./before-unload"
 import { hideButtons, hideChoice, markTrayNoticed, planHide, trayNoticed } from "./tray-hide"
+import { trayLabels } from "./tray-labels"
 import { RAGU_VERSION_EVERY_MS, parseRaguVersion } from "../host/ragu-version"
 import {
   agentMissing,
@@ -6221,6 +6222,14 @@ export function Workbench() {
       report(t("update.installFailed", errorMessage(error)))
     }
   }
+
+  // The tray's words, from the first render and again at every change of language: `t()` reads the locale.
+  createEffect(() => {
+    const labels = trayLabels()
+    void getHost()
+      .then((h) => h?.setTrayLabels?.(labels))
+      .catch(() => {})
+  })
 
   onMount(() => {
     /*

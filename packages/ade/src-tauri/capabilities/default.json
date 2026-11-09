@@ -34,6 +34,7 @@
     "allow-ade-open-in-browser",
     "allow-ade-open-release",
     "allow-ade-prune",
+    "allow-ade-tray-labels",
     "allow-ade-tray-take",
     "allow-ade-update-download",
     "allow-ade-update-install",
