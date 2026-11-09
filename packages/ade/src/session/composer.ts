@@ -77,8 +77,12 @@ const MARK_ROWS_MAX = 6
 /** The top of ragu's dialogs (`ui/dialog.tsx`): rounded, and centred on the terminal. */
 const DIALOG_TOP = /╭─{8,}╮/
 const FRAME_BOTTOM = /^ *╰─{8,}╯/
-/** The row of steps of ragu's first-run wizard, «1. … · 2. … · 3. …». Before 0.2.17 it has no frame round it. */
-const WIZARD_STEPS = /\b1\. \S.*·.*\b2\. \S.*·.*\b3\. \S/
+/**
+ * The row of steps of ragu's first-run wizard, «1. …  ·  2. …  ·  3. …», with a rule under it at its own column. Before 0.2.17
+ * it has no frame round it. Its wide joints and the rule are what a reply's numbered row does not have.
+ */
+const WIZARD_STEPS = /\b1\. \S.* {2}· {2}2\. \S.* {2}· {2}3\. \S/
+const WIZARD_RULE = /^─{4,}/
 
 /** The part of a terminal that says when a program hides or shows the cursor. Off the chunk's road: only those two codes. */
 interface CursorModes {
@@ -146,7 +150,8 @@ export function followKeys(terminal: ComposerTerminal, agentId: string, data: st
 export function dialogOver(terminal: ComposerTerminal, agentId: string): boolean {
   if (agentId !== "ragu") return false
   return Array.from({ length: terminal.rows }, (_, y) => y).some((y) => {
-    if (WIZARD_STEPS.test(textAt(terminal, y))) return true
+    const steps = textAt(terminal, y).match(WIZARD_STEPS)
+    if (steps && WIZARD_RULE.test(textAt(terminal, y + 1).slice(steps.index))) return true
     const top = textAt(terminal, y).match(DIALOG_TOP)
     if (!top) return false
     // In cells: a wide character left of the frame takes two.

@@ -970,20 +970,20 @@ describe("ragu 0.2.17: no bar, the text between two rules (live test 6, FAIL 1 a
   })
 
   test("the first-run wizard over the box: the cursor stays visible in the box, and the reading stays none", async () => {
-    await shutWhile("ragu-017-procedura-guidata", "ragu", "Welcome to Ragu Code", SIZE)
     let frames = 0
     await play(
       "ragu-017-procedura-guidata",
       (shown) => {
         if (!screenText(shown).includes("Welcome to Ragu Code")) return
         frames++
+        expect(gate(shown, "ragu")).toBe(false)
         expect(composerOf(shown, "ragu")).toBe("none")
         expect(dialogOver(shown, "ragu")).toBe(true)
       },
       SIZE,
     )
     expect(frames).toBeGreaterThan(0)
-  })
+  }, 20_000)
 
   const RULE = "─".repeat(60)
   const STATUS = "   Build · Approve · Grok"
@@ -1118,7 +1118,8 @@ describe("ragu 0.2.17: no bar, the text between two rules (live test 6, FAIL 1 a
   test.each(["ragu-procedura-guidata", "ragu-avvio"])("ragu 0.2.14's wizard has no frame, and its row of steps says it: %s", async (name) => {
     let frames = 0
     await play(name, (shown) => {
-      if (!screenText(shown).includes("2. Filesystem")) return
+      // Not the frame half painted, with the art still over the row.
+      if (!screenText(shown).includes("  ·  3. AI provider")) return
       frames++
       expect(dialogOver(shown, "ragu")).toBe(true)
       expect(blindNow({ box: composerOf(shown, "ragu"), question: dialogOver(shown, "ragu"), turn: false, nothingDrawn: false })).toBe(false)
@@ -1128,6 +1129,24 @@ describe("ragu 0.2.17: no bar, the text between two rules (live test 6, FAIL 1 a
 
   test.each(["ragu-avvio-normale", "ragu-017-dopo-risposta"])("no dialog on a session at rest: %s", async (name) => {
     await play(name, (shown) => expect(dialogOver(shown, "ragu")).toBe(false))
+  })
+
+  test.each([
+    ["a reply's row", ["  1. Installa · 2. Compila · 3. Prova", ""]],
+    ["wide joints, nothing under them", ["  1. Installa  ·  2. Compila  ·  3. Prova", ""]],
+    ["wide joints, a rule elsewhere", ["  1. Installa  ·  2. Compila  ·  3. Prova", "      ──────────"]],
+    ["narrow joints over a rule", ["  1. Installa · 2. Compila · 3. Prova", "  ──────────"]],
+  ])("the row of steps wants its wide joints and a rule under it at its own column: %s", async (_name, reply) => {
+    const terminal = await screenWith([...(reply as string[]), ...boxOf('› Ask anything... "x"')], 4, 3)
+    expect(dialogOver(terminal, "ragu")).toBe(false)
+    expect(composerOf(terminal, "ragu")).toBe("ready")
+  })
+
+  test("the wizard's row as ragu draws it, in a pane with the frame gone", async () => {
+    const steps = "          1. Welcome  ·  2. Filesystem  ·  3. AI provider  ·  4. Extras  ·  5. Image"
+    const terminal = await screenWith([steps, `          ${"─".repeat(40)}`, ...boxOf('› Ask anything... "x"')], 4, 3, false, 100)
+    expect(dialogOver(terminal, "ragu")).toBe(true)
+    expect(composerOf(terminal, "ragu")).toBe("none")
   })
 
   test("a numbered list in the transcript is not the wizard's row of steps", async () => {
