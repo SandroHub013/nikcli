@@ -389,3 +389,70 @@ describe("settled: a take is finished before ADE goes (review of the 2026-11-02 
     expect(await isSettled(recorder.settled())).toBe(true)
   })
 })
+
+/*
+ * MOD-10: the capture takes a while to come up (`deps.start` is the platform's), and the state is still `idle` until it
+ * has. A second «start» in that time began a second capture; a «stop» was ignored, and the take then ran on after the
+ * user had asked it to end.
+ */
+describe("a take that is still starting", () => {
+  function slowStart() {
+    let up: (value: { path: string | null }) => void = () => {}
+    let starts = 0
+    let stops = 0
+    const pending = () =>
+      new Promise<{ path: string | null }>((resolve) => {
+        up = resolve
+      })
+    const it = setup({
+      start: () => {
+        starts++
+        return pending()
+      },
+      stop: async () => {
+        stops++
+        return { path: "C:/video/ADE.mp4" }
+      },
+    })
+    return { ...it, resolve: (path = "C:/video/ADE.mp4") => up({ path }), starts: () => starts, stops: () => stops }
+  }
+
+  test("a second start meanwhile is told a take is on, and the capture is started once", async () => {
+    const it = slowStart()
+    const first = it.recorder.start({ kind: "window" })
+    const second = await it.recorder.start({ kind: "window" }, { language: "it" })
+    expect(second).toBe("Una registrazione è già in corso.")
+    it.resolve()
+    expect(await first).toBeUndefined()
+    expect(it.starts()).toBe(1)
+    expect(it.recorder.state().status).toBe("recording")
+  })
+
+  test("a stop meanwhile is kept: once the capture is up it is stopped, and the state ends idle", async () => {
+    const it = slowStart()
+    const first = it.recorder.start({ kind: "window" })
+    expect(await it.recorder.stop()).toBeUndefined()
+    expect(it.stops()).toBe(0)
+    it.resolve()
+    expect(await first).toBeUndefined()
+    expect(it.stops()).toBe(1)
+    expect(it.recorder.state()).toEqual({ status: "idle" })
+  })
+
+  test("a start that fails forgets the stop that was asked, and a new take can begin", async () => {
+    let attempt = 0
+    const it = setup({
+      start: async () => {
+        attempt++
+        if (attempt === 1) throw new Error("no capture")
+        return { path: "C:/video/ADE.mp4" }
+      },
+    })
+    const first = it.recorder.start({ kind: "window" })
+    await it.recorder.stop()
+    expect(await first).toBe("no capture")
+    expect(await it.recorder.start({ kind: "window" })).toBeUndefined()
+    // The stop of the failed one is not carried over: this take is still recording.
+    expect(it.recorder.state().status).toBe("recording")
+  })
+})
