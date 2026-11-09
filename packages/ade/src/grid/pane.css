@@ -27,7 +27,7 @@
    * the one renderer that needed them most — see `terminal/registry.ts`.
    */
 
-  /* The status hue for this card. Redefined per status below, once, so every
+  /* The status hue for this card. Redefined per state below, once, so every
      rule that needs it — edge, pulse, activity word — reads the same value. */
   --pane-status: var(--ade-text-weak);
 
@@ -40,20 +40,6 @@
    */
   /* Both axes: the width for the header's queries, the height for a short pane's notes (at the end of this file). */
   container-type: size;
-}
-
-[data-component="session-pane"][data-status="working"],
-[data-component="session-pane"][data-status="provisioning"] {
-  --pane-status: var(--ade-working);
-}
-[data-component="session-pane"][data-status="waiting"] {
-  --pane-status: var(--ade-waiting);
-}
-[data-component="session-pane"][data-status="done"] {
-  --pane-status: var(--ade-done);
-}
-[data-component="session-pane"][data-status="error"] {
-  --pane-status: var(--ade-error);
 }
 
 /* ── header ────────────────────────────────────────────────────────────────── */
@@ -982,9 +968,11 @@
 }
 [data-component="session-pane"][data-state="off"] {
   --st: var(--ade-state-off);
+  --pane-status: var(--ade-state-off);
 }
 [data-component="session-pane"][data-state="closed"] {
   --st: var(--ade-state-closed);
+  --pane-status: var(--ade-state-closed);
 }
 
 /* The state icon is `state-icon.css`; it does not move here (DS-5). */

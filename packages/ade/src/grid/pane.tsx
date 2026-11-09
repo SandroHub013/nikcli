@@ -905,8 +905,8 @@ export function SessionPane(props: SessionPaneProps) {
       </header>
 
       {/* The liveness sweep used to be a 2px lane of its own here. It is now
-          the pane's own top edge, keyed off `data-status`, which says the same
-          thing without taking a row — see `pane.css`. */}
+          the pane's own top edge, keyed off the state's colour, which says the
+          same thing without taking a row — see `pane.css`. */}
 
       {/*
         The live session, drawn by a real terminal emulator.

@@ -111,6 +111,14 @@ describe("the sidebar and the pane read the same list", () => {
     }
     expect(paneCss).not.toContain("--st-ask")
     expect(paneCss).not.toContain("--st-limit")
+    // The halo, the bullets and the chip's tint read `--pane-status`, the two
+    // states with no process included. They used to fall back to the old
+    // `data-status` map, which said a different thing than the chip: a cleanly
+    // closed pane wore the green of `done`, a suspended one the amber of `waiting`.
+    for (const id of STATE_IDS) {
+      expect([id, paneCss.includes(`--pane-status: var(--ade-state-${id});`)]).toEqual([id, true])
+    }
+    expect(paneCss).not.toContain('[data-status="')
   })
 
   test("«needs you» is blue everywhere, and pomodoro is not a state colour", () => {
