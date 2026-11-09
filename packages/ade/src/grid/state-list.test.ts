@@ -294,6 +294,18 @@ describe("the header keeps four things (DS-19)", () => {
   })
 })
 
+describe("a narrow sidebar drops the row's second line (DS-20)", () => {
+  test("the session meta is hidden under a container query of the sidebar at 219px (a column narrower than 220px)", () => {
+    const at = sidebarCss.indexOf("@container ade-sidebar (max-width: 219px)")
+    expect(at).toBeGreaterThan(-1)
+    // The block of that query: up to the next `@container`, or the end.
+    const rest = sidebarCss.slice(at + 1)
+    const next = rest.indexOf("@container")
+    const block = rest.slice(0, next === -1 ? undefined : next)
+    expect(/\[data-slot="session-meta"\]\s*\{\s*display:\s*none;/.test(block)).toBe(true)
+  })
+})
+
 describe("a selected sidebar row keeps its meta readable (DS-22)", () => {
   test("the meta takes the soft text on the selection's veil", () => {
     expect(sidebarCss).toMatch(/\[data-slot="session-row"\]\[data-selected\] :is\(\[data-slot="session-meta"\]/)
