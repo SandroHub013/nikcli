@@ -111,6 +111,8 @@ import {
   modelArgs,
   nameTaken,
   opencodeVersion,
+  shouldDropOpencodeModel,
+  OPENCODE_MODEL_DROPPED_NOTE,
   withoutModel,
   resultsDir,
   slugify,
@@ -412,6 +414,7 @@ import {
   formatLost,
   noticeTarget,
   registerAuthor,
+  earlyCloseReason,
   formatRequest,
   parseMessage,
   resolveAgent,
@@ -4528,15 +4531,17 @@ export function Workbench() {
       const state = stateOf(request, now)
       // A request whose answerer is gone will never be answered; the caller is told, not left waiting.
       if (state === "sessione chiusa") {
-        const title = wb().panes.find((pane) => pane.id === request.to)?.title ?? request.to
+        const closed = wb().panes.find((pane) => pane.id === request.to)
+        const title = closed?.title ?? request.to
         // A start that did not happen says why (review N2); a session that simply closed has no reason on record.
         const refusal = startRefusals.get(request.to)
+        const why = earlyCloseReason(closed?.activity, closed?.lines)
         await settle(
           host,
           request.id,
           refusal
             ? `[ade-msg] errore: la sessione "${title}" non è ripartita (${refusal}) e la richiesta ${request.id} resta senza risposta`
-            : `[ade-msg] errore: la sessione "${title}" si è chiusa senza rispondere alla richiesta ${request.id}`,
+            : `[ade-msg] errore: la sessione "${title}" si è chiusa${why ? ` (${why})` : ""} senza rispondere alla richiesta ${request.id}`,
         )
         continue
       }
@@ -9676,7 +9681,7 @@ export function Workbench() {
      * restart. Before the opening, like the notice, so a `resume` subcommand
      * still comes after the flags.
      */
-    const launched = wb().panes.find((pane) => pane.id === paneId)
+    let launched = wb().panes.find((pane) => pane.id === paneId)
     const workDir = launched?.worktree || p.root
 
     /*
@@ -9739,6 +9744,17 @@ export function Workbench() {
      * id, hook nonce and status, and clears its per-pane records, which by now are the newer session's (review, NB1).
      */
     if (!running.starting(paneId, start)) return
+
+    if (agentId === "opencode" && modelIn(launched?.spawnArgs ?? [])) {
+      const version = await opencodeVersion(host)
+      if (!running.starting(paneId, start)) return
+      if (shouldDropOpencodeModel(agentId, launched?.spawnArgs, version)) {
+        const cleaned = withoutModel(launched?.spawnArgs ?? [])
+        setWb((w) => updatePane(w, paneId, { spawnArgs: cleaned }))
+        if (launched) launched = { ...launched, spawnArgs: cleaned }
+        tellPane(paneId, OPENCODE_MODEL_DROPPED_NOTE)
+      }
+    }
 
     const paneTitle = wb().panes.find((pane) => pane.id === paneId)?.title ?? agent.label ?? agentId
     // The pane's own arguments on every start, the first and each restart (`start-args.ts`).
