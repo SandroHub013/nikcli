@@ -13,6 +13,8 @@ import {
   resultsDir,
   slugify,
   withoutModel,
+  OPENCODE_MODEL_DROPPED_NOTE,
+  shouldDropOpencodeModel,
   worktreeArgs,
   worktreePlan,
   effortArgs,
@@ -116,12 +118,17 @@ describe("options a session may choose for its subagent", () => {
     expect(modelArgs("agy", "gemini-3.1-pro-high")).toEqual(["--model", "gemini-3.1-pro-high"])
     // OpenCode 1.x takes provider/model with --model. OpenCode 2.x dropped --model on the interactive CLI.
     expect(modelArgs("opencode", "opencode/deepseek-v4.1-flash-free", "1.19.2")).toEqual(["--model", "opencode/deepseek-v4.1-flash-free"])
-    expect(modelArgs("opencode", "opencode/deepseek-v4.1-flash-free", "2.3.0")).toEqual({
-      error: "OpenCode 2 non accetta il modello all'avvio: avvialo senza --model e sceglilo dentro con /models",
-    })
-    expect(modelArgs("opencode", "opencode/deepseek-v4.1-flash-free")).toEqual({
-      error: "OpenCode 2 non accetta il modello all'avvio: avvialo senza --model e sceglilo dentro con /models",
-    })
+    const v2 = modelArgs("opencode", "opencode/deepseek-v4.1-flash-free", "2.3.0")
+    expect("error" in (v2 as object)).toBe(true)
+    if ("error" in (v2 as object)) {
+      expect((v2 as { error: string }).error).toContain("/models")
+    }
+    const vUnknown = modelArgs("opencode", "opencode/deepseek-v4.1-flash-free")
+    expect("error" in (vUnknown as object)).toBe(true)
+    if ("error" in (vUnknown as object)) {
+      expect((vUnknown as { error: string }).error).toContain("Non riesco a leggere la versione")
+      expect((vUnknown as { error: string }).error).not.toContain("OpenCode 2")
+    }
     expect("error" in (modelArgs("opencode", "x --dangerously-skip-permissions") as object)).toBe(true)
   })
 
@@ -155,6 +162,20 @@ test("results live in .ade/results, kept out of git once", () => {
 test("withoutModel takes the model choice out and leaves the rest", () => {
   expect(withoutModel(["--model", "a", "--add-dir", "C:\\w"])).toEqual(["--add-dir", "C:\\w"])
   expect(withoutModel(["-m", "gpt-5"])).toEqual([])
+})
+
+test("shouldDropOpencodeModel drops stored model on OpenCode 2.x and unknown version", () => {
+  expect(shouldDropOpencodeModel("opencode", ["--model", "opencode/deepseek"], "2.3.0")).toBe(true)
+  expect(shouldDropOpencodeModel("opencode", ["--model", "opencode/deepseek"], undefined)).toBe(true)
+  expect(shouldDropOpencodeModel("opencode", ["--model", "opencode/deepseek"], null)).toBe(true)
+  expect(shouldDropOpencodeModel("opencode", ["--model", "opencode/deepseek"], "1.19.2")).toBe(false)
+  expect(shouldDropOpencodeModel("claude-code", ["--model", "haiku"], "2.3.0")).toBe(false)
+  expect(shouldDropOpencodeModel("opencode", ["--verbose"], "2.3.0")).toBe(false)
+})
+
+test("OPENCODE_MODEL_DROPPED_NOTE explains model was dropped", () => {
+  expect(OPENCODE_MODEL_DROPPED_NOTE).toContain("OpenCode 2 o successivo")
+  expect(OPENCODE_MODEL_DROPPED_NOTE).toContain("/models")
 })
 describe("effort and dispatch profiles at spawn", () => {
   test("each agent is told the effort its own way, and one that cannot be told is refused", () => {
@@ -253,6 +274,13 @@ describe("opencode --version, to check whether it accepts --model", () => {
     expect(await opencodeVersion(m.host, "opencode")).toBe("opencode v2.3.0")
     expect(await opencodeVersion(m.host, "opencode")).toBe("opencode v2.3.0")
     expect(m.asked).toEqual([["opencode", "--version"]])
+  })
+
+  test("a 1.x answer is not cached so an upgrade to 2.x is seen on the next spawn", async () => {
+    const m = machine({ lines: ["opencode v1.19.2"] })
+    expect(await opencodeVersion(m.host, "opencode")).toBe("opencode v1.19.2")
+    expect(await opencodeVersion(m.host, "opencode")).toBe("opencode v1.19.2")
+    expect(m.asked.length).toBe(2)
   })
 
   test("no answer in time: null, the process stopped, and the next turn asks again", async () => {

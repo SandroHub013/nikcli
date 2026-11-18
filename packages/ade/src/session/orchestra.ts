@@ -174,7 +174,10 @@ export function opencodeVersion(
     const asking = askOpencodeVersion(host, command, timeoutMs)
     opencodeVersionOnce = asking
     void asking.then((answer) => {
-      if (answer === null && opencodeVersionOnce === asking) opencodeVersionOnce = undefined
+      const major = parseMajorVersion(answer)
+      if ((major === undefined || major < 2) && opencodeVersionOnce === asking) {
+        opencodeVersionOnce = undefined
+      }
     })
   }
   return opencodeVersionOnce
@@ -246,8 +249,14 @@ export function modelArgs(agentId: string, model: string, version?: string | nul
       if (major !== undefined && major < 2) {
         return ["--model", value]
       }
+      if (major === undefined) {
+        return {
+          error: "Non riesco a leggere la versione di OpenCode: avvialo senza modello e sceglilo dentro con /models",
+        }
+      }
       return {
-        error: "OpenCode 2 non accetta il modello all'avvio: avvialo senza --model e sceglilo dentro con /models",
+        error:
+          "OpenCode 2 o successivo non accetta il modello all'avvio: avvialo senza modello e sceglilo dentro con /models",
       }
     }
     case "codex":
@@ -386,6 +395,22 @@ export function withoutModel(args: readonly string[]): string[] {
     out.push(args[i]!)
   }
   return out
+}
+
+export const OPENCODE_MODEL_DROPPED_NOTE =
+  "OpenCode 2 o successivo non accetta il modello all'avvio: sceglilo dentro con /models"
+
+/**
+ * Whether a pane's stored spawnArgs contain a model flag that OpenCode 2.x or an unknown version cannot accept.
+ */
+export function shouldDropOpencodeModel(
+  agentId: string,
+  spawnArgs: readonly string[] | undefined,
+  version?: string | null,
+): boolean {
+  if (agentId !== "opencode" || !modelIn(spawnArgs ?? [])) return false
+  const major = parseMajorVersion(version)
+  return major === undefined || major >= 2
 }
 
 /**
