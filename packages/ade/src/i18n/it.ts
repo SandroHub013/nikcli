@@ -1833,6 +1833,8 @@ export const it = {
     `Scartata ${n === 1 ? "una risposta del pannello" : `${n} risposte del pannello`}: in attesa troppo a lungo`,
   "note.dictationHeld":
     "Dettatura non scritta: c'è una domanda aperta o il pannello non è pronto. Rispondi prima o riprova tra poco.",
+  "note.textHeldByDialog":
+    "Testo non scritto: ADE vede una finestra aperta nel terminale. Chiudila con Esc e riprova.",
   "note.enterHeldFor": (to: string) => `Digitata a ${to}, Invio non premuto: c'è un permesso aperto`,
   "note.inboxLost": (id: string) =>
     `Messaggio ${id} sparito dalla casella prima di essere letto: il mittente è avvisato`,

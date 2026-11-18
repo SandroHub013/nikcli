@@ -1791,6 +1791,8 @@ export const en: Messages = {
     `Dropped ${n === 1 ? "one panel reply" : `${n} panel replies`}: waiting too long`,
   "note.dictationHeld":
     "Dictation not written: a question is open or the panel isn't ready. Answer it first or try again in a moment.",
+  "note.textHeldByDialog":
+    "Text not written: ADE sees a window open in the terminal. Close it with Esc and try again.",
   "note.enterHeldFor": (to: string) => `Typed to ${to}, Enter not pressed: a permission prompt is open`,
   "note.inboxLost": (id) => `Message ${id} vanished from the inbox before it was read: the sender is told`,
   "note.rang": (rings) => `Reminder sent again: message not read yet (${rings}/3)`,

@@ -42,4 +42,11 @@ describe("sendShotToFocused", () => {
     expect(typed).toContain('composerNow(paneId) === "none"')
     expect(typed).not.toContain("!mayType")
   })
+
+  test("typeAsUser tells note.textHeldByDialog when refocusedNow stands (F3 + F9)", () => {
+    const typed = body("const typeAsUser", "  /**\n   * Gives a screenshot")
+    expect(typed).toContain("refocusedNow(getTerminal(paneId).terminal)")
+    expect(typed).toContain('t("note.textHeldByDialog")')
+    expect(typed).toContain('t("note.dictationHeld")')
+  })
 })
