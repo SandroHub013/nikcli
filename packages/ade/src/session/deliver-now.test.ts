@@ -370,6 +370,10 @@ describe("the click", () => {
     expect(between("constblindHold=", "constdeliverNowNote=")).toContain("cursorSaysDialog(")
   })
 
+  test("lint: blindHold treats refocusedNow as a dialog wait", () => {
+    expect(between("constblindHold=", "constdeliverNowNote=")).toContain("refocusedNow(")
+  })
+
   test("lint: a first task held on a line in the box is said too, after the same wait", () => {
     expect(workbench).toContain('if(boxRead&&boxHolds&&!asked&&box!=="ready")noteMailHeld(paneId,request?.from)')
   })

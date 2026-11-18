@@ -834,6 +834,12 @@ describe("lint: the workbench's wiring", () => {
     expect(poll).toContain(codeOf("if (menuTold && !trustHandled && drawn && note !== menuNote) { dropPaneNote(paneId, menuNote) tellPane(paneId, note) menuNote = note }"))
   })
 
+  test("lint: when the focus-in mark stands, noteMailHeld tells note.mailHeldByDialog", () => {
+    const noteHeld = between("const noteMailHeld =", "const newProcessOnPane =")
+    expect(noteHeld).toContain(codeOf("refocusedNow(getTerminal(paneId).terminal)"))
+    expect(noteHeld).toContain(codeOf('tellPane(paneId, t("note.mailHeldByDialog"))'))
+  })
+
   test.each([
     ["it", itText],
     ["en", enText],
