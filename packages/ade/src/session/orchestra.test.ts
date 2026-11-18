@@ -1,12 +1,15 @@
-import { describe, expect, test } from "bun:test"
+import { beforeEach, describe, expect, test } from "bun:test"
 import {
   checkName,
   isReservedName,
   depthOf,
   descendants,
   excludeWithAde,
+  forgetOpencodeVersion,
   modelArgs,
   nameTaken,
+  opencodeVersion,
+  parseMajorVersion,
   resultsDir,
   slugify,
   withoutModel,
@@ -111,8 +114,14 @@ describe("options a session may choose for its subagent", () => {
     expect(modelArgs("claude-code", "sonnet")).toEqual(["--model", "sonnet"])
     expect(modelArgs("codex", "gpt-5-codex")).toEqual(["-m", "gpt-5-codex"])
     expect(modelArgs("agy", "gemini-3.1-pro-high")).toEqual(["--model", "gemini-3.1-pro-high"])
-    // OpenCode takes provider/model: the slash passes, and nothing else is added.
-    expect(modelArgs("opencode", "opencode/deepseek-v4.1-flash-free")).toEqual(["--model", "opencode/deepseek-v4.1-flash-free"])
+    // OpenCode 1.x takes provider/model with --model. OpenCode 2.x dropped --model on the interactive CLI.
+    expect(modelArgs("opencode", "opencode/deepseek-v4.1-flash-free", "1.19.2")).toEqual(["--model", "opencode/deepseek-v4.1-flash-free"])
+    expect(modelArgs("opencode", "opencode/deepseek-v4.1-flash-free", "2.3.0")).toEqual({
+      error: "OpenCode 2 non accetta il modello all'avvio: avvialo senza --model e sceglilo dentro con /models",
+    })
+    expect(modelArgs("opencode", "opencode/deepseek-v4.1-flash-free")).toEqual({
+      error: "OpenCode 2 non accetta il modello all'avvio: avvialo senza --model e sceglilo dentro con /models",
+    })
     expect("error" in (modelArgs("opencode", "x --dangerously-skip-permissions") as object)).toBe(true)
   })
 
@@ -125,7 +134,7 @@ describe("options a session may choose for its subagent", () => {
     expect("error" in (modelArgs("claude-code", "--yolo") as object)).toBe(true)
     expect("error" in (modelArgs("claude-code", "-x") as object)).toBe(true)
     expect(modelArgs("claude-code", "claude-haiku-5-5")).toEqual(["--model", "claude-haiku-5-5"])
-    expect(modelArgs("opencode", "opencode/deepseek-v4.1-flash-free")).toEqual([
+    expect(modelArgs("opencode", "opencode/deepseek-v4.1-flash-free", "1.19.2")).toEqual([
       "--model",
       "opencode/deepseek-v4.1-flash-free",
     ])
@@ -198,5 +207,72 @@ describe("effort and dispatch profiles at spawn", () => {
       error: expect.stringContaining("revisione-audit, compito-piccolo"),
     })
     expect(dispatchChoice("{", "x", "agy")).toEqual({ error: "dispatch.json non è JSON valido" })
+  })
+})
+
+function machine(answer: { lines?: readonly string[]; code?: number | null; never?: boolean } = {}) {
+  const asked: (readonly string[])[] = []
+  let killed = 0
+  const host = {
+    spawn: async (options: {
+      command: string
+      args: string[]
+      onLine: (line: string, stream: "out" | "err") => void
+      onExit: (code: number | null) => void
+    }) => {
+      asked.push([options.command, ...options.args])
+      if (!answer.never)
+        setTimeout(() => {
+          for (const line of answer.lines ?? ["opencode v2.3.0"]) options.onLine(line, "out")
+          options.onExit(answer.code === undefined ? 0 : answer.code)
+        }, 1)
+      return { kill: () => void killed++ }
+    },
+  }
+  return { host, asked, killed: () => killed }
+}
+
+describe("parseMajorVersion", () => {
+  test("extracts major version from CLI version text", () => {
+    expect(parseMajorVersion("opencode v2.3.0")).toBe(2)
+    expect(parseMajorVersion("opencode 2.0.0")).toBe(2)
+    expect(parseMajorVersion("v1.19.2")).toBe(1)
+    expect(parseMajorVersion("1.0.0")).toBe(1)
+    expect(parseMajorVersion("")).toBeUndefined()
+    expect(parseMajorVersion(null)).toBeUndefined()
+    expect(parseMajorVersion(undefined)).toBeUndefined()
+    expect(parseMajorVersion("non-version string")).toBeUndefined()
+  })
+})
+
+describe("opencode --version, to check whether it accepts --model", () => {
+  beforeEach(() => forgetOpencodeVersion())
+
+  test("asked once per start: the second launch does not ask again", async () => {
+    const m = machine({ lines: ["opencode v2.3.0"] })
+    expect(await opencodeVersion(m.host, "opencode")).toBe("opencode v2.3.0")
+    expect(await opencodeVersion(m.host, "opencode")).toBe("opencode v2.3.0")
+    expect(m.asked).toEqual([["opencode", "--version"]])
+  })
+
+  test("no answer in time: null, the process stopped, and the next turn asks again", async () => {
+    const m = machine({ never: true })
+    expect(await opencodeVersion(m.host, "opencode", 5)).toBeNull()
+    expect(m.killed()).toBe(1)
+    await opencodeVersion(m.host, "opencode", 5)
+    expect(m.asked.length).toBe(2)
+  })
+
+  test("the pty's colours and window title are stripped", async () => {
+    const m = machine({ lines: ["\u001b]0;opencode\u0007\u001b[1mopencode v2.3.0\u001b[0m"] })
+    expect(await opencodeVersion(m.host, "opencode")).toBe("opencode v2.3.0")
+  })
+
+  test("a failed command or no version in what it said: null", async () => {
+    expect(await opencodeVersion(machine({ code: 1 }).host, "opencode")).toBeNull()
+    forgetOpencodeVersion()
+    expect(await opencodeVersion(machine({ lines: ["command not found"] }).host, "opencode")).toBeNull()
+    forgetOpencodeVersion()
+    expect(await opencodeVersion({}, "opencode")).toBeNull()
   })
 })
