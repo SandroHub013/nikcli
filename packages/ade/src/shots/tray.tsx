@@ -42,6 +42,8 @@ export interface ShotTrayProps {
    * arrive. The strip then says so in one line instead of staying blank.
    */
   unavailable?: boolean
+  /** Whether the watched folder has not been created on disk yet. */
+  missing?: boolean
   /** The folder the host is watching. Shown so a wrong folder is visible. */
   folder?: string
   /** A folder on a share: named, but not read without sending credentials. */
@@ -229,7 +231,7 @@ export function ShotTray(props: ShotTrayProps) {
             {/* A share was not read, so "nothing in this folder" would be a claim about what was not looked at. */}
             <Show when={!props.network}>
               <span data-slot="shot-tray-empty">
-                {props.unavailable ? t("shots.noFolder") : t("shots.emptyFolder")}
+                {props.unavailable || props.missing ? t("shots.noFolder") : t("shots.emptyFolder")}
               </span>
             </Show>
             <Where

@@ -53,8 +53,9 @@ pub struct Shot {
 /// explanation for the rest of the session.
 #[derive(Clone, serde::Serialize)]
 pub struct ShotLocation {
-    dir: String,
-    network: bool,
+    pub dir: String,
+    pub network: bool,
+    pub missing: bool,
 }
 
 /// Folders that hold nothing but screenshots, where every image is one.
@@ -242,9 +243,14 @@ pub async fn shots_dir(watch: tauri::State<'_, Watch>) -> Result<Option<ShotLoca
     // The tray asking is the moment to look again: it is opening, or the page
     // was reloaded, and the answer may have changed since the last look.
     let dir = current_dir(&watch, true);
-    Ok(dir.map(|dir| ShotLocation {
-        network: crate::is_network_path(&dir.to_string_lossy()),
-        dir: dir.to_string_lossy().into_owned(),
+    Ok(dir.map(|dir| {
+        let network = crate::is_network_path(&dir.to_string_lossy());
+        let missing = !network && !dir.is_dir();
+        ShotLocation {
+            network,
+            missing,
+            dir: dir.to_string_lossy().into_owned(),
+        }
     }))
 }
 
@@ -750,8 +756,11 @@ pub async fn shots_choose_folder(
     save_chosen(&file, &path).map_err(|_| "not-saved".to_string())?;
     // The next question must see the choice, not the one made a minute ago.
     forget_pick(&watch);
+    let network = crate::is_network_path(&path.to_string_lossy());
+    let missing = !network && !path.is_dir();
     Ok(Some(ShotLocation {
-        network: crate::is_network_path(&path.to_string_lossy()),
+        network,
+        missing,
         dir: path.to_string_lossy().into_owned(),
     }))
 }
@@ -2059,5 +2068,30 @@ mod name_tests {
     fn a_screenshot_is_still_only_an_image() {
         assert!(!is_shot(&desktop(), &desktop().join("Screenshot 2026-09-17 at 21.43.13.txt")));
         assert!(!is_shot(&shots_folder(), &shots_folder().join("thumbs.db")));
+    }
+
+    #[test]
+    fn shot_location_reports_missing_when_not_on_disk() {
+        let root = scratch("loc-missing");
+        let missing_path = root.join("NotCreatedYet");
+        let network = crate::is_network_path(&missing_path.to_string_lossy());
+        let missing = !network && !missing_path.is_dir();
+        let loc = ShotLocation {
+            dir: missing_path.to_string_lossy().into_owned(),
+            network,
+            missing,
+        };
+        assert!(loc.missing);
+        assert!(!loc.network);
+
+        let existing = root.clone();
+        let net_ex = crate::is_network_path(&existing.to_string_lossy());
+        let loc_ex = ShotLocation {
+            dir: existing.to_string_lossy().into_owned(),
+            network: net_ex,
+            missing: !net_ex && !existing.is_dir(),
+        };
+        assert!(!loc_ex.missing);
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

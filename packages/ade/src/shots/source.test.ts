@@ -153,4 +153,22 @@ describe("createShotSource with a host", () => {
       dispose()
     })
   })
+
+  test("tracks when the watched folder is missing on disk", async () => {
+    const ask = (async (command: string) => {
+      if (command === "shots_dir") {
+        return { dir: "C:/Pictures/Screenshots", network: false, missing: true }
+      }
+      if (command === "shots_recent") return []
+      if (command === "shots_watch") return undefined
+      return undefined
+    }) as never
+
+    await createRoot(async (dispose) => {
+      const source = createShotSource(true, ask)
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(source.missing()).toBe(true)
+      dispose()
+    })
+  })
 })

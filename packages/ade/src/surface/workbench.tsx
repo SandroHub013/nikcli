@@ -11231,6 +11231,7 @@ export function Workbench() {
             <ShotTray
               shots={shotSource.shots()}
               unavailable={shotSource.state() === "none"}
+              missing={shotSource.missing()}
               folder={shotSource.folder()}
               network={shotSource.state() === "network"}
               onChoose={shotSource.canChoose ? () => void shotSource.choose() : undefined}

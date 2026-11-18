@@ -21,6 +21,8 @@ export interface ShotLocation {
   dir: string
   /** A share: named in the tray, never opened. */
   network: boolean
+  /** Whether the folder does not exist on disk yet. */
+  missing?: boolean
 }
 
 export type ShotState = "asking" | "watching" | "none" | "network"
@@ -38,6 +40,8 @@ export interface ShotSource {
   load: (path: string) => Promise<Uint8Array | null>
   /** Where the host is watching, once it has answered. Undefined in the browser. */
   folder: () => string | undefined
+  /** Whether the watched folder does not exist on disk yet (e.g. before first Win+Stamp). */
+  missing: () => boolean
   /**
    * Whether this machine has a screenshots folder at all, and whether it is on
    * a network share.
@@ -80,6 +84,7 @@ async function call<T>(command: string, args?: Record<string, unknown>): Promise
 export function createShotSource(inTauri: boolean, ask: typeof call = call): ShotSource {
   const [shots, setShots] = createSignal<Shot[]>([])
   const [folder, setFolder] = createSignal<string>()
+  const [missing, setMissing] = createSignal(false)
   const [state, setState] = createSignal<ShotState>(inTauri ? "asking" : "none")
   const [notice, setNotice] = createSignal<ShotNotice>()
   const [choosing, setChoosing] = createSignal(false)
@@ -119,6 +124,7 @@ export function createShotSource(inTauri: boolean, ask: typeof call = call): Sho
   const watch = async (location: ShotLocation) => {
     const mine = ++watching
     setFolder(location.dir)
+    setMissing(Boolean(location.missing))
     setState(location.network ? "network" : "watching")
     if (!location.network) {
       // What is already there first: the screenshot taken a moment before
@@ -185,7 +191,10 @@ export function createShotSource(inTauri: boolean, ask: typeof call = call): Sho
       const unlisten = await listen<Shot>("shot:new", (event) => {
         // A watcher for a folder the user just left can still be finishing its
         // last pass; its pictures are not this folder's.
-        if (belongs(event.payload.path, folder())) add([event.payload])
+        if (belongs(event.payload.path, folder())) {
+          setMissing(false)
+          add([event.payload])
+        }
       })
       if (disposed) {
         unlisten()
@@ -200,6 +209,7 @@ export function createShotSource(inTauri: boolean, ask: typeof call = call): Sho
   return {
     shots,
     folder,
+    missing,
     state,
     dismiss: (path) => {
       dismissed.add(path)
