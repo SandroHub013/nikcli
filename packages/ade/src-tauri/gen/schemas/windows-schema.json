@@ -843,6 +843,12 @@
           "markdownDescription": "Enables the mailbox_inbox_text command without any pre-configured scope."
         },
         {
+          "description": "Enables the mailbox_install_error command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-mailbox-install-error",
+          "markdownDescription": "Enables the mailbox_install_error command without any pre-configured scope."
+        },
+        {
           "description": "Enables the mailbox_publish command without any pre-configured scope.",
           "type": "string",
           "const": "allow-mailbox-publish",
@@ -883,6 +889,12 @@
           "type": "string",
           "const": "allow-mailbox-taken",
           "markdownDescription": "Enables the mailbox_taken command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the own_folders command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-own-folders",
+          "markdownDescription": "Enables the own_folders command without any pre-configured scope."
         },
         {
           "description": "Enables the path_exists command without any pre-configured scope.",
@@ -1743,6 +1755,12 @@
           "markdownDescription": "Denies the mailbox_inbox_text command without any pre-configured scope."
         },
         {
+          "description": "Denies the mailbox_install_error command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-mailbox-install-error",
+          "markdownDescription": "Denies the mailbox_install_error command without any pre-configured scope."
+        },
+        {
           "description": "Denies the mailbox_publish command without any pre-configured scope.",
           "type": "string",
           "const": "deny-mailbox-publish",
@@ -1783,6 +1801,12 @@
           "type": "string",
           "const": "deny-mailbox-taken",
           "markdownDescription": "Denies the mailbox_taken command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the own_folders command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-own-folders",
+          "markdownDescription": "Denies the own_folders command without any pre-configured scope."
         },
         {
           "description": "Denies the path_exists command without any pre-configured scope.",
