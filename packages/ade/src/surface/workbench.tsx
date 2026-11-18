@@ -2944,7 +2944,9 @@ export function Workbench() {
     const note = heldByMenuNoted.get(paneId)
     if (note === undefined) return
     heldByMenuNoted.delete(paneId)
-    dropPaneNote(paneId, note)
+    if (note !== t("note.mailHeldByDialog") || !heldByDialogNoted.has(paneId)) {
+      dropPaneNote(paneId, note)
+    }
   }
   /*
    * Panes whose process has drawn nothing yet, and since when. What is typed now is read by whatever it opens on, with no
@@ -3693,21 +3695,32 @@ export function Workbench() {
     }
   }
   const heldByDialogNoted = new Set<string>()
+  const dropDialogNoteSafe = (paneId: string) => {
+    const dialogText = t("note.mailHeldByDialog")
+    if (heldByMenuNoted.get(paneId) !== dialogText) {
+      dropPaneNote(paneId, dialogText)
+    }
+    dropPaneNote(paneId, t("task.heldByDialog"))
+  }
   const dropHeldByDialog = (paneId: string) => {
-    if (heldByDialogNoted.delete(paneId)) dropPaneNote(paneId, t("note.mailHeldByDialog"))
+    if (heldByDialogNoted.delete(paneId)) {
+      dropDialogNoteSafe(paneId)
+    }
   }
   /** A round found mail or a first task held for this pane. */
-  const noteMailHeld = (paneId: string, from?: string) => {
+  const noteMailHeld = (paneId: string, from?: string, task = false) => {
     if (composerNow(paneId) === undefined) return
-    if (hasTerminal(paneId) && refocusedNow(getTerminal(paneId).terminal)) {
+    const hold = blindHold(paneId)
+    const key = task ? "task.heldByDialog" : "note.mailHeldByDialog"
+    if (hold.blind && hasTerminal(paneId) && refocusedNow(getTerminal(paneId).terminal)) {
       if (!heldByDialogNoted.has(paneId)) {
         heldByDialogNoted.add(paneId)
-        tellPane(paneId, t("note.mailHeldByDialog"))
+        tellPane(paneId, t(key))
       }
     } else if (heldByDialogNoted.delete(paneId)) {
-      dropPaneNote(paneId, t("note.mailHeldByDialog"))
+      dropDialogNoteSafe(paneId)
     }
-    deliverNowChanged(paneId, deliverNow.mailHeld(paneId, blindHold(paneId), Date.now(), from))
+    deliverNowChanged(paneId, deliverNow.mailHeld(paneId, hold, Date.now(), from))
   }
   /** A new process on this pane: an offer or a click was about the one before it. */
   const newProcessOnPane = (paneId: string) => {
@@ -8698,6 +8711,7 @@ export function Workbench() {
     heldBySilenceNoted.delete(id)
     screenWaiting.delete(id)
     heldByMenuNoted.delete(id)
+    heldByDialogNoted.delete(id)
     rawWindows.forget(id)
     paneClasses.delete(id)
     modeTracker.forget(id)
@@ -10190,7 +10204,7 @@ export function Workbench() {
             box !== undefined &&
             !(readySince !== undefined && pollAt - readySince >= OPENING_SETTLE_MS) &&
             !(deliverNow.armed(paneId, pollAt) && !asked)
-          if (boxRead && boxHolds && !asked && box !== "ready") noteMailHeld(paneId, request?.from)
+          if (boxRead && boxHolds && !asked && box !== "ready") noteMailHeld(paneId, request?.from, true)
           if (asked) {
             menuAt = Date.now()
             const note = t(dialogUp(paneId) ? "task.heldByDialog" : "task.heldByMenu")
@@ -10413,7 +10427,7 @@ export function Workbench() {
           stepBoxAt = stepAt
           stepBox = !shellOnly && index === 1 ? composerNow(paneId) : undefined
           stepReadySince = stepBox === "ready" ? (stepReadySince ?? stepAt) : undefined
-          if (stepBox !== undefined && stepBox !== "ready" && !questionOpen(paneId)) noteMailHeld(paneId)
+          if (stepBox !== undefined && stepBox !== "ready" && !questionOpen(paneId)) noteMailHeld(paneId, undefined, true)
         }
         const boxHolds =
           stepBox !== undefined &&
