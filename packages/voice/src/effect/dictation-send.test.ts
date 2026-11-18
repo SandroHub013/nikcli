@@ -409,7 +409,7 @@ describe("a dictation goes to the pane it was started for", () => {
   test("a plan waiting for confirmation is refused if the project changes before execution", async () => {
     class PlanProjectHost extends ChangingHost {
       currentProject = "root-a"
-      override listProjects() {
+      listProjects() {
         return [
           { name: "A", root: "root-a", isOpen: this.currentProject === "root-a" },
           { name: "B", root: "root-b", isOpen: this.currentProject === "root-b" },
