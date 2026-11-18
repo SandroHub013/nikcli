@@ -110,6 +110,7 @@ import {
   excludeWithAde,
   modelArgs,
   nameTaken,
+  opencodeVersion,
   withoutModel,
   resultsDir,
   slugify,
@@ -5322,7 +5323,8 @@ export function Workbench() {
         ? [...(wb().panes.find((pane) => pane.id === message.from)?.spawnArgs ?? [])]
         : []
       if (model) {
-        const chosen = modelArgs(agent.id, model)
+        const version = agent.id === "opencode" ? await opencodeVersion(host) : undefined
+        const chosen = modelArgs(agent.id, model, version)
         if ("error" in chosen) {
           await answer(`errore: ${chosen.error}`)
           return true
@@ -5591,7 +5593,8 @@ export function Workbench() {
       const agentId = pane.agent ?? pane.model
       let spawnArgs = pane.spawnArgs ?? []
       if (message.model) {
-        const chosen = modelArgs(agentId, message.model)
+        const version = agentId === "opencode" ? await opencodeVersion(host) : undefined
+        const chosen = modelArgs(agentId, message.model, version)
         if ("error" in chosen) {
           await answer(`errore: ${chosen.error}`)
           return true
