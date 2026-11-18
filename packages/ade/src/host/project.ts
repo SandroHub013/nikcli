@@ -35,7 +35,7 @@ export interface Project {
  * no recent project) none is opened and the empty project screen shows «Apri una cartella» (audit 2026-11-02, UX-5).
  * A user with a history keeps the old fallback, and a saved workspace with sessions never opens on nothing, except when
  * its project is gone: the sessions still restart, each in its own folder (the workbench's resume block does not need
- * an open project).
+ * an open project). Own folders belonging to ADE itself or the user's home are refused even when saved or started from.
  */
 export function startFolder(input: {
   /** The project folder the saved workspace names. */

@@ -46,6 +46,7 @@ import { RemoteSpaceDialog } from "../remote/remote-dialog"
 import { discoverProject, grantedRoots, openProject, rootMissing, startFolder, type Project } from "../host/project"
 import {
   addRecent,
+  cleanOwnRecentsOnce,
   isMissingRecent,
   missingRecents,
   parseRecents,
@@ -7557,13 +7558,10 @@ export function Workbench() {
       const here = host.currentDir ? await host.currentDir() : ""
       const own = host.ownFolders ? await host.ownFolders() : []
       if (own.length > 0) {
-        let cur = recents()
-        for (const f of own) {
-          cur = removeRecent(cur, f)
-        }
-        if (cur.length !== recents().length) {
-          setRecents(cur)
-          localStorage.setItem("ade.recents", serializeRecents(cur))
+        const { list, changed } = cleanOwnRecentsOnce(recents(), own, localStorage)
+        if (changed) {
+          setRecents(list)
+          localStorage.setItem("ade.recents", serializeRecents(list))
         }
       }
       const saved = restored?.projectPath

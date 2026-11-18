@@ -256,15 +256,6 @@ export interface RegisterVoiceShortcutsDeps {
 }
 
 /**
- * Claims both voice chords system-wide, each on its own.
- *
- * One `try` around both used to mean the first refusal — a chord another
- * application already holds, which is common for Ctrl+Space — skipped the
- * registration of the other one, so a single busy chord silently turned off
- * both shortcuts. The failure was a `console.warn` nobody sees, and from the
- * outside the feature simply did not work.
- */
-/**
  * Whether voice is set up so that system-wide hotkeys should be claimed.
  * With default settings and no key configured, chords are not claimed
  * so they do not steal hotkeys (e.g. Ctrl+Shift+J/K) from other apps.
@@ -279,6 +270,15 @@ export function isVoiceSetUp(
   return true
 }
 
+/**
+ * Claims both voice chords system-wide, each on its own.
+ *
+ * One `try` around both used to mean the first refusal — a chord another
+ * application already holds, which is common for Ctrl+Space — skipped the
+ * registration of the other one, so a single busy chord silently turned off
+ * both shortcuts. The failure was a `console.warn` nobody sees, and from the
+ * outside the feature simply did not work.
+ */
 export async function registerVoiceShortcuts(
   settings: Pick<VoiceSettings, "agentChord" | "transcriptionChord"> & { openRouterApiKey?: string },
   deps: RegisterVoiceShortcutsDeps,

@@ -259,9 +259,10 @@ pub async fn shots_dir(watch: tauri::State<'_, Watch>) -> Result<Option<ShotLoca
 /// Every thumbnail and every delete asks which folder is the screenshots
 /// folder, and making the choice reads every candidate folder. The tray asking
 /// (`shots_dir`) and the user choosing a folder renew it at once. The expiry
-/// limits the cost, nothing more: the page asks `shots_dir` once, when the tray
-/// mounts, so a tool that starts saving elsewhere while ADE stays open changes
-/// which roots `shot_delete` accepts, not the folder the tray is on.
+/// limits the cost, nothing more: the page asks `shots_dir` when the tray
+/// mounts and on window focus (while none), so a tool that starts saving elsewhere
+/// while ADE stays open changes which roots `shot_delete` accepts, not the folder
+/// the tray is on.
 const PICK_TTL: Duration = Duration::from_secs(60);
 
 /// The folder the tray should watch, made at most once per `PICK_TTL`.
@@ -671,12 +672,10 @@ fn configured_dir() -> Option<PathBuf> {
 fn configured_dir() -> Option<PathBuf> {
     use windows::Win32::UI::Shell::FOLDERID_Screenshots;
 
-    // A redirected Pictures can be a share: `names_a_folder` asks the text
-    // before the disk, so the share is named without being opened.
-    // Keep a local FOLDERID_Screenshots even when not on disk yet.
-    known_folder(&FOLDERID_Screenshots).filter(|path| {
-        !crate::is_network_path(&path.to_string_lossy()) || names_a_folder(path)
-    })
+    // A redirected Pictures can be a share: known_folder with KF_FLAG_DONT_VERIFY
+    // returns the path without opening an SMB connection. Keep FOLDERID_Screenshots
+    // even when Windows has not made the folder on disk yet.
+    known_folder(&FOLDERID_Screenshots)
 }
 
 /// A known folder's path, without the shell checking that it exists.
