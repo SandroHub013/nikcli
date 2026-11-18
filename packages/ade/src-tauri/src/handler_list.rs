@@ -112,6 +112,28 @@ mod tests {
         assert!(capability.get("remote").is_none(), "nessuna origine remota ha accesso ai comandi dell'app");
     }
 
+    /// What lies between two needles of `lib.rs`; the needles must be there, once, in this order.
+    fn between<'a>(source: &'a str, from: &str, to: &str) -> &'a str {
+        assert_eq!(source.matches(from).count(), 1, "`{from}` must be in lib.rs once");
+        let start = source.find(from).unwrap();
+        let end = start + source[start..].find(to).unwrap_or_else(|| panic!("`{to}` must follow `{from}`"));
+        &source[start..end]
+    }
+
+    #[test]
+    fn both_start_failures_are_reported_and_the_log_folder_comes_from_the_identifier() {
+        // The setup closure, when the window cannot be opened, and `.build(context)`: a call deleted from either goes red here.
+        let window = between(LIB, "if let Err(error) = open_main_window(app.handle()) {", "return Err(Box::new(error))");
+        assert!(window.contains("report_failed_step("), "a window that cannot be opened must be reported: {window}");
+        let build = between(LIB, ".build(context)", ".expect(\"error while running ADE\")");
+        assert!(build.contains("report_failed_step("), "a build that fails must be reported: {build}");
+        // The folder is named by the identifier, as `is_test_build` tells the apps apart, and not by a build feature.
+        assert!(window.contains("setup_error_log_dir(&app.handle().config().identifier)"), "{window}");
+        assert!(build.contains("setup_error_log_dir(&identifier)"), "{build}");
+        let folder = between(LIB, "pub fn setup_error_log_dir(", "/// Appends the reason");
+        assert!(!folder.contains("test-exe"), "the feature must not pick the log folder: {folder}");
+    }
+
     #[test]
     fn the_build_script_declares_the_manifest_from_this_same_list() {
         let build = include_str!("../build.rs");
