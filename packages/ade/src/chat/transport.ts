@@ -94,7 +94,8 @@ export function serverFetch(bridge: ServerBridge, options: { directory?: string 
       started = undefined
       if (error instanceof ChatRefused) throw error
       const message = error instanceof Error ? error.message : String(error)
-      if (message.includes("ragu non è nel PATH") || /ragu.*PATH/i.test(message)) {
+      // The sentence `serve.rs` writes when ragu is not found, and only that: another error that names a path is not it.
+      if (message.includes("ragu non è nel PATH")) {
         throw new ChatRefused(message)
       }
       throw error instanceof Error ? error : new Error(message)
