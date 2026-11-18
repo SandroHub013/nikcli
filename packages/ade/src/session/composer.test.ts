@@ -14,6 +14,7 @@ import {
   enterBlocked,
   followKeys,
   forgetRefocus,
+  refocusedNow,
   lineBegunNow,
   mayTypeNow,
   questionHolds,
@@ -1030,6 +1031,15 @@ describe("a dialog left open over ragu's box, after a focus-in (audit SES2-2)", 
       expect(composerOf(terminal, agent)).toBe("ready")
     })
   }
+
+  test("refocusedNow reports whether the focus-in mark stands", async () => {
+    const terminal = await drawn(`${box}${picker}`, 120, 17)
+    expect(refocusedNow(terminal)).toBe(false)
+    followKeys(terminal, "ragu", FOCUS_REPORT)
+    expect(refocusedNow(terminal)).toBe(true)
+    followKeys(terminal, "ragu", "\x1b")
+    expect(refocusedNow(terminal)).toBe(false)
+  })
 
   test("an Enter closes it as well as an Esc", async () => {
     const terminal = await drawn(`${box}${picker}`, 120, 17)

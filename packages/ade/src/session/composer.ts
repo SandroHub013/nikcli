@@ -185,6 +185,11 @@ export function forgetRefocus(terminal: object): void {
   refocused.delete(terminal)
 }
 
+/** Whether the focus-in mark stands on this terminal. */
+export function refocusedNow(terminal: object): boolean {
+  return refocused.has(terminal)
+}
+
 /** Whether ADE knows this agent's input box. The others stay on the reading of menus (`questionOpen`). */
 export function readsComposer(agentId: string): boolean {
   return agentId in RULED_PROMPT || BAR_AGENTS.has(agentId)
