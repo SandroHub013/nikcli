@@ -250,12 +250,9 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
     const result = await connection.client.session.messages({ sessionID, limit: MESSAGE_LIMIT })
     if (mine !== generation) return
     const list = (result.data ?? []) as unknown as { info: Message; parts: Part[] }[]
-    const next = list.map((m) => m.info).sort(byId)
-    setData("message", sessionID, next.length === 0 ? [] : reconcile(next, { key: "id" }))
-    for (const message of list) {
-      const parts = [...message.parts].sort(byId)
-      setData("part", message.info.id, parts.length === 0 ? [] : reconcile(parts, { key: "id" }))
-    }
+    setData("message", sessionID, reconcile(list.map((m) => m.info).sort(byId), { key: "id" }))
+    for (const message of list)
+      setData("part", message.info.id, reconcile([...message.parts].sort(byId), { key: "id" }))
   }
 
   /** The folder's sessions, their status and the watched messages; false when it did not load. */
