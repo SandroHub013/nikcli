@@ -13,7 +13,6 @@ import {
   resultsDir,
   slugify,
   withoutModel,
-  OPENCODE_MODEL_DROPPED_NOTE,
   shouldDropOpencodeModel,
   worktreeArgs,
   worktreePlan,
@@ -173,10 +172,6 @@ test("shouldDropOpencodeModel drops stored model on OpenCode 2.x and unknown ver
   expect(shouldDropOpencodeModel("opencode", ["--verbose"], "2.3.0")).toBe(false)
 })
 
-test("OPENCODE_MODEL_DROPPED_NOTE explains model was dropped", () => {
-  expect(OPENCODE_MODEL_DROPPED_NOTE).toContain("OpenCode 2 o successivo")
-  expect(OPENCODE_MODEL_DROPPED_NOTE).toContain("/models")
-})
 describe("effort and dispatch profiles at spawn", () => {
   test("each agent is told the effort its own way, and one that cannot be told is refused", () => {
     expect(effortArgs("claude-code", "XHigh")).toEqual(["--effort", "xhigh"])

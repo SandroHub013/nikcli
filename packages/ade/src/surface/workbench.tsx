@@ -112,7 +112,6 @@ import {
   nameTaken,
   opencodeVersion,
   shouldDropOpencodeModel,
-  OPENCODE_MODEL_DROPPED_NOTE,
   withoutModel,
   resultsDir,
   slugify,
@@ -9752,7 +9751,7 @@ export function Workbench() {
         const cleaned = withoutModel(launched?.spawnArgs ?? [])
         setWb((w) => updatePane(w, paneId, { spawnArgs: cleaned }))
         if (launched) launched = { ...launched, spawnArgs: cleaned }
-        tellPane(paneId, OPENCODE_MODEL_DROPPED_NOTE)
+        tellPane(paneId, t("note.opencodeModelDropped"))
       }
     }
 

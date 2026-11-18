@@ -19,6 +19,7 @@
  * agent that has never heard of `ade-msg` can still answer.
  */
 import { isReservedName } from "./orchestra"
+import { scrubSecrets } from "../secrets/scrub"
 
 export interface MailPane {
   id: string
@@ -2053,12 +2054,12 @@ export function earlyCloseReason(
 ): string {
   const code = /^exited:(.*)$/.exec(activity ?? "")?.[1]
   if (code === undefined) return ""
-  const said = (lines ?? [])
+  const joined = (lines ?? [])
     .filter((l) => l.kind === "step")
     .slice(-6)
     .map((l) => l.text.trim())
     .filter(Boolean)
     .join(" | ")
-    .slice(-300)
+  const said = scrubSecrets(joined).slice(-300)
   return `uscita ${code}${said ? `; ultime righe: ${said}` : ""}`
 }

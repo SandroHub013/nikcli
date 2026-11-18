@@ -397,9 +397,6 @@ export function withoutModel(args: readonly string[]): string[] {
   return out
 }
 
-export const OPENCODE_MODEL_DROPPED_NOTE =
-  "OpenCode 2 o successivo non accetta il modello all'avvio: sceglilo dentro con /models"
-
 /**
  * Whether a pane's stored spawnArgs contain a model flag that OpenCode 2.x or an unknown version cannot accept.
  */

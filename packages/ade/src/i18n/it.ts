@@ -1858,6 +1858,8 @@ export const it = {
   "note.updateFrom": (from: string, state: string, text: string) => `Aggiornamento da ${from}: ${state} — ${text}`,
   "note.memory": (line: string) => `Memoria: ${line}`,
   "note.subagent": (title: string) => `Subagent avviato: ${title}`,
+  "note.opencodeModelDropped":
+    "OpenCode 2 o successivo non accetta il modello all'avvio: sceglilo dentro con /models",
   "note.mailHeldByLine":
     "Un messaggio per questa sessione aspetta: per ADE hai iniziato una riga. Inviala o cancellala e arriva; se non ne vedi nessuna, premi Invio.",
   "note.mailHeldBySilence":

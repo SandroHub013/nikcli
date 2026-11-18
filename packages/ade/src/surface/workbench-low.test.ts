@@ -3,6 +3,9 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { workbenchSource } from "../test-support/workbench-source"
 
+import { it } from "../i18n/it"
+import { en } from "../i18n/en"
+
 const source = workbenchSource()
 
 describe("workbench, low findings of the full review 2026-10-06", () => {
@@ -26,7 +29,9 @@ describe("OpenCode 2.x stored model and early close reason (review 2026-11-18)",
   test("startProcess drops stored --model for OpenCode 2.x before startArgsFor", () => {
     expect(source).toContain("shouldDropOpencodeModel")
     expect(source).toContain("withoutModel(launched?.spawnArgs ?? [])")
-    expect(source).toContain("tellPane(paneId, OPENCODE_MODEL_DROPPED_NOTE)")
+    expect(source).toContain('tellPane(paneId, t("note.opencodeModelDropped"))')
+    expect(it["note.opencodeModelDropped"].length).toBeLessThanOrEqual(150)
+    expect(en["note.opencodeModelDropped"].length).toBeLessThanOrEqual(150)
   })
 
   test("workbench settles early closed session with earlyCloseReason", () => {

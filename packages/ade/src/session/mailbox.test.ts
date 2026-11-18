@@ -1637,4 +1637,12 @@ describe("earlyCloseReason: exit code and lines when a session closes without re
     expect(said.length).toBeLessThanOrEqual(300)
     expect(reason).not.toContain("line 0")
   })
+
+  test("scrubs secrets from output lines before slicing to 300 characters", () => {
+    const key = ["sk-", "proj-", "1234567890abcdef1234567890abcdef"].join("")
+    const lines = [{ kind: "step", text: `invalid API key ${key}` }]
+    const reason = earlyCloseReason("exited:1", lines)
+    expect(reason).not.toContain(key)
+    expect(reason).toContain("[nascosto]")
+  })
 })
