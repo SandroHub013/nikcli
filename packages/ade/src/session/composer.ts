@@ -185,6 +185,11 @@ export function forgetRefocus(terminal: object): void {
   refocused.delete(terminal)
 }
 
+/** Whether the focus-in mark stands on this terminal. */
+export function refocusedNow(terminal: object): boolean {
+  return refocused.has(terminal)
+}
+
 /** Whether ADE knows this agent's input box. The others stay on the reading of menus (`questionOpen`). */
 export function readsComposer(agentId: string): boolean {
   return agentId in RULED_PROMPT || BAR_AGENTS.has(agentId)
@@ -212,6 +217,21 @@ export function composerOf(terminal: ComposerTerminal, agentId: string): Compose
  */
 export function cursorSaysDialog(terminal: ComposerTerminal): boolean {
   return hiddenCursor.has(terminal)
+}
+
+/**
+ * Whether a bar agent's model row or home footer is on screen (SES3-1 second half).
+ *
+ * For ragu and OpenCode, a frameless picker (e.g. `/models`) or the home screen
+ * leaves the model row or footer on screen while the input box is covered or unparsed.
+ */
+export function barModelOrFooter(terminal: ComposerTerminal, agentId: string): boolean {
+  if (!BAR_AGENTS.has(agentId)) return false
+  for (let y = 0; y < terminal.rows; y++) {
+    const text = textAt(terminal, y)
+    if (MODEL_ROW.test(text) || HOME_FOOTER.test(text)) return true
+  }
+  return false
 }
 
 const lineAt = (terminal: ComposerTerminal, y: number) =>

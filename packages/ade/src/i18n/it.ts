@@ -565,7 +565,7 @@ export const it = {
   "pane.deliverNow": "Consegna ora: scrive e preme Invio",
   "pane.deliverNow.chip": "la posta aspetta te",
   "note.deliverNowOffer": (agent: string) =>
-    `Un messaggio per ${agent} aspetta: ADE non riconosce il suo schermo. «Consegna ora» lo scrive e preme Invio, anche sopra una domanda o del testo già scritto.`,
+    `Messaggio per ${agent} in attesa. Se c'è una finestra aperta chiudila prima con Esc. «Consegna ora» scrive e preme Invio.`,
   "note.deliverNowLapsed": "«Consegna ora» non ha scritto niente: lo schermo è cambiato o è comparsa una domanda. Il messaggio è ancora in coda; il pulsante torna se serve.",
   "note.enterWaiting":
     "Il testo è scritto e ADE non ha ancora premuto Invio: non riconosce la casella di testo. Se il testo è lì e non c'è una domanda aperta, puoi premere Invio tu.",
@@ -1831,7 +1831,10 @@ export const it = {
     `Risposta del pannello in attesa (${why}): la riprovo quando il pannello si libera`,
   "note.panelReplyStale": (n: number) =>
     `Scartata ${n === 1 ? "una risposta del pannello" : `${n} risposte del pannello`}: in attesa troppo a lungo`,
-  "note.dictationHeld": "Dettatura non scritta: c'è una domanda aperta, rispondi prima e poi detta",
+  "note.dictationHeld":
+    "Dettatura non scritta: c'è una domanda aperta o il pannello non è pronto. Rispondi prima o riprova tra poco.",
+  "note.textHeldByDialog":
+    "Testo non scritto: ADE vede una finestra aperta nel terminale. Chiudila con Esc e riprova.",
   "note.enterHeldFor": (to: string) => `Digitata a ${to}, Invio non premuto: c'è un permesso aperto`,
   "note.inboxLost": (id: string) =>
     `Messaggio ${id} sparito dalla casella prima di essere letto: il mittente è avvisato`,

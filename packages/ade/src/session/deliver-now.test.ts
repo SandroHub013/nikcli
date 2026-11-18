@@ -370,8 +370,16 @@ describe("the click", () => {
     expect(between("constblindHold=", "constdeliverNowNote=")).toContain("cursorSaysDialog(")
   })
 
+  test("lint: blindHold treats refocusedNow as a dialog wait", () => {
+    expect(between("constblindHold=", "constdeliverNowNote=")).toContain(
+      codeOf(
+        '(cursorSaysDialog(getTerminal(paneId).terminal) || refocusedNow(getTerminal(paneId).terminal) || (box === "none" && barModelOrFooter(getTerminal(paneId).terminal, agentId))) ? { dialog: true } : {}',
+      ),
+    )
+  })
+
   test("lint: a first task held on a line in the box is said too, after the same wait", () => {
-    expect(workbench).toContain('if(boxRead&&boxHolds&&!asked&&box!=="ready")noteMailHeld(paneId,request?.from)')
+    expect(workbench).toContain('if(boxRead&&boxHolds&&!asked&&box!=="ready")noteMailHeld(paneId,request?.from,true)')
   })
 })
 

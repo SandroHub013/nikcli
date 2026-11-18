@@ -216,7 +216,7 @@ describe("createAdeVoiceHost", () => {
   test("sendPrompt writes one submitted line and shows what it sent", async () => {
     const writtenLines: string[] = []
     const session = {
-      write: (line: string) => writtenLines.push(line),
+      write: (line: string) => void writtenLines.push(line),
     }
 
     const { deps, appendedLines } = createMockDeps({
@@ -241,7 +241,7 @@ describe("createAdeVoiceHost", () => {
 
   test("sendPrompt cannot be made to submit twice", async () => {
     const writtenLines: string[] = []
-    const session = { write: (line: string) => writtenLines.push(line) }
+    const session = { write: (line: string) => void writtenLines.push(line) }
     const { deps } = createMockDeps({
       isRunning: () => true,
       getRunningSession: () => session,
@@ -262,7 +262,7 @@ describe("createAdeVoiceHost", () => {
     const writtenLines: string[] = []
     const { deps, told } = createMockDeps({
       isRunning: () => true,
-      getRunningSession: () => ({ write: (line: string) => writtenLines.push(line) }),
+      getRunningSession: () => ({ write: (line: string) => void writtenLines.push(line) }),
       isTyping: (id) => id === "p1",
     })
     const host = createAdeVoiceHost(deps)
@@ -290,7 +290,7 @@ describe("createAdeVoiceHost", () => {
    */
   test("insertText reaches the terminal when the pane has no composer", async () => {
     const writtenLines: string[] = []
-    const session = { write: (line: string) => writtenLines.push(line) }
+    const session = { write: (line: string) => void writtenLines.push(line) }
     const { deps } = createMockDeps({
       isRunning: () => true,
       getRunningSession: () => session,
@@ -314,9 +314,22 @@ describe("createAdeVoiceHost", () => {
     expect(host.insertText("p1", "ciao")).rejects.toThrow("Il pannello selezionato non ha dove ricevere il testo.")
   })
 
+  test("insertText throws when the write returned false (MOD3-1)", async () => {
+    const session = { write: () => false }
+    const { deps } = createMockDeps({
+      isRunning: () => true,
+      getRunningSession: () => session,
+    })
+    const host = createAdeVoiceHost(deps)
+
+    await expect(host.insertText("p1", "testo")).rejects.toThrow(
+      "il pannello non è pronto a ricevere testo; riprova tra poco",
+    )
+  })
+
   test("insertText never lets a dictated newline submit the line", async () => {
     const writtenLines: string[] = []
-    const session = { write: (line: string) => writtenLines.push(line) }
+    const session = { write: (line: string) => void writtenLines.push(line) }
     const { deps } = createMockDeps({
       isRunning: () => true,
       getRunningSession: () => session,

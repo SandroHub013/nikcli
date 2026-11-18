@@ -834,6 +834,25 @@ describe("lint: the workbench's wiring", () => {
     expect(poll).toContain(codeOf("if (menuTold && !trustHandled && drawn && note !== menuNote) { dropPaneNote(paneId, menuNote) tellPane(paneId, note) menuNote = note }"))
   })
 
+  test("lint: when the focus-in mark stands and hold is blind, noteMailHeld tells dialog note", () => {
+    const noteHeld = between("const noteMailHeld =", "const newProcessOnPane =")
+    expect(noteHeld).toContain(codeOf("if (hold.blind && hasTerminal(paneId) && refocusedNow(getTerminal(paneId).terminal))"))
+    expect(noteHeld).toContain(codeOf("tellPane(paneId, t(key))"))
+  })
+
+  test("lint: neither dropHeldByMenu nor dropHeldByDialog drops the dialog note while the other set claims it (F2)", () => {
+    const dropMenu = between("const dropHeldByMenu =", "const undrawnSince =")
+    expect(dropMenu).toContain(codeOf('if (note !== t("note.mailHeldByDialog") || !heldByDialogNoted.has(paneId))'))
+    const dropDialog = between("const dropDialogNoteSafe =", "/** A round found mail or a first task held for this pane. */")
+    expect(dropDialog).toContain(codeOf('if (heldByMenuNoted.get(paneId) !== dialogText)'))
+    expect(dropDialog).toContain(codeOf('dropPaneNote(paneId, t("task.heldByDialog"))'))
+  })
+
+  test("lint: the opening poll tells task.heldByDialog on the mark, not mailHeldByDialog (F8)", () => {
+    expect(source).toContain(codeOf('if (boxRead && boxHolds && !asked && box !== "ready") noteMailHeld(paneId, request?.from, true)'))
+    expect(source).toContain(codeOf('if (stepBox !== undefined && stepBox !== "ready" && !questionOpen(paneId)) noteMailHeld(paneId, undefined, true)'))
+  })
+
   test.each([
     ["it", itText],
     ["en", enText],

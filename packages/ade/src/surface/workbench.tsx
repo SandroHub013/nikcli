@@ -495,6 +495,7 @@ import {
   composerLine,
   composerOf,
   composerRow,
+  barModelOrFooter,
   cursorSaysDialog,
   dialogOver,
   enterBlocked,
@@ -504,6 +505,7 @@ import {
   mayTypeNow,
   questionHolds,
   readsComposer,
+  refocusedNow,
   type ComposerState,
 } from "../session/composer"
 import { COMPOSER_LOG_KEY, composerLogEntry, disagreement, logWith, type ComposerLogReason } from "../session/composer-log"
@@ -2946,7 +2948,9 @@ export function Workbench() {
     const note = heldByMenuNoted.get(paneId)
     if (note === undefined) return
     heldByMenuNoted.delete(paneId)
-    dropPaneNote(paneId, note)
+    if (note !== t("note.mailHeldByDialog") || !heldByDialogNoted.has(paneId)) {
+      dropPaneNote(paneId, note)
+    }
   }
   /*
    * Panes whose process has drawn nothing yet, and since when. What is typed now is read by whatever it opens on, with no
@@ -3136,18 +3140,23 @@ export function Workbench() {
    * dictated speech — and counts it as typed, because it is: nothing is
    * submitted until the user says so, and until then the line is theirs.
    *
-   * Not over a question, and the reason is where the text lands rather than an
-   * Enter: `dictationHold` says it at length. The words are not written and the
-   * pane says why, so the user answers with the keys or the card's buttons and
-   * dictates again afterwards.
+   * Not over a question, nor when the agent's box is not on screen, and the
+   * reason is where the text lands rather than an Enter: `dictationHold` says it
+   * at length. The words are not written and the pane says why, so the user
+   * answers with the keys or the card's buttons and dictates again afterwards.
    *
    * Says whether the text was written, for a caller that has to tell the user it was not.
    */
   const typeAsUser = (paneId: string, text: string): boolean => {
     const session = running.get(paneId)
     if (!session) return false
-    if (dictationHold({ alive: true, questionOpen: questionOpen(paneId) })) {
-      tellPane(paneId, t("note.dictationHeld"))
+    if (dictationHold({ alive: true, questionOpen: questionOpen(paneId) }) || composerNow(paneId) === "none") {
+      tellPane(
+        paneId,
+        hasTerminal(paneId) && refocusedNow(getTerminal(paneId).terminal)
+          ? t("note.textHeldByDialog")
+          : t("note.dictationHeld"),
+      )
       return false
     }
     records.typed.update(paneId, (line) => typedAfter(line, text, Date.now()))
@@ -3164,7 +3173,7 @@ export function Workbench() {
     const paneId = wb().focusedId
     const text = formatDroppedPaths([path], project()?.root)
     if (!paneId || !text || !running.get(paneId)) return false
-    // False when the text was held back (a question is open, or a dictation is held): the viewer then stays and says so.
+    // False when the text was held back (a question is open, the agent's box is not on screen, or a dictation is held): the viewer then stays and says so.
     if (!typeAsUser(paneId, `${text} `)) return false
     // The caret goes to the terminal it wrote into, while the viewer is still open: the viewer gives the focus back to
     // whatever last took it from the sheet, so closing it next lands here and not on the tile behind it.
@@ -3664,6 +3673,7 @@ export function Workbench() {
   const blindHold = (paneId: string): BlindHold => {
     const box = composerNow(paneId)
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    const agentId = pane?.agent ?? pane?.model ?? ""
     const turn = turnKnown({
       ...(activityOf.has(paneId) ? { activity: activityOf.get(paneId)! } : {}),
       working: pane?.status === "working",
@@ -3673,7 +3683,10 @@ export function Workbench() {
     return {
       blind: blindNow({ box, question: questionOpen(paneId), turn, nothingDrawn: undrawnSince.has(paneId) }),
       ...(box === "draft" ? { line: composerLine(getTerminal(paneId).terminal) } : {}),
-      ...(hasTerminal(paneId) && cursorSaysDialog(getTerminal(paneId).terminal)
+      ...(hasTerminal(paneId) &&
+      (cursorSaysDialog(getTerminal(paneId).terminal) ||
+        refocusedNow(getTerminal(paneId).terminal) ||
+        (box === "none" && barModelOrFooter(getTerminal(paneId).terminal, agentId)))
         ? { dialog: true }
         : {}),
     }
@@ -3693,10 +3706,33 @@ export function Workbench() {
       if (from !== paneId) tellSender(from, formatHeldByScreen(agent, reader))
     }
   }
+  const heldByDialogNoted = new Set<string>()
+  const dropDialogNoteSafe = (paneId: string) => {
+    const dialogText = t("note.mailHeldByDialog")
+    if (heldByMenuNoted.get(paneId) !== dialogText) {
+      dropPaneNote(paneId, dialogText)
+    }
+    dropPaneNote(paneId, t("task.heldByDialog"))
+  }
+  const dropHeldByDialog = (paneId: string) => {
+    if (heldByDialogNoted.delete(paneId)) {
+      dropDialogNoteSafe(paneId)
+    }
+  }
   /** A round found mail or a first task held for this pane. */
-  const noteMailHeld = (paneId: string, from?: string) => {
+  const noteMailHeld = (paneId: string, from?: string, task = false) => {
     if (composerNow(paneId) === undefined) return
-    deliverNowChanged(paneId, deliverNow.mailHeld(paneId, blindHold(paneId), Date.now(), from))
+    const hold = blindHold(paneId)
+    const key = task ? "task.heldByDialog" : "note.mailHeldByDialog"
+    if (hold.blind && hasTerminal(paneId) && refocusedNow(getTerminal(paneId).terminal)) {
+      if (!heldByDialogNoted.has(paneId)) {
+        heldByDialogNoted.add(paneId)
+        tellPane(paneId, t(key))
+      }
+    } else if (heldByDialogNoted.delete(paneId)) {
+      dropDialogNoteSafe(paneId)
+    }
+    deliverNowChanged(paneId, deliverNow.mailHeld(paneId, hold, Date.now(), from))
   }
   /** A new process on this pane: an offer or a click was about the one before it. */
   const newProcessOnPane = (paneId: string) => {
@@ -3704,6 +3740,7 @@ export function Workbench() {
     setDeliverNowPanes(new Set(deliverNow.standing()))
     dropPaneNote(paneId, deliverNowNote(paneId))
     if (hasTerminal(paneId)) forgetRefocus(getTerminal(paneId).terminal)
+    dropHeldByDialog(paneId)
   }
   /** The click: one message, with its Enter, and the action goes. */
   const pressDeliverNow = (paneId: string) => {
@@ -3711,6 +3748,7 @@ export function Workbench() {
     setDeliverNowPanes(new Set(deliverNow.standing()))
     // The user has looked at the pane and chosen: the mark of a focus-in (`followKeys`) would make every message ask again.
     if (go && hasTerminal(paneId)) forgetRefocus(getTerminal(paneId).terminal)
+    if (go) dropHeldByDialog(paneId)
     // A click that goes keeps note and button until its line has gone (`typeLineNow`).
     if (go) void mailRound(false)
     else if (!deliverNow.standing().includes(paneId)) dropPaneNote(paneId, deliverNowNote(paneId))
@@ -3819,6 +3857,7 @@ export function Workbench() {
     else screenWaiting.delete(paneId)
     // Answered: the note goes at once, and the mail on the next round.
     if (heldByMenuNoted.has(paneId) && !questionOpen(paneId)) dropHeldByMenu(paneId)
+    if (hasTerminal(paneId) && !refocusedNow(getTerminal(paneId).terminal)) dropHeldByDialog(paneId)
     if (next === "waiting") {
       // A new question: the key that answered the last one is not this one's answer (re-review B7).
       records.typed.update(paneId, questionOpened)
@@ -4440,6 +4479,7 @@ export function Workbench() {
           if (notices.length === 0) continue
           for (const notice of notices) dropFrom(heldLines, notice)
           dropHeldByMenu(item.paneId)
+          dropHeldByDialog(item.paneId)
           void typeLineOutcome(session, joinNotices(notices), { mail: false }).then((outcome) => {
             if (deliveryResult(outcome, running.get(item.paneId) === session) === "held") heldLines.push(...notices)
           })
@@ -4448,6 +4488,7 @@ export function Workbench() {
         if (!dropFrom(heldLines, item)) continue
         if (item.suspended) saveSuspendedMail()
         dropHeldByMenu(item.paneId)
+        dropHeldByDialog(item.paneId)
         const typingId = item.inbox?.id
         if (typingId) heldBeingTyped.add(typingId)
         // Not typed while the session is still there (a prompt opened): back among the held lines.
@@ -5905,6 +5946,7 @@ export function Workbench() {
       dropPaneNote(target.pane.id, t("note.mailHeldByLine"))
     }
     dropHeldByMenu(target.pane.id)
+    dropHeldByDialog(target.pane.id)
     if (heldBySilenceNoted.delete(target.pane.id)) dropPaneNote(target.pane.id, t("note.mailHeldBySilence"))
 
     const targetDepth = depthOf(target.pane.id, parentOf)
@@ -8685,6 +8727,7 @@ export function Workbench() {
     heldBySilenceNoted.delete(id)
     screenWaiting.delete(id)
     heldByMenuNoted.delete(id)
+    heldByDialogNoted.delete(id)
     rawWindows.forget(id)
     paneClasses.delete(id)
     modeTracker.forget(id)
@@ -8834,6 +8877,7 @@ export function Workbench() {
     deliverNowChanged(id, deliverNow.forget(id))
     // The note speaks of a process that may yet start: this one will not.
     if (heldBySilenceNoted.delete(id)) dropPaneNote(id, t("note.mailHeldBySilence"))
+    dropHeldByDialog(id)
     // Whatever was half-written belonged to the process that has gone. Left
     // behind, it would hold mail back from the session that starts next.
     records.typed.forget(id)
@@ -9909,6 +9953,7 @@ export function Workbench() {
       undrawnSince.set(paneId, Date.now())
       if (heldBySilenceNoted.delete(paneId)) dropPaneNote(paneId, t("note.mailHeldBySilence"))
       dropHeldByMenu(paneId)
+      dropHeldByDialog(paneId)
       dropPaneNote(paneId, t("task.heldByMenu"))
       dropPaneNote(paneId, t("task.heldByDialog"))
       dropPaneNote(paneId, t("task.notSent"))
@@ -10127,6 +10172,7 @@ export function Workbench() {
             if (menuTold) dropPaneNote(paneId, menuNote)
             if (silenceTold) dropPaneNote(paneId, t("task.notSent"))
             if (trustSeen) dropPaneNote(paneId, t("task.confirmTrust"))
+            dropHeldByDialog(paneId)
             // Closed with its task: «No, exit» on a trust dialog, or anything else. Said, in the pane and to whoever asked.
             if (running.get(paneId) === undefined && !running.relaunching(paneId) && paneExists(paneId)) {
               tellPane(paneId, t(trustSeen ? "task.exitedOnTrust" : "task.exitedUnsent"))
@@ -10185,7 +10231,7 @@ export function Workbench() {
             box !== undefined &&
             !(readySince !== undefined && pollAt - readySince >= OPENING_SETTLE_MS) &&
             !(deliverNow.armed(paneId, pollAt) && !asked)
-          if (boxRead && boxHolds && !asked && box !== "ready") noteMailHeld(paneId, request?.from)
+          if (boxRead && boxHolds && !asked && box !== "ready") noteMailHeld(paneId, request?.from, true)
           if (asked) {
             menuAt = Date.now()
             const note = t(dialogUp(paneId) ? "task.heldByDialog" : "task.heldByMenu")
@@ -10241,6 +10287,7 @@ export function Workbench() {
           stopOpeningPoll(poll)
           if (menuTold) dropPaneNote(paneId, menuNote)
           if (trustSeen) dropPaneNote(paneId, t("task.confirmTrust"))
+          dropHeldByDialog(paneId)
           setWb((w) =>
             updatePane(w, paneId, {
               status: "working",
@@ -10335,6 +10382,7 @@ export function Workbench() {
       undrawnSince.set(paneId, Date.now())
       if (heldBySilenceNoted.delete(paneId)) dropPaneNote(paneId, t("note.mailHeldBySilence"))
       dropHeldByMenu(paneId)
+      dropHeldByDialog(paneId)
       // Born at the pane's size, not the host's 120x30 (S77); undefined for a pane not yet fitted.
       const bornAt = ptySize(paneId)
       const paneToken = await freshPaneToken(host, paneId)
@@ -10406,7 +10454,7 @@ export function Workbench() {
           stepBoxAt = stepAt
           stepBox = !shellOnly && index === 1 ? composerNow(paneId) : undefined
           stepReadySince = stepBox === "ready" ? (stepReadySince ?? stepAt) : undefined
-          if (stepBox !== undefined && stepBox !== "ready" && !questionOpen(paneId)) noteMailHeld(paneId)
+          if (stepBox !== undefined && stepBox !== "ready" && !questionOpen(paneId)) noteMailHeld(paneId, undefined, true)
         }
         const boxHolds =
           stepBox !== undefined &&
