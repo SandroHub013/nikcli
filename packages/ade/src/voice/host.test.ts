@@ -322,7 +322,9 @@ describe("createAdeVoiceHost", () => {
     })
     const host = createAdeVoiceHost(deps)
 
-    await expect(host.insertText("p1", "testo")).rejects.toThrow()
+    await expect(host.insertText("p1", "testo")).rejects.toThrow(
+      "il pannello non è pronto a ricevere testo; riprova tra poco",
+    )
   })
 
   test("insertText never lets a dictated newline submit the line", async () => {

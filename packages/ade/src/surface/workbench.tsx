@@ -3137,10 +3137,10 @@ export function Workbench() {
    * dictated speech — and counts it as typed, because it is: nothing is
    * submitted until the user says so, and until then the line is theirs.
    *
-   * Not over a question, and the reason is where the text lands rather than an
-   * Enter: `dictationHold` says it at length. The words are not written and the
-   * pane says why, so the user answers with the keys or the card's buttons and
-   * dictates again afterwards.
+   * Not over a question, nor when the agent's box is not on screen, and the
+   * reason is where the text lands rather than an Enter: `dictationHold` says it
+   * at length. The words are not written and the pane says why, so the user
+   * answers with the keys or the card's buttons and dictates again afterwards.
    *
    * Says whether the text was written, for a caller that has to tell the user it was not.
    */
@@ -3170,7 +3170,7 @@ export function Workbench() {
     const paneId = wb().focusedId
     const text = formatDroppedPaths([path], project()?.root)
     if (!paneId || !text || !running.get(paneId)) return false
-    // False when the text was held back (a question is open, or a dictation is held): the viewer then stays and says so.
+    // False when the text was held back (a question is open, the agent's box is not on screen, or a dictation is held): the viewer then stays and says so.
     if (!typeAsUser(paneId, `${text} `)) return false
     // The caret goes to the terminal it wrote into, while the viewer is still open: the viewer gives the focus back to
     // whatever last took it from the sheet, so closing it next lands here and not on the tile behind it.

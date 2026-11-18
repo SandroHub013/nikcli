@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
+import { codeOf } from "../test-support/source-text"
 import { workbenchSource } from "../test-support/workbench-source"
 
 /**
@@ -39,14 +40,21 @@ describe("sendShotToFocused", () => {
 
   test("typeAsUser holds on composerNow === none but not on draft (MOD3-1)", () => {
     const typed = body("const typeAsUser", "  /**\n   * Gives a screenshot")
-    expect(typed).toContain('composerNow(paneId) === "none"')
-    expect(typed).not.toContain("!mayType")
+    expect(codeOf(typed)).toContain(
+      codeOf(
+        'if (dictationHold({ alive: true, questionOpen: questionOpen(paneId) }) || composerNow(paneId) === "none") {',
+      ),
+    )
+    expect(codeOf(typed)).not.toContain("!mayType")
+    expect(codeOf(typed)).not.toContain('"draft"')
   })
 
   test("typeAsUser tells note.textHeldByDialog when refocusedNow stands (F3 + F9)", () => {
     const typed = body("const typeAsUser", "  /**\n   * Gives a screenshot")
-    expect(typed).toContain("refocusedNow(getTerminal(paneId).terminal)")
-    expect(typed).toContain('t("note.textHeldByDialog")')
-    expect(typed).toContain('t("note.dictationHeld")')
+    expect(codeOf(typed)).toContain(
+      codeOf(
+        'hasTerminal(paneId) && refocusedNow(getTerminal(paneId).terminal) ? t("note.textHeldByDialog") : t("note.dictationHeld")',
+      ),
+    )
   })
 })
