@@ -192,6 +192,16 @@ describe("the catalogs", () => {
   test("the exceptions still exist, so the list cannot rot", () => {
     for (const key of SAME_IN_BOTH) expect(Object.keys(it)).toContain(key)
   })
+
+  test("note.deliverNowOffer advises Esc on open windows and stays within 150 chars (F6)", () => {
+    for (const [lang, cat] of [["it", it], ["en", en]] as const) {
+      const render = cat["note.deliverNowOffer"] as (agent: string) => string
+      expect(typeof render).toBe("function")
+      const withAgent = render("OpenCode Interpreter")
+      expect(withAgent).toContain("Esc")
+      expect(withAgent.length).toBeLessThanOrEqual(150)
+    }
+  })
 })
 
 /** Every text of a catalog, functions called with marked arguments, with its key. */
