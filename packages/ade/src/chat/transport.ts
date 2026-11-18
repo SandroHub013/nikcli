@@ -83,7 +83,8 @@ function abortError(): Error {
  *
  * The server is found or started on the first call, once; a start that fails
  * is tried again on the next call rather than remembered, because the usual
- * cause — ragu not installed yet, a server still loading — does not last.
+ * cause — a server still loading — does not last. If ragu is missing from PATH,
+ * the failure is final and not retried.
  */
 export function serverFetch(bridge: ServerBridge, options: { directory?: string } = {}): typeof globalThis.fetch {
   const base = new URL(SERVER_BASE)
@@ -91,8 +92,12 @@ export function serverFetch(bridge: ServerBridge, options: { directory?: string 
   const ensure = () => {
     started ??= bridge.start(options.directory).catch((error: unknown) => {
       started = undefined
+      if (error instanceof ChatRefused) throw error
       const message = error instanceof Error ? error.message : String(error)
-      throw error instanceof ChatRefused ? error : new ChatRefused(message)
+      if (message.includes("ragu non è nel PATH") || /ragu.*PATH/i.test(message)) {
+        throw new ChatRefused(message)
+      }
+      throw error instanceof Error ? error : new Error(message)
     })
     return started
   }

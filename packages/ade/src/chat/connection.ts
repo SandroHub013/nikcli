@@ -95,7 +95,7 @@ export type ChatConnection =
     }
   | { ok: false; problem?: string }
 
-/** A request refused because the user no longer trusts the project: not to be retried. */
+/** A request refused because the user no longer trusts the project, or ragu is not installed: not to be retried. */
 export class ChatRefused extends Error {
   override readonly name = "ChatRefused"
 }

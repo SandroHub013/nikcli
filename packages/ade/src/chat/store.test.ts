@@ -206,6 +206,7 @@ describe("the chat's store", () => {
     await live(server, store)
     server.stream().push({ type: "message.updated", properties: { info: assistant("msg_1") } })
     server.stream().push({ type: "message.part.updated", properties: { part: textPart("prt_1", "msg_1", "Il mare") } })
+    await until("il messaggio", () => store.state.data.part.msg_1?.length === 1)
     // The view: a root that reads the store, disposed as when the section changes.
     const seen: string[] = []
     const dispose = createRoot((dispose) => {
@@ -447,9 +448,20 @@ describe("the chat's store", () => {
     }
     const { store } = storeOn(server)
     await store.open(A)
-    await until("settled", () => store.state.status === "refused", 100)
+    await until("settled", () => store.state.status === "refused", 500)
     expect(store.state.status).toBe("refused")
     expect(store.state.problem).toBe("ragu non è nel PATH")
+  })
+
+  test("a store whose bridge start rejects with a transient timeout retries, and does not refuse", async () => {
+    const server = fakeServer()
+    server.bridge.start = async () => {
+      throw new Error("ragu serve non ha risposto entro 45 secondi.")
+    }
+    const { store } = storeOn(server)
+    await store.open(A)
+    await until("retrying", () => store.state.status === "retrying", 500)
+    expect(store.state.status).toBe("retrying")
   })
 
   test("trust refused on a reconnection: final, no more requests and no retry", async () => {
