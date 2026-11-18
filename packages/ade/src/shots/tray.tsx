@@ -217,7 +217,14 @@ export function ShotTray(props: ShotTrayProps) {
     <Show
       when={props.shots.length > 0}
       fallback={
-        <Show when={props.unavailable || props.folder}>
+        <Show
+          when={props.unavailable || props.folder}
+          fallback={
+            <aside data-component="shot-tray" data-empty="true">
+              <span data-slot="shot-tray-empty">{t("shots.asking")}</span>
+            </aside>
+          }
+        >
           <aside data-component="shot-tray" data-empty="true">
             {/* A share was not read, so "nothing in this folder" would be a claim about what was not looked at. */}
             <Show when={!props.network}>

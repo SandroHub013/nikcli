@@ -1,5 +1,21 @@
-import { describe, expect, test } from "bun:test"
+import { afterAll, describe, expect, mock, test } from "bun:test"
 import { createRoot } from "solid-js"
+import { GlobalRegistrator } from "@happy-dom/global-registrator"
+
+if (typeof window === "undefined") {
+  GlobalRegistrator.register()
+}
+
+const realEvent = await import("@tauri-apps/api/event")
+mock.module("@tauri-apps/api/event", () => ({
+  ...realEvent,
+  listen: async () => () => {},
+}))
+
+afterAll(() => {
+  mock.module("@tauri-apps/api/event", () => realEvent)
+})
+
 import { createShotSource } from "./source"
 
 /**
@@ -108,6 +124,33 @@ describe("createShotSource with a host", () => {
       // Before the await: the source's listener would otherwise reach for a host this test does not have.
       dispose()
       expect(await loading).toEqual(picture)
+    })
+  })
+
+  test("a focus event while in state 'none' re-checks shots_dir and moves to watching", async () => {
+    let callCount = 0
+    const ask = (async (command: string) => {
+      if (command === "shots_dir") {
+        callCount++
+        if (callCount === 1) return null
+        return { dir: "C:/Pictures/Screenshots", network: false }
+      }
+      if (command === "shots_recent") return []
+      if (command === "shots_watch") return undefined
+      return undefined
+    }) as never
+
+    await createRoot(async (dispose) => {
+      const source = createShotSource(true, ask)
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(source.state()).toBe("none")
+
+      window.dispatchEvent(new Event("focus"))
+      await new Promise((resolve) => setTimeout(resolve, 50))
+
+      expect(source.state()).toBe("watching")
+      expect(source.folder()).toBe("C:/Pictures/Screenshots")
+      dispose()
     })
   })
 })

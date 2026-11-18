@@ -313,7 +313,7 @@ fn default_dir() -> Option<PathBuf> {
         configured.as_deref(),
         &one_drive_roots(home.as_deref()),
     );
-    pick_shot_dir(&candidates, chosen.as_deref())
+    pick_shot_dir(&candidates, chosen.as_deref(), configured.as_deref())
 }
 
 /// The folders this platform may be saving screenshots in, likeliest first.
@@ -388,7 +388,11 @@ pub fn shot_dir_candidates(
 /// A share is never listed (that would send the user's hash), so it cannot win
 /// on pictures; it is named only when no local folder has any, so that the tray
 /// can say why it is empty instead of looking broken.
-fn pick_shot_dir(candidates: &[PathBuf], chosen: Option<&Path>) -> Option<PathBuf> {
+fn pick_shot_dir(
+    candidates: &[PathBuf],
+    chosen: Option<&Path>,
+    known: Option<&Path>,
+) -> Option<PathBuf> {
     // Asked before `is_dir`: on a UNC path the latter talks to the server,
     // which sends the user's hash before the tray has even named the folder.
     if let Some(chosen) = chosen {
@@ -409,6 +413,7 @@ fn pick_shot_dir(candidates: &[PathBuf], chosen: Option<&Path>) -> Option<PathBu
     }
     best.map(|(dir, _)| dir.clone())
         .or_else(|| candidates.iter().find(|path| names_a_folder(path)).cloned())
+        .or_else(|| known.map(Path::to_path_buf))
 }
 
 /// A folder that exists, or a share that is only named.
@@ -662,7 +667,10 @@ fn configured_dir() -> Option<PathBuf> {
 
     // A redirected Pictures can be a share: `names_a_folder` asks the text
     // before the disk, so the share is named without being opened.
-    known_folder(&FOLDERID_Screenshots).filter(|path| names_a_folder(path))
+    // Keep a local FOLDERID_Screenshots even when not on disk yet.
+    known_folder(&FOLDERID_Screenshots).filter(|path| {
+        !crate::is_network_path(&path.to_string_lossy()) || names_a_folder(path)
+    })
 }
 
 /// A known folder's path, without the shell checking that it exists.
@@ -819,7 +827,7 @@ pub async fn shots_watch(
         let _ = claim(&watch, &path);
         return Err(format!("percorso di rete non consentito: {dir}"));
     }
-    if !path.is_dir() {
+    if path.exists() && !path.is_dir() {
         return Err(format!("{dir} non è una cartella"));
     }
 
@@ -1511,7 +1519,7 @@ mod dir_tests {
         std::fs::create_dir_all(&used).expect("cartella usata");
         image_at(&used, "Screenshot 1.png", 1_700_000_000);
 
-        let found = pick_shot_dir(&[empty.clone(), used.clone()], None);
+        let found = pick_shot_dir(&[empty.clone(), used.clone()], None, None);
         assert_eq!(found, Some(used));
 
         let _ = std::fs::remove_dir_all(&root);
@@ -1529,7 +1537,7 @@ mod dir_tests {
         image_at(&known, "Screenshot 1.png", 1_600_000_000);
         image_at(&used, "Screenshot 1.png", 1_700_000_000);
 
-        let found = pick_shot_dir(&[known, used.clone()], None);
+        let found = pick_shot_dir(&[known, used.clone()], None, None);
         assert_eq!(found, Some(used));
 
         let _ = std::fs::remove_dir_all(&root);
@@ -1546,7 +1554,7 @@ mod dir_tests {
         std::fs::create_dir_all(&used).expect("cartella usata");
         image_at(&used, "Screenshot 1.png", 1_700_000_000);
 
-        assert_eq!(pick_shot_dir(&[known, used.clone()], None), Some(used));
+        assert_eq!(pick_shot_dir(&[known, used.clone()], None, None), Some(used));
 
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -1561,11 +1569,11 @@ mod dir_tests {
         std::fs::create_dir_all(&known).expect("cartella nota");
         std::fs::create_dir_all(&other).expect("altra cartella");
 
-        assert_eq!(pick_shot_dir(&[known.clone(), other.clone()], None), Some(known.clone()));
+        assert_eq!(pick_shot_dir(&[known.clone(), other.clone()], None, None), Some(known.clone()));
 
         image_at(&known, "Screenshot 1.png", 1_700_000_000);
         image_at(&other, "Screenshot 2.png", 1_700_000_000);
-        assert_eq!(pick_shot_dir(&[known.clone(), other], None), Some(known));
+        assert_eq!(pick_shot_dir(&[known.clone(), other], None, None), Some(known));
 
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -1581,7 +1589,7 @@ mod dir_tests {
         std::fs::create_dir_all(&chosen).expect("cartella scelta");
         image_at(&used, "Screenshot 1.png", 1_700_000_000);
 
-        let found = pick_shot_dir(&[empty, used, chosen.clone()], Some(&chosen));
+        let found = pick_shot_dir(&[empty, used, chosen.clone()], Some(&chosen), None);
         assert_eq!(found, Some(chosen));
 
         let _ = std::fs::remove_dir_all(&root);
@@ -1596,7 +1604,7 @@ mod dir_tests {
         image_at(&used, "Screenshot 1.png", 1_700_000_000);
         let gone = root.join("Non Esiste");
 
-        let found = pick_shot_dir(&[gone, used.clone()], Some(&root.join("Non Esiste")));
+        let found = pick_shot_dir(&[gone, used.clone()], Some(&root.join("Non Esiste")), None);
         assert_eq!(found, Some(used));
 
         let _ = std::fs::remove_dir_all(&root);
@@ -1610,7 +1618,7 @@ mod dir_tests {
         let empty = root.join("Pictures").join("Screenshots");
         std::fs::create_dir_all(&empty).expect("cartella vuota");
 
-        assert_eq!(pick_shot_dir(&[empty.clone()], None), Some(empty));
+        assert_eq!(pick_shot_dir(&[empty.clone()], None, None), Some(empty));
 
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -1916,7 +1924,7 @@ mod dir_tests {
         image_at(&desktop, "vacanza.png", 1_800_000_000);
         image_at(&used, "Screenshot 1.png", 1_700_000_000);
 
-        let found = pick_shot_dir(&[desktop, used.clone()], None);
+        let found = pick_shot_dir(&[desktop, used.clone()], None, None);
         assert_eq!(found, Some(used));
 
         let _ = std::fs::remove_dir_all(&root);
@@ -1924,7 +1932,7 @@ mod dir_tests {
 
     #[test]
     fn no_existing_folder_means_no_place_to_watch() {
-        assert_eq!(pick_shot_dir(&[PathBuf::from("/davvero/non/esiste")], None), None);
+        assert_eq!(pick_shot_dir(&[PathBuf::from("/davvero/non/esiste")], None, None), None);
     }
 
     /// The path is never opened: naming it is what lets the tray say the
@@ -1932,8 +1940,23 @@ mod dir_tests {
     #[test]
     fn a_share_is_named_even_when_it_is_not_read() {
         let share = PathBuf::from(r"\\server\shots");
-        assert_eq!(pick_shot_dir(&[share.clone()], None), Some(share.clone()));
-        assert_eq!(pick_shot_dir(&[], Some(&share)), Some(share));
+        assert_eq!(pick_shot_dir(&[share.clone()], None, None), Some(share.clone()));
+        assert_eq!(pick_shot_dir(&[], Some(&share), None), Some(share));
+    }
+
+    #[test]
+    fn a_missing_known_folder_is_kept_over_no_folder() {
+        let root = scratch("missing-known");
+        let known = root.join("Pictures").join("Screenshots");
+        let onedrive = root.join("OneDrive").join("Pictures").join("Screenshots");
+        // Neither folder is created on disk.
+        assert_eq!(
+            pick_shot_dir(&[known.clone(), onedrive.clone()], None, Some(&known)),
+            Some(known.clone())
+        );
+        // With no known folder, a missing guess still returns None.
+        assert_eq!(pick_shot_dir(&[onedrive], None, None), None);
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
