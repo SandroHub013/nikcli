@@ -911,6 +911,7 @@ export const en: Messages = {
   "shots.asking": "Looking for the screenshots folder…",
   "shots.noFolder": "Screenshots will appear here. Press Win+PrtScn, or choose a folder.",
   "shots.emptyFolder": "No screenshots in this folder yet",
+  "chat.raguNeeded": "Ragù Code is needed",
   "shots.choose": "Choose folder…",
   "shots.network": "Network folder: shown, not read",
   "shots.error.notAFolder": "That is not a folder.",

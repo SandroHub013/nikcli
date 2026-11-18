@@ -928,6 +928,7 @@ export const it = {
   "shots.asking": "Cerco la cartella delle schermate…",
   "shots.noFolder": "Le schermate compariranno qui. Premi Win+Stamp, o scegli una cartella.",
   "shots.emptyFolder": "Nessuna schermata in questa cartella",
+  "chat.raguNeeded": "Serve Ragù Code",
   "shots.choose": "Scegli cartella…",
   "shots.network": "Cartella di rete: mostrata, non letta",
   "shots.error.notAFolder": "Questa non è una cartella.",

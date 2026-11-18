@@ -440,6 +440,18 @@ describe("the chat's store", () => {
     expect(failing.state.data.session.map((s) => s.id)).toEqual(["ses_1"])
   })
 
+  test("a store whose bridge start rejects with 'ragu non è nel PATH' ends in refused, not retrying", async () => {
+    const server = fakeServer()
+    server.bridge.start = async () => {
+      throw new Error("ragu non è nel PATH")
+    }
+    const { store } = storeOn(server)
+    await store.open(A)
+    await until("settled", () => store.state.status === "refused", 100)
+    expect(store.state.status).toBe("refused")
+    expect(store.state.problem).toBe("ragu non è nel PATH")
+  })
+
   test("trust refused on a reconnection: final, no more requests and no retry", async () => {
     const server = fakeServer()
     let trusted = true

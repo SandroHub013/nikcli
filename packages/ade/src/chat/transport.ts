@@ -17,6 +17,7 @@
  */
 
 import { t } from "../i18n"
+import { ChatRefused } from "./connection"
 
 /** The base URL the SDK is given. Not an address anything listens on. */
 export const SERVER_BASE = "http://ragu.ade"
@@ -90,7 +91,8 @@ export function serverFetch(bridge: ServerBridge, options: { directory?: string 
   const ensure = () => {
     started ??= bridge.start(options.directory).catch((error: unknown) => {
       started = undefined
-      throw error
+      const message = error instanceof Error ? error.message : String(error)
+      throw error instanceof ChatRefused ? error : new ChatRefused(message)
     })
     return started
   }

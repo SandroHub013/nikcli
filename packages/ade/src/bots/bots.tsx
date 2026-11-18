@@ -138,6 +138,7 @@ import { appGatewayPanelDeps } from "./gateway/bridge"
 import { GatewaySection } from "./gateway/panel"
 import { localRemoteStore } from "./gateway/remote"
 import { openExternally } from "../browser/host-bridge"
+import { installFor } from "../session-new/install"
 import {
   addRoutine,
   createRoutineScheduler,
@@ -1494,8 +1495,21 @@ function Thread(props: {
 }) {
   const [draft, setDraft] = createSignal("")
   const [why, setWhy] = createSignal(false)
+  const [hasRagu, setHasRagu] = createSignal(true)
   let scroller: HTMLDivElement | undefined
   let field: HTMLTextAreaElement | undefined
+
+  onMount(() => {
+    void (async () => {
+      try {
+        const { invoke } = await import("@tauri-apps/api/core")
+        const found = await invoke<string | null>("pty_which", { command: "ragu" })
+        setHasRagu(Boolean(found))
+      } catch {
+        // Outside Tauri, keep true
+      }
+    })()
+  })
 
   // Kept at the bottom as it grows, the way a conversation is read.
   createEffect(
@@ -1878,130 +1892,148 @@ function Thread(props: {
       </Show>
       <Show when={attachProblem()}>{(text) => <p data-slot="bots-problem">{text()}</p>}</Show>
 
-      <form
-        data-slot="bots-composer"
-        onSubmit={(event) => {
-          event.preventDefault()
-          submit()
-        }}
-        onDragOver={(event) => {
-          const data = event.dataTransfer
-          if (!data || !(dragCarriesPaths(data) || data.types.includes("Files"))) return
-          event.preventDefault()
-          data.dropEffect = "copy"
-        }}
-        onDrop={(event) => {
-          const data = event.dataTransfer
-          if (!data || !(dragCarriesPaths(data) || data.files.length > 0)) return
-          event.preventDefault()
-          dropFiles(data)
-        }}
+      <Show
+        when={hasRagu()}
+        fallback={
+          <div data-slot="bots-ragu-missing">
+            <span>{t("chat.raguNeeded")}</span>
+            <button
+              type="button"
+              data-slot="bots-ragu-install"
+              onClick={() =>
+                void openExternally(installFor("ragu")?.page ?? "https://github.com/SandroHub013/nikcli")
+              }
+            >
+              {t("install.page")}
+            </button>
+          </div>
+        }
       >
-        <textarea
-          ref={(el) => (field = el)}
-          data-slot="bots-composer-field"
-          aria-label={t("bots.composer.label", props.bot.identifier)}
-          rows="1"
-          value={draft()}
-          placeholder={
-            props.others.length > 0
-              ? t("bots.composer.placeholderOthers", props.bot.identifier)
-              : t("bots.composer.placeholder", props.bot.identifier)
-          }
-          onInput={(event) => setDraft(event.currentTarget.value)}
-          onPaste={(event) => {
-            const data = event.clipboardData
-            if (!data) return
-            const pictures = Array.from(data.files).filter((file) => pastedExtension(file.type) !== undefined)
-            // Words copied with a picture (a page, a document) still paste as words.
-            if (pictures.length === 0 || data.types.includes("text/plain")) return
+        <form
+          data-slot="bots-composer"
+          onSubmit={(event) => {
             event.preventDefault()
-            addPictures(pictures)
+            submit()
           }}
-          onKeyDown={(event) => {
-            // Enter sends, Shift+Enter breaks the line: what every messenger does.
-            if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
-              event.preventDefault()
-              submit()
+          onDragOver={(event) => {
+            const data = event.dataTransfer
+            if (!data || !(dragCarriesPaths(data) || data.types.includes("Files"))) return
+            event.preventDefault()
+            data.dropEffect = "copy"
+          }}
+          onDrop={(event) => {
+            const data = event.dataTransfer
+            if (!data || !(dragCarriesPaths(data) || data.files.length > 0)) return
+            event.preventDefault()
+            dropFiles(data)
+          }}
+        >
+          <textarea
+            ref={(el) => (field = el)}
+            data-slot="bots-composer-field"
+            aria-label={t("bots.composer.label", props.bot.identifier)}
+            rows="1"
+            value={draft()}
+            placeholder={
+              props.others.length > 0
+                ? t("bots.composer.placeholderOthers", props.bot.identifier)
+                : t("bots.composer.placeholder", props.bot.identifier)
             }
-          }}
-        />
-        {/* Under the text, in the same box: the bot's model and effort, then Invia (as the Chat's). */}
-        <div data-slot="bots-composer-row">
-          <button
-            type="button"
-            data-slot="bots-attach"
-            aria-label={t("bots.attach.add")}
-            title={props.projectRoot ? t("bots.attach.addHint") : t("bots.attach.noProject")}
-            disabled={!props.projectRoot}
-            onClick={() => void pickFiles()}
-          >
-            +
-          </button>
-          <Show
-            when={runner().id === "ragu"}
-            fallback={
-              <ChipMenu
-                kind="model"
+            onInput={(event) => setDraft(event.currentTarget.value)}
+            onPaste={(event) => {
+              const data = event.clipboardData
+              if (!data) return
+              const pictures = Array.from(data.files).filter((file) => pastedExtension(file.type) !== undefined)
+              // Words copied with a picture (a page, a document) still paste as words.
+              if (pictures.length === 0 || data.types.includes("text/plain")) return
+              event.preventDefault()
+              addPictures(pictures)
+            }}
+            onKeyDown={(event) => {
+              // Enter sends, Shift+Enter breaks the line: what every messenger does.
+              if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+                event.preventDefault()
+                submit()
+              }
+            }}
+          />
+          {/* Under the text, in the same box: the bot's model and effort, then Invia (as the Chat's). */}
+          <div data-slot="bots-composer-row">
+            <button
+              type="button"
+              data-slot="bots-attach"
+              aria-label={t("bots.attach.add")}
+              title={props.projectRoot ? t("bots.attach.addHint") : t("bots.attach.noProject")}
+              disabled={!props.projectRoot}
+              onClick={() => void pickFiles()}
+            >
+              +
+            </button>
+            <Show
+              when={runner().id === "ragu"}
+              fallback={
+                <ChipMenu
+                  kind="model"
+                  label={t("bots.engine.model")}
+                  text={model() || t("bots.engine.modelDefaultOf", runner().label)}
+                  value={model()}
+                  items={runnerModelItems(runner().models, model(), t("bots.engine.modelDefaultOf", runner().label))}
+                  onChoose={chooseModel}
+                />
+              }
+            >
+              <ModelPicker
                 label={t("bots.engine.model")}
-                text={model() || t("bots.engine.modelDefaultOf", runner().label)}
                 value={model()}
-                items={runnerModelItems(runner().models, model(), t("bots.engine.modelDefaultOf", runner().label))}
+                gone={gone()}
+                models={props.models}
+                {...(props.catalog ? { state: props.catalog.state() } : {})}
+                recent={props.catalog?.recent() ?? []}
+                defaultLabel={t("bots.engine.raguDefault")}
+                {...(props.bot.model ? { kept: props.bot.model } : {})}
+                fallback={(value) => botModelLabel(value)}
+                onOpen={() => props.catalog?.open()}
+                onRetry={() => props.catalog?.retry()}
                 onChoose={chooseModel}
               />
-            }
-          >
-            <ModelPicker
-              label={t("bots.engine.model")}
-              value={model()}
-              gone={gone()}
-              models={props.models}
-              {...(props.catalog ? { state: props.catalog.state() } : {})}
-              recent={props.catalog?.recent() ?? []}
-              defaultLabel={t("bots.engine.raguDefault")}
-              {...(props.bot.model ? { kept: props.bot.model } : {})}
-              fallback={(value) => botModelLabel(value)}
-              onOpen={() => props.catalog?.open()}
-              onRetry={() => props.catalog?.retry()}
-              onChoose={chooseModel}
-            />
-          </Show>
-          <Show when={!efforts().none}>
-            <EffortPicker
-              label={t("bots.engine.effort")}
-              value={efforts().stale ? "" : effort()}
-              levels={[...(efforts().kept ? [efforts().kept!] : []), ...efforts().options]}
-              onChoose={chooseEffort}
-            />
-          </Show>
-          <span data-slot="bots-composer-gap" />
-          <span data-slot="bots-composer-cap">
-            <Show when={props.talk.lastTurn}>
-              {(turn) => (
-                <>
-                  {t("bots.lastTurn.label")} {turn().model || t("bots.lastTurn.unknownModel")}
-                  {" · "}
-                  <LastFigures
-                    {...(turn().mode ? { mode: turn().mode } : {})}
-                    runner={props.bot.runner}
-                    model={turn().model}
-                    tokens={turn().tokens}
-                    costUsd={turn().costUsd}
-                  />
-                  {" · "}
-                </>
-              )}
             </Show>
-            <Show when={hasThreadTotals(props.talk)}>
-              {t("bots.conversation.total")}{" "}
-              <ThreadTotals runner={props.bot.runner} model={props.bot.model} talk={props.talk} />
+            <Show when={!efforts().none}>
+              <EffortPicker
+                label={t("bots.engine.effort")}
+                value={efforts().stale ? "" : effort()}
+                levels={[...(efforts().kept ? [efforts().kept!] : []), ...efforts().options]}
+                onChoose={chooseEffort}
+              />
             </Show>
-          </span>
-          <button type="submit" data-slot="bots-send" disabled={busy() || draft().trim().length === 0}>
-            {t("bots.send")}
-          </button>
-        </div>
-      </form>
+            <span data-slot="bots-composer-gap" />
+            <span data-slot="bots-composer-cap">
+              <Show when={props.talk.lastTurn}>
+                {(turn) => (
+                  <>
+                    {t("bots.lastTurn.label")} {turn().model || t("bots.lastTurn.unknownModel")}
+                    {" · "}
+                    <LastFigures
+                      {...(turn().mode ? { mode: turn().mode } : {})}
+                      runner={props.bot.runner}
+                      model={turn().model}
+                      tokens={turn().tokens}
+                      costUsd={turn().costUsd}
+                    />
+                    {" · "}
+                  </>
+                )}
+              </Show>
+              <Show when={hasThreadTotals(props.talk)}>
+                {t("bots.conversation.total")}{" "}
+                <ThreadTotals runner={props.bot.runner} model={props.bot.model} talk={props.talk} />
+              </Show>
+            </span>
+            <button type="submit" data-slot="bots-send" disabled={busy() || draft().trim().length === 0}>
+              {t("bots.send")}
+            </button>
+          </div>
+        </form>
+      </Show>
     </div>
   )
 }
