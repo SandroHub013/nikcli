@@ -7,6 +7,7 @@ import {
   serializeRecents,
   parseRecents,
   withMissing,
+  cleanOwnRecentsOnce,
   type RecentEntry,
 } from "./recent"
 
@@ -131,5 +132,28 @@ describe("missing roots", () => {
     expect(isMissingRecent(gone, "c:\\a")).toBe(true)
     expect(recents).toHaveLength(1)
     expect(isMissingRecent(withMissing(gone, "C:/a", false), "C:/a")).toBe(false)
+  })
+
+  it("cleans own folders on first start and marks the cleanup done", () => {
+    const store = new Map<string, string>()
+    const storage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+    }
+    const initial: RecentEntry[] = [
+      { root: "C:/Users/x/AppData/Local/ADE", name: "ADE", openedAt: 1 },
+      { root: "C:/Users/x", name: "x", openedAt: 2 },
+      { root: "C:/Users/x/work/repo", name: "repo", openedAt: 3 },
+    ]
+    const first = cleanOwnRecentsOnce(initial, ["C:/Users/x/AppData/Local/ADE", "C:/Users/x"], storage)
+    expect(first.changed).toBe(true)
+    expect(first.list).toHaveLength(1)
+    expect(first.list[0].root).toBe("C:/Users/x/work/repo")
+    expect(storage.getItem("ade.recents.ownCleaned")).toBe("1")
+
+    // On subsequent start, even if home is present in recents, it is kept because cleanup runs once
+    const second = cleanOwnRecentsOnce(initial, ["C:/Users/x/AppData/Local/ADE", "C:/Users/x"], storage)
+    expect(second.changed).toBe(false)
+    expect(second.list).toHaveLength(3)
   })
 })

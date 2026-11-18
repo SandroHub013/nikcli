@@ -104,6 +104,7 @@
     "allow-mailbox-state",
     "allow-mailbox-take",
     "allow-mailbox-taken",
+    "allow-own-folders",
     "allow-path-exists",
     "allow-pty-ack",
     "allow-pty-kill",

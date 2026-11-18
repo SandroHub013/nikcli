@@ -35,7 +35,7 @@ export interface Project {
  * no recent project) none is opened and the empty project screen shows «Apri una cartella» (audit 2026-11-02, UX-5).
  * A user with a history keeps the old fallback, and a saved workspace with sessions never opens on nothing, except when
  * its project is gone: the sessions still restart, each in its own folder (the workbench's resume block does not need
- * an open project).
+ * an open project). Own folders belonging to ADE itself or the user's home are refused even when saved or started from.
  */
 export function startFolder(input: {
   /** The project folder the saved workspace names. */
@@ -51,12 +51,22 @@ export function startFolder(input: {
   hasPanes: boolean
   /** The folder ADE was started from; empty when the host cannot say. */
   here: string
+  /** Folders belonging to ADE itself or user home that should not open as projects. */
+  ownFolders?: string[]
 }): string | undefined {
-  if (input.saved && !input.gone) return input.saved
+  const isOwn = (p: string | undefined): boolean => {
+    if (!p || !input.ownFolders?.length) return false
+    const norm = normalizePath(p).replace(/\/+$/, "").toLowerCase()
+    return input.ownFolders.some((f) => normalizePath(f).replace(/\/+$/, "").toLowerCase() === norm)
+  }
+
+  const savedGoneOrOwn = input.gone || isOwn(input.saved)
+  if (input.saved && !savedGoneOrOwn) return input.saved
   // The last project vanished: not the folder ADE was started from (its own install folder, or home), but the empty
   // project screen, where the user picks one (UX-5).
-  if (input.saved && input.gone) return undefined
+  if (input.saved && savedGoneOrOwn) return undefined
   if (!input.saved && !input.hasRecents && !input.hasPanes) return undefined
+  if (isOwn(input.here)) return undefined
   return input.here || undefined
 }
 

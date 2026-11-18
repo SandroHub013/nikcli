@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test"
 import { createRaguClient } from "@ragu/sdk/client"
+import { ChatRefused } from "./connection"
 import { SERVER_BASE, serverFetch, type ProxyEvent, type ProxyRequest, type ServerBridge } from "./transport"
 
 /*
@@ -194,6 +195,29 @@ describe("il trasporto della chat", () => {
     await expect(fetch(`${SERVER_BASE}/provider`)).rejects.toThrow("ragu non è nel PATH")
     expect((await fetch(`${SERVER_BASE}/provider`)).status).toBe(200)
     expect(fake.starts()).toBe(2)
+  })
+
+  /*
+   * Only the exact sentence `serve.rs` writes for a missing ragu is a final refusal. The old test also took any
+   * message that named ragu and said «path» in any case, and `ragu serve` exiting with a path in its stderr is not that.
+   */
+  test("only the sentence serve.rs writes for a missing ragu is final; a lower-case path in another error retries", async () => {
+    const failWith = async (message: string) => {
+      const fake = fakeBridge()
+      fake.bridge.start = async () => {
+        throw new Error(message)
+      }
+      const error = await serverFetch(fake.bridge)(`${SERVER_BASE}/provider`).catch((caught: unknown) => caught)
+      return error
+    }
+    const missing = await failWith("ragu non è nel PATH: installalo per usare chat e assistente.")
+    expect(missing).toBeInstanceOf(ChatRefused)
+
+    const exited = await failWith("ragu serve è uscito senza annunciare una porta: cannot read path C:/x/config")
+    expect(exited).toBeInstanceOf(Error)
+    expect(exited).not.toBeInstanceOf(ChatRefused)
+    const lower = await failWith("ragu: could not open the path it was given")
+    expect(lower).not.toBeInstanceOf(ChatRefused)
   })
 
   test("una risposta senza corpo (204) non rompe il Response", async () => {

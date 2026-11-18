@@ -40,6 +40,28 @@ export function removeRecent(list: readonly RecentEntry[], root: string): Recent
   return list.filter((e) => recentKey(e.root) !== key)
 }
 
+export const OWN_RECENTS_CLEANED_KEY = "ade.recents.ownCleaned"
+
+/**
+ * Removes ADE's own folders (such as install dir and home) from recents, once.
+ * A user who intentionally opens home later keeps it in recents.
+ */
+export function cleanOwnRecentsOnce(
+  recents: readonly RecentEntry[],
+  ownFolders: readonly string[],
+  storage: { getItem(k: string): string | null; setItem(k: string, v: string): void },
+): { list: RecentEntry[]; changed: boolean } {
+  if (storage.getItem(OWN_RECENTS_CLEANED_KEY)) {
+    return { list: [...recents], changed: false }
+  }
+  let cur = [...recents]
+  for (const f of ownFolders) {
+    cur = removeRecent(cur, f)
+  }
+  storage.setItem(OWN_RECENTS_CLEANED_KEY, "1")
+  return { list: cur, changed: cur.length !== recents.length }
+}
+
 /**
  * The identity of a project root, for deduplication.
  *

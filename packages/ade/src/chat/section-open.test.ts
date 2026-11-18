@@ -65,7 +65,9 @@ describe("C9: showing the Chat calls nothing", () => {
 
   test("lint: on mount the view calls only sectionShown, never use() or another store method", () => {
     const view = readFileSync(new URL("./chat.tsx", import.meta.url), "utf8")
-    const mount = view.slice(view.indexOf("onMount(() => {"), view.indexOf("})", view.indexOf("onMount(() => {")))
+    // The view has more than one onMount (one probes for ragu); the one under test is the one that shows the section.
+    const start = view.lastIndexOf("onMount(() => {", view.indexOf("sectionShown(store"))
+    const mount = view.slice(start, view.indexOf("})", start))
     expect(mount).toMatch(/sectionShown\(store, props\.projectRoot, applyCatalog\)/)
     expect(mount).not.toMatch(/\buse\(\)|store\.(?!state)\w+\(/)
   })

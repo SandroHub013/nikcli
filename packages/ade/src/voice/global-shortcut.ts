@@ -256,6 +256,21 @@ export interface RegisterVoiceShortcutsDeps {
 }
 
 /**
+ * Whether voice is set up so that system-wide hotkeys should be claimed.
+ * With default settings and no key configured, chords are not claimed
+ * so they do not steal hotkeys (e.g. Ctrl+Shift+J/K) from other apps.
+ */
+export function isVoiceSetUp(
+  settings: Pick<VoiceSettings, "agentChord" | "transcriptionChord"> & { openRouterApiKey?: string },
+): boolean {
+  if (Boolean(settings.openRouterApiKey?.trim())) return true
+  if (settings.agentChord === "mod+shift+k" && settings.transcriptionChord === "mod+shift+j") {
+    return false
+  }
+  return true
+}
+
+/**
  * Claims both voice chords system-wide, each on its own.
  *
  * One `try` around both used to mean the first refusal — a chord another
@@ -265,13 +280,17 @@ export interface RegisterVoiceShortcutsDeps {
  * outside the feature simply did not work.
  */
 export async function registerVoiceShortcuts(
-  settings: Pick<VoiceSettings, "agentChord" | "transcriptionChord">,
+  settings: Pick<VoiceSettings, "agentChord" | "transcriptionChord"> & { openRouterApiKey?: string },
   deps: RegisterVoiceShortcutsDeps,
 ): Promise<{ registered: VoiceMode[]; failed: { mode: VoiceMode; chord: string; problem: string }[] }> {
   try {
     await deps.unregisterAll()
   } catch {
     // Nothing held, or the plugin is gone: the registrations below say so themselves.
+  }
+
+  if (!isVoiceSetUp(settings)) {
+    return { registered: [], failed: [] }
   }
 
   const windows = deps.windows ?? isWindowsRuntime()

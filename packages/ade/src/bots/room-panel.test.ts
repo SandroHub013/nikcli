@@ -72,4 +72,10 @@ describe("B8b: the room in the Bot section", () => {
       expect(key in itDict).toBe(true)
     }
   })
+
+  test("lint: the room composer is gated when ragu is missing and shows the ragu needed notice", () => {
+    expect(panel).toContain('data-slot="bots-ragu-missing"')
+    expect(panel).toContain("props.hasRagu ?? true")
+    expect(bots).toContain("hasRagu={hasRagu()}")
+  })
 })

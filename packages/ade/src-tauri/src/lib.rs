@@ -1825,6 +1825,20 @@ async fn home_dir() -> Result<String, String> {
         .ok_or_else(|| "impossibile determinare la home".to_string())
 }
 
+#[tauri::command]
+async fn own_folders() -> Result<Vec<String>, String> {
+    let mut folders = Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            folders.push(parent.to_string_lossy().into_owned());
+        }
+    }
+    if let Some(home) = dirs::home_dir() {
+        folders.push(home.to_string_lossy().into_owned());
+    }
+    Ok(folders)
+}
+
 /// Whether the path is there. `try_exists`, not `exists`: a check that fails (a share whose VPN is off, a denied folder) is an error
 /// the page can tell from «not there», which `exists()` made `false` (full review 2026-10-06, sessions 16). Off the async worker as
 /// well: a share that does not answer can wait a long time.
@@ -2813,6 +2827,7 @@ pub fn run() {
             write_bytes,
             current_dir,
             home_dir,
+            own_folders,
             path_exists,
             stats::system_stats,
             usage::transcript_usage,

@@ -17,6 +17,7 @@
  */
 
 import { t } from "../i18n"
+import { ChatRefused } from "./connection"
 
 /** The base URL the SDK is given. Not an address anything listens on. */
 export const SERVER_BASE = "http://ragu.ade"
@@ -82,7 +83,8 @@ function abortError(): Error {
  *
  * The server is found or started on the first call, once; a start that fails
  * is tried again on the next call rather than remembered, because the usual
- * cause — ragu not installed yet, a server still loading — does not last.
+ * cause — a server still loading — does not last. If ragu is missing from PATH,
+ * the failure is final and not retried.
  */
 export function serverFetch(bridge: ServerBridge, options: { directory?: string } = {}): typeof globalThis.fetch {
   const base = new URL(SERVER_BASE)
@@ -90,7 +92,13 @@ export function serverFetch(bridge: ServerBridge, options: { directory?: string 
   const ensure = () => {
     started ??= bridge.start(options.directory).catch((error: unknown) => {
       started = undefined
-      throw error
+      if (error instanceof ChatRefused) throw error
+      const message = error instanceof Error ? error.message : String(error)
+      // The sentence `serve.rs` writes when ragu is not found, and only that: another error that names a path is not it.
+      if (message.includes("ragu non è nel PATH")) {
+        throw new ChatRefused(message)
+      }
+      throw error instanceof Error ? error : new Error(message)
     })
     return started
   }

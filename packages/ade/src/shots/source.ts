@@ -21,6 +21,8 @@ export interface ShotLocation {
   dir: string
   /** A share: named in the tray, never opened. */
   network: boolean
+  /** Whether the folder does not exist on disk yet. */
+  missing?: boolean
 }
 
 export type ShotState = "asking" | "watching" | "none" | "network"
@@ -38,6 +40,8 @@ export interface ShotSource {
   load: (path: string) => Promise<Uint8Array | null>
   /** Where the host is watching, once it has answered. Undefined in the browser. */
   folder: () => string | undefined
+  /** Whether the watched folder does not exist on disk yet (e.g. before first Win+Stamp). */
+  missing: () => boolean
   /**
    * Whether this machine has a screenshots folder at all, and whether it is on
    * a network share.
@@ -80,6 +84,7 @@ async function call<T>(command: string, args?: Record<string, unknown>): Promise
 export function createShotSource(inTauri: boolean, ask: typeof call = call): ShotSource {
   const [shots, setShots] = createSignal<Shot[]>([])
   const [folder, setFolder] = createSignal<string>()
+  const [missing, setMissing] = createSignal(false)
   const [state, setState] = createSignal<ShotState>(inTauri ? "asking" : "none")
   const [notice, setNotice] = createSignal<ShotNotice>()
   const [choosing, setChoosing] = createSignal(false)
@@ -119,22 +124,43 @@ export function createShotSource(inTauri: boolean, ask: typeof call = call): Sho
   const watch = async (location: ShotLocation) => {
     const mine = ++watching
     setFolder(location.dir)
+    setMissing(Boolean(location.missing))
     setState(location.network ? "network" : "watching")
     if (!location.network) {
       // What is already there first: the screenshot taken a moment before
       // switching to ADE is the one the user came here to use, and it arrived
       // before anything was listening.
-      const recent = await call<Shot[]>("shots_recent", { dir: location.dir, limit: KEEP }).catch(() => [])
+      const recent = await ask<Shot[]>("shots_recent", { dir: location.dir, limit: KEEP }).catch(() => [])
       if (disposed || mine !== watching) return
       add(recent)
     }
     if (disposed || mine !== watching) return
     // Called for a share too: the host refuses it, and retires the watcher of
     // the folder the tray was on before.
-    await call("shots_watch", { dir: location.dir }).catch(() => undefined)
+    await ask("shots_watch", { dir: location.dir }).catch(() => undefined)
+  }
+
+  const checkDir = async () => {
+    const location = await ask<ShotLocation | null>("shots_dir").catch(() => null)
+    if (disposed) return
+    if (!location) {
+      setState("none")
+      return
+    }
+    await watch(location)
+  }
+
+  const onFocus = () => {
+    if (state() === "none") {
+      void checkDir()
+    }
   }
 
   if (inTauri) {
+    if (typeof window !== "undefined") {
+      window.addEventListener("focus", onFocus)
+    }
+
     /*
      * The unlisten handle is held in a variable, and the cleanup that uses
      * it is registered *synchronously*.
@@ -153,6 +179,9 @@ export function createShotSource(inTauri: boolean, ask: typeof call = call): Sho
       disposed = true
       stop?.()
       stop = undefined
+      if (typeof window !== "undefined") {
+        window.removeEventListener("focus", onFocus)
+      }
     })
 
     void (async () => {
@@ -162,7 +191,10 @@ export function createShotSource(inTauri: boolean, ask: typeof call = call): Sho
       const unlisten = await listen<Shot>("shot:new", (event) => {
         // A watcher for a folder the user just left can still be finishing its
         // last pass; its pictures are not this folder's.
-        if (belongs(event.payload.path, folder())) add([event.payload])
+        if (belongs(event.payload.path, folder())) {
+          setMissing(false)
+          add([event.payload])
+        }
       })
       if (disposed) {
         unlisten()
@@ -170,19 +202,14 @@ export function createShotSource(inTauri: boolean, ask: typeof call = call): Sho
       }
       stop = unlisten
 
-      const location = await call<ShotLocation | null>("shots_dir").catch(() => null)
-      if (disposed) return
-      if (!location) {
-        setState("none")
-        return
-      }
-      await watch(location)
+      await checkDir()
     })()
   }
 
   return {
     shots,
     folder,
+    missing,
     state,
     dismiss: (path) => {
       dismissed.add(path)
@@ -215,7 +242,7 @@ export function createShotSource(inTauri: boolean, ask: typeof call = call): Sho
       setChoosing(true)
       let location: ShotLocation | null
       try {
-        location = await call<ShotLocation | null>("shots_choose_folder")
+        location = await ask<ShotLocation | null>("shots_choose_folder")
       } catch (error) {
         // The host answers with a code; anything else is still a refusal.
         setNotice(NOTICES.includes(String(error)) ? (String(error) as ShotNotice) : "not-saved")

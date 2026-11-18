@@ -56,6 +56,16 @@ describe("the empty screenshot tray", () => {
     expect(host.querySelector('[data-slot="shot-tray-empty"]')?.textContent).toBe(t("shots.emptyFolder"))
   })
 
+  test("shows instructions to create the folder when missing on disk", () => {
+    const host = mount({ folder: "C:/Users/nik/Pictures/Screenshots", missing: true, onChoose: () => {} })
+
+    expect(host.querySelector('[data-slot="shot-tray-folder"]')?.textContent).toBe(
+      "C:/Users/nik/Pictures/Screenshots",
+    )
+    expect(host.querySelector('[data-slot="shot-tray-choose"]')?.textContent).toBe(t("shots.choose"))
+    expect(host.querySelector('[data-slot="shot-tray-empty"]')?.textContent).toBe(t("shots.noFolder"))
+  })
+
   test("says when the folder is on a network share", () => {
     const host = mount({ folder: "\\\\server\\shots", network: true, onChoose: () => {} })
 

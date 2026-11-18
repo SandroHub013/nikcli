@@ -46,6 +46,7 @@ import { RemoteSpaceDialog } from "../remote/remote-dialog"
 import { discoverProject, grantedRoots, openProject, rootMissing, startFolder, type Project } from "../host/project"
 import {
   addRecent,
+  cleanOwnRecentsOnce,
   isMissingRecent,
   missingRecents,
   parseRecents,
@@ -7199,6 +7200,7 @@ export function Workbench() {
     setVoiceSettings(settings)
     await voiceEngine.updateSettings(settings)
     if (listensByItself(settings) && !before) listenForName()
+    await registerGlobalShortcuts?.(settings)
   }
 
   const voiceKeyHost = async (): Promise<VoiceKeyHost | undefined> => {
@@ -7607,6 +7609,14 @@ export function Workbench() {
     if (host) {
       setBooting(t("boot.project"))
       const here = host.currentDir ? await host.currentDir() : ""
+      const own = host.ownFolders ? await host.ownFolders() : []
+      if (own.length > 0) {
+        const { list, changed } = cleanOwnRecentsOnce(recents(), own, localStorage)
+        if (changed) {
+          setRecents(list)
+          localStorage.setItem("ade.recents", serializeRecents(list))
+        }
+      }
       const saved = restored?.projectPath
       // The last project's folder gone: ADE opens no project, and says why (the saved sessions still restart, each in its own folder).
       const gone = saved ? await refuseMissingRoot(host, saved) : false
@@ -7617,6 +7627,7 @@ export function Workbench() {
         hasRecents: recents().length > 0,
         hasPanes: (restored?.panes.length ?? 0) > 0,
         here,
+        ownFolders: own,
       })
       const p = path ? await discoverProject(host, path) : undefined
       if (p) {
@@ -8069,8 +8080,8 @@ export function Workbench() {
             setShortcutRefusals(refusalsOf(failed))
           })
 
-          await syncGlobalShortcuts(voiceSettings())
           registerGlobalShortcuts = syncGlobalShortcuts
+          await syncGlobalShortcuts(voiceSettings())
 
           /*
            * The OS takes a registered hotkey before the webview sees the key,
@@ -11288,6 +11299,7 @@ export function Workbench() {
             <ShotTray
               shots={shotSource.shots()}
               unavailable={shotSource.state() === "none"}
+              missing={shotSource.missing()}
               folder={shotSource.folder()}
               network={shotSource.state() === "network"}
               onChoose={shotSource.canChoose ? () => void shotSource.choose() : undefined}

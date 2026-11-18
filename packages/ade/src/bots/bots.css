@@ -681,6 +681,38 @@
   background: var(--ade-surface);
 }
 
+[data-slot="bots-ragu-missing"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ade-space-4);
+  box-sizing: border-box;
+  margin: 0 var(--ade-space-8) var(--ade-space-7);
+  padding: var(--ade-space-4) var(--ade-space-5);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-lg);
+  background: var(--ade-surface);
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-md);
+}
+
+[data-slot="bots-ragu-install"] {
+  flex: 0 0 auto;
+  padding: var(--ade-space-2) var(--ade-space-4);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-raised);
+  color: var(--ade-text);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-sm);
+  cursor: pointer;
+}
+
+[data-slot="bots-ragu-install"]:hover {
+  background: var(--ade-hover);
+  border-color: var(--ade-border-strong);
+}
+
 /*
  * The field stays black and plain: at the focus the border steps up one shade,
  * `--ade-border-strong`, a neutral grey in both themes, and the halo that keeps
@@ -1689,7 +1721,8 @@
   [data-slot="bots-composer"] {
     padding-inline: var(--ade-space-6);
   }
-  [data-slot="bots-composer"] {
+  [data-slot="bots-composer"],
+  [data-slot="bots-ragu-missing"] {
     margin-inline: var(--ade-space-6);
   }
 }

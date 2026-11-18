@@ -17,6 +17,8 @@ import { createEffect, createMemo, createSignal, on, For, Show, onMount } from "
 import { EmptyIcon } from "../ui/empty-icon"
 import { t } from "../i18n"
 import { IconButton } from "../ui/controls"
+import { installFor } from "../session-new/install"
+import { openExternally } from "../browser/host-bridge"
 import type { Agent, ConfigProviders } from "@ragu/sdk/client"
 import type { ChatCatalog } from "./connection"
 import {
@@ -133,6 +135,19 @@ export function Chat(props: ChatProps) {
   const [agents, setAgents] = createSignal<readonly ChatAgentChoice[]>(agentsFromList(props.agents))
   const [model, setModel] = createSignal<ModelRef | undefined>(loadStoredModel(models(), isTest()))
   const [agent, setAgent] = createSignal<string>(loadStoredAgent(agents()))
+  const [hasRagu, setHasRagu] = createSignal(true)
+
+  onMount(() => {
+    void (async () => {
+      try {
+        const { invoke } = await import("@tauri-apps/api/core")
+        const found = await invoke<string | null>("pty_which", { command: "ragu" })
+        setHasRagu(Boolean(found))
+      } catch {
+        // Outside Tauri, keep true
+      }
+    })()
+  })
   // The effort last chosen; sent only when the model has it (`effortValue`).
   const [effort, setEffort] = createSignal<string>(
     (() => {
@@ -603,97 +618,115 @@ export function Chat(props: ChatProps) {
             </ul>
           </Show>
 
-          <div data-slot="chat-composer">
-            <textarea
-              ref={(el) => (composer = el)}
-              data-slot="chat-input"
-              rows="1"
-              placeholder={t("chat.input.placeholder")}
-              value={draft()}
-              disabled={foreign()}
-              role="combobox"
-              aria-autocomplete="list"
-              aria-expanded={mention() !== undefined}
-              aria-controls={mention() ? "chat-mentions" : undefined}
-              aria-activedescendant={
-                mention() && mentionResults().length > 0 ? `chat-mention-${mentionIndex()}` : undefined
-              }
-              onInput={(event) => {
-                setDraft(event.currentTarget.value)
-                lookUp(
-                  event.currentTarget.value,
-                  event.currentTarget.selectionStart ?? event.currentTarget.value.length,
-                )
-              }}
-              onBlur={closeMention}
-              onKeyDown={onKeyDown}
-            />
-            {/*
-              Under the field, the chips (composer-chip, pezzo 3): «il tasto
-              nella zona dove scrivo». The agent, the model and, when the
-              model has levels, the effort; each reads the catalog when it
-              opens, and sends only what the model has.
-            */}
-            <div data-slot="chat-composer-row">
-              <button
-                type="button"
-                data-slot="chat-attach"
-                aria-label={t("chat.attach.addHint")}
-                title={t("chat.attach.addHint")}
-                disabled={!props.projectRoot || foreign()}
-                onClick={() => void attach()}
-              >
-                +
-              </button>
-              <ChipMenu
-                kind="agent"
-                label={t("chat.agent.label")}
-                text={agent() ? agentDisplayName(agent()) : t("chat.agent.none")}
-                value={agent()}
-                items={agents().map((entry) => ({
-                  kind: "option" as const,
-                  value: entry.name,
-                  label: agentDisplayName(entry.name),
-                  // The id in the title, with what the agent is for.
-                  hint: entry.description ? `${entry.name} · ${entry.description}` : entry.name,
-                }))}
-                empty={t("chat.agent.none")}
-                disabled={foreign()}
-                onOpen={() => void use()}
-                onChoose={chooseAgent}
-              />
-              <ModelPicker
-                label={t("chat.model.label")}
-                value={model() ? serializeModelRef(model()!) : ""}
-                models={models()}
-                state={modelState()}
-                recent={recent()}
-                disabled={foreign()}
-                onOpen={() => void openCatalog()}
-                onRetry={() => void openCatalog()}
-                onChoose={chooseModel}
-              />
-              <EffortPicker value={effort()} levels={levels()} disabled={foreign()} onChoose={chooseEffort} />
-              <span data-slot="chat-composer-gap" />
-              <Show
-                when={answering() && !foreign()}
-                fallback={
-                  <button
-                    type="button"
-                    data-slot="chat-send"
-                    disabled={!draft().trim() || !canSend()}
-                    onClick={() => void send()}
-                  >
-                    {t("chat.send")}
-                  </button>
-                }
-              >
-                <button type="button" data-slot="chat-send" data-stop="true" onClick={stop}>
-                  {t("chat.stop")}
+          <Show
+            when={hasRagu()}
+            fallback={
+              <div data-slot="chat-ragu-missing">
+                <span>{t("chat.raguNeeded")}</span>
+                <button
+                  type="button"
+                  data-slot="chat-ragu-install"
+                  onClick={() =>
+                    void openExternally(installFor("ragu")?.page ?? "https://github.com/SandroHub013/nikcli")
+                  }
+                >
+                  {t("install.page")}
                 </button>
-              </Show>
+              </div>
+            }
+          >
+            <div data-slot="chat-composer">
+              <textarea
+                ref={(el) => (composer = el)}
+                data-slot="chat-input"
+                rows="1"
+                placeholder={t("chat.input.placeholder")}
+                value={draft()}
+                disabled={foreign()}
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={mention() !== undefined}
+                aria-controls={mention() ? "chat-mentions" : undefined}
+                aria-activedescendant={
+                  mention() && mentionResults().length > 0 ? `chat-mention-${mentionIndex()}` : undefined
+                }
+                onInput={(event) => {
+                  setDraft(event.currentTarget.value)
+                  lookUp(
+                    event.currentTarget.value,
+                    event.currentTarget.selectionStart ?? event.currentTarget.value.length,
+                  )
+                }}
+                onBlur={closeMention}
+                onKeyDown={onKeyDown}
+              />
+              {/*
+                Under the field, the chips (composer-chip, pezzo 3): «il tasto
+                nella zona dove scrivo». The agent, the model and, when the
+                model has levels, the effort; each reads the catalog when it
+                opens, and sends only what the model has.
+              */}
+              <div data-slot="chat-composer-row">
+                <button
+                  type="button"
+                  data-slot="chat-attach"
+                  aria-label={t("chat.attach.addHint")}
+                  title={t("chat.attach.addHint")}
+                  disabled={!props.projectRoot || foreign()}
+                  onClick={() => void attach()}
+                >
+                  +
+                </button>
+                <ChipMenu
+                  kind="agent"
+                  label={t("chat.agent.label")}
+                  text={agent() ? agentDisplayName(agent()) : t("chat.agent.none")}
+                  value={agent()}
+                  items={agents().map((entry) => ({
+                    kind: "option" as const,
+                    value: entry.name,
+                    label: agentDisplayName(entry.name),
+                    // The id in the title, with what the agent is for.
+                    hint: entry.description ? `${entry.name} · ${entry.description}` : entry.name,
+                  }))}
+                  empty={t("chat.agent.none")}
+                  disabled={foreign()}
+                  onOpen={() => void use()}
+                  onChoose={chooseAgent}
+                />
+                <ModelPicker
+                  label={t("chat.model.label")}
+                  value={model() ? serializeModelRef(model()!) : ""}
+                  models={models()}
+                  state={modelState()}
+                  recent={recent()}
+                  disabled={foreign()}
+                  onOpen={() => void openCatalog()}
+                  onRetry={() => void openCatalog()}
+                  onChoose={chooseModel}
+                />
+                <EffortPicker value={effort()} levels={levels()} disabled={foreign()} onChoose={chooseEffort} />
+                <span data-slot="chat-composer-gap" />
+                <Show
+                  when={answering() && !foreign()}
+                  fallback={
+                    <button
+                      type="button"
+                      data-slot="chat-send"
+                      disabled={!draft().trim() || !canSend()}
+                      onClick={() => void send()}
+                    >
+                      {t("chat.send")}
+                    </button>
+                  }
+                >
+                  <button type="button" data-slot="chat-send" data-stop="true" onClick={stop}>
+                    {t("chat.stop")}
+                  </button>
+                </Show>
+              </div>
             </div>
-          </div>
+          </Show>
         </div>
       </div>
       {/* What a screen reader hears when an answer is finished (`composer.ts`). */}
