@@ -8029,8 +8029,8 @@ export function Workbench() {
             setShortcutRefusals(refusalsOf(failed))
           })
 
-          await syncGlobalShortcuts(voiceSettings())
           registerGlobalShortcuts = syncGlobalShortcuts
+          await syncGlobalShortcuts(voiceSettings())
 
           /*
            * The OS takes a registered hotkey before the webview sees the key,

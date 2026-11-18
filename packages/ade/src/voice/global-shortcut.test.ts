@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
 import { DEFAULT_VOICE_SETTINGS } from "@ragu/voice/core"
 import {
   globalVoiceAction,
@@ -260,5 +261,16 @@ describe("serialiseRegistrations", () => {
     await save("ctrl+b")
     await save("ctrl+c")
     expect(opened).toEqual(["ctrl+a", "ctrl+b", "ctrl+c"])
+  })
+})
+
+describe("workbench global shortcut initialization order", () => {
+  test("registerGlobalShortcuts callback is assigned before initial syncGlobalShortcuts await", () => {
+    const workbench = readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8")
+    const assignIndex = workbench.indexOf("registerGlobalShortcuts = syncGlobalShortcuts")
+    const syncIndex = workbench.indexOf("await syncGlobalShortcuts(voiceSettings())")
+    expect(assignIndex).toBeGreaterThan(-1)
+    expect(syncIndex).toBeGreaterThan(-1)
+    expect(assignIndex).toBeLessThan(syncIndex)
   })
 })
