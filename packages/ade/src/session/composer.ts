@@ -219,6 +219,21 @@ export function cursorSaysDialog(terminal: ComposerTerminal): boolean {
   return hiddenCursor.has(terminal)
 }
 
+/**
+ * Whether a bar agent's model row or home footer is on screen (SES3-1 second half).
+ *
+ * For ragu and OpenCode, a frameless picker (e.g. `/models`) or the home screen
+ * leaves the model row or footer on screen while the input box is covered or unparsed.
+ */
+export function barModelOrFooter(terminal: ComposerTerminal, agentId: string): boolean {
+  if (!BAR_AGENTS.has(agentId)) return false
+  for (let y = 0; y < terminal.rows; y++) {
+    const text = textAt(terminal, y)
+    if (MODEL_ROW.test(text) || HOME_FOOTER.test(text)) return true
+  }
+  return false
+}
+
 const lineAt = (terminal: ComposerTerminal, y: number) =>
   terminal.buffer.active.getLine(terminal.buffer.active.baseY + y)
 const textAt = (terminal: ComposerTerminal, y: number) => lineAt(terminal, y)?.translateToString(true) ?? ""

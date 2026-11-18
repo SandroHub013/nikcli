@@ -492,6 +492,7 @@ import {
   composerLine,
   composerOf,
   composerRow,
+  barModelOrFooter,
   cursorSaysDialog,
   dialogOver,
   enterBlocked,
@@ -3669,6 +3670,7 @@ export function Workbench() {
   const blindHold = (paneId: string): BlindHold => {
     const box = composerNow(paneId)
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    const agentId = pane?.agent ?? pane?.model ?? ""
     const turn = turnKnown({
       ...(activityOf.has(paneId) ? { activity: activityOf.get(paneId)! } : {}),
       working: pane?.status === "working",
@@ -3679,7 +3681,9 @@ export function Workbench() {
       blind: blindNow({ box, question: questionOpen(paneId), turn, nothingDrawn: undrawnSince.has(paneId) }),
       ...(box === "draft" ? { line: composerLine(getTerminal(paneId).terminal) } : {}),
       ...(hasTerminal(paneId) &&
-      (cursorSaysDialog(getTerminal(paneId).terminal) || refocusedNow(getTerminal(paneId).terminal))
+      (cursorSaysDialog(getTerminal(paneId).terminal) ||
+        refocusedNow(getTerminal(paneId).terminal) ||
+        (box === "none" && barModelOrFooter(getTerminal(paneId).terminal, agentId)))
         ? { dialog: true }
         : {}),
     }

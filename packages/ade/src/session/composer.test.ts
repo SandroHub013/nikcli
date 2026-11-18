@@ -7,6 +7,7 @@ import { disagreement } from "./composer-log"
 import { blindNow } from "./deliver-now"
 import { AGENTS } from "../session-new/agents"
 import {
+  barModelOrFooter,
   composerOf,
   composerRow,
   cursorSaysDialog,
@@ -1039,6 +1040,29 @@ describe("a dialog left open over ragu's box, after a focus-in (audit SES2-2)", 
     expect(refocusedNow(terminal)).toBe(true)
     followKeys(terminal, "ragu", "\x1b")
     expect(refocusedNow(terminal)).toBe(false)
+  })
+
+  describe("barModelOrFooter reports model row or footer on screen for bar agents (audit SES3-1)", () => {
+    test("detects model row for ragu and opencode, but ignores non-bar agents", async () => {
+      const terminal = await drawn(`\x1b[2J\x1b[11;3H┃  Build · Grok 4.7 · xAI\x1b[12;3H┃`, 120, 17)
+      expect(barModelOrFooter(terminal, "ragu")).toBe(true)
+      expect(barModelOrFooter(terminal, "opencode")).toBe(true)
+      expect(barModelOrFooter(terminal, "claude-code")).toBe(false)
+      expect(barModelOrFooter(terminal, "agy")).toBe(false)
+    })
+
+    test("detects home footer for ragu and opencode", async () => {
+      const terminal = await drawn(`\x1b[2J\x1b[11;3H  ~/repo   0.2.14\x1b[12;3H┃`, 120, 17)
+      expect(barModelOrFooter(terminal, "ragu")).toBe(true)
+      expect(barModelOrFooter(terminal, "opencode")).toBe(true)
+      expect(barModelOrFooter(terminal, "claude-code")).toBe(false)
+    })
+
+    test("returns false when neither model row nor footer is present", async () => {
+      const terminal = await drawn(`\x1b[2J\x1b[11;3HJust some arbitrary output\x1b[12;3Hhere`, 120, 17)
+      expect(barModelOrFooter(terminal, "ragu")).toBe(false)
+      expect(barModelOrFooter(terminal, "opencode")).toBe(false)
+    })
   })
 
   test("an Enter closes it as well as an Esc", async () => {
