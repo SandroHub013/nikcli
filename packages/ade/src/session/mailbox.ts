@@ -19,6 +19,7 @@
  * agent that has never heard of `ade-msg` can still answer.
  */
 import { isReservedName } from "./orchestra"
+import { scrubSecrets } from "../secrets/scrub"
 
 export interface MailPane {
   id: string
@@ -2040,4 +2041,25 @@ export function noticeTarget(
  */
 export function registerAuthor(title: string | undefined, from: string | undefined): string {
   return (title && !isReservedName(title) ? title : "") || from || "ade-msg"
+}
+
+/**
+ * The reason a session closed early, for the error sent to the caller whose
+ * request will never be answered: its non-zero exit code, and the last lines it
+ * printed, capped at 300 characters.
+ */
+export function earlyCloseReason(
+  activity?: string,
+  lines?: readonly { kind?: string; text: string }[],
+): string {
+  const code = /^exited:(.*)$/.exec(activity ?? "")?.[1]
+  if (code === undefined) return ""
+  const joined = (lines ?? [])
+    .filter((l) => l.kind === "step")
+    .slice(-6)
+    .map((l) => l.text.trim())
+    .filter(Boolean)
+    .join(" | ")
+  const said = scrubSecrets(joined).slice(-300)
+  return `uscita ${code}${said ? `; ultime righe: ${said}` : ""}`
 }

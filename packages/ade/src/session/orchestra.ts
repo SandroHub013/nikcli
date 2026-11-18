@@ -6,6 +6,8 @@
  * Pure, like `mailbox.ts`, so each rule is tested rather than trusted.
  */
 
+import { stripAnsi } from "./stream"
+
 /** Longest name a session may be given. It is a title and a branch segment. */
 export const MAX_NAME = 40
 
@@ -129,6 +131,95 @@ export function descendants(paneId: string, parents: ReadonlyMap<string, string>
 }
 
 /**
+ * Major version number from a CLI version output (e.g. "opencode v2.3.0", "1.19.2"),
+ * or undefined when no version was found.
+ */
+export function parseMajorVersion(text: string | null | undefined): number | undefined {
+  const found = /\bv?(\d+)\.\d+/.exec(text ?? "")
+  return found ? Number(found[1]) : undefined
+}
+
+/** How long `opencode --version` may take. */
+export const OPENCODE_VERSION_TIMEOUT_MS = 5_000
+
+/** What version probing needs of the host: a process through a pty. */
+export interface VersionHost {
+  readonly spawn?: (input: {
+    command: string
+    args: string[]
+    cols?: number
+    rows?: number
+    onLine: (line: string, stream: "out" | "err") => void
+    onExit: (code: number | null) => void
+  }) => Promise<{ kill: () => void }>
+}
+
+let opencodeVersionOnce: Promise<string | null> | undefined
+
+/** Forgets the version read, for tests. */
+export function forgetOpencodeVersion(): void {
+  opencodeVersionOnce = undefined
+}
+
+/**
+ * What `opencode --version` printed, or null when it did not run, failed, timed out or named no version.
+ * Asked once per ADE session.
+ */
+export function opencodeVersion(
+  host: VersionHost,
+  command = "opencode",
+  timeoutMs = OPENCODE_VERSION_TIMEOUT_MS,
+): Promise<string | null> {
+  if (!opencodeVersionOnce) {
+    const asking = askOpencodeVersion(host, command, timeoutMs)
+    opencodeVersionOnce = asking
+    void asking.then((answer) => {
+      const major = parseMajorVersion(answer)
+      if ((major === undefined || major < 2) && opencodeVersionOnce === asking) {
+        opencodeVersionOnce = undefined
+      }
+    })
+  }
+  return opencodeVersionOnce
+}
+
+function askOpencodeVersion(host: VersionHost, command: string, timeoutMs: number): Promise<string | null> {
+  const spawn = host.spawn
+  if (!spawn) return Promise.resolve(null)
+  return new Promise((resolve) => {
+    const lines: string[] = []
+    let settled = false
+    let kill: (() => void) | undefined
+    const finish = (answer: string | null) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolve(answer)
+    }
+    const timer = setTimeout(() => {
+      kill?.()
+      finish(null)
+    }, timeoutMs)
+    spawn({
+      command,
+      args: ["--version"],
+      cols: 200,
+      rows: 50,
+      onLine: (line) => lines.push(stripAnsi(line)),
+      onExit: (code) => {
+        const text = lines.join("\n").trim()
+        finish(code === 0 && /\d+\.\d+\.\d+/.test(text) ? text : null)
+      },
+    })
+      .then((session) => {
+        kill = () => session.kill()
+        if (settled) session.kill()
+      })
+      .catch(() => finish(null))
+  })
+}
+
+/**
  * The arguments that choose a model, for the agents whose flag is known.
  *
  * Only the model, and not arbitrary arguments: an agent choosing its
@@ -140,9 +231,9 @@ export function descendants(paneId: string, parents: ReadonlyMap<string, string>
  *   claude  --model <m>
  *   codex   -m <m>
  *   agy     --model <m>   (ids from `agy models`)
- *   opencode --model <provider/model>   (`-m, --model` in `opencode --help`, 1.19.2; ids from `opencode models`)
+ *   opencode --model <provider/model>   (OpenCode 1.x only, e.g. 1.19.2; OpenCode 2.x dropped --model on interactive CLI)
  */
-export function modelArgs(agentId: string, model: string): string[] | { error: string } {
+export function modelArgs(agentId: string, model: string, version?: string | null): string[] | { error: string } {
   const value = model.trim()
   // The pattern allows a dash anywhere for provider/model ids, so the first
   // character is checked on its own: `--yolo` is a flag, not a model, and the
@@ -152,8 +243,22 @@ export function modelArgs(agentId: string, model: string): string[] | { error: s
   switch (agentId) {
     case "claude-code":
     case "agy":
-    case "opencode":
       return ["--model", value]
+    case "opencode": {
+      const major = parseMajorVersion(version)
+      if (major !== undefined && major < 2) {
+        return ["--model", value]
+      }
+      if (major === undefined) {
+        return {
+          error: "Non riesco a leggere la versione di OpenCode: avvialo senza modello e sceglilo dentro con /models",
+        }
+      }
+      return {
+        error:
+          "OpenCode 2 o successivo non accetta il modello all'avvio: avvialo senza modello e sceglilo dentro con /models",
+      }
+    }
     case "codex":
       return ["-m", value]
     default:
@@ -290,6 +395,19 @@ export function withoutModel(args: readonly string[]): string[] {
     out.push(args[i]!)
   }
   return out
+}
+
+/**
+ * Whether a pane's stored spawnArgs contain a model flag that OpenCode 2.x or an unknown version cannot accept.
+ */
+export function shouldDropOpencodeModel(
+  agentId: string,
+  spawnArgs: readonly string[] | undefined,
+  version?: string | null,
+): boolean {
+  if (agentId !== "opencode" || !modelIn(spawnArgs ?? [])) return false
+  const major = parseMajorVersion(version)
+  return major === undefined || major >= 2
 }
 
 /**

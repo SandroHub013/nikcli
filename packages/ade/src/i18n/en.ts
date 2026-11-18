@@ -1815,6 +1815,8 @@ export const en: Messages = {
   "note.updateFrom": (from, state, text) => `Update from ${from}: ${state} — ${text}`,
   "note.memory": (line) => `Memory: ${line}`,
   "note.subagent": (title) => `Subagent started: ${title}`,
+  "note.opencodeModelDropped":
+    "OpenCode 2 or later does not accept a model at launch: choose it inside with /models",
   "note.mailHeldByLine":
     "A message for this session is waiting: ADE thinks you have started a line. Send or clear it and the message arrives; if you see no line, press Enter.",
   "note.mailHeldBySilence":

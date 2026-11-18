@@ -5,6 +5,7 @@ import { DEFAULT_MAX_DEPTH, depthOf } from "./orchestra"
 import {
   MAX_TEXT,
   USAGE,
+  earlyCloseReason,
   spawnDepthRefusal,
   spawnLimit,
   spawnLimitRefusal,
@@ -1602,5 +1603,46 @@ describe("a request to a pane being relaunched", () => {
     expect(requestState(request, { running: false, relaunching: false, permissionPending: false }, 60_000)).toBe(
       "sessione chiusa",
     )
+  })
+})
+
+describe("earlyCloseReason: exit code and lines when a session closes without replying", () => {
+  test("extracts non-zero exit code and last step lines", () => {
+    const lines = [
+      { kind: "step", text: "step 1" },
+      { kind: "note", text: "note 1" },
+      { kind: "step", text: "error: unknown option '--model'" },
+    ]
+    expect(earlyCloseReason("exited:1", lines)).toBe(
+      "uscita 1; ultime righe: step 1 | error: unknown option '--model'",
+    )
+  })
+
+  test("handles exited with unknown code and no lines", () => {
+    expect(earlyCloseReason("exited:?")).toBe("uscita ?")
+    expect(earlyCloseReason("exited:2", [])).toBe("uscita 2")
+  })
+
+  test("returns empty string when activity is not exited or code is missing", () => {
+    expect(earlyCloseReason("done")).toBe("")
+    expect(earlyCloseReason(undefined)).toBe("")
+    expect(earlyCloseReason("startFailed")).toBe("")
+  })
+
+  test("caps output lines to 300 characters and takes at most 6 step lines", () => {
+    const lines = Array.from({ length: 10 }, (_, i) => ({ kind: "step", text: `line ${i} ${"x".repeat(50)}` }))
+    const reason = earlyCloseReason("exited:1", lines)
+    expect(reason.startsWith("uscita 1; ultime righe: ")).toBe(true)
+    const said = reason.slice("uscita 1; ultime righe: ".length)
+    expect(said.length).toBeLessThanOrEqual(300)
+    expect(reason).not.toContain("line 0")
+  })
+
+  test("scrubs secrets from output lines before slicing to 300 characters", () => {
+    const key = ["sk-", "proj-", "1234567890abcdef1234567890abcdef"].join("")
+    const lines = [{ kind: "step", text: `invalid API key ${key}` }]
+    const reason = earlyCloseReason("exited:1", lines)
+    expect(reason).not.toContain(key)
+    expect(reason).toContain("[nascosto]")
   })
 })
