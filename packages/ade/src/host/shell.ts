@@ -169,6 +169,8 @@ export interface Host {
   // -- Messages between sessions (see `src-tauri/src/mailbox.rs`) -----------
   /** Takes every message `ade-msg send` has dropped since the last call. */
   mailboxTake?: () => Promise<{ id: string; body: string }[]>
+  /** If writing `ade-msg` failed at startup, the reason; null if it succeeded. */
+  mailboxInstallError?: () => Promise<string | null>
   /** The page holds these messages on disk: the native side, which kept them until now, can let them go. */
   mailboxTaken?: (ids: string[]) => Promise<void>
   /** What the tray's menu and tooltip say, in the app's language. */
@@ -1067,6 +1069,11 @@ export async function getHost(): Promise<Host | undefined> {
     async mailboxTaken(ids) {
       const { invoke } = await import("@tauri-apps/api/core")
       await invoke("mailbox_taken", { ids })
+    },
+
+    async mailboxInstallError() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<string | null>("mailbox_install_error").catch(() => null)
     },
 
     async onMailboxPending(listener) {

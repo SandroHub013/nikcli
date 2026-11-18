@@ -1854,6 +1854,7 @@ export const it = {
   "mail.stuck":
     "Un messaggio tra sessioni non è stato consegnato e ADE ha smesso di aspettarlo. Chi l'ha mandato lo saprà, se è ancora aperto.",
   "mail.stepStuck": "Posta tra le sessioni: un passo non finisce. ADE lo riprova; se la posta resta ferma, riavvia ADE",
+  "mail.adeMsgFailed": (reason: string) => `Gli agenti non potranno usare ade-msg: ${reason}`,
   "note.closedAfterReply": (closed: string) => `Chiusa dopo la risposta: ${closed}`,
   "note.updateFrom": (from: string, state: string, text: string) => `Aggiornamento da ${from}: ${state} — ${text}`,
   "note.memory": (line: string) => `Memoria: ${line}`,

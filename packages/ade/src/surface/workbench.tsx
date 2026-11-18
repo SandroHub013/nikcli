@@ -409,6 +409,7 @@ import {
   sameDir,
   formatLateReply,
   formatLost,
+  reportMailboxInstallError,
   noticeTarget,
   registerAuthor,
   formatRequest,
@@ -6300,7 +6301,7 @@ export function Workbench() {
         { immediate: true },
       ),
     )
-    void getHost().then((host) => {
+    void getHost().then(async (host) => {
       void host?.mailboxPublish?.(agentsTable(SPAWNABLE), "agents").catch(() => {})
       const panelVerbs = [
         { panel: "video", verbs: VIDEO_VERBS },
@@ -6311,6 +6312,8 @@ export function Workbench() {
       void host?.mailboxPublish?.(`${USAGE}${panelsHelp(panelVerbs)}`, "usage").catch(() => {})
       void host?.mailboxPublish?.(`${USAGE_DESIGN}\n`, "usage-design").catch(() => {})
       void host?.mailboxPublish?.(`${USAGE_DECISIONI}\n`, "usage-decisioni").catch(() => {})
+      const installError = await host?.mailboxInstallError?.().catch(() => null)
+      reportMailboxInstallError(installError, report, (reason) => t("mail.adeMsgFailed", reason))
     })
   })
 

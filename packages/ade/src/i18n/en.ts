@@ -1811,6 +1811,7 @@ export const en: Messages = {
   "mail.stuck":
     "A message between sessions was not delivered and ADE stopped waiting for it. The sender will know, if it is still open.",
   "mail.stepStuck": "Mail between sessions: a step does not finish. ADE keeps trying; if mail stays stuck, restart ADE",
+  "mail.adeMsgFailed": (reason) => `Agents will not be able to use ade-msg: ${reason}`,
   "note.closedAfterReply": (closed) => `Closed after replying: ${closed}`,
   "note.updateFrom": (from, state, text) => `Update from ${from}: ${state} — ${text}`,
   "note.memory": (line) => `Memory: ${line}`,

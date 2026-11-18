@@ -2041,3 +2041,17 @@ export function noticeTarget(
 export function registerAuthor(title: string | undefined, from: string | undefined): string {
   return (title && !isReservedName(title) ? title : "") || from || "ade-msg"
 }
+
+/**
+ * When writing the `ade-msg` scripts fails at startup, reports it to the user once (Fault 10).
+ */
+export function reportMailboxInstallError(
+  error: string | null | undefined,
+  report: (text: string, kind?: "error" | "warning" | "info" | "done") => void,
+  translate: (reason: string) => string,
+): boolean {
+  if (!error) return false
+  report(translate(error), "error")
+  return true
+}
+

@@ -95,13 +95,32 @@ pub fn bin_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
     Some(bin)
 }
 
+static INSTALL_ERROR: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+pub fn record_install_error(error: String) {
+    let mut lock = INSTALL_ERROR.lock().unwrap();
+    if lock.is_none() {
+        *lock = Some(error);
+    }
+}
+
+pub fn take_install_error() -> Option<String> {
+    INSTALL_ERROR.lock().unwrap().take()
+}
+
 /// Writes the `ade-msg` scripts and clears old leftovers. Called at startup.
 ///
 /// Checked every launch rather than only when missing, so a session always
 /// runs the version that matches the ADE that will read its messages.
 pub fn install(app: &tauri::AppHandle) {
-    let Some(dir) = mailbox_path(app) else { return };
-    let Some(bin) = bin_dir(app) else { return };
+    let Some(dir) = mailbox_path(app) else {
+        record_install_error("cartella mailbox non disponibile".into());
+        return;
+    };
+    let Some(bin) = bin_dir(app) else {
+        record_install_error("cartella bin non disponibile".into());
+        return;
+    };
     // Where an older ADE put them: nothing has them on its PATH any more, and they would not read today's mail.
     let _ = fs::remove_dir_all(dir.join("bin"));
     // And the lists and help texts, which used to be published in the mailbox itself, where any session could replace them.
@@ -111,6 +130,7 @@ pub fn install(app: &tauri::AppHandle) {
     for (name, text) in [("ade-msg.ps1", PS1), ("ade-msg.cmd", CMD), ("ade-msg", SH)] {
         if let Err(error) = put_script(&bin, name, text) {
             eprintln!("ADE: {name} non aggiornato: {error}");
+            record_install_error(format!("{name}: {error}"));
         }
     }
     #[cfg(unix)]
@@ -262,6 +282,12 @@ pub async fn mailbox_taken(app: tauri::AppHandle, ids: Vec<String>) -> Result<()
     let dir = mailbox_path(&app).ok_or("casella non disponibile")?;
     confirm_taken(&dir.join("outbox"), &ids);
     Ok(())
+}
+
+/// Takes the startup installation error of `ade-msg`, if any, and clears it.
+#[tauri::command]
+pub async fn mailbox_install_error() -> Result<Option<String>, String> {
+    Ok(take_install_error())
 }
 
 /// A page has gone, with what it was handed and had not confirmed: the next one gets it.
@@ -2554,5 +2580,12 @@ mod tests {
         for script in [PS1, SH] {
             assert_eq!(script.matches("| registro | design proponi").count(), 2);
         }
+    }
+
+    #[test]
+    fn mailbox_install_error_recorded_and_taken_once() {
+        record_install_error("ade-msg.ps1: permission denied".into());
+        assert_eq!(take_install_error().as_deref(), Some("ade-msg.ps1: permission denied"));
+        assert_eq!(take_install_error(), None);
     }
 }

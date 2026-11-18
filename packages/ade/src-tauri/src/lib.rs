@@ -2249,6 +2249,72 @@ async fn unregister_global_voice_shortcuts(app: tauri::AppHandle) -> Result<(), 
     Ok(())
 }
 
+type SetupErrorHook = Box<dyn Fn(&str) + Send + Sync>;
+static SETUP_ERROR_HOOK: std::sync::Mutex<Option<SetupErrorHook>> = std::sync::Mutex::new(None);
+
+pub fn set_setup_error_hook<F>(hook: F)
+where
+    F: Fn(&str) + Send + Sync + 'static,
+{
+    *SETUP_ERROR_HOOK.lock().unwrap() = Some(Box::new(hook));
+}
+
+pub fn clear_setup_error_hook() {
+    *SETUP_ERROR_HOOK.lock().unwrap() = None;
+}
+
+pub fn setup_error_log_path() -> std::path::PathBuf {
+    dirs::data_local_dir()
+        .or_else(dirs::data_dir)
+        .map(|base| {
+            let id = if cfg!(feature = "test-exe") {
+                "ai.nikcli.ade.test"
+            } else {
+                "ai.nikcli.ade"
+            };
+            base.join(id)
+        })
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("setup-error.log")
+}
+
+/// In a release build, a setup error shows a native message box with the reason and
+/// writes it to a log file in ADE's own app data folder, saying where the file is (Fault 7).
+pub fn report_setup_error(reason: &str) {
+    if let Some(hook) = SETUP_ERROR_HOOK.lock().unwrap().as_ref() {
+        hook(reason);
+    }
+    let log_path = setup_error_log_path();
+    if let Some(parent) = log_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&log_path) {
+        use std::io::Write;
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let _ = writeln!(file, "[{ts}] {reason}");
+    }
+    #[cfg(all(windows, not(debug_assertions)))]
+    {
+        use windows::core::HSTRING;
+        use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
+        let message = format!(
+            "Errore durante l'avvio di ADE:\n{reason}\n\nI dettagli sono stati salvati nel file:\n{}",
+            log_path.display()
+        );
+        unsafe {
+            MessageBoxW(
+                None,
+                &HSTRING::from(message),
+                &HSTRING::from("ADE - Errore di avvio"),
+                MB_OK | MB_ICONERROR,
+            );
+        }
+    }
+}
+
 /// Opens ADE's window, and says out loud if it cannot.
 ///
 /// Built here instead of declared in tauri.conf.json because a window that
@@ -2695,7 +2761,9 @@ pub fn run() {
             // The bots' gateways the user left on; they read once the page listens.
             gateway::resume(app.handle());
             if let Err(error) = open_main_window(app.handle()) {
-                eprintln!("ADE: impossibile aprire la finestra: {error}");
+                let msg = format!("impossibile aprire la finestra: {error}");
+                eprintln!("ADE: {msg}");
+                report_setup_error(&msg);
                 return Err(Box::new(error));
             }
             Ok(())
@@ -2737,6 +2805,7 @@ pub fn run() {
             usage::transcript_usage,
             mailbox::mailbox_take,
             mailbox::mailbox_taken,
+            mailbox::mailbox_install_error,
             tts::tts_piper_status,
             tts::tts_piper_delete,
             tts::tts_piper_install,
@@ -2853,6 +2922,11 @@ pub fn run() {
             glass::ade_window_set_glass,
         ])
         .build(context)
+        .map_err(|error| {
+            let msg = format!("impossibile inizializzare l'applicazione: {error}");
+            report_setup_error(&msg);
+            error
+        })
         .expect("error while running ADE")
         /*
          * Every process this window started is a child of it, so they die
@@ -2904,6 +2978,27 @@ pub(crate) fn end_everything(app: &tauri::AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn setup_error_reporter_invokes_seam_and_writes_log() {
+        let captured = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let cap_clone = captured.clone();
+        set_setup_error_hook(move |reason| {
+            *cap_clone.lock().unwrap() = Some(reason.to_string());
+        });
+        report_setup_error("impossibile aprire la finestra: mock error");
+        assert_eq!(
+            captured.lock().unwrap().as_deref(),
+            Some("impossibile aprire la finestra: mock error")
+        );
+        clear_setup_error_hook();
+
+        let log = setup_error_log_path();
+        if log.exists() {
+            let content = std::fs::read_to_string(&log).unwrap_or_default();
+            assert!(content.contains("impossibile aprire la finestra: mock error"));
+        }
+    }
 
     /// A fresh folder under the test temp dir (`TMP`), with a project and a secret beside it.
     fn attachment_fixture(name: &str) -> (PathBuf, PathBuf, PathBuf) {
