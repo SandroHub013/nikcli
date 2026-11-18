@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import postcss from "postcss"
 import { SETTINGS_VIEW_STORAGE_KEY, readLastView } from "./categories"
+import { resetLocaleForTests } from "../i18n"
 
 if (typeof document === "undefined") GlobalRegistrator.register()
 compileSolidJsx()
@@ -28,6 +29,7 @@ afterEach(() => {
   dispose = undefined
   document.body.innerHTML = ""
   localStorage.clear()
+  resetLocaleForTests()
 })
 
 const fakeVoiceEngine = {
@@ -453,6 +455,13 @@ describe("settings shell", () => {
       dispose?.()
       document.body.innerHTML = ""
     }
+  })
+
+  test("Point 15: «Sistema» shows the OS language, not the interface language (S15)", () => {
+    resetLocaleForTests("en", "it")
+    renderSettingsSheet({ initialTarget: "general/language" })
+    const systemTab = document.body.querySelector<HTMLElement>('[data-locale="system"]')
+    expect(systemTab?.textContent).toBe("System (Italiano)")
   })
 
   test("Informazioni: il nome con l'accento, la frase, la versione e la cartella dei dati (DS-29)", () => {

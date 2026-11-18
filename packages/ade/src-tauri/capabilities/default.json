@@ -93,6 +93,7 @@
     "allow-learn-progress-set",
     "allow-list-archive",
     "allow-mailbox-dir",
+    "allow-mailbox-install-error",
     "allow-mailbox-inbox-put",
     "allow-mailbox-inbox-read",
     "allow-mailbox-inbox-text",

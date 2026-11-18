@@ -43,3 +43,13 @@ describe("lint: FAIL 8, with no project the sidebar is told so and offers no new
     expect([...sidebar.matchAll(/onNewSession=/g)].length).toBe(1)
   })
 })
+
+describe("lint: Fault 10, ade-msg not written reported to the page once", () => {
+  test("workbench checks mailboxInstallError at startup and reports it with mail.adeMsgFailed", () => {
+    expect(workbench).toContain("mailboxInstallError")
+    expect(workbench).toContain("mail.adeMsgFailed")
+    // The reason is a code from the native side, worded here in the app's language.
+    expect(workbench).toContain('t("mail.adeMsgFailed", mailboxInstallReason(raw))')
+  })
+})
+

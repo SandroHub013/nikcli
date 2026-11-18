@@ -55,10 +55,13 @@ function readStoredPreference(): LocalePreference {
 }
 
 const [preference, setPreferenceSignal] = createSignal<LocalePreference>(readStoredPreference())
-const [systemLocale, setSystemLocale] = createSignal<Locale>(readSystemLocale())
+const [detectedSystemLocale, setSystemLocale] = createSignal<Locale>(readSystemLocale())
 
 /** What the user chose: a language, or "follow the system". */
 export const localePreference = preference
+
+/** What the OS speaks, as detected from the browser environment. */
+export const systemLocale = detectedSystemLocale
 
 /** The language in effect now. */
 export function locale(): Locale {

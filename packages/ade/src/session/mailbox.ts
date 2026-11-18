@@ -2063,3 +2063,17 @@ export function earlyCloseReason(
   const said = scrubSecrets(joined).slice(-300)
   return `uscita ${code}${said ? `; ultime righe: ${said}` : ""}`
 }
+
+/**
+ * When writing the `ade-msg` scripts fails at startup, reports it to the user once (Fault 10).
+ */
+export function reportMailboxInstallError(
+  error: string | null | undefined,
+  report: (text: string, kind?: "error" | "warning" | "info" | "done") => void,
+  translate: (reason: string) => string,
+): boolean {
+  if (!error) return false
+  report(translate(error), "error")
+  return true
+}
+

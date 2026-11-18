@@ -2249,6 +2249,85 @@ async fn unregister_global_voice_shortcuts(app: tauri::AppHandle) -> Result<(), 
     Ok(())
 }
 
+/// Where the setup-error log goes: `<local app data>/<identifier>`, the folder Tauri itself gives the app.
+///
+/// The identifier tells ADE Test (`ai.nikcli.ade.test`) from the official ADE (`ai.nikcli.ade`), as `is_test_build`
+/// does, and not a build feature: a test build writes in its own folder and never in the official one.
+pub fn setup_error_log_dir(identifier: &str) -> PathBuf {
+    dirs::data_local_dir()
+        .or_else(dirs::data_dir)
+        .map(|base| base.join(identifier))
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
+/// Appends the reason to `<dir>/setup-error.log`, making the folder if it is not there: the file written, or why it was not.
+fn write_setup_error_log(dir: &Path, reason: &str) -> Result<PathBuf, String> {
+    use std::io::Write;
+    std::fs::create_dir_all(dir).map_err(|error| error.to_string())?;
+    let path = dir.join("setup-error.log");
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .map_err(|error| error.to_string())?;
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    writeln!(file, "[{ts}] {reason}").map_err(|error| error.to_string())?;
+    Ok(path)
+}
+
+/// What the start-error box says, in Italian and in English: the page cannot be asked yet, so there is no one language to pick.
+///
+/// It names the file only when the line was really written; otherwise it says it could not be, and where it tried.
+pub fn setup_error_box_text(reason: &str, dir: &Path, log: &Result<PathBuf, String>) -> String {
+    let (it, en, place) = match log {
+        Ok(path) => (
+            "I dettagli sono stati salvati nel file:",
+            "The details were saved in the file:",
+            path.display().to_string(),
+        ),
+        Err(error) => (
+            "Non è stato possibile scrivere il file dei dettagli nella cartella:",
+            "The details file could not be written in the folder:",
+            format!("{}\n({error})", dir.display()),
+        ),
+    };
+    format!("Errore durante l'avvio di ADE / ADE failed to start:\n{reason}\n\n{it}\n{en}\n{place}")
+}
+
+/// Writes the reason to the log in `dir` and, in a Windows release build, shows the box. Gives back what the box says.
+///
+/// The folder is passed in, so a test points it at a folder of its own and never at ADE's real one (Fault 7).
+pub fn report_setup_error_in(dir: &Path, reason: &str) -> String {
+    let log = write_setup_error_log(dir, reason);
+    let text = setup_error_box_text(reason, dir, &log);
+    #[cfg(all(windows, not(debug_assertions), not(test)))]
+    {
+        use windows::core::HSTRING;
+        use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
+        unsafe {
+            MessageBoxW(
+                None,
+                &HSTRING::from(text.as_str()),
+                &HSTRING::from("ADE - Errore di avvio / Startup error"),
+                MB_OK | MB_ICONERROR,
+            );
+        }
+    }
+    text
+}
+
+/// A step of the start failed: says so on stderr, in the log and in the box. Both start failures go through here.
+///
+/// The reason is English and the error is the one the system or Tauri gave; the Italian is in the box text only.
+fn report_failed_step(dir: &Path, what: &str, error: &dyn std::fmt::Display) {
+    let msg = format!("{what}: {error}");
+    eprintln!("ADE: {msg}");
+    report_setup_error_in(dir, &msg);
+}
+
 /// Opens ADE's window, and says out loud if it cannot.
 ///
 /// Built here instead of declared in tauri.conf.json because a window that
@@ -2583,6 +2662,8 @@ pub fn run() {
     import_login_path();
 
     let context = tauri::generate_context!();
+    // The folder of the start-error log is named by it, and building the app takes the context away.
+    let identifier = context.config().identifier.clone();
     // The installer's own calls (`windows/hooks.nsh`): one flag, done before anything of the app starts, then out. Before the single-instance
     // plugin too, so a running ADE is not told anything.
     if let Some(code) = uninstall::dispatch(&std::env::args().skip(1).collect::<Vec<_>>(), &context.config().identifier) {
@@ -2695,7 +2776,7 @@ pub fn run() {
             // The bots' gateways the user left on; they read once the page listens.
             gateway::resume(app.handle());
             if let Err(error) = open_main_window(app.handle()) {
-                eprintln!("ADE: impossibile aprire la finestra: {error}");
+                report_failed_step(&setup_error_log_dir(&app.handle().config().identifier), "could not open the window", &error);
                 return Err(Box::new(error));
             }
             Ok(())
@@ -2737,6 +2818,7 @@ pub fn run() {
             usage::transcript_usage,
             mailbox::mailbox_take,
             mailbox::mailbox_taken,
+            mailbox::mailbox_install_error,
             tts::tts_piper_status,
             tts::tts_piper_delete,
             tts::tts_piper_install,
@@ -2853,6 +2935,10 @@ pub fn run() {
             glass::ade_window_set_glass,
         ])
         .build(context)
+        .map_err(|error| {
+            report_failed_step(&setup_error_log_dir(&identifier), "could not initialize the application", &error);
+            error
+        })
         .expect("error while running ADE")
         /*
          * Every process this window started is a child of it, so they die
@@ -2904,6 +2990,61 @@ pub(crate) fn end_everything(app: &tauri::AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A folder of its own under the test temp dir, empty, and not ADE's real data folder.
+    fn setup_error_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("ade-setup-error-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        dir
+    }
+
+    #[test]
+    fn a_start_failure_is_written_in_the_folder_it_is_given_and_the_box_names_that_file() {
+        let dir = setup_error_dir("written");
+        report_failed_step(&dir, "could not open the window", &"mock error");
+        let log = std::fs::read_to_string(dir.join("setup-error.log")).expect("the log is written in the folder given");
+        assert!(log.contains("could not open the window: mock error"), "{log}");
+
+        let written = write_setup_error_log(&dir, "second").expect("a second line is appended");
+        assert_eq!(written, dir.join("setup-error.log"));
+        let log = std::fs::read_to_string(&written).unwrap();
+        assert_eq!(log.lines().count(), 2, "{log}");
+
+        let text = report_setup_error_in(&dir, "third");
+        assert!(text.contains("salvati nel file"), "{text}");
+        assert!(text.contains("were saved in the file"), "{text}");
+        assert!(text.contains(&written.display().to_string()), "{text}");
+        assert!(!text.contains("could not be written"), "{text}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_box_says_the_log_could_not_be_written_when_it_could_not() {
+        let dir = setup_error_dir("blocked");
+        std::fs::create_dir_all(&dir).unwrap();
+        // A file where the folder should be: the folder cannot be made, so there is no log.
+        let blocker = dir.join("blocker");
+        std::fs::write(&blocker, "x").unwrap();
+        let folder = blocker.join("log");
+        let text = report_setup_error_in(&folder, "mock error");
+        assert!(text.contains("mock error"), "{text}");
+        assert!(text.contains("Non è stato possibile scrivere"), "{text}");
+        assert!(text.contains("could not be written"), "{text}");
+        assert!(text.contains(&folder.display().to_string()), "{text}");
+        assert!(!text.contains("salvati nel file") && !text.contains("were saved"), "{text}");
+        assert!(!folder.exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_log_folder_follows_the_identifier_so_the_test_app_has_its_own() {
+        let official = setup_error_log_dir("ai.nikcli.ade");
+        let test = setup_error_log_dir("ai.nikcli.ade.test");
+        assert_ne!(official, test);
+        assert!(official.ends_with("ai.nikcli.ade"));
+        assert!(test.ends_with("ai.nikcli.ade.test"));
+        // Only the path is made: nothing is written in either folder here.
+    }
 
     /// A fresh folder under the test temp dir (`TMP`), with a project and a secret beside it.
     fn attachment_fixture(name: &str) -> (PathBuf, PathBuf, PathBuf) {

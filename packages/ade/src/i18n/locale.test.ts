@@ -9,6 +9,7 @@ import {
   parseLocalePreference,
   resetLocaleForTests,
   setLocalePreference,
+  systemLocale,
   systemLocaleFrom,
   t,
   translate,
@@ -42,14 +43,17 @@ describe("the preference", () => {
 
   test("System follows the machine, a choice overrides it, and the choice is stored", () => {
     resetLocaleForTests("system", "en")
+    expect(systemLocale()).toBe("en")
     expect(locale()).toBe("en")
     setLocalePreference("it")
     expect(locale()).toBe("it")
     expect(localePreference()).toBe("it")
+    expect(systemLocale()).toBe("en")
     expect(localStorage.getItem(LOCALE_STORAGE_KEY)).toBe("it")
     expect(document.documentElement.lang).toBe("it")
     setLocalePreference("system")
     expect(locale()).toBe("en")
+    expect(systemLocale()).toBe("en")
     expect(document.documentElement.lang).toBe("en")
   })
 })

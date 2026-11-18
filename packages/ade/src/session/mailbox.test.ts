@@ -61,6 +61,7 @@ import {
   formatNudge,
   formatUpdate,
   keptBody,
+  reportMailboxInstallError,
   parseActivity,
   keptActivity,
   isQuestionOpen,
@@ -1646,3 +1647,17 @@ describe("earlyCloseReason: exit code and lines when a session closes without re
     expect(reason).toContain("[nascosto]")
   })
 })
+
+describe("Fault 10: ade-msg not written reported to the page once", () => {
+  test("reportMailboxInstallError reports error to the bell once with the translated reason", () => {
+    const reported: { text: string; kind?: string }[] = []
+    const translate = (reason: string) => `Agents will not be able to use ade-msg: ${reason}`
+    const handled = reportMailboxInstallError("ade-msg.ps1: access denied", (text, kind) => reported.push({ text, kind }), translate)
+    expect(handled).toBe(true)
+    expect(reported).toEqual([{ text: "Agents will not be able to use ade-msg: ade-msg.ps1: access denied", kind: "error" }])
+
+    // With no error, nothing is reported
+    expect(reportMailboxInstallError(null, (text, kind) => reported.push({ text, kind }), translate)).toBe(false)
+  })
+})
+

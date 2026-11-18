@@ -3,7 +3,7 @@ import { BRAND } from "../brand"
 import type { AgentFile } from "../bots/ragu"
 import { listBots, resolveRoots } from "../bots/store"
 import { QUALITY_LEVELS, qualityLabel, qualityLevel, sizePerMinute, type RecordQuality } from "../record/recording"
-import { LOCALE_PREFERENCES, locale, localePreference, setLocalePreference, t, type LocalePreference } from "../i18n"
+import { LOCALE_PREFERENCES, localePreference, setLocalePreference, systemLocale, t, type LocalePreference } from "../i18n"
 import { DEFAULT_GLASS_OPACITY, GLASS_READABLE_MIN, THEME_CHOICES, isGlassReadable, type Theme } from "../theme"
 import type { GlassStatus } from "../surface/glass-window"
 import { shortcutGroups } from "../keyboard/shortcuts-list"
@@ -289,7 +289,7 @@ export function LanguageSection(props: LanguageSectionProps) {
   const choose = (next: LocalePreference) => (props.onChange ?? setLocalePreference)(next)
   const label = (choice: LocalePreference) =>
     choice === "system"
-      ? t("settings.language.systemNow", t(locale() === "it" ? "settings.language.it" : "settings.language.en"))
+      ? t("settings.language.systemNow", t(systemLocale() === "it" ? "settings.language.it" : "settings.language.en"))
       : t(choice === "it" ? "settings.language.it" : "settings.language.en")
 
   return (
