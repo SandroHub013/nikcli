@@ -172,6 +172,13 @@ describe("startFolder: where ADE opens", () => {
     expect(startFolder({ saved: undefined, gone: false, hasRecents: true, hasPanes: false, here })).toBe(here)
   })
 
+  it("refuses ADE's own folder even when saved or here", () => {
+    const installDir = "C:/Users/x/AppData/Local/ADE"
+    expect(
+      startFolder({ saved: installDir, gone: false, hasRecents: true, hasPanes: false, here: installDir, ownFolders: [installDir] }),
+    ).toBeUndefined()
+  })
+
   it("a saved workspace with sessions in it never opens on nothing, whatever else is missing", () => {
     expect(startFolder({ saved: undefined, gone: false, hasRecents: false, hasPanes: true, here })).toBe(here)
   })

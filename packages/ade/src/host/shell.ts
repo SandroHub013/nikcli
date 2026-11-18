@@ -357,6 +357,7 @@ export interface Host {
   listArchive?: (path: string) => Promise<ArchiveListing>
   currentDir?: () => Promise<string>
   homeDir?: () => Promise<string>
+  ownFolders?: () => Promise<string[]>
   exists?: (path: string) => Promise<boolean>
 
   /**
@@ -921,6 +922,16 @@ export async function getHost(): Promise<Host | undefined> {
     async homeDir() {
       const { invoke } = await import("@tauri-apps/api/core")
       return invoke<string>("home_dir")
+    },
+
+    async ownFolders() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      try {
+        return await invoke<string[]>("own_folders")
+      } catch {
+        const home = await invoke<string>("home_dir").catch(() => "")
+        return home ? [home] : []
+      }
     },
 
     async exists(path) {

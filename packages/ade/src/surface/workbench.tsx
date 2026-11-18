@@ -7554,6 +7554,17 @@ export function Workbench() {
     if (host) {
       setBooting(t("boot.project"))
       const here = host.currentDir ? await host.currentDir() : ""
+      const own = host.ownFolders ? await host.ownFolders() : []
+      if (own.length > 0) {
+        let cur = recents()
+        for (const f of own) {
+          cur = removeRecent(cur, f)
+        }
+        if (cur.length !== recents().length) {
+          setRecents(cur)
+          localStorage.setItem("ade.recents", serializeRecents(cur))
+        }
+      }
       const saved = restored?.projectPath
       // The last project's folder gone: ADE opens no project, and says why (the saved sessions still restart, each in its own folder).
       const gone = saved ? await refuseMissingRoot(host, saved) : false
@@ -7564,6 +7575,7 @@ export function Workbench() {
         hasRecents: recents().length > 0,
         hasPanes: (restored?.panes.length ?? 0) > 0,
         here,
+        ownFolders: own,
       })
       const p = path ? await discoverProject(host, path) : undefined
       if (p) {

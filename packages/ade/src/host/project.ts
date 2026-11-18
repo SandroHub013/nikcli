@@ -51,12 +51,22 @@ export function startFolder(input: {
   hasPanes: boolean
   /** The folder ADE was started from; empty when the host cannot say. */
   here: string
+  /** Folders belonging to ADE itself or user home that should not open as projects. */
+  ownFolders?: string[]
 }): string | undefined {
-  if (input.saved && !input.gone) return input.saved
+  const isOwn = (p: string | undefined): boolean => {
+    if (!p || !input.ownFolders?.length) return false
+    const norm = normalizePath(p).replace(/\/+$/, "").toLowerCase()
+    return input.ownFolders.some((f) => normalizePath(f).replace(/\/+$/, "").toLowerCase() === norm)
+  }
+
+  const savedGoneOrOwn = input.gone || isOwn(input.saved)
+  if (input.saved && !savedGoneOrOwn) return input.saved
   // The last project vanished: not the folder ADE was started from (its own install folder, or home), but the empty
   // project screen, where the user picks one (UX-5).
-  if (input.saved && input.gone) return undefined
+  if (input.saved && savedGoneOrOwn) return undefined
   if (!input.saved && !input.hasRecents && !input.hasPanes) return undefined
+  if (isOwn(input.here)) return undefined
   return input.here || undefined
 }
 
