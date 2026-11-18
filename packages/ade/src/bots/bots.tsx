@@ -1085,6 +1085,39 @@ export function BotsMain(props: BotsMainProps) {
   createEffect(() => void (roomProject = props.projectRoot))
 
   const { roster, roots, models, catalog, composing, current, identifiers, expression, reload, ordered, open } = shared
+  const [hasRagu, setHasRagu] = createSignal(true)
+
+  const probeRagu = async () => {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core")
+      const found = await invoke<string | null>("pty_which", { command: "ragu" })
+      setHasRagu(Boolean(found))
+    } catch {
+      // Outside Tauri, keep true
+    }
+  }
+
+  onMount(() => {
+    void probeRagu()
+    if (typeof window !== "undefined") {
+      const onFocus = () => {
+        if (!hasRagu()) {
+          void (async () => {
+            try {
+              const { invoke } = await import("@tauri-apps/api/core")
+              await invoke<boolean>("pty_refresh_path").catch(() => false)
+              const found = await invoke<string | null>("pty_which", { command: "ragu" })
+              setHasRagu(Boolean(found))
+            } catch {
+              // Outside Tauri, keep true
+            }
+          })()
+        }
+      }
+      window.addEventListener("focus", onFocus)
+      onCleanup(() => window.removeEventListener("focus", onFocus))
+    }
+  })
 
   // The bot's page, shown, is the user looking at it: what it wrote is read (design/ade-bot-2, scelta 6).
   createEffect(() => {
@@ -1241,6 +1274,7 @@ export function BotsMain(props: BotsMainProps) {
               }}
             >
               <Thread
+                hasRagu={hasRagu()}
                 bot={bot()}
                 talk={talkOf(bot().path)}
                 others={identifiers().filter((name) => name !== bot().identifier)}
@@ -1275,36 +1309,61 @@ export function BotsMain(props: BotsMainProps) {
         </Show>
 
         <Show when={!composing() && !shared.roomComposing() && shared.openRoomId()}>
-          {(id) => <RoomMain deps={roomDeps} roomId={id()} onRemoved={() => shared.openRoom(undefined)} />}
+          {(id) => (
+            <RoomMain
+              deps={roomDeps}
+              roomId={id()}
+              onRemoved={() => shared.openRoom(undefined)}
+              hasRagu={hasRagu()}
+            />
+          )}
         </Show>
 
         <Show when={!composing() && !current() && !shared.roomComposing() && !shared.openRoomId()}>
           <div data-slot="bots-blank">
             <Show
-              when={(roster() ?? []).length > 0}
+              when={hasRagu()}
               fallback={
-                <>
-                  <p data-slot="bots-blank-text">{t("bots.blank.empty")}</p>
-                  <Button data-slot="bots-btn" variant="primary" onClick={startNewBot}>
-                    {t("bots.blank.create")}
-                  </Button>
-                </>
+                <div data-slot="bots-ragu-missing">
+                  <span>{t("chat.raguNeeded")}</span>
+                  <button
+                    type="button"
+                    data-slot="bots-ragu-install"
+                    onClick={() =>
+                      void openExternally(installFor("ragu")?.page ?? "https://github.com/SandroHub013/nikcli")
+                    }
+                  >
+                    {t("install.page")}
+                  </button>
+                </div>
               }
             >
-              {/* With the sidebar hidden there is nowhere else to choose from: the list is here too. */}
-              <p data-slot="bots-blank-text">{t("bots.blank.pick")}</p>
-              <div data-slot="bots-blank-list">
-                <For each={ordered()}>
-                  {(bot) => (
-                    <Button data-slot="bots-btn" onClick={() => open(bot)}>
-                      {bot.identifier}
+              <Show
+                when={(roster() ?? []).length > 0}
+                fallback={
+                  <>
+                    <p data-slot="bots-blank-text">{t("bots.blank.empty")}</p>
+                    <Button data-slot="bots-btn" variant="primary" onClick={startNewBot}>
+                      {t("bots.blank.create")}
                     </Button>
-                  )}
-                </For>
-              </div>
-              <button type="button" data-slot="bots-link" onClick={startNewBot}>
-                {t("bots.blank.createAnother")}
-              </button>
+                  </>
+                }
+              >
+                {/* With the sidebar hidden there is nowhere else to choose from: the list is here too. */}
+                <p data-slot="bots-blank-text">{t("bots.blank.pick")}</p>
+                <div data-slot="bots-blank-list">
+                  <For each={ordered()}>
+                    {(bot) => (
+                      <Button data-slot="bots-btn" onClick={() => open(bot)}>
+                        {bot.identifier}
+                      </Button>
+                    )}
+                  </For>
+                </div>
+                <button type="button" data-slot="bots-link" onClick={startNewBot}>
+                  {t("bots.blank.createAnother")}
+                </button>
+              </Show>
             </Show>
           </div>
         </Show>
@@ -1492,24 +1551,13 @@ function Thread(props: {
   catalog?: BotCatalog
   /** A chip's choice, saved as the form saves it; resolves to the problem, if any. */
   onSettings: (changes: BotChanges) => Promise<string | undefined>
+  hasRagu?: boolean
 }) {
   const [draft, setDraft] = createSignal("")
   const [why, setWhy] = createSignal(false)
-  const [hasRagu, setHasRagu] = createSignal(true)
+  const hasRagu = () => props.hasRagu ?? true
   let scroller: HTMLDivElement | undefined
   let field: HTMLTextAreaElement | undefined
-
-  onMount(() => {
-    void (async () => {
-      try {
-        const { invoke } = await import("@tauri-apps/api/core")
-        const found = await invoke<string | null>("pty_which", { command: "ragu" })
-        setHasRagu(Boolean(found))
-      } catch {
-        // Outside Tauri, keep true
-      }
-    })()
-  })
 
   // Kept at the bottom as it grows, the way a conversation is read.
   createEffect(

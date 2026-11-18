@@ -8,7 +8,9 @@
  */
 
 import { createEffect, createMemo, createResource, createSignal, For, on, Show } from "solid-js"
+import { openExternally } from "../browser/host-bridge"
 import { t } from "../i18n"
+import { installFor } from "../session-new/install"
 import { Button } from "../ui/controls"
 import { APPROVAL_TIMEOUT_MS } from "./approval"
 import { approvalAction } from "./approval-signal"
@@ -118,7 +120,12 @@ export function RoomsRoster(props: {
 }
 
 /** A room's conversation, drawn in the main area. */
-export function RoomMain(props: { deps: RoomPanelDeps; roomId: string; onRemoved: () => void }) {
+export function RoomMain(props: {
+  deps: RoomPanelDeps
+  roomId: string
+  onRemoved: () => void
+  hasRagu?: boolean
+}) {
   const room = createMemo(() => props.deps.book().rooms.find((entry) => entry.id === props.roomId))
   const [draft, setDraft] = createSignal("")
   let scroller: HTMLDivElement | undefined
@@ -305,36 +312,54 @@ export function RoomMain(props: { deps: RoomPanelDeps; roomId: string; onRemoved
             </For>
           </div>
 
-          <form
-            data-slot="bots-composer"
-            onSubmit={(event) => {
-              event.preventDefault()
-              void submit()
-            }}
+          <Show
+            when={props.hasRagu ?? true}
+            fallback={
+              <div data-slot="bots-ragu-missing">
+                <span>{t("chat.raguNeeded")}</span>
+                <button
+                  type="button"
+                  data-slot="bots-ragu-install"
+                  onClick={() =>
+                    void openExternally(installFor("ragu")?.page ?? "https://github.com/SandroHub013/nikcli")
+                  }
+                >
+                  {t("install.page")}
+                </button>
+              </div>
+            }
           >
-            <textarea
-              ref={(el) => (field = el)}
-              data-slot="bots-composer-field"
-              aria-label={t("bots.room.composerLabel", current().name)}
-              rows="1"
-              value={draft()}
-              placeholder={t("bots.room.placeholder")}
-              onInput={(event) => setDraft(event.currentTarget.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
-                  event.preventDefault()
-                  void submit()
-                }
+            <form
+              data-slot="bots-composer"
+              onSubmit={(event) => {
+                event.preventDefault()
+                void submit()
               }}
-            />
-            {/* Invia inside the box, under the text, as in a bot's thread. */}
-            <div data-slot="bots-composer-row">
-              <span data-slot="bots-composer-gap" />
-              <button type="submit" data-slot="bots-send" disabled={draft().trim().length === 0}>
-                {t("bots.send")}
-              </button>
-            </div>
-          </form>
+            >
+              <textarea
+                ref={(el) => (field = el)}
+                data-slot="bots-composer-field"
+                aria-label={t("bots.room.composerLabel", current().name)}
+                rows="1"
+                value={draft()}
+                placeholder={t("bots.room.placeholder")}
+                onInput={(event) => setDraft(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+                    event.preventDefault()
+                    void submit()
+                  }
+                }}
+              />
+              {/* Invia inside the box, under the text, as in a bot's thread. */}
+              <div data-slot="bots-composer-row">
+                <span data-slot="bots-composer-gap" />
+                <button type="submit" data-slot="bots-send" disabled={draft().trim().length === 0}>
+                  {t("bots.send")}
+                </button>
+              </div>
+            </form>
+          </Show>
         </div>
       )}
     </Show>
