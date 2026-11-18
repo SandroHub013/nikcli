@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { DEFAULT_VOICE_SETTINGS } from "@ragu/voice/core"
 import {
   globalVoiceAction,
   modeForGlobalChord,
@@ -96,6 +97,17 @@ describe("readGlobalVoicePayload", () => {
 
 describe("registerVoiceShortcuts", () => {
   const settings = { agentChord: "mod+shift+k", transcriptionChord: "mod+space" }
+
+  test("with default settings, the register dependency of registerVoiceShortcuts is never called", async () => {
+    let called = false
+    await registerVoiceShortcuts(DEFAULT_VOICE_SETTINGS, {
+      unregisterAll: async () => {},
+      register: async () => {
+        called = true
+      },
+    })
+    expect(called).toBe(false)
+  })
 
   test("a chord another application holds does not take the other one down with it", async () => {
     const registered: string[] = []

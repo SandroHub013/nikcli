@@ -10,7 +10,7 @@ import { workbenchSource } from "../test-support/workbench-source"
  * chord does nothing, the voice settings showed it exactly like one that works.
  */
 describe("a chord the system refuses", () => {
-  const settings = { agentChord: "mod+shift+k", transcriptionChord: "mod+shift+j" }
+  const settings = { agentChord: "mod+shift+k", transcriptionChord: "mod+shift+j", openRouterApiKey: "test" }
 
   test("is named beside that chord, and only that one", async () => {
     const result = await registerVoiceShortcuts(settings, {

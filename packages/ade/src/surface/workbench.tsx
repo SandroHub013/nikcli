@@ -7146,6 +7146,7 @@ export function Workbench() {
     setVoiceSettings(settings)
     await voiceEngine.updateSettings(settings)
     if (listensByItself(settings) && !before) listenForName()
+    await registerGlobalShortcuts?.(settings)
   }
 
   const voiceKeyHost = async (): Promise<VoiceKeyHost | undefined> => {
