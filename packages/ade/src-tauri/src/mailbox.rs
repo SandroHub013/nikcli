@@ -108,14 +108,14 @@ pub fn script_install_error(name: &str, error: &str) -> String {
 }
 
 pub fn record_install_error(error: String) {
-    let mut lock = INSTALL_ERROR.lock().unwrap();
+    let mut lock = INSTALL_ERROR.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     if lock.is_none() {
         *lock = Some(error);
     }
 }
 
 pub fn take_install_error() -> Option<String> {
-    INSTALL_ERROR.lock().unwrap().take()
+    INSTALL_ERROR.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take()
 }
 
 /// Writes the `ade-msg` scripts and clears old leftovers. Called at startup.
