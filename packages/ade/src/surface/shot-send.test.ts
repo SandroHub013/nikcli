@@ -36,4 +36,10 @@ describe("sendShotToFocused", () => {
     expect(typed).toContain("return false")
     expect(typed).toContain("return true")
   })
+
+  test("typeAsUser holds on composerNow === none but not on draft (MOD3-1)", () => {
+    const typed = body("const typeAsUser", "  /**\n   * Gives a screenshot")
+    expect(typed).toContain('composerNow(paneId) === "none"')
+    expect(typed).not.toContain("!mayType")
+  })
 })

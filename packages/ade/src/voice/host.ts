@@ -42,7 +42,7 @@ export interface AdeVoiceHostDeps {
   isRunning: (paneId: string) => boolean
   getRunningSession: (
     paneId: string,
-  ) => SpawnedSession | { write: (text: string) => void; kill?: () => void } | undefined
+  ) => SpawnedSession | { write: (text: string) => void | boolean; kill?: () => void } | undefined
   openFile: (path: string) => Promise<void>
   appendLine: (paneId: string, text: string, kind?: "step" | "shell" | "note") => void
   /** A note the user has to read, over the terminal as well as in the transcript. */
@@ -634,7 +634,10 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
       refuseWhileAsking(paneId, trimmed)
       // A trailing space, not a carriage return: the next dictated phrase must
       // not run into this one, and nothing is submitted until the user says so.
-      session.write(`${trimmed} `)
+      const written = session.write(`${trimmed} `)
+      if (written === false) {
+        throw new Error(translate(currentLocale, "voice.msg.host.notReady"))
+      }
     },
 
     describeState(): VoiceStateSnapshot {

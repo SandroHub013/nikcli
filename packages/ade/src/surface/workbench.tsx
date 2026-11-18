@@ -3144,7 +3144,7 @@ export function Workbench() {
   const typeAsUser = (paneId: string, text: string): boolean => {
     const session = running.get(paneId)
     if (!session) return false
-    if (dictationHold({ alive: true, questionOpen: questionOpen(paneId) })) {
+    if (dictationHold({ alive: true, questionOpen: questionOpen(paneId) }) || composerNow(paneId) === "none") {
       tellPane(paneId, t("note.dictationHeld"))
       return false
     }

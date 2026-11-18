@@ -1831,7 +1831,8 @@ export const it = {
     `Risposta del pannello in attesa (${why}): la riprovo quando il pannello si libera`,
   "note.panelReplyStale": (n: number) =>
     `Scartata ${n === 1 ? "una risposta del pannello" : `${n} risposte del pannello`}: in attesa troppo a lungo`,
-  "note.dictationHeld": "Dettatura non scritta: c'è una domanda aperta, rispondi prima e poi detta",
+  "note.dictationHeld":
+    "Dettatura non scritta: c'è una domanda aperta o il pannello non è pronto. Rispondi prima o riprova tra poco.",
   "note.enterHeldFor": (to: string) => `Digitata a ${to}, Invio non premuto: c'è un permesso aperto`,
   "note.inboxLost": (id: string) =>
     `Messaggio ${id} sparito dalla casella prima di essere letto: il mittente è avvisato`,
