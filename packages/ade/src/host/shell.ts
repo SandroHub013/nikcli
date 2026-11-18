@@ -169,7 +169,7 @@ export interface Host {
   // -- Messages between sessions (see `src-tauri/src/mailbox.rs`) -----------
   /** Takes every message `ade-msg send` has dropped since the last call. */
   mailboxTake?: () => Promise<{ id: string; body: string }[]>
-  /** If writing `ade-msg` failed at startup, the reason; null if it succeeded. */
+  /** If writing `ade-msg` failed at startup, a code (`mailbox`, `bin` or `script:<name>: <system error>`); null if it succeeded. */
   mailboxInstallError?: () => Promise<string | null>
   /** The page holds these messages on disk: the native side, which kept them until now, can let them go. */
   mailboxTaken?: (ids: string[]) => Promise<void>

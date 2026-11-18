@@ -97,6 +97,16 @@ pub fn bin_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
 
 static INSTALL_ERROR: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 
+/// What the page is told when a script could not be put in place: `script:<name>: <system error>`.
+///
+/// A code and the system's own text, never a sentence of ours: the page words it in the language of the app (Fault 10).
+/// The other two codes are `mailbox` and `bin`, a folder that could not be found.
+pub fn script_install_error(name: &str, error: &str) -> String {
+    // `write_whole` puts its own Italian label in front of the system error; the page gets only the error.
+    let raw = error.strip_prefix("scrittura fallita: ").unwrap_or(error);
+    format!("script:{name}: {raw}")
+}
+
 pub fn record_install_error(error: String) {
     let mut lock = INSTALL_ERROR.lock().unwrap();
     if lock.is_none() {
@@ -114,11 +124,11 @@ pub fn take_install_error() -> Option<String> {
 /// runs the version that matches the ADE that will read its messages.
 pub fn install(app: &tauri::AppHandle) {
     let Some(dir) = mailbox_path(app) else {
-        record_install_error("cartella mailbox non disponibile".into());
+        record_install_error("mailbox".into());
         return;
     };
     let Some(bin) = bin_dir(app) else {
-        record_install_error("cartella bin non disponibile".into());
+        record_install_error("bin".into());
         return;
     };
     // Where an older ADE put them: nothing has them on its PATH any more, and they would not read today's mail.
@@ -130,7 +140,7 @@ pub fn install(app: &tauri::AppHandle) {
     for (name, text) in [("ade-msg.ps1", PS1), ("ade-msg.cmd", CMD), ("ade-msg", SH)] {
         if let Err(error) = put_script(&bin, name, text) {
             eprintln!("ADE: {name} non aggiornato: {error}");
-            record_install_error(format!("{name}: {error}"));
+            record_install_error(script_install_error(name, &error));
         }
     }
     #[cfg(unix)]
@@ -2582,10 +2592,21 @@ mod tests {
         }
     }
 
+    /// One test on the one global, so no other test takes or records beside it.
     #[test]
-    fn mailbox_install_error_recorded_and_taken_once() {
-        record_install_error("ade-msg.ps1: permission denied".into());
-        assert_eq!(take_install_error().as_deref(), Some("ade-msg.ps1: permission denied"));
+    fn the_install_error_is_a_code_taken_once_and_the_first_one_wins() {
+        assert_eq!(script_install_error("ade-msg", "no label here"), "script:ade-msg: no label here");
+
+        record_install_error(script_install_error("ade-msg.ps1", "scrittura fallita: permission denied (os error 5)"));
+        assert_eq!(
+            take_install_error().as_deref(),
+            Some("script:ade-msg.ps1: permission denied (os error 5)"),
+            "a code and the system error, with no Italian label in front"
+        );
         assert_eq!(take_install_error(), None);
+
+        record_install_error("bin".into());
+        record_install_error("mailbox".into());
+        assert_eq!(take_install_error().as_deref(), Some("bin"));
     }
 }

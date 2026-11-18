@@ -457,6 +457,7 @@ import {
   lateLockReceipt,
   type InboxEntry,
 } from "../session/mailbox"
+import { mailboxInstallReason } from "../session/mailbox-install"
 import {
   createOutputClaims,
   outputRun,
@@ -6313,7 +6314,7 @@ export function Workbench() {
       void host?.mailboxPublish?.(`${USAGE_DESIGN}\n`, "usage-design").catch(() => {})
       void host?.mailboxPublish?.(`${USAGE_DECISIONI}\n`, "usage-decisioni").catch(() => {})
       const installError = await host?.mailboxInstallError?.().catch(() => null)
-      reportMailboxInstallError(installError, report, (reason) => t("mail.adeMsgFailed", reason))
+      reportMailboxInstallError(installError, report, (raw) => t("mail.adeMsgFailed", mailboxInstallReason(raw)))
     })
   })
 
