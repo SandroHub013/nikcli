@@ -594,7 +594,7 @@ import { SIMULATOR_VERBS } from "../simulator/simulator"
 import { PLAYABLE_EXTENSIONS } from "../video/video"
 import { playWav } from "../voice/wav-player"
 import { testBuildMarked } from "../host/build-identity"
-import { emptyStorage, pageFirstRun } from "../host/first-run"
+import { pageFirstRun, voiceStorageFor } from "../host/first-run"
 import { MODEL_EXTENSIONS } from "../model3d/model"
 import {
   createOutsideConfirmationTracker,
@@ -6386,7 +6386,9 @@ export function Workbench() {
    * microphone themselves, so mediaDevices is the whole requirement.
    */
   const voiceAvailable = typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia
-  const voiceNotSetUp = pageFirstRun().includes("no-voice")
+  const firstRun = pageFirstRun()
+  const voiceNotSetUp = firstRun.includes("no-voice")
+  const voiceStore = voiceStorageFor(firstRun)
   const rawSavedVoice =
     typeof localStorage !== "undefined" && !voiceNotSetUp ? localStorage.getItem("voice.settings") : null
   /*
@@ -6398,10 +6400,10 @@ export function Workbench() {
   const testBuild = testBuildMarked()
   /*
    * `--first-run=no-voice` of ADE Test (`voiceNotSetUp`, above): the profile is read as one that has never set voice
-   * up, and no key is read (`startVoiceKey`). Nothing is deleted at start: the saved settings and the keychain stay,
-   * and the next start without the switch finds them. Empty outside ADE Test (`pageFirstRun`).
+   * up, and no key is read (`startVoiceKey`). `voiceStore` is a memory storage for this run, used to load and to
+   * save, so the stored profile and the keychain stay as they are. Empty outside ADE Test (`pageFirstRun`).
    */
-  const initialVoice = loadVoiceSettings(voiceNotSetUp ? emptyStorage() : undefined, { testIdentity: testBuild })
+  const initialVoice = loadVoiceSettings(voiceStore, { testIdentity: testBuild })
   const [voiceSettings, setVoiceSettings] = createSignal<VoiceSettings>(initialVoice.settings)
   /*
    * The voice's OpenRouter key, in memory only (S6): read from the keychain
@@ -6737,6 +6739,8 @@ export function Workbench() {
   /** The xAI key's masked tail from the keychain, `null` without one; undefined until read. Never the value. */
   const [xaiKeyMasked, setXaiKeyMasked] = createSignal<string | null | undefined>(undefined)
   const refreshXaiKey = async () => {
+    // `--first-run=no-voice` of ADE Test: no key, here as in the list of the agent's needs.
+    if (voiceNotSetUp) return setXaiKeyMasked(null)
     if (!keysAvailable()) return
     const keys = await keysService.list().catch(() => undefined)
     if (keys) setXaiKeyMasked(xaiKeyEntry(keys)?.masked ?? null)
@@ -7175,7 +7179,7 @@ export function Workbench() {
     const before = listensByItself(voiceSettings())
     const choosesMai = next.replyBackend === "mai" && voiceSettings().replyBackend !== "mai"
     const previousVoice = activePiperVoice()
-    const stored = saveVoiceSettings(next, undefined, { testIdentity: testBuild })
+    const stored = saveVoiceSettings(next, voiceStore, { testIdentity: testBuild })
     // The key is not the panel's to change: it is the keychain's, whatever `next` says.
     const saved = { ...stored, settings: withVoiceKey(stored.settings) }
     setVoiceSettings(saved.settings)

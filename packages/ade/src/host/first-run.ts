@@ -10,13 +10,6 @@
 export const FIRST_RUN_SWITCHES = ["no-screenshots", "no-agents", "no-voice"] as const
 export type FirstRunSwitch = (typeof FIRST_RUN_SWITCHES)[number]
 
-/** What `--first-run` says, one line per case, for the launcher's help. */
-export const FIRST_RUN_HELP: Record<FirstRunSwitch, string> = {
-  "no-screenshots": "Windows non ha ancora creato la cartella Screenshots (nasce al primo Win+Stampa)",
-  "no-agents": "nessun agente installato, ragu compreso: Chat, Bot e il form della nuova sessione lo dicono",
-  "no-voice": "la voce non è configurata: nessuna chiave, scorciatoie di sistema non registrate",
-}
-
 export interface FirstRunParse {
   switches: FirstRunSwitch[]
   /** What was written and is not a switch, as written. */
@@ -62,4 +55,13 @@ export function emptyStorage(): Storage {
     removeItem: (key) => void items.delete(key),
     setItem: (key, value) => void items.set(key, String(value)),
   }
+}
+
+/**
+ * Where the voice settings are read from and saved to: `undefined` is the profile's own storage, and with `no-voice`
+ * one empty storage in memory for this run, so a change made in the settings never reaches the stored profile.
+ * One call per page: the load and every save must use the same one.
+ */
+export function voiceStorageFor(switches: readonly FirstRunSwitch[]): Storage | undefined {
+  return switches.includes("no-voice") ? emptyStorage() : undefined
 }

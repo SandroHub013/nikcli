@@ -11,7 +11,13 @@
 //!
 //! The variable is read only by the test build (`cfg(feature = "test-exe")`). In the official build the read, and the
 //! name of the variable, are not compiled: `on` is a constant `false`. A switch changes what is answered, never what
-//! is on the disk: nothing is created, moved or deleted, and no key is opened.
+//! is on the disk: nothing is created, moved or deleted, and no key is opened. The one thing written is the folder
+//! chosen in the tray under `no-screenshots`, in a file of the switch's own (`chosen_screenshots_file`), which the
+//! launcher empties at each start with the switch, so a run without it never reads it.
+//!
+//! The Rust side asks the feature `test-exe`, the page asks the identifier `.test` (`src/host/first-run.ts`). A build
+//! with the identity of the test and without the feature (`native:build:test`) honours the page's half only, and the
+//! feature without that identity (a bare `cargo run --features test-exe`) the Rust half only, which can only hide.
 
 /// The name of the variable: compiled in the test build only, so the official binary does not even carry it.
 #[cfg(feature = "test-exe")]
@@ -45,16 +51,28 @@ pub fn missing_screenshots_dir() -> std::path::PathBuf {
     std::env::temp_dir().join("ade-first-run").join("Screenshots")
 }
 
+/// The file where `no-screenshots` keeps the folder chosen in the tray: next to the missing one, under the
+/// instance's own temp folder, and not the `screenshots-folder` file that every ADE Test shares.
+#[cfg_attr(not(feature = "test-exe"), allow(dead_code))]
+pub fn chosen_screenshots_file() -> std::path::PathBuf {
+    std::env::temp_dir().join("ade-first-run").join("screenshots-folder")
+}
+
 /// Runs `run` with the variable set to `value`, one test at a time: the environment is the process's, and the tests
-/// of every module share it.
+/// of every module share it. The variable is taken off again even when `run` panics.
 #[cfg(all(test, feature = "test-exe"))]
 pub(crate) fn with_switches<T>(value: &str, run: impl FnOnce() -> T) -> T {
+    struct Unset;
+    impl Drop for Unset {
+        fn drop(&mut self) {
+            std::env::remove_var(ENV);
+        }
+    }
     static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
     let _held = LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     std::env::set_var(ENV, value);
-    let out = run();
-    std::env::remove_var(ENV);
-    out
+    let _unset = Unset;
+    run()
 }
 
 #[cfg(test)]

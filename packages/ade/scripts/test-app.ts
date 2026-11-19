@@ -11,7 +11,8 @@
  *                               show the first-run cases on a PC that already has everything (ADE Test only,
  *                               the official build does not read them); a list of these, or all:
  *       no-screenshots          Windows has not made the Screenshots folder yet (it appears at the first Win+PrintScreen)
- *       no-agents               no agent CLI installed, ragu included: Chat, Bot and the new-session form say so
+ *       no-agents               no agent CLI installed, ragu included: Chat, Bot and the new-session form say so.
+ *                               NEVER press «Installa» then: it runs the real installer on this PC
  *       no-voice                voice not set up: no key read, the system-wide chords not claimed
  *   bun run test:app stop       stop this worktree's instance, and nothing else
  *   bun run test:app status     this worktree's instance
@@ -192,6 +193,7 @@ async function start(): Promise<void> {
   if (state(plan, root, existing)) {
     console.log(`ADE Test è già aperta per questa cartella:\n${existing ? describe(existing) : `  ${plan.label}`}`)
     console.log("Per riavviarla: bun run test:app stop, poi bun run test:app")
+    if (parsed.firstRun.length > 0) console.log(`  --first-run=${parsed.firstRun.join(",")} NON applicato: vale solo a una partenza`)
     return
   }
 
@@ -207,6 +209,8 @@ async function start(): Promise<void> {
   )
 
   for (const dir of [plan.stateDir, plan.profileDir, plan.tmpDir]) mkdirSync(dir, { recursive: true })
+  // `no-screenshots` keeps its folder and its choice here (first_run.rs): each start is a new PC, and no run without it reads this.
+  if (parsed.firstRun.includes("no-screenshots")) rmSync(join(plan.tmpDir, "ade-first-run"), { recursive: true, force: true })
 
   const { port, cdpPort } = await choosePorts()
   writeFileSync(plan.configPath, devConfig(port))
@@ -284,6 +288,7 @@ async function start(): Promise<void> {
   console.log(
     `ADE Test in avvio (la prima compilazione Rust di una cartella nuova richiede minuti):\n${describe(record)}`,
   )
+  if (parsed.firstRun.length > 0) console.log(`  --first-run=${parsed.firstRun.join(",")}: i casi di primo avvio mostrati`)
   console.log(
     wantWatch
       ? "  --watch: ogni modifica al Rust ricompila e riapre la finestra, chiudendo quella aperta"
