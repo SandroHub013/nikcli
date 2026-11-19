@@ -4,7 +4,7 @@ import { XAI_KEY_ENV } from "../secrets/xai-key"
 import { isVoiceSetUp, registerVoiceShortcuts, shortcutsNote } from "./global-shortcut"
 import { createXaiKeyWatch } from "./xai-key-watch"
 
-const key = (env: string, masked = "••••wxyz"): KeyInfo => ({ name: env, env, agents: [], masked }) as KeyInfo
+const key = (env: string, masked = "••••wxyz"): KeyInfo => ({ name: env, env, agents: [], createdMs: 0, masked })
 
 /**
  * The page as the workbench wires it: the keychain's answer, the signals, and the registration that claims through the gate.
