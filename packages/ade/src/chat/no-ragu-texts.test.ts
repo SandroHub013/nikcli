@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
-import { raguFound } from "../host/ragu-check"
+import { REREAD_GAP_MS, raguFound } from "../host/ragu-check"
 import { translate } from "../i18n"
 import { codeOf } from "../test-support/source-text"
 
@@ -70,6 +70,44 @@ describe("without Ragù Code, Chat and Bot say why and what to do", () => {
     expect(await raguFound({ probe: async () => null, refreshPath: () => Promise.reject(new Error("no")) })).toBe(false)
     // No host (the browser harness): no answer, and the caller keeps what it assumed.
     expect(await raguFound(undefined)).toBeUndefined()
+  })
+
+  test("the PATH is reread once at a time and not again inside the gap, while every caller still gets its answer", async () => {
+    // macOS and Linux: a reread is a login shell of up to 8 s, and Chat and Bot ask for it at every opening and focus.
+    let clock = 1_000_000
+    let rereads = 0
+    let installed = false
+    let finish: () => void = () => {}
+    const host = {
+      probe: async () => (installed ? "ragu 1.0" : null),
+      refreshPath: () =>
+        new Promise<boolean>((resolve) => {
+          rereads += 1
+          finish = () => {
+            installed = true
+            resolve(true)
+          }
+        }),
+    }
+    // Four callers while the first reread runs: one reread, and all four wait for it.
+    const together = [1, 2, 3, 4].map(() => raguFound(host, () => clock))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(rereads).toBe(1)
+    finish()
+    expect(await Promise.all(together)).toEqual([true, true, true, true])
+    expect(rereads).toBe(1)
+
+    // Still missing, asked again inside the gap: no second reread, only the look; and past it, one more.
+    installed = false
+    clock += REREAD_GAP_MS - 1
+    expect(await raguFound(host, () => clock)).toBe(false)
+    expect(rereads).toBe(1)
+    clock += 1
+    const later = raguFound(host, () => clock)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(rereads).toBe(2)
+    finish()
+    expect(await later).toBe(true)
   })
 
   test("lint: Chat and Bot ask the one check, at the opening and, in Bot, whenever the window comes back", () => {
