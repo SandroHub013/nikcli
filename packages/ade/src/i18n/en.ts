@@ -541,7 +541,7 @@ export const en: Messages = {
   "task.confirmTrust":
     "The session is asking you to trust this folder: confirm it in the terminal and ADE will type the initial task.",
   "task.droppedUser": "The initial task was not typed: you had already written to the session.",
-  "task.droppedRequest": "The initial task was not typed: the request that carried it was cancelled.",
+  "task.droppedRequest": "The initial task was not typed: the request that carried it was closed.",
   "task.exitedUnsent": "The session closed before it got the initial task: ADE did not type it.",
   "task.exitedOnTrust": "The session closed on the trust question's “No, exit”: the task was not typed. To try again, reopen it with the button below and choose “Yes”.",
   "pane.deliverNow": "Deliver now: types and presses Enter",

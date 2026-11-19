@@ -22,6 +22,7 @@
  * ready and a session takes whichever comes first.
  */
 
+import type { ComposerState } from "./composer"
 import { stripAnsi } from "./stream"
 
 /** How long the output must stay quiet before the screen counts as drawn. */
@@ -88,6 +89,30 @@ export function openingDropReason(input: Pick<OpeningInput, "userSpoke" | "reque
   if (input.userSpoke) return "user"
   if (input.requestGone) return "request"
   return undefined
+}
+
+/**
+ * Whether an Enter that sent a line (`submitsLine`) is the user speaking to the agent, for the opening's sake.
+ *
+ * Text and Enter in a window are not: a login code in a startup dialog, a «1» sent to a menu, a search typed into a picker
+ * are for the window, and the opening still goes once it is answered. So an Enter that ADE sees going to a window does not
+ * count, and only on a positive sighting: `windowKnown` is a detector's yes (a question open, a trust dialog), never a
+ * screen that merely reads nothing, because a screen can lag behind xterm and a real line sent then must still count.
+ *
+ * An agent's own box, `ready` or `draft`, is where the Enter goes, whatever else is on screen: that is the line of live
+ * test 11 (agy's box reads draft at rest, the user types and sends), and it always counts.
+ */
+export function enterIsUsersLine(input: {
+  /** `submitsLine`: an Enter that sent something typed. */
+  sendsLine: boolean
+  /** The agent's box as the screen reads it; undefined for an agent whose box ADE does not know. */
+  box: ComposerState | undefined
+  /** A detector positively sees a window at this Enter: a question open (hook, menu, dialog) or a folder-trust dialog. */
+  windowKnown: boolean
+}): boolean {
+  if (!input.sendsLine) return false
+  if (input.box === "ready" || input.box === "draft") return true
+  return !input.windowKnown
 }
 
 export function decideOpening(input: OpeningInput): OpeningDecision {

@@ -745,6 +745,7 @@ import {
   decideOpening,
   OPENING_SETTLE_MS,
   drawsText,
+  enterIsUsersLine,
   openingDropReason,
   openingStep,
   screenDrawn,
@@ -4089,6 +4090,14 @@ export function Workbench() {
     settleWhenQuiet(paneId)
   }
 
+  /** A folder-trust dialog is on the pane's screen: a positive sighting, as the opening poll reads it. */
+  const trustDialogUp = (paneId: string) => {
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    return (
+      hasTerminal(paneId) &&
+      folderTrust(bottomRows(getTerminal(paneId).terminal), pane?.agent ?? pane?.model ?? "") !== undefined
+    )
+  }
   /** When the user last sent a line in each pane: an opening still waiting is not typed over it (`openingDropReason`). */
   const userSpokeAt = new Map<string, number>()
 
@@ -4103,8 +4112,18 @@ export function Workbench() {
    * An Enter into a prompt only the hook reported is its answer: see `promptAnswered`.
    */
   const turnSubmitted = (paneId: string, line = true) => {
-    // The user's own line, as the keys counted it: an Enter into an empty box or a menu says nothing (`submitsLine`).
-    if (line) userSpokeAt.set(paneId, Date.now())
+    /*
+     * The user's own line, as the keys counted it (`submitsLine`) and the screen allows: an Enter that ADE positively sees going
+     * to a window (a login code, a menu, the trust dialog) is for the window, and the opening still goes (`enterIsUsersLine`).
+     */
+    if (
+      enterIsUsersLine({
+        sendsLine: line,
+        box: composerNow(paneId),
+        windowKnown: questionOpen(paneId) || trustDialogUp(paneId),
+      })
+    )
+      userSpokeAt.set(paneId, Date.now())
     promptAnswered(paneId)
     // An Enter ADE saw is evidence, not a guess from output: this turn does not expire (`OUTPUT_CLAIM_MAX_MS`).
     claims.evidence(paneId)
@@ -4999,7 +5018,9 @@ export function Workbench() {
       // The session stays: it may have other work, and closing is `ade-msg close`'s decision.
       // Held, like every other note: typed at once it landed mid-turn or inside
       // the user's draft (review area 2). The round types it when the line is free.
-      if (running.has(request.to)) heldLines.push({ paneId: request.to, text: formatCancel(request.id, sender) })
+      // Not to an agent that never got the task: the opening is dropped, and a stop order for work it never saw costs it a turn.
+      if (running.has(request.to) && !openingWaiting(request.to))
+        heldLines.push({ paneId: request.to, text: formatCancel(request.id, sender) })
       await answer(
         `ok: richiesta ${request.id} annullata; la sessione resta aperta (chiudila con ade-msg close se non serve più)`,
       )
@@ -9346,13 +9367,18 @@ export function Workbench() {
    * actually works; the set is what gives it something to clear.
    */
   const openingPolls = new Set<ReturnType<typeof setInterval>>()
+  /** The pane each first-task poll types into, while it is alive: a task not yet typed is not work the agent has. */
+  const openingPanes = new Map<ReturnType<typeof setInterval>, string>()
+  const openingWaiting = (paneId: string) => [...openingPanes.values()].includes(paneId)
   const stopOpeningPoll = (poll: ReturnType<typeof setInterval>) => {
     clearInterval(poll)
     openingPolls.delete(poll)
+    openingPanes.delete(poll)
   }
   onCleanup(() => {
     for (const poll of openingPolls) clearInterval(poll)
     openingPolls.clear()
+    openingPanes.clear()
   })
 
   /**
@@ -10249,19 +10275,24 @@ export function Workbench() {
            * started (the box can read ready in the middle of their own turn), or the request this opening carries is closed.
            * First of all, before the trust dialog's Enter: nothing is written into a session that has moved on without it.
            */
-          const dropReason = openingDropReason({
+          const dropFields = {
             userSpoke: (userSpokeAt.get(paneId) ?? 0) >= startedAt,
             requestGone: spawnId !== undefined && !openRequests.has(spawnId),
-          })
-          if (dropReason) {
+          }
+          // The one tested function decides; the reason only words what is said.
+          if (decideOpening({ startedAt, now: Date.now(), permissionPending: false, ...dropFields }) === "drop") {
+            const dropReason = openingDropReason(dropFields)
+            // Gone for good: a restart of ADE or «Riprendi» would type it again from the pane's saved task.
+            setWb((w) => updatePane(w, paneId, { task: "" }))
             if (menuTold) dropPaneNote(paneId, menuNote)
             if (silenceTold) dropPaneNote(paneId, t("task.notSent"))
             if (trustSeen) dropPaneNote(paneId, t("task.confirmTrust"))
             dropHeldByDialog(paneId)
             stopOpeningPoll(poll)
             tellPane(paneId, t(dropReason === "user" ? "task.droppedUser" : "task.droppedRequest"))
-            // Their turn is theirs: the status moves only when no turn of theirs is running.
-            if (dropReason === "request") setWb((w) => updatePane(w, paneId, { status: "idle", activity: "ready" }))
+            // Their turn is theirs, and a window still on screen is the pane's state: «Disponibile» only over a quiet screen.
+            if (dropReason === "request" && !trustSeen && !menuTold && !questionOpen(paneId))
+              setWb((w) => updatePane(w, paneId, { status: "idle", activity: "ready" }))
             const open = spawnId !== undefined ? openRequests.get(spawnId) : undefined
             if (open) {
               // Still open and nothing will answer it: its sender hears why, and `ade-msg wait` stops waiting.
@@ -10402,6 +10433,7 @@ export function Workbench() {
           } else void typeOpening()
         }, 100)
         openingPolls.add(poll)
+        openingPanes.set(poll, paneId)
       }
     } catch (e) {
       // Over the terminal: a pane started again keeps the old one live, and the transcript hidden.
