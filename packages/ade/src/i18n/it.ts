@@ -720,6 +720,8 @@ export const it = {
     `La scorciatoia ${chord} per ${feature} non è disponibile: forse un'altra applicazione la sta usando. Scegline un'altra nelle impostazioni vocali.`,
   "voice.shortcut.notSystem": (chord: string, feature: string) =>
     `La scorciatoia ${chord} per ${feature} funziona solo con ADE in primo piano: il suo tasto non si può registrare nel sistema. Scegline una con una lettera, un numero o un tasto F nelle impostazioni vocali.`,
+  "voice.shortcut.notSetUp":
+    "Le scorciatoie vocali partono quando salvi una chiave o scegli i tasti, qui nelle impostazioni vocali.",
   "voice.shortcut.unknown": (chord: string) =>
     `Scorciatoia vocale non riconosciuta (${chord}): il microfono non è stato aperto. Riassegnala nelle impostazioni vocali.`,
   "permission.answer.yes": "Sì",

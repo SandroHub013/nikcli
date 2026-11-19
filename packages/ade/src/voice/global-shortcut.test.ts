@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import { workbenchSource } from "../test-support/workbench-source"
+import { codeOf } from "../test-support/source-text"
 import { DEFAULT_VOICE_SETTINGS } from "@ragu/voice/core"
 import {
   globalVoiceAction,
   modeForGlobalChord,
+  notSetUpRefusals,
   registerVoiceShortcuts,
   serialiseRegistrations,
   unknownChordMessage,
@@ -261,6 +263,50 @@ describe("serialiseRegistrations", () => {
     await save("ctrl+b")
     await save("ctrl+c")
     expect(opened).toEqual(["ctrl+a", "ctrl+b", "ctrl+c"])
+  })
+})
+
+/*
+ * The default engine is grok-stream and runs on an xAI key that lives in the keychain, not in the settings: a user who
+ * set voice up with only that key, and kept the default chords, must keep both shortcuts.
+ */
+describe("the xAI key counts as voice set up", () => {
+  const defaults = { agentChord: "mod+shift+k", transcriptionChord: "mod+shift+j" }
+  const claim = async (settings: Parameters<typeof registerVoiceShortcuts>[0]) => {
+    const claimed: string[] = []
+    const result = await registerVoiceShortcuts(settings, {
+      unregisterAll: async () => {},
+      register: async (chord) => void claimed.push(chord),
+    })
+    return { claimed, result }
+  }
+
+  test("only the xAI key, default chords: both chords are claimed", async () => {
+    const { claimed, result } = await claim({ ...defaults, hasXaiKey: true })
+    expect(claimed.sort()).toEqual(["CommandOrControl+Shift+J", "CommandOrControl+Shift+K"])
+    expect(result.notSetUp).toBeUndefined()
+  })
+
+  test("no key, default chords: nothing is claimed, and it is said", async () => {
+    const { claimed, result } = await claim({ ...defaults, hasXaiKey: false })
+    expect(claimed).toEqual([])
+    expect(result.notSetUp).toBe(true)
+    expect(notSetUpRefusals().agent).toBe(notSetUpRefusals().transcription)
+    expect(notSetUpRefusals().agent).toContain("chiave")
+  })
+
+  test("the key saved later: claimed then, not before", async () => {
+    const before = await claim({ ...defaults, hasXaiKey: false })
+    const after = await claim({ ...defaults, hasXaiKey: true })
+    expect(before.claimed).toEqual([])
+    expect(after.claimed).toHaveLength(2)
+  })
+
+  test("the workbench passes the keychain's answer to the gate and claims again when it changes", () => {
+    const workbench = codeOf(workbenchSource())
+    expect(workbench).toContain(codeOf("hasXaiKey: typeof xaiKeyMasked() === \"string\""))
+    expect(workbench).toContain(codeOf("void registerGlobalShortcuts?.(voiceSettings())"))
+    expect(workbench).toContain(codeOf("setShortcutRefusals(notSetUp ? notSetUpRefusals() : refusalsOf(failed))"))
   })
 })
 

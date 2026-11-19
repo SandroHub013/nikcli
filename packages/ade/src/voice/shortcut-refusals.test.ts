@@ -84,7 +84,7 @@ describe("lint: the refusal reaches the voice settings", () => {
   const panel = codeOf(readFileSync(new URL("../../../voice/src/ui/settings-state.ts", import.meta.url), "utf8"))
 
   test("the workbench keeps what the last registration refused, and hands it to the panel", () => {
-    expect(workbench).toContain(codeOf("setShortcutRefusals(refusalsOf(failed))"))
+    expect(workbench).toContain(codeOf("setShortcutRefusals(notSetUp ? notSetUpRefusals() : refusalsOf(failed))"))
     expect(workbench).toContain(codeOf("shortcutRefusals={shortcutRefusals()}"))
   })
 

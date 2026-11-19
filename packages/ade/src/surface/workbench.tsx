@@ -770,6 +770,7 @@ import { createPushToTalkHandler, resolveVoiceOrAdeKey } from "../voice/shortcut
 import {
   GLOBAL_VOICE_EVENT,
   globalVoiceAction,
+  notSetUpRefusals,
   refusalsOf,
   registerVoiceShortcuts,
   serialiseRegistrations,
@@ -6731,7 +6732,11 @@ export function Workbench() {
   const refreshXaiKey = async () => {
     if (!keysAvailable()) return
     const keys = await keysService.list().catch(() => undefined)
-    if (keys) setXaiKeyMasked(xaiKeyEntry(keys)?.masked ?? null)
+    if (!keys) return
+    const had = typeof xaiKeyMasked() === "string"
+    setXaiKeyMasked(xaiKeyEntry(keys)?.masked ?? null)
+    // A key saved or removed changes whether the voice is set up: the shortcuts are claimed or dropped now, not at the next launch.
+    if (had !== (typeof xaiKeyMasked() === "string")) void registerGlobalShortcuts?.(voiceSettings())
   }
   // Read once the keychain answers: only whether there is a key, and its masked tail (T5b).
   createEffect(() => {
@@ -8072,12 +8077,16 @@ export function Workbench() {
            * the chords the user kept were whichever finished last.
            */
           const syncGlobalShortcuts = serialiseRegistrations(async (settings: VoiceSettings) => {
-            const { failed } = await registerVoiceShortcuts(settings, {
-              unregisterAll: () => invoke("unregister_global_voice_shortcuts") as Promise<void>,
-              register: (chord) => invoke("register_global_voice_shortcut", { chord }) as Promise<void>,
-              report: (message) => report(message, "warning"),
-            })
-            setShortcutRefusals(refusalsOf(failed))
+            // The xAI key is the keychain's, not the settings': only that it is there, read as the claim starts.
+            const { failed, notSetUp } = await registerVoiceShortcuts(
+              { ...settings, hasXaiKey: typeof xaiKeyMasked() === "string" },
+              {
+                unregisterAll: () => invoke("unregister_global_voice_shortcuts") as Promise<void>,
+                register: (chord) => invoke("register_global_voice_shortcut", { chord }) as Promise<void>,
+                report: (message) => report(message, "warning"),
+              },
+            )
+            setShortcutRefusals(notSetUp ? notSetUpRefusals() : refusalsOf(failed))
           })
 
           registerGlobalShortcuts = syncGlobalShortcuts
