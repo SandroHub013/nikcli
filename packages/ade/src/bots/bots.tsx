@@ -48,6 +48,7 @@ import { t } from "../i18n"
 import { Button, IconButton } from "../ui/controls"
 import { APPROVAL_TIMEOUT_MS, localAlwaysStore } from "./approval"
 import { askDialog, askYesNo } from "../host/ask"
+import { raguFound } from "../host/ragu-check"
 import { getHost, type Host } from "../host/shell"
 import { every } from "../host/every"
 import {
@@ -1089,11 +1090,11 @@ export function BotsMain(props: BotsMainProps) {
 
   const probeRagu = async () => {
     try {
-      const { invoke } = await import("@tauri-apps/api/core")
-      const found = await invoke<string | null>("pty_which", { command: "ragu" })
-      setHasRagu(Boolean(found))
+      // Outside Tauri there is no host, and the answer stays true.
+      const found = await raguFound(await getHost())
+      if (found !== undefined) setHasRagu(found)
     } catch {
-      // Outside Tauri, keep true
+      // Keep true
     }
   }
 
@@ -1101,18 +1102,7 @@ export function BotsMain(props: BotsMainProps) {
     void probeRagu()
     if (typeof window !== "undefined") {
       const onFocus = () => {
-        if (!hasRagu()) {
-          void (async () => {
-            try {
-              const { invoke } = await import("@tauri-apps/api/core")
-              await invoke<boolean>("pty_refresh_path").catch(() => false)
-              const found = await invoke<string | null>("pty_which", { command: "ragu" })
-              setHasRagu(Boolean(found))
-            } catch {
-              // Outside Tauri, keep true
-            }
-          })()
-        }
+        if (!hasRagu()) void probeRagu()
       }
       window.addEventListener("focus", onFocus)
       onCleanup(() => window.removeEventListener("focus", onFocus))
@@ -1325,7 +1315,10 @@ export function BotsMain(props: BotsMainProps) {
               when={hasRagu()}
               fallback={
                 <div data-slot="bots-ragu-missing">
-                  <span>{t("chat.raguNeeded")}</span>
+                  <span>
+                    {t("chat.raguNeeded")}
+                    <small data-slot="bots-ragu-hint">{t("bots.raguNeeded.hint")}</small>
+                  </span>
                   <button
                     type="button"
                     data-slot="bots-ragu-install"
@@ -1944,7 +1937,10 @@ function Thread(props: {
         when={hasRagu()}
         fallback={
           <div data-slot="bots-ragu-missing">
-            <span>{t("chat.raguNeeded")}</span>
+            <span>
+              {t("chat.raguNeeded")}
+              <small data-slot="bots-ragu-hint">{t("bots.raguNeeded.hint")}</small>
+            </span>
             <button
               type="button"
               data-slot="bots-ragu-install"

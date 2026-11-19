@@ -343,7 +343,6 @@ export const it = {
   "new.looking": "Cerco gli agenti installati…",
   "new.noneInstalled":
     "Nessun agente installato su questo computer. Scegline uno qui sotto per vedere come installarlo.",
-  "new.noAgentChosen": "nessun agente scelto",
   "pane.noAgent":
     "Questa sessione non può partire: non è stato scelto nessun agente. Chiudila e scegline uno in Nuova sessione.",
   "install.cardHint": "Non installato. Apri per vedere come installarlo.",
@@ -383,6 +382,7 @@ export const it = {
   "new.role.reviewer": "revisiona",
   "new.summary": (count: number, agent: string, workspace: string) =>
     `${count} ${count === 1 ? "sessione" : "sessioni"} con ${agent} in ${workspace}`,
+  "new.summary.none": (workspace: string) => `Nessun agente scelto in ${workspace}`,
   "hooks.desc":
     "Al riavvio ADE riapre le sessioni dov'erano. Per farlo deve sapere quale conversazione aveva ogni pannello: alcune CLI accettano un identificativo scelto da ADE, altre — codex fra queste — no, e possono solo dirlo loro. Qui ADE aggiunge una voce alla configurazione di quella CLI perché all'avvio di ogni sessione lo comunichi.",
   "hooks.files":
@@ -935,6 +935,10 @@ export const it = {
   "shots.noFolder": "Le schermate compariranno qui. Premi Win+Stamp, o scegli una cartella.",
   "shots.emptyFolder": "Nessuna schermata in questa cartella",
   "chat.raguNeeded": "Serve Ragù Code",
+  "chat.raguNeeded.hint":
+    "Ragù Code è l'agente che ADE usa per la Chat. Installalo dalla pagina ufficiale, poi riapri la Chat.",
+  "bots.raguNeeded.hint":
+    "Ragù Code è l'agente che ADE usa per i bot. Installalo dalla pagina ufficiale: ADE lo riconosce quando torni a questa finestra o riapri Bot.",
   "shots.choose": "Scegli cartella…",
   "shots.network": "Cartella di rete: mostrata, non letta",
   "shots.error.notAFolder": "Questa non è una cartella.",

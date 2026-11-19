@@ -696,6 +696,12 @@
   font-size: var(--ade-font-md);
 }
 
+[data-slot="bots-ragu-hint"] {
+  display: block;
+  margin-top: var(--ade-space-1);
+  font-size: var(--ade-font-sm);
+}
+
 [data-slot="bots-ragu-install"] {
   flex: 0 0 auto;
   padding: var(--ade-space-2) var(--ade-space-4);

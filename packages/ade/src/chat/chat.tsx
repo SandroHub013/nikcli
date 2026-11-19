@@ -17,6 +17,8 @@ import { createEffect, createMemo, createSignal, on, For, Show, onMount } from "
 import { EmptyIcon } from "../ui/empty-icon"
 import { t } from "../i18n"
 import { IconButton } from "../ui/controls"
+import { raguFound } from "../host/ragu-check"
+import { getHost } from "../host/shell"
 import { installFor } from "../session-new/install"
 import { openExternally } from "../browser/host-bridge"
 import type { Agent, ConfigProviders } from "@ragu/sdk/client"
@@ -140,11 +142,11 @@ export function Chat(props: ChatProps) {
   onMount(() => {
     void (async () => {
       try {
-        const { invoke } = await import("@tauri-apps/api/core")
-        const found = await invoke<string | null>("pty_which", { command: "ragu" })
-        setHasRagu(Boolean(found))
+        // Outside Tauri there is no host, and the answer stays true.
+        const found = await raguFound(await getHost())
+        if (found !== undefined) setHasRagu(found)
       } catch {
-        // Outside Tauri, keep true
+        // Keep true
       }
     })()
   })
@@ -302,6 +304,11 @@ export function Chat(props: ChatProps) {
     return id ? isBusy(store.state.data, id) : false
   }
   const notice = () => connectionNotice(store.state, props.projectRoot)
+  // «La Chat non è ancora collegata» and its «Collega adesso» mean nothing without Ragù Code: the pill says what to do.
+  const shownNotice = () => {
+    const now = notice()
+    return now?.kind === "notOpen" && !hasRagu() ? undefined : now
+  }
   // A session made outside the chat is read, never written to (C5).
   const foreign = () => entry() !== undefined && !entry()!.chat
   // The first message is a use too: it opens the folder, then goes. The stream follows it.
@@ -501,9 +508,11 @@ export function Chat(props: ChatProps) {
         />
 
         <div data-slot="chat-column">
-          <RulesNote />
+          <Show when={hasRagu()}>
+            <RulesNote />
+          </Show>
 
-          <Show when={notice()}>
+          <Show when={shownNotice()}>
             {(shown) => (
               <p data-slot="chat-notice" role="status">
                 {(() => {
@@ -622,7 +631,10 @@ export function Chat(props: ChatProps) {
             when={hasRagu()}
             fallback={
               <div data-slot="chat-ragu-missing">
-                <span>{t("chat.raguNeeded")}</span>
+                <span>
+                  {t("chat.raguNeeded")}
+                  <small data-slot="chat-ragu-hint">{t("chat.raguNeeded.hint")}</small>
+                </span>
                 <button
                   type="button"
                   data-slot="chat-ragu-install"
