@@ -1,4 +1,8 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { codeOf } from "../test-support/source-text"
+import { formatOpeningDropped } from "./mailbox"
+import { workbenchSource } from "../test-support/workbench-source"
 import {
   OPENING_QUIET_MS,
   OPENING_SETTLE_MS,
@@ -7,6 +11,7 @@ import {
   clockAfterMenu,
   decideOpening,
   drawsText,
+  openingDropReason,
   openingStep,
   screenDrawn,
   type OpeningBytes,
@@ -18,6 +23,52 @@ const at = (overrides: Partial<OpeningInput>): OpeningInput => ({
   now: 0,
   permissionPending: false,
   ...overrides,
+})
+
+/*
+ * Live test 11: an agent's box read `draft` at rest, so the opening waited; the user typed and sent a line, the box read
+ * `ready` in the middle of the turn, and ADE typed 1922 characters into the agent while it worked. Ready is not leave to type.
+ */
+describe("an opening that is dropped", () => {
+  const settled = { firstByteAt: 3_000, lastByteAt: 3_200, now: 10_000 }
+
+  test("nothing happened: the normal send", () => {
+    expect(decideOpening(at({ ...settled }))).toBe("send")
+    expect(decideOpening(at({ ...settled, userSpoke: false, requestGone: false }))).toBe("send")
+  })
+
+  test("a line of the user's, sent since the start: dropped, on a screen that reads ready", () => {
+    expect(decideOpening(at({ ...settled, userSpoke: true }))).toBe("drop")
+  })
+
+  test("a request cancelled: dropped, on a screen that reads ready", () => {
+    expect(decideOpening(at({ ...settled, requestGone: true }))).toBe("drop")
+  })
+
+  test("dropped before anything else: a question standing, a silent process, a late deadline", () => {
+    expect(decideOpening(at({ ...settled, userSpoke: true, permissionPending: true }))).toBe("drop")
+    expect(decideOpening(at({ now: 900, userSpoke: true }))).toBe("drop")
+    expect(decideOpening(at({ now: OPENING_TIMEOUT_MS * 2, requestGone: true }))).toBe("drop")
+  })
+
+  test("the reason names the user first, then the request; nothing when neither", () => {
+    expect(openingDropReason({ userSpoke: true, requestGone: true })).toBe("user")
+    expect(openingDropReason({ requestGone: true })).toBe("request")
+    expect(openingDropReason({})).toBeUndefined()
+  })
+
+  test("the sender is told which request was not typed, and that it can send it again", () => {
+    const told = formatOpeningDropped("r1", undefined)
+    expect(told).toContain("r1")
+    expect(told).toContain("non è stata digitata")
+    expect(told).toContain("Rimanda")
+  })
+
+  test("the step of a first task lets a drop through, never waits or tells over it", () => {
+    expect(openingStep("drop", false, {})).toBe("drop")
+    expect(openingStep("drop", true, { firstByteAt: 1 })).toBe("drop")
+    expect(openingStep("send", false, {})).toBe("send")
+  })
 })
 
 describe("decideOpening", () => {
@@ -297,5 +348,54 @@ describe("a session that says nothing past the deadline", () => {
 
   test("no text ever: said once, and no task is typed", () => {
     expect(poll(400_000)).toEqual(["tell at 60000"])
+  })
+})
+
+describe("lint: the opening poll drops what the user or a cancelled request has overtaken", () => {
+  const source = codeOf(workbenchSource())
+  const between = (from: string, to: string) => {
+    const start = source.indexOf(codeOf(from))
+    expect(start).toBeGreaterThanOrEqual(0)
+    const end = source.indexOf(codeOf(to), start)
+    expect(end).toBeGreaterThan(start)
+    return source.slice(start, end)
+  }
+  const poll = between("const poll = setInterval(() => {", "openingPolls.add(poll)")
+
+  test("the poll asks before the trust dialog's Enter and before any typing, with the keys' and the request's word", () => {
+    const asked = poll.indexOf(codeOf("openingDropReason({"))
+    expect(asked).toBeGreaterThanOrEqual(0)
+    expect(poll).toContain(codeOf("userSpoke: (userSpokeAt.get(paneId) ?? 0) >= startedAt"))
+    expect(poll).toContain(codeOf("requestGone: spawnId !== undefined && !openRequests.has(spawnId)"))
+    expect(asked).toBeLessThan(poll.indexOf(codeOf("session.write(")))
+    expect(asked).toBeLessThan(poll.indexOf(codeOf("withIntro(agentId, task)")))
+  })
+
+  test("a drop stops the poll, says why in the pane, closes the request for its sender, and types nothing", () => {
+    const dropped = between("if (dropReason) {", "// It has written something, whatever that is")
+    expect(dropped).toContain(codeOf("stopOpeningPoll(poll)"))
+    expect(dropped).toContain(codeOf("tellPane(paneId, t(dropReason === \"user\" ? \"task.droppedUser\" : \"task.droppedRequest\"))"))
+    expect(dropped).toContain(codeOf("tellSender(open.from, said, { lost: true })"))
+    expect(dropped).toContain(codeOf("settle(host, open.id, said)"))
+    expect(dropped).toContain(codeOf("return"))
+    for (const typing of ["typeLine", "typeOpening", "deliverText", "session.write", "withIntro"]) {
+      expect(dropped).not.toContain(codeOf(typing))
+    }
+  })
+
+  test("the request is taken before the first await that follows the spawn, so a cancel during the awaits still counts", () => {
+    const start = between("const start = running.beginStart(paneId)", "if (starting.typesTask) {")
+    expect(start.indexOf(codeOf("constspawnId=[...openRequests.values()]"))).toBeGreaterThan(start.indexOf(codeOf("awaitgetHost()")))
+    expect(start.indexOf(codeOf("constspawnId"))).toBeLessThan(start.indexOf(codeOf("awaithost.assignedSecrets")))
+  })
+
+  test("the user's line is counted from the keys: the terminal's Enter and the composer's submit both say so", () => {
+    expect(between("const turnSubmitted = (", "const promptAnswered")).toContain(codeOf("if (line) userSpokeAt.set(paneId, Date.now())"))
+    const renderer = codeOf(readFileSync(new URL("../surface/pane-renderer.tsx", import.meta.url), "utf8"))
+    const counted = renderer.indexOf(codeOf("const sendsLine = submitsLine(deps.records.typed.get(current().id), data)"))
+    expect(counted).toBeGreaterThanOrEqual(0)
+    // Before the key is added to the count, or an Enter would always find the line it has just emptied.
+    expect(counted).toBeLessThan(renderer.indexOf(codeOf("deps.records.typed.update(current().id, (line) => typedAfter(line, data")))
+    expect(renderer).toContain(codeOf("deps.turnSubmitted(current().id, sendsLine)"))
   })
 })

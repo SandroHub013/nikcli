@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { codeOf } from "../test-support/source-text"
 
-import { isAnswerKey, isTyping, questionOpened, submittedSince, typedAfter, type TypedLine } from "./typed-line"
+import { isAnswerKey, isTyping, questionOpened, submittedSince, submitsLine, typedAfter, type TypedLine } from "./typed-line"
 import { workbenchSource } from "../test-support/workbench-source"
 
 const typeAll = (chunks: string[], from: TypedLine | undefined = undefined): TypedLine | undefined =>
@@ -266,5 +266,46 @@ describe("Enter in the kitty keyboard protocol (SES-10)", () => {
   test("any other sequence is still neither typing nor sending", () => {
     expect(typedAfter(draft, "\u001b[A", 2)?.pending).toBe(5)
     expect(typedAfter(draft, "\u001b[13;3u", 2)?.pending).toBe(5)
+  })
+})
+
+/*
+ * What tells an opening that the user has spoken (`openingDropReason`): an Enter that sends a line of theirs. An Enter into an
+ * empty box, and the Enter after a key that only answered a menu, send nothing they wrote and must not cancel the task.
+ */
+describe("submitsLine", () => {
+  const CR = String.fromCharCode(13)
+  const typed = (...chunks: string[]) => typeAll(chunks)
+
+  test("an Enter after typing sends a line of theirs", () => {
+    expect(submitsLine(typed("o", "k"), CR)).toBe(true)
+  })
+
+  test("an Enter into an empty box sends nothing", () => {
+    expect(submitsLine(undefined, CR)).toBe(false)
+  })
+
+  test("a paste that ends in an Enter is a line, with nothing counted before it", () => {
+    expect(submitsLine(undefined, `scrivi i numeri${CR}`)).toBe(true)
+  })
+
+  test("a declared paste never submits", () => {
+    expect(submitsLine(undefined, `${String.fromCharCode(27)}[200~ciao${CR}${String.fromCharCode(27)}[201~`)).toBe(false)
+  })
+
+  test("the key that answers a menu is no line, nor is the Enter after it", () => {
+    const answered = typedAfter(undefined, "1", 1_000, true)
+    expect(isTyping(answered)).toBe(false)
+    expect(submitsLine(answered, CR)).toBe(false)
+  })
+
+  test("a second key after the answer is the start of a line", () => {
+    const answered = typedAfter(undefined, "1", 1_000, true)
+    expect(submitsLine(typedAfter(answered, "x", 1_001), CR)).toBe(true)
+  })
+
+  test("data without an Enter, and an Alt+Enter, send nothing", () => {
+    expect(submitsLine(typed("o"), "k")).toBe(false)
+    expect(submitsLine(typed("o"), `${String.fromCharCode(27)}${CR}`)).toBe(false)
   })
 })

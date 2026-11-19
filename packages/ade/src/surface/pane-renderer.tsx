@@ -12,7 +12,7 @@ import { PluginPane } from "../plugin/pane"
 import type { AdePluginRuntime } from "../plugin/runtime"
 import { AgentMark } from "../session-new/agent-mark"
 import { formatCost, formatTokens } from "../session/metrics"
-import { isAnswerKey, isEnterKey, isTyping, typedAfter } from "../session/typed-line"
+import { isAnswerKey, isEnterKey, isTyping, submitsLine, typedAfter } from "../session/typed-line"
 import { answersPrompt, isInterruptInput } from "../session/mailbox"
 import { showsSuspendButton, SUSPEND_REASON, type SuspendCheck } from "../session/suspend"
 import { formatDroppedPaths } from "../sidebar/file-drag"
@@ -95,7 +95,8 @@ export interface PaneRendererDeps {
    * A line submitted in the pane, by Enter in the terminal or by the composer:
    * the turn starts now, so the previous turn's Stop does not end it.
    */
-  turnSubmitted: (id: string) => void
+  /** `line`: the Enter sent something the user wrote (`submitsLine`); an Enter into an empty box or a menu did not. */
+  turnSubmitted: (id: string, line?: boolean) => void
   /** A key typed in the pane that answers a prompt standing there (`answersPrompt`). */
   promptAnswered: (id: string) => void
   /** An Enter on its way to the pane: what it answers on the screen no longer waits (`createMenuHold`). */
@@ -518,6 +519,8 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
           deps.followKeys(current().id, data)
           // Asked before the key is written: a key that answers a menu on screen is not a line begun (F2).
           const menuOpen = isAnswerKey(data) && !isTyping(deps.records.typed.get(current().id)) && deps.menuOpen(current().id, data)
+          // Before the key is counted: what the user had begun, and whether this Enter sends a line of theirs.
+          const sendsLine = submitsLine(deps.records.typed.get(current().id), data)
           deps.records.typed.update(current().id, (line) => typedAfter(line, data, Date.now(), menuOpen))
           // Enter typed straight into the terminal submits a turn, exactly as
           // the composer does; the quiet timer brings the pane back to idle.
@@ -526,7 +529,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
           if (isEnterKey(data)) deps.menuEnter(current().id)
           if (data.includes("\r")) {
             deps.panels.newTurn(current().id)
-            deps.turnSubmitted(current().id)
+            deps.turnSubmitted(current().id, sendsLine)
           }
           if (isInterruptInput(data)) deps.interrupted(current().id)
           session.write(data)

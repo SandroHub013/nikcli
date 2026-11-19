@@ -160,10 +160,11 @@ test("lint: Enter in the terminal and the composer start the turn through turnSu
   // Setting working by hand left `workingSince` behind, and the previous turn's
   // Stop set the pane idle again on the next mail pass.
   const source = readFileSync(join(import.meta.dir, "pane-renderer.tsx"), "utf-8")
-  expect(source.match(/deps\.turnSubmitted\(current\(\)\.id\)/g)).toHaveLength(2)
+  // The terminal says whether the Enter sent a line of the user's own; the composer's submit is always one.
+  expect(source.match(/deps\.turnSubmitted\(current\(\)\.id(, sendsLine)?\)/g)).toHaveLength(2)
   expect(source).not.toContain('data.includes("\\r") && current().status === "idle"')
   const workbench = workbenchSource()
-  expect(workbench).toMatch(/const turnSubmitted = \(paneId: string\) => \{[\s\S]*?markWorking\(paneId\)\r?\n  \}/)
+  expect(workbench).toMatch(/const turnSubmitted = \(paneId: string, line = true\) => \{[\s\S]*?markWorking\(paneId\)\r?\n  \}/)
 })
 
 test("lint: a key that answers a prompt only the hook reported takes the pane off Permesso", () => {
@@ -172,7 +173,7 @@ test("lint: a key that answers a prompt only the hook reported takes the pane of
   expect(source).toContain("if (answersPrompt(data)) deps.promptAnswered(current().id)")
   const workbench = workbenchSource()
   expect(workbench).toMatch(/const promptAnswered = \(paneId: string\) => \{[\s\S]*?questionSeenAt\.set\(paneId/)
-  expect(workbench).toMatch(/const turnSubmitted = \(paneId: string\) => \{\s+promptAnswered\(paneId\)/)
+  expect(workbench).toMatch(/const turnSubmitted = \(paneId: string, line = true\) => \{[\s\S]*?promptAnswered\(paneId\)/)
 })
 
 test("lint: a gone pane is offered to close, and is never restartable", () => {

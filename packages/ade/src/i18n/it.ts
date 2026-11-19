@@ -560,6 +560,8 @@ export const it = {
   "task.heldByDialog":
     "Il compito iniziale aspetta: ADE vede una finestra aperta nel terminale. Completala, o chiudila con Esc, e parte.",
   "task.notTyped": "Il compito iniziale non è arrivato: si è aperto un menu, o il testo non è comparso nella casella dove si scrive. Guarda il pannello e, se manca, scrivilo tu.",
+  "task.droppedUser": "Il compito iniziale non è stato scritto: hai già scritto tu nella sessione.",
+  "task.droppedRequest": "Il compito iniziale non è stato scritto: la richiesta che lo portava è stata annullata.",
   "task.exitedUnsent": "La sessione si è chiusa prima di ricevere il compito iniziale: ADE non l'ha scritto.",
   "task.exitedOnTrust": "La sessione si è chiusa sul «No, exit» della fiducia: il compito non è stato scritto. Per riprovare, riaprila con il pulsante qui sotto e scegli «Yes».",
   "pane.deliverNow": "Consegna ora: scrive e preme Invio",

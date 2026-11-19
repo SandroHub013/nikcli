@@ -187,3 +187,18 @@ export function submittedSince(line: TypedLine | undefined, submittedAt: number)
 export function isEnterKey(data: string): boolean {
   return data.includes("\r") && !data.startsWith(ESC)
 }
+
+/**
+ * Whether `data`, reaching the session as the user's input, sends a line of theirs: an Enter with something before it, in
+ * the count already (`line`) or in the data itself (a paste that ends in a carriage return).
+ *
+ * The answer to a menu is not a line: its one key is not counted (`typedAfter`, `menuOpen`), so the Enter after it, and the
+ * Enter into an empty box, send nothing the user wrote. Taken from the keys and not from the screen, because the screen
+ * is behind xterm at the moment it matters, and an agent's box at rest can read as a draft (a status line in it).
+ * Call it with the count as it was BEFORE `data` was added to it.
+ */
+export function submitsLine(line: TypedLine | undefined, data: string): boolean {
+  if (!isEnterKey(data)) return false
+  if (isTyping(line)) return true
+  return /[^\u0000-\u001f\u007f]/.test(data.slice(0, data.indexOf("\r")))
+}

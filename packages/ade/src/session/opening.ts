@@ -57,6 +57,13 @@ export interface OpeningInput {
   now: number
   /** True while the session is holding a question the user has not answered. */
   permissionPending: boolean
+  /**
+   * The user has sent a line in this pane since the session started: counted from the keys, never read off the screen
+   * (`submitsLine`). The opening is not typed over what they are already saying to the agent.
+   */
+  userSpoke?: boolean
+  /** The spawn this opening belongs to has no open request any more: cancelled, or answered by other means. */
+  requestGone?: boolean
   quietMs?: number
   settleMs?: number
   timeoutMs?: number
@@ -66,10 +73,27 @@ export interface OpeningInput {
  * `wait` — not yet; ask again later.
  * `send` — the screen has settled, type it.
  * `abandon` — nothing came, or nothing settled; do not type, and say so (`openingStep` for a first task).
+ * `drop` — the opening is no longer wanted: type nothing, ever, and say why (`openingDropReason`).
  */
-export type OpeningDecision = "wait" | "send" | "abandon"
+export type OpeningDecision = "wait" | "send" | "abandon" | "drop"
+
+/**
+ * Why an opening is not typed at all: the user has already written to the agent, or the request it carries is closed.
+ *
+ * Property: ADE never types into an agent uninvited. The opening waits for a screen that is ready, and a screen can read
+ * ready in the middle of the user's own turn (a box that is empty while the agent works), so readiness is not permission to
+ * type. The user's line comes first, and a cancelled request is a task nobody wants done any more.
+ */
+export function openingDropReason(input: Pick<OpeningInput, "userSpoke" | "requestGone">): "user" | "request" | undefined {
+  if (input.userSpoke) return "user"
+  if (input.requestGone) return "request"
+  return undefined
+}
 
 export function decideOpening(input: OpeningInput): OpeningDecision {
+  // Before everything else, a pending question included: what is dropped is never typed, whenever the screen is ready.
+  if (openingDropReason(input)) return "drop"
+
   const quietMs = input.quietMs ?? OPENING_QUIET_MS
   const settleMs = input.settleMs ?? OPENING_SETTLE_MS
   const timeoutMs = input.timeoutMs ?? OPENING_TIMEOUT_MS
@@ -177,7 +201,11 @@ export const REMOTE_STEP_NOTE_MS = 180_000
  * machine, lost its task just as it began to draw. A session that comes late gets its task. The poll ends by itself when
  * the process exits. A program already drawing when the deadline comes has nothing to be told about: its settle is near.
  */
-export function openingStep(decision: OpeningDecision, told: boolean, bytes: OpeningBytes): "wait" | "tell" | "send" {
+export function openingStep(
+  decision: OpeningDecision,
+  told: boolean,
+  bytes: OpeningBytes,
+): "wait" | "tell" | "send" | "drop" {
   if (decision === "abandon") return told || bytes.firstByteAt !== undefined ? "wait" : "tell"
   return decision
 }

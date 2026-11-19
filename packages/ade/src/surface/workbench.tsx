@@ -436,6 +436,7 @@ import {
   waitsForLine,
   formatEnterStuck,
   formatExitedUnsent,
+  formatOpeningDropped,
   formatHeldByScreen,
   formatSilentStart,
   formatHeldDialogReceipt,
@@ -744,6 +745,7 @@ import {
   decideOpening,
   OPENING_SETTLE_MS,
   drawsText,
+  openingDropReason,
   openingStep,
   screenDrawn,
   type OpeningBytes,
@@ -4087,6 +4089,9 @@ export function Workbench() {
     settleWhenQuiet(paneId)
   }
 
+  /** When the user last sent a line in each pane: an opening still waiting is not typed over it (`openingDropReason`). */
+  const userSpokeAt = new Map<string, number>()
+
   /*
    * A line submitted by the user in the pane: Enter in the terminal, or the composer.
    *
@@ -4097,7 +4102,9 @@ export function Workbench() {
    *
    * An Enter into a prompt only the hook reported is its answer: see `promptAnswered`.
    */
-  const turnSubmitted = (paneId: string) => {
+  const turnSubmitted = (paneId: string, line = true) => {
+    // The user's own line, as the keys counted it: an Enter into an empty box or a menu says nothing (`submitsLine`).
+    if (line) userSpokeAt.set(paneId, Date.now())
     promptAnswered(paneId)
     // An Enter ADE saw is evidence, not a guess from output: this turn does not expire (`OUTPUT_CLAIM_MAX_MS`).
     claims.evidence(paneId)
@@ -9708,6 +9715,12 @@ export function Workbench() {
     if (agent?.kind === "app") task = ""
     const host = await getHost()
     /*
+     * The request this session was spawned for, if any: registered right after `addAgent` returns, before this await
+     * resumes. Taken now, and not when the opening poll starts, so a request cancelled during the awaits below still
+     * reads as gone (`openingDropReason`).
+     */
+    const spawnId = [...openRequests.values()].find((other) => other.kind === "spawn" && other.to === paneId)?.id
+    /*
      * Its folder gone (a project removed, a worktree cleaned up): not started
      * somewhere else, and not left to die starting. The pane says which folder
      * and offers to be closed.
@@ -10231,6 +10244,36 @@ export function Workbench() {
             }
             return
           }
+          /*
+           * Not wanted any more, and so not typed, whatever the screen says: the user has sent a line in this pane since it
+           * started (the box can read ready in the middle of their own turn), or the request this opening carries is closed.
+           * First of all, before the trust dialog's Enter: nothing is written into a session that has moved on without it.
+           */
+          const dropReason = openingDropReason({
+            userSpoke: (userSpokeAt.get(paneId) ?? 0) >= startedAt,
+            requestGone: spawnId !== undefined && !openRequests.has(spawnId),
+          })
+          if (dropReason) {
+            if (menuTold) dropPaneNote(paneId, menuNote)
+            if (silenceTold) dropPaneNote(paneId, t("task.notSent"))
+            if (trustSeen) dropPaneNote(paneId, t("task.confirmTrust"))
+            dropHeldByDialog(paneId)
+            stopOpeningPoll(poll)
+            tellPane(paneId, t(dropReason === "user" ? "task.droppedUser" : "task.droppedRequest"))
+            // Their turn is theirs: the status moves only when no turn of theirs is running.
+            if (dropReason === "request") setWb((w) => updatePane(w, paneId, { status: "idle", activity: "ready" }))
+            const open = spawnId !== undefined ? openRequests.get(spawnId) : undefined
+            if (open) {
+              // Still open and nothing will answer it: its sender hears why, and `ade-msg wait` stops waiting.
+              const reader = mailPanes().find((pane) => pane.id === paneId)
+              const said = formatOpeningDropped(open.id, reader)
+              tellSender(open.from, said, { lost: true })
+              void getHost().then((host) => {
+                if (host) void settle(host, open.id, said)
+              })
+            }
+            return
+          }
           // It has written something, whatever that is: a menu drawn first has a note of its own.
           if (silenceTold && openingBytes.firstByteAt !== undefined) {
             silenceTold = false
@@ -10305,7 +10348,7 @@ export function Workbench() {
             permissionPending: boxHolds || asked || unparsed.behind(paneId),
           })
           const step = openingStep(decision, silenceTold, openingBytes)
-          if (step === "wait") return
+          if (step === "wait" || step === "drop") return
           /*
            * Said, not swallowed, and not given up: a session that comes late gets its task, and the sender, who would
            * otherwise believe it went, hears why it has not. The poll ends above, when the process exits.
