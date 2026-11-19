@@ -548,6 +548,10 @@ pub async fn secret_delete(app: AppHandle, lock: tauri::State<'_, SecretsLock>, 
 /// The voice's OpenRouter key, for the webview's own requests. `None` when there is none.
 #[tauri::command]
 pub async fn secret_voice_key(app: AppHandle, lock: tauri::State<'_, SecretsLock>, env: String) -> Result<Option<String>, String> {
+    // `--first-run=no-voice` of ADE Test: voice is not set up and no key is opened (a constant `false` outside the test build).
+    if crate::first_run::on("no-voice") {
+        return Ok(None);
+    }
     let _guard = lock.0.lock().map_err(|_| "chiavi bloccate")?;
     voice_key_in(&SystemVault, &service(&app), &index_path(&app)?, &env)
 }

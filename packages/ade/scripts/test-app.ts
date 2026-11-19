@@ -7,6 +7,13 @@
  *                               (the window closes and reopens: only while writing Rust)
  *   bun run test:app --low      compile, and run, below normal priority (a machine busy with something else)
  *   bun run test:app --jobs 2   cargo's -j (CARGO_BUILD_JOBS) for this start
+ *   bun run test:app --first-run=no-screenshots,no-agents,no-voice
+ *                               show the first-run cases on a PC that already has everything (ADE Test only,
+ *                               the official build does not read them); a list of these, or all:
+ *       no-screenshots          Windows has not made the Screenshots folder yet (it appears at the first Win+PrintScreen)
+ *       no-agents               no agent CLI installed, ragu included: Chat, Bot and the new-session form say so.
+ *                               NEVER press «Installa» then: it runs the real installer on this PC
+ *       no-voice                voice not set up: no key read, the system-wide chords not claimed
  *   bun run test:app stop       stop this worktree's instance, and nothing else
  *   bun run test:app status     this worktree's instance
  *   bun run test:app list       every worktree's instance
@@ -24,6 +31,7 @@ import { join } from "node:path"
 import {
   TEST_APP_CDP_OFFSET,
   devConfig,
+  firstRunEnv,
   instanceProcesses,
   instanceRunning,
   parseRecord,
@@ -185,6 +193,7 @@ async function start(): Promise<void> {
   if (state(plan, root, existing)) {
     console.log(`ADE Test è già aperta per questa cartella:\n${existing ? describe(existing) : `  ${plan.label}`}`)
     console.log("Per riavviarla: bun run test:app stop, poi bun run test:app")
+    if (parsed.firstRun.length > 0) console.log(`  --first-run=${parsed.firstRun.join(",")} NON applicato: vale solo a una partenza`)
     return
   }
 
@@ -200,6 +209,8 @@ async function start(): Promise<void> {
   )
 
   for (const dir of [plan.stateDir, plan.profileDir, plan.tmpDir]) mkdirSync(dir, { recursive: true })
+  // `no-screenshots` keeps its folder and its choice here (first_run.rs): each start is a new PC, and no run without it reads this.
+  if (parsed.firstRun.includes("no-screenshots")) rmSync(join(plan.tmpDir, "ade-first-run"), { recursive: true, force: true })
 
   const { port, cdpPort } = await choosePorts()
   writeFileSync(plan.configPath, devConfig(port))
@@ -242,6 +253,8 @@ async function start(): Promise<void> {
         VITE_ADE_TEST_LABEL: plan.name,
         // Read only by a test build (mailbox.rs): its own mailbox, not the one all test builds share.
         ADE_MAILBOX_ROOT: plan.mailboxDir,
+        // `--first-run`: the cases to show. Read by the test build only (Rust) and by a page marked as ADE Test.
+        ...firstRunEnv(parsed.firstRun),
         // cargo's `-j`, for a machine that is busy with something else (`--jobs N`).
         ...(parsed.jobs ? { CARGO_BUILD_JOBS: String(parsed.jobs) } : {}),
       },
@@ -275,6 +288,7 @@ async function start(): Promise<void> {
   console.log(
     `ADE Test in avvio (la prima compilazione Rust di una cartella nuova richiede minuti):\n${describe(record)}`,
   )
+  if (parsed.firstRun.length > 0) console.log(`  --first-run=${parsed.firstRun.join(",")}: i casi di primo avvio mostrati`)
   console.log(
     wantWatch
       ? "  --watch: ogni modifica al Rust ricompila e riapre la finestra, chiudendo quella aperta"
@@ -425,6 +439,6 @@ switch (command) {
     list()
     break
   default:
-    console.error(`Comando sconosciuto: ${command}. Usa start, stop, status o list (con --cdp, --watch, --low, --jobs N).`)
+    console.error(`Comando sconosciuto: ${command}. Usa start, stop, status o list (con --cdp, --watch, --low, --jobs N, --first-run=...).`)
     process.exit(1)
 }

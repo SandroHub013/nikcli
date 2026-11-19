@@ -15,6 +15,7 @@
  */
 
 import { basename, join, resolve } from "node:path"
+import { FIRST_RUN_SWITCHES, parseFirstRun, type FirstRunSwitch } from "./first-run"
 
 /** Dev ports are taken from 5200–5599, clear of Vite's 5173 and ADE's 5177. */
 export const TEST_APP_PORT_BASE = 5200
@@ -295,6 +296,8 @@ export interface TestAppArgs {
   low: boolean
   /** The `-j` of cargo, as `CARGO_BUILD_JOBS` (`--jobs N`). */
   jobs?: number
+  /** First-run cases to show on this PC (`--first-run=no-agents,...`): see `first-run.ts`. */
+  firstRun: FirstRunSwitch[]
   error?: string
 }
 
@@ -307,14 +310,20 @@ export interface TestAppArgs {
  * normal priority and on every core, on a machine running a benchmark).
  */
 export function parseTestAppArgs(argv: readonly string[]): TestAppArgs {
-  const out: TestAppArgs = { command: "start", cdp: false, watch: false, low: false }
+  const out: TestAppArgs = { command: "start", cdp: false, watch: false, low: false, firstRun: [] }
   let command: string | undefined
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index]!
     if (arg === "--cdp") out.cdp = true
     else if (arg === "--watch") out.watch = true
     else if (arg === "--low") out.low = true
-    else if (arg === "--jobs" || arg.startsWith("--jobs=")) {
+    else if (arg === "--first-run" || arg.startsWith("--first-run=")) {
+      const value = arg === "--first-run" ? argv[++index] : arg.slice("--first-run=".length)
+      const { switches, unknown } = parseFirstRun(value)
+      if (!value || unknown.length > 0 || switches.length === 0)
+        out.error = `--first-run vuole un elenco di ${FIRST_RUN_SWITCHES.join(", ")} (o all), non «${value ?? ""}»`
+      else out.firstRun = [...new Set([...out.firstRun, ...switches])]
+    } else if (arg === "--jobs" || arg.startsWith("--jobs=")) {
       const value = arg === "--jobs" ? argv[++index] : arg.slice("--jobs=".length)
       const jobs = value !== undefined && /^\d+$/.test(value) ? Number(value) : NaN
       if (!Number.isInteger(jobs) || jobs < 1 || jobs > 64) out.error = `--jobs vuole un numero da 1 a 64, non «${value ?? ""}»`
@@ -323,6 +332,15 @@ export function parseTestAppArgs(argv: readonly string[]): TestAppArgs {
   }
   if (command !== undefined) out.command = command
   return out
+}
+
+/**
+ * The environment `--first-run` gives ADE Test: the Rust host's variable (read by the test build only) and the page's.
+ * Always both, empty when no case was asked for, so a list left in the shell that started the launcher is not inherited.
+ */
+export function firstRunEnv(firstRun: readonly FirstRunSwitch[]): Record<string, string> {
+  const list = firstRun.join(",")
+  return { ADE_TEST_FIRST_RUN: list, VITE_ADE_FIRST_RUN: list }
 }
 
 /** Whether `tauri dev`'s output says the app binary is running, under either name. */

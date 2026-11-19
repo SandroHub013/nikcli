@@ -25,6 +25,7 @@ mod append;
 mod archive;
 mod browse;
 mod browser_shot;
+mod first_run;
 mod frontend;
 mod gateway;
 mod learn;

@@ -306,6 +306,14 @@ const ALLOWED_AGENTS: &[&str] = &[
     "prime-agent", "omp",
 ];
 
+/// Whether `command` names an agent CLI, under any of its names (`nikcli` is the name `ragu` had).
+///
+/// What `no-agents` of ADE Test hides: never a shell, `node`, `npm` or `git`, which the app and the install panel need.
+fn is_agent_name(command: &str) -> bool {
+    let stem = command_stem(command);
+    stem.eq_ignore_ascii_case("nikcli") || ALLOWED_AGENTS.iter().any(|agent| agent.eq_ignore_ascii_case(stem))
+}
+
 /// The other names an agent's program goes by, tried in order after the name the page asks for.
 ///
 /// Prime Agent's installer puts `prime-agent` on PATH and oh-my-pi's puts `omp`, while ADE started with `prime` and
@@ -1158,7 +1166,13 @@ pub async fn pty_spawn(
      * in the same directory, and only the one PATHEXT picks can actually run.
      */
     // `ragu` falls back to the nikcli of before the rename (`legacy_cli`).
-    let resolved = resolve_command(&command, which_on_path).unwrap_or_else(|| command.clone());
+    let found = resolve_command(&command, which_on_path);
+    // `--first-run=no-agents` of ADE Test: the bare name below would still be found by the system's own search, so an
+    // agent that is "not installed" is refused here, the way a missing program is.
+    if found.is_none() && crate::first_run::on("no-agents") && is_agent_name(&command) {
+        return Err(format!("programma non trovato: {command}"));
+    }
+    let resolved = found.unwrap_or_else(|| command.clone());
     /*
      * Prime Agent and pi report their turns through an extension ADE passes on
      * the command line, and only to a spawn that has a nonce to report under.
@@ -1978,6 +1992,10 @@ fn runnable_on_windows(candidate: &std::path::Path) -> bool {
 /// Shared with `serve`, which has to find the same `ragu` this module would
 /// start — on Windows that means honouring PATHEXT rather than guessing `.exe`.
 pub(crate) fn which_on_path(command: &str) -> Option<String> {
+    // `--first-run=no-agents` of ADE Test: no agent CLI is installed (a constant `false` outside the test build).
+    if crate::first_run::on("no-agents") && is_agent_name(command) {
+        return None;
+    }
     let path = std::env::var_os("PATH")?;
     /*
      * On Windows the agent CLIs are npm shims, and only some of them are .exe.
@@ -3172,6 +3190,31 @@ mod tests {
         let big = "x".repeat(MAX_PENDING);
         let emitted = pumped(&[&big, "tail"]);
         assert_eq!(emitted, vec![big, "tail".to_string()]);
+    }
+
+    #[test]
+    fn no_agents_hides_every_agent_name_and_nothing_a_shell_or_the_install_panel_needs() {
+        for agent in ALLOWED_AGENTS {
+            assert!(is_agent_name(agent), "{agent} must be hidden");
+        }
+        // The name `ragu` had, and the Windows spelling.
+        assert!(is_agent_name("nikcli"));
+        assert!(is_agent_name("claude.cmd"));
+        assert!(is_agent_name("RAGU.exe"));
+        for other in ["cmd", "powershell", "pwsh", "bash", "node", "npm", "winget", "git", "bun"] {
+            assert!(!is_agent_name(other), "{other} must stay visible");
+        }
+    }
+
+    /// The test build with `no-agents`: the lookup answers nothing for an agent, and as before for what is not one.
+    #[cfg(feature = "test-exe")]
+    #[test]
+    fn no_agents_makes_the_lookup_find_no_agent() {
+        crate::first_run::with_switches("no-agents", || {
+            for agent in ["claude", "codex", "ragu", "nikcli"] {
+                assert_eq!(which_on_path(agent), None, "{agent} must not be found");
+            }
+        });
     }
 
     #[test]

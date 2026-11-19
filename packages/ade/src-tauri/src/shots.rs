@@ -314,6 +314,16 @@ fn forget_pick(watch: &Watch) {
 ///
 /// Reads the disk on every call: go through `current_dir`.
 fn default_dir() -> Option<PathBuf> {
+    // `--first-run=no-screenshots` of ADE Test: Windows has not made the folder yet, and no other one exists. A folder
+    // chosen in the tray is the one exception, and its file is the switch's own (`chosen_dir_file`), so the full
+    // recovery can be shown: the message, the choice, the screenshots.
+    if crate::first_run::on("no-screenshots") {
+        return Some(
+            chosen_dir()
+                .filter(|dir| names_a_folder(dir))
+                .unwrap_or_else(crate::first_run::missing_screenshots_dir),
+        );
+    }
     let home = dirs::home_dir();
     let chosen = chosen_dir();
     let configured = configured_dir();
@@ -482,6 +492,11 @@ fn config_dir_name() -> &'static str {
 /// Under the local app data, not the roaming config: a folder such as `D:\Shots`
 /// means nothing on another PC, and a roaming profile would carry it there.
 fn chosen_dir_file() -> Option<PathBuf> {
+    // `--first-run=no-screenshots` of ADE Test: not the file every ADE Test shares, which a run without the switch
+    // reads. The launcher empties this folder at each start with the switch.
+    if crate::first_run::on("no-screenshots") {
+        return Some(crate::first_run::chosen_screenshots_file());
+    }
     dirs::data_local_dir().map(|base| base.join(config_dir_name()).join(CHOSEN_FILE))
 }
 
@@ -1964,6 +1979,46 @@ mod dir_tests {
         // With no known folder, a missing guess still returns None.
         assert_eq!(pick_shot_dir(&[onedrive], None, None), None);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// `--first-run=no-screenshots` of ADE Test: the tray is told of a folder Windows has not made yet, and the
+    /// folder is not on the disk, so the tray shows the message that says what fills it.
+    /// The full recovery under `no-screenshots`: the choice made in the tray is the folder the tray then watches, it
+    /// is written to the switch's own file and not to the one every ADE Test shares, and `is_current_dir` accepts it
+    /// (it was refused as `not-current`, and the tray stayed empty).
+    #[cfg(feature = "test-exe")]
+    #[test]
+    fn no_screenshots_lets_the_tray_choose_a_folder_and_then_watches_it() {
+        let root = scratch("first-run-choice");
+        let chosen = root.join("Scelta");
+        std::fs::create_dir_all(&chosen).expect("cartella scelta");
+        crate::first_run::with_switches("no-screenshots", || {
+            let file = chosen_dir_file().expect("the switch's own file");
+            assert_eq!(file, crate::first_run::chosen_screenshots_file());
+            assert_ne!(Some(file.clone()), dirs::data_local_dir().map(|base| base.join(config_dir_name()).join(CHOSEN_FILE)));
+            let _ = std::fs::remove_file(&file);
+            let watch = Watch::default();
+            assert!(!is_current_dir(&watch, &chosen.to_string_lossy()), "before the choice the folder is the missing one");
+
+            save_chosen(&file, &chosen).expect("scelta salvata");
+            forget_pick(&watch);
+            assert_eq!(default_dir(), Some(chosen.clone()));
+            assert!(is_current_dir(&watch, &chosen.to_string_lossy()), "after the choice the tray may watch it");
+            let _ = std::fs::remove_file(&file);
+            forget_pick(&watch);
+            assert_eq!(default_dir(), Some(crate::first_run::missing_screenshots_dir()));
+        });
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[cfg(feature = "test-exe")]
+    #[test]
+    fn no_screenshots_names_a_folder_that_is_not_there_yet() {
+        crate::first_run::with_switches("no-screenshots", || {
+            let dir = default_dir().expect("the missing folder is named");
+            assert!(shot_location(&dir).missing);
+            assert!(!dir.exists());
+        });
     }
 
     #[test]
