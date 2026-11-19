@@ -301,13 +301,14 @@ describe("host/test-app with a build folder shared between worktrees", () => {
 
 describe("host/test-app arguments", () => {
   test("the command is the first word that is not a flag, and --jobs takes its number", () => {
-    expect(parseTestAppArgs([])).toEqual({ command: "start", cdp: false, watch: false, low: false })
+    expect(parseTestAppArgs([])).toEqual({ command: "start", cdp: false, watch: false, low: false, firstRun: [] })
     expect(parseTestAppArgs(["--cdp", "--low", "--jobs", "2"])).toEqual({
       command: "start",
       cdp: true,
       watch: false,
       low: true,
       jobs: 2,
+      firstRun: [],
     })
     expect(parseTestAppArgs(["stop"]).command).toBe("stop")
     expect(parseTestAppArgs(["--jobs=3", "status"])).toMatchObject({ command: "status", jobs: 3 })

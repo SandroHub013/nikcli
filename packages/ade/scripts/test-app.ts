@@ -7,6 +7,12 @@
  *                               (the window closes and reopens: only while writing Rust)
  *   bun run test:app --low      compile, and run, below normal priority (a machine busy with something else)
  *   bun run test:app --jobs 2   cargo's -j (CARGO_BUILD_JOBS) for this start
+ *   bun run test:app --first-run=no-screenshots,no-agents,no-voice
+ *                               show the first-run cases on a PC that already has everything (ADE Test only,
+ *                               the official build does not read them); a list of these, or all:
+ *       no-screenshots          Windows has not made the Screenshots folder yet (it appears at the first Win+PrintScreen)
+ *       no-agents               no agent CLI installed, ragu included: Chat, Bot and the new-session form say so
+ *       no-voice                voice not set up: no key read, the system-wide chords not claimed
  *   bun run test:app stop       stop this worktree's instance, and nothing else
  *   bun run test:app status     this worktree's instance
  *   bun run test:app list       every worktree's instance
@@ -24,6 +30,7 @@ import { join } from "node:path"
 import {
   TEST_APP_CDP_OFFSET,
   devConfig,
+  firstRunEnv,
   instanceProcesses,
   instanceRunning,
   parseRecord,
@@ -242,6 +249,8 @@ async function start(): Promise<void> {
         VITE_ADE_TEST_LABEL: plan.name,
         // Read only by a test build (mailbox.rs): its own mailbox, not the one all test builds share.
         ADE_MAILBOX_ROOT: plan.mailboxDir,
+        // `--first-run`: the cases to show. Read by the test build only (Rust) and by a page marked as ADE Test.
+        ...firstRunEnv(parsed.firstRun),
         // cargo's `-j`, for a machine that is busy with something else (`--jobs N`).
         ...(parsed.jobs ? { CARGO_BUILD_JOBS: String(parsed.jobs) } : {}),
       },
@@ -425,6 +434,6 @@ switch (command) {
     list()
     break
   default:
-    console.error(`Comando sconosciuto: ${command}. Usa start, stop, status o list (con --cdp, --watch, --low, --jobs N).`)
+    console.error(`Comando sconosciuto: ${command}. Usa start, stop, status o list (con --cdp, --watch, --low, --jobs N, --first-run=...).`)
     process.exit(1)
 }
