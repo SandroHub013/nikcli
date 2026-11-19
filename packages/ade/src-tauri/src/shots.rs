@@ -314,6 +314,10 @@ fn forget_pick(watch: &Watch) {
 ///
 /// Reads the disk on every call: go through `current_dir`.
 fn default_dir() -> Option<PathBuf> {
+    // `--first-run=no-screenshots` of ADE Test: Windows has not made the folder yet, and no other one exists.
+    if crate::first_run::on("no-screenshots") {
+        return Some(crate::first_run::missing_screenshots_dir());
+    }
     let home = dirs::home_dir();
     let chosen = chosen_dir();
     let configured = configured_dir();
@@ -1964,6 +1968,18 @@ mod dir_tests {
         // With no known folder, a missing guess still returns None.
         assert_eq!(pick_shot_dir(&[onedrive], None, None), None);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// `--first-run=no-screenshots` of ADE Test: the tray is told of a folder Windows has not made yet, and the
+    /// folder is not on the disk, so the tray shows the message that says what fills it.
+    #[cfg(feature = "test-exe")]
+    #[test]
+    fn no_screenshots_names_a_folder_that_is_not_there_yet() {
+        crate::first_run::with_switches("no-screenshots", || {
+            let dir = default_dir().expect("the missing folder is named");
+            assert!(shot_location(&dir).missing);
+            assert!(!dir.exists());
+        });
     }
 
     #[test]
