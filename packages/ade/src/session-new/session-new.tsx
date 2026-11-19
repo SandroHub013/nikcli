@@ -264,11 +264,14 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
           </fieldset>
 
           <footer data-slot="new-foot">
-            <span data-slot="new-summary">
-              {agentId()
-                ? t("new.summary", count(), agentLabel(agentId()), props.workspace)
-                : t("new.summary.none", props.workspace)}
-            </span>
+            {/* Not while the agents are still being looked up: «nessun agente» would be said before it is known. */}
+            <Show when={agents() !== undefined}>
+              <span data-slot="new-summary">
+                {agentId()
+                  ? t("new.summary", count(), agentLabel(agentId()), props.workspace)
+                  : t("new.summary.none", props.workspace)}
+              </span>
+            </Show>
             <div data-slot="new-spacer" />
             <Show when={props.onClose}>
               <Button variant="ghost" data-slot="new-cancel" onClick={() => props.onClose?.()}>

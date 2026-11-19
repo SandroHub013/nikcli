@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
+import { raguFound } from "../host/ragu-check"
 import { translate } from "../i18n"
 import { codeOf } from "../test-support/source-text"
 
@@ -38,21 +39,71 @@ describe("without Ragù Code, Chat and Bot say why and what to do", () => {
     expect(count(room, '{t("chat.raguNeeded")}')).toBe(count(room, '{t("bots.raguNeeded.hint")}'))
   })
 
-  test("the Bot sentence says ADE picks the install up on its own, and Bot does look again when the window is back", () => {
-    // The claim in the text is true only while this stays: the PATH is read again on focus (the Chat reads it once).
-    expect(bots).toContain('window.addEventListener("focus",onFocus)')
-    expect(bots).toContain('invoke<boolean>("pty_refresh_path")')
-    expect(bots).toContain("if(!hasRagu()){")
-    expect(translate("en", "bots.raguNeeded.hint")).toContain("on its own")
-    // The Chat does not, so its sentence says to reopen it and promises nothing else.
-    expect(chat).not.toContain('addEventListener("focus"')
-    expect(translate("en", "chat.raguNeeded.hint")).toContain("reopen Chat")
+  test("a Ragù Code found only after the PATH is reread opens Chat and Bot", async () => {
+    // The installer wrote the new directory to the user's environment, not to ADE's PATH: the first look finds nothing.
+    let reread = false
+    const probes: string[] = []
+    const host = {
+      probe: async (command: string) => {
+        probes.push(command)
+        return reread ? "ragu 1.0" : null
+      },
+      refreshPath: async () => {
+        reread = true
+        return true
+      },
+    }
+    expect(await raguFound(host)).toBe(true)
+    expect(probes).toEqual(["ragu", "ragu"])
+    // Present at once: one look, and no PATH read for everyone who has it.
+    let asked = false
+    expect(
+      await raguFound({
+        probe: async () => "ragu 1.0",
+        refreshPath: async () => ((asked = true), true),
+      }),
+    ).toBe(true)
+    expect(asked).toBe(false)
+    // Still missing after the reread: the pill stays. A host that cannot reread, or fails, is looked up as it is.
+    expect(await raguFound({ probe: async () => null, refreshPath: async () => true })).toBe(false)
+    expect(await raguFound({ probe: async () => null })).toBe(false)
+    expect(await raguFound({ probe: async () => null, refreshPath: () => Promise.reject(new Error("no")) })).toBe(false)
+    // No host (the browser harness): no answer, and the caller keeps what it assumed.
+    expect(await raguFound(undefined)).toBeUndefined()
   })
 
-  test("Chat shows neither the «sempre» note nor «Collega adesso» when there is no Ragù Code", () => {
+  test("lint: Chat and Bot ask the one check, at the opening and, in Bot, whenever the window comes back", () => {
+    expect(chat).toContain("raguFound(awaitgetHost())")
+    expect(bots).toContain("raguFound(awaitgetHost())")
+    expect(bots).toContain('window.addEventListener("focus",onFocus)')
+    expect(bots).toContain("if(!hasRagu())voidprobeRagu()")
+    // Neither keeps a lookup of its own: that one reads the PATH ADE started with.
+    expect(chat).not.toContain('"pty_which"')
+    expect(bots).not.toContain('"pty_which"')
+  })
+
+  test("the sentences promise what the code does: reopen Chat, come back to the window or reopen Bot", () => {
+    expect(translate("en", "chat.raguNeeded.hint")).toContain("reopen Chat")
+    expect(translate("en", "bots.raguNeeded.hint")).toContain("come back to this window or reopen Bot")
+    expect(translate("it", "bots.raguNeeded.hint")).toContain("torni a questa finestra o riapri Bot")
+  })
+
+  test("Ragù Code is described as what ADE uses, not as «l'agente di questo progetto» (progetto is the user's folder)", () => {
+    for (const language of ["it", "en"] as const) {
+      for (const key of ["chat.raguNeeded.hint", "bots.raguNeeded.hint"] as const) {
+        expect(translate(language, key)).not.toMatch(/progetto|project/)
+      }
+    }
+    expect(translate("it", "chat.raguNeeded.hint")).toContain("l'agente che ADE usa per la Chat")
+    expect(translate("it", "bots.raguNeeded.hint")).toContain("l'agente che ADE usa per i bot")
+  })
+
+  test("lint: Chat keeps «Apri un progetto» without Ragù Code and hides only the not-connected notice with its button", () => {
     expect(chat).toContain("<Showwhen={hasRagu()}><RulesNote/></Show>")
-    // The notice holds the «Collega adesso» button.
-    expect(chat).toContain("<Showwhen={hasRagu()&&notice()}>")
+    expect(chat).toContain('returnnow?.kind==="notOpen"&&!hasRagu()?undefined:now')
+    expect(chat).toContain("<Showwhen={shownNotice()}>")
+    // The notice holds the «Collega adesso» button; the whole notice is not gated any more.
+    expect(chat).not.toContain("hasRagu()&&notice()")
   })
 })
 
@@ -64,7 +115,8 @@ describe("the new-session line with no agent chosen", () => {
     expect(translate("it", "new.summary", 1, "Claude Code", "proj")).toBe("1 sessione con Claude Code in proj")
   })
 
-  test("lint: the form uses it when no agent is chosen", () => {
+  test("lint: the form uses it when no agent is chosen, and not while the agents are still being looked up", () => {
+    expect(newSession).toContain('<Showwhen={agents()!==undefined}><spandata-slot="new-summary">')
     expect(newSession).toContain('agentId()?t("new.summary",count(),agentLabel(agentId()),props.workspace):t("new.summary.none",props.workspace)')
     expect(newSession).not.toContain("new.noAgentChosen")
   })

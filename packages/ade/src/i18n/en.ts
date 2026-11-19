@@ -918,9 +918,10 @@ export const en: Messages = {
   "shots.noFolder": "Screenshots will appear here. Press Win+PrtScn, or choose a folder.",
   "shots.emptyFolder": "No screenshots in this folder yet",
   "chat.raguNeeded": "Ragù Code is needed",
-  "chat.raguNeeded.hint": "Chat uses Ragù Code, this project's agent. Install it from the official page, then reopen Chat.",
+  "chat.raguNeeded.hint":
+    "Ragù Code is the agent ADE uses for Chat. Install it from the official page, then reopen Chat.",
   "bots.raguNeeded.hint":
-    "Bots use Ragù Code, this project's agent. Install it from the official page: ADE picks it up on its own when you come back to this window.",
+    "Ragù Code is the agent ADE uses for bots. Install it from the official page: ADE picks it up when you come back to this window or reopen Bot.",
   "shots.choose": "Choose folder…",
   "shots.network": "Network folder: shown, not read",
   "shots.error.notAFolder": "That is not a folder.",

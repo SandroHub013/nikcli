@@ -935,9 +935,10 @@ export const it = {
   "shots.noFolder": "Le schermate compariranno qui. Premi Win+Stamp, o scegli una cartella.",
   "shots.emptyFolder": "Nessuna schermata in questa cartella",
   "chat.raguNeeded": "Serve Ragù Code",
-  "chat.raguNeeded.hint": "La Chat usa Ragù Code, l'agente di questo progetto. Installalo dalla pagina ufficiale, poi riapri la Chat.",
+  "chat.raguNeeded.hint":
+    "Ragù Code è l'agente che ADE usa per la Chat. Installalo dalla pagina ufficiale, poi riapri la Chat.",
   "bots.raguNeeded.hint":
-    "I bot usano Ragù Code, l'agente di questo progetto. Installalo dalla pagina ufficiale: ADE lo riconosce da sola quando torni a questa finestra.",
+    "Ragù Code è l'agente che ADE usa per i bot. Installalo dalla pagina ufficiale: ADE lo riconosce quando torni a questa finestra o riapri Bot.",
   "shots.choose": "Scegli cartella…",
   "shots.network": "Cartella di rete: mostrata, non letta",
   "shots.error.notAFolder": "Questa non è una cartella.",
