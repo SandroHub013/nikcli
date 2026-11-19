@@ -1166,7 +1166,13 @@ pub async fn pty_spawn(
      * in the same directory, and only the one PATHEXT picks can actually run.
      */
     // `ragu` falls back to the nikcli of before the rename (`legacy_cli`).
-    let resolved = resolve_command(&command, which_on_path).unwrap_or_else(|| command.clone());
+    let found = resolve_command(&command, which_on_path);
+    // `--first-run=no-agents` of ADE Test: the bare name below would still be found by the system's own search, so an
+    // agent that is "not installed" is refused here, the way a missing program is.
+    if found.is_none() && crate::first_run::on("no-agents") && is_agent_name(&command) {
+        return Err(format!("programma non trovato: {command}"));
+    }
+    let resolved = found.unwrap_or_else(|| command.clone());
     /*
      * Prime Agent and pi report their turns through an extension ADE passes on
      * the command line, and only to a spawn that has a nonce to report under.

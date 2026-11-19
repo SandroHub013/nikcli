@@ -144,5 +144,7 @@ describe("first-run switches: the Rust host", () => {
     const pty = read("src-tauri", "src", "pty.rs")
     expect(pty).toMatch(/fn is_agent_name\(command: &str\) -> bool \{[^}]*ALLOWED_AGENTS/)
     expect(pty).toContain('stem.eq_ignore_ascii_case("nikcli")')
+    // A start too: with nothing found the spawner falls back to the bare name, which the system would find on its own.
+    expect(pty).toMatch(/found\.is_none\(\) && crate::first_run::on\("no-agents"\) && is_agent_name\(&command\)/)
   })
 })
