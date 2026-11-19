@@ -15,9 +15,9 @@
  *   codex    -c developer_instructions=<toml string>   (key present in 0.154)
  *
  * agy, opencode, ragu, kimi and hermes have no such flag. For them the
- * notice rides in front of the opening task when there is one; a session
- * started with no task learns it from the first message it receives, which
- * carries the reply command.
+ * notice rides in front of the opening task when there is one. A session
+ * started with no task, or whose opening is dropped (`openingDropReason`),
+ * does not get it: mail carries its own reply command, but not this text.
  *
  * The text avoids `" & | < > ^ %`: on Windows these CLIs are `.cmd` shims, and
  * an argument crosses cmd.exe on its way to the program.

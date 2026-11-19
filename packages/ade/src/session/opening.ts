@@ -22,6 +22,7 @@
  * ready and a session takes whichever comes first.
  */
 
+import type { ComposerState } from "./composer"
 import { stripAnsi } from "./stream"
 
 /** How long the output must stay quiet before the screen counts as drawn. */
@@ -57,6 +58,13 @@ export interface OpeningInput {
   now: number
   /** True while the session is holding a question the user has not answered. */
   permissionPending: boolean
+  /**
+   * The user has sent a line in this pane since the session started: counted from the keys, never read off the screen
+   * (`submitsLine`). The opening is not typed over what they are already saying to the agent.
+   */
+  userSpoke?: boolean
+  /** The spawn this opening belongs to has no open request any more: cancelled, or answered by other means. */
+  requestGone?: boolean
   quietMs?: number
   settleMs?: number
   timeoutMs?: number
@@ -66,10 +74,51 @@ export interface OpeningInput {
  * `wait` — not yet; ask again later.
  * `send` — the screen has settled, type it.
  * `abandon` — nothing came, or nothing settled; do not type, and say so (`openingStep` for a first task).
+ * `drop` — the opening is no longer wanted: type nothing, ever, and say why (`openingDropReason`).
  */
-export type OpeningDecision = "wait" | "send" | "abandon"
+export type OpeningDecision = "wait" | "send" | "abandon" | "drop"
+
+/**
+ * Why an opening is not typed at all: the user has already written to the agent, or the request it carries is closed.
+ *
+ * Property: ADE never types into an agent uninvited. The opening waits for a screen that is ready, and a screen can read
+ * ready in the middle of the user's own turn (a box that is empty while the agent works), so readiness is not permission to
+ * type. The user's line comes first, and a cancelled request is a task nobody wants done any more.
+ */
+export function openingDropReason(input: Pick<OpeningInput, "userSpoke" | "requestGone">): "user" | "request" | undefined {
+  if (input.userSpoke) return "user"
+  if (input.requestGone) return "request"
+  return undefined
+}
+
+/**
+ * Whether an Enter that sent a line (`submitsLine`) is the user speaking to the agent, for the opening's sake.
+ *
+ * Text and Enter in a window are not: a login code in a startup dialog, a «1» sent to a menu, a search typed into a picker
+ * are for the window, and the opening still goes once it is answered. So an Enter that ADE sees going to a window does not
+ * count, and only on a positive sighting: `windowKnown` is a detector's yes (a question open, a trust dialog), never a
+ * screen that merely reads nothing, because a screen can lag behind xterm and a real line sent then must still count.
+ *
+ * An agent's own box, `ready` or `draft`, is where the Enter goes, whatever else is on screen: that is the line of live
+ * test 11 (agy's box reads draft at rest, the user types and sends), and it always counts.
+ */
+export function enterIsUsersLine(input: {
+  /** `submitsLine`: an Enter that sent something typed. */
+  sendsLine: boolean
+  /** The agent's box as the screen reads it; undefined for an agent whose box ADE does not know. */
+  box: ComposerState | undefined
+  /** A detector positively sees a window at this Enter: a question open (hook, menu, dialog) or a folder-trust dialog. */
+  windowKnown: boolean
+}): boolean {
+  if (!input.sendsLine) return false
+  if (input.box === "ready" || input.box === "draft") return true
+  return !input.windowKnown
+}
 
 export function decideOpening(input: OpeningInput): OpeningDecision {
+  // Before everything else, a pending question included: what is dropped is never typed, whenever the screen is ready.
+  if (openingDropReason(input)) return "drop"
+
   const quietMs = input.quietMs ?? OPENING_QUIET_MS
   const settleMs = input.settleMs ?? OPENING_SETTLE_MS
   const timeoutMs = input.timeoutMs ?? OPENING_TIMEOUT_MS
@@ -177,7 +226,11 @@ export const REMOTE_STEP_NOTE_MS = 180_000
  * machine, lost its task just as it began to draw. A session that comes late gets its task. The poll ends by itself when
  * the process exits. A program already drawing when the deadline comes has nothing to be told about: its settle is near.
  */
-export function openingStep(decision: OpeningDecision, told: boolean, bytes: OpeningBytes): "wait" | "tell" | "send" {
+export function openingStep(
+  decision: OpeningDecision,
+  told: boolean,
+  bytes: OpeningBytes,
+): "wait" | "tell" | "send" | "drop" {
   if (decision === "abandon") return told || bytes.firstByteAt !== undefined ? "wait" : "tell"
   return decision
 }

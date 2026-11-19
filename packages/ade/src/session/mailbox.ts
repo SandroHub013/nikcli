@@ -883,6 +883,14 @@ export function formatExitedUnsent(id: string, reader: MailPane | undefined, onT
   )
 }
 
+/** Told to the sender when the user wrote to the session first: the task it asked for was not typed over their line. */
+export function formatOpeningDropped(id: string, reader: MailPane | undefined): string {
+  return (
+    `[ade-msg] La richiesta ${id} non è partita: l'utente ha scritto per primo nella sessione di ${who(reader)}, ` +
+    `e ADE non scrive sopra a chi sta già parlando. Se il lavoro serve ancora, mandalo di nuovo con una nuova ade-msg ask o spawn.`
+  )
+}
+
 export function formatSilentStart(id: string, reader: MailPane | undefined): string {
   return (
     `[ade-msg] ADE ha la richiesta ${id} per ${who(reader)} ma non l'ha ancora digitata: ` +

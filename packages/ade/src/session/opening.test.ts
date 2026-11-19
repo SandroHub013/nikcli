@@ -1,4 +1,8 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { codeOf } from "../test-support/source-text"
+import { formatOpeningDropped } from "./mailbox"
+import { workbenchSource } from "../test-support/workbench-source"
 import {
   OPENING_QUIET_MS,
   OPENING_SETTLE_MS,
@@ -7,6 +11,8 @@ import {
   clockAfterMenu,
   decideOpening,
   drawsText,
+  enterIsUsersLine,
+  openingDropReason,
   openingStep,
   screenDrawn,
   type OpeningBytes,
@@ -18,6 +24,90 @@ const at = (overrides: Partial<OpeningInput>): OpeningInput => ({
   now: 0,
   permissionPending: false,
   ...overrides,
+})
+
+/*
+ * Live test 11: an agent's box read `draft` at rest, so the opening waited; the user typed and sent a line, the box read
+ * `ready` in the middle of the turn, and ADE typed 1922 characters into the agent while it worked. Ready is not leave to type.
+ */
+describe("an opening that is dropped", () => {
+  const settled = { firstByteAt: 3_000, lastByteAt: 3_200, now: 10_000 }
+
+  test("nothing happened: the normal send", () => {
+    expect(decideOpening(at({ ...settled }))).toBe("send")
+    expect(decideOpening(at({ ...settled, userSpoke: false, requestGone: false }))).toBe("send")
+  })
+
+  test("a line of the user's, sent since the start: dropped, on a screen that reads ready", () => {
+    expect(decideOpening(at({ ...settled, userSpoke: true }))).toBe("drop")
+  })
+
+  test("a request cancelled: dropped, on a screen that reads ready", () => {
+    expect(decideOpening(at({ ...settled, requestGone: true }))).toBe("drop")
+  })
+
+  test("dropped before anything else: a question standing, a silent process, a late deadline", () => {
+    expect(decideOpening(at({ ...settled, userSpoke: true, permissionPending: true }))).toBe("drop")
+    expect(decideOpening(at({ now: 900, userSpoke: true }))).toBe("drop")
+    expect(decideOpening(at({ now: OPENING_TIMEOUT_MS * 2, requestGone: true }))).toBe("drop")
+  })
+
+  test("the reason names the user first, then the request; nothing when neither", () => {
+    expect(openingDropReason({ userSpoke: true, requestGone: true })).toBe("user")
+    expect(openingDropReason({ requestGone: true })).toBe("request")
+    expect(openingDropReason({})).toBeUndefined()
+  })
+
+  test("the sender is told plainly that the user wrote first, and how to send the task again", () => {
+    const told = formatOpeningDropped("r1", undefined)
+    expect(told).toContain("r1")
+    expect(told).toContain("non è partita")
+    expect(told).toContain("l'utente ha scritto per primo")
+    expect(told).toContain("mandalo di nuovo")
+  })
+})
+
+/*
+ * Whose line an Enter is. A login code in a startup dialog or a «1» to a menu is for the window, and the opening stays; the
+ * line of live test 11 is for the agent's own box, and the opening goes. Only a detector's yes counts as a window: a screen
+ * that reads nothing is no proof, because it can lag behind xterm.
+ */
+describe("an Enter that is, or is not, the user speaking", () => {
+  const enter = (over: Partial<Parameters<typeof enterIsUsersLine>[0]>) =>
+    enterIsUsersLine({ sendsLine: true, box: "none", windowKnown: false, ...over })
+
+  test("a login code typed in a startup dialog that is recognised: not the user speaking, so the opening stays", () => {
+    const spoke = enter({ box: "none", windowKnown: true })
+    expect(spoke).toBe(false)
+    expect(decideOpening(at({ firstByteAt: 3_000, lastByteAt: 3_200, now: 10_000, userSpoke: spoke }))).toBe("send")
+  })
+
+  test("a «1» sent to a recognised menu, on an agent whose box is not known: the opening stays", () => {
+    const spoke = enter({ box: undefined, windowKnown: true })
+    expect(spoke).toBe(false)
+    expect(decideOpening(at({ firstByteAt: 3_000, lastByteAt: 3_200, now: 10_000, userSpoke: spoke }))).toBe("send")
+  })
+
+  test("the sequence of test 11: agy idle with its Auto mode line, the user types a message and Enter: dropped", () => {
+    // The box reads draft at rest, so it is the agent's box that gets the Enter, whatever else a detector says.
+    for (const windowKnown of [false, true]) {
+      const spoke = enter({ box: "draft", windowKnown })
+      expect(spoke).toBe(true)
+      // Two and a half seconds later the box reads ready in the middle of the turn: still dropped.
+      expect(decideOpening(at({ firstByteAt: 3_000, lastByteAt: 3_200, now: 10_000, userSpoke: spoke }))).toBe("drop")
+    }
+    expect(enter({ box: "ready" })).toBe(true)
+  })
+
+  test("a screen that reads nothing is no proof of a window: a real line sent then still counts", () => {
+    expect(enter({ box: "none", windowKnown: false })).toBe(true)
+    expect(enter({ box: undefined, windowKnown: false })).toBe(true)
+  })
+
+  test("an Enter that sent nothing is never the user speaking", () => {
+    expect(enter({ sendsLine: false, box: "draft" })).toBe(false)
+    expect(enter({ sendsLine: false, box: "none" })).toBe(false)
+  })
 })
 
 describe("decideOpening", () => {
@@ -297,5 +387,75 @@ describe("a session that says nothing past the deadline", () => {
 
   test("no text ever: said once, and no task is typed", () => {
     expect(poll(400_000)).toEqual(["tell at 60000"])
+  })
+})
+
+describe("lint: the opening poll drops what the user or a cancelled request has overtaken", () => {
+  const source = codeOf(workbenchSource())
+  const between = (from: string, to: string) => {
+    const start = source.indexOf(codeOf(from))
+    expect(start).toBeGreaterThanOrEqual(0)
+    const end = source.indexOf(codeOf(to), start)
+    expect(end).toBeGreaterThan(start)
+    return source.slice(start, end)
+  }
+  const poll = between("const poll = setInterval(() => {", "openingPolls.add(poll)")
+
+  test("the poll goes through decideOpening for the drop, before the trust dialog's Enter and before any typing", () => {
+    const asked = poll.indexOf(codeOf("decideOpening({ startedAt, now: Date.now(), permissionPending: false, ...dropFields }) === \"drop\""))
+    expect(asked).toBeGreaterThanOrEqual(0)
+    expect(poll).toContain(codeOf("userSpoke: (userSpokeAt.get(paneId) ?? 0) >= startedAt"))
+    expect(poll).toContain(codeOf("requestGone: spawnId !== undefined && !openRequests.has(spawnId)"))
+    expect(asked).toBeLessThan(poll.indexOf(codeOf("session.write(")))
+    expect(asked).toBeLessThan(poll.indexOf(codeOf("withIntro(agentId, task)")))
+  })
+
+  test("a drop clears the pane's task, so a restart of ADE or Riprendi does not type it again", () => {
+    const dropped = between("=== \"drop\") {", "if (silenceTold && openingBytes.firstByteAt !== undefined) {")
+    expect(dropped).toContain(codeOf("updatePane(w, paneId, { task: \"\" })"))
+  })
+
+  test("a drop leaves the pane's state alone over a window still on screen", () => {
+    const dropped = between("=== \"drop\") {", "if (silenceTold && openingBytes.firstByteAt !== undefined) {")
+    expect(dropped).toContain(codeOf("if (dropReason === \"request\" && !trustSeen && !menuTold && !questionOpen(paneId))"))
+  })
+
+  test("a drop stops the poll, says why in the pane, closes the request for its sender, and types nothing", () => {
+    const dropped = between("=== \"drop\") {", "if (silenceTold && openingBytes.firstByteAt !== undefined) {")
+    expect(dropped).toContain(codeOf("stopOpeningPoll(poll)"))
+    expect(dropped).toContain(codeOf("tellPane(paneId, t(dropReason === \"user\" ? \"task.droppedUser\" : \"task.droppedRequest\"))"))
+    expect(dropped).toContain(codeOf("tellSender(open.from, said, { lost: true })"))
+    expect(dropped).toContain(codeOf("settle(host, open.id, said)"))
+    expect(dropped).toContain(codeOf("return"))
+    for (const typing of ["typeLine", "typeOpening", "deliverText", "session.write", "withIntro"]) {
+      expect(dropped).not.toContain(codeOf(typing))
+    }
+  })
+
+  test("the request is taken before the first await that follows the spawn, so a cancel during the awaits still counts", () => {
+    const start = between("const start = running.beginStart(paneId)", "if (starting.typesTask) {")
+    expect(start.indexOf(codeOf("constspawnId=[...openRequests.values()]"))).toBeGreaterThan(start.indexOf(codeOf("awaitgetHost()")))
+    expect(start.indexOf(codeOf("constspawnId"))).toBeLessThan(start.indexOf(codeOf("awaithost.assignedSecrets")))
+  })
+
+  test("the cancel note is not held for an agent whose opening has not been typed", () => {
+    const cancel = between("await settle(host, request.id, `[ade-msg] richiesta ${request.id} annullata`)", "await answer(`ok: richiesta")
+    expect(cancel).toContain(codeOf("if (running.has(request.to) && !openingWaiting(request.to))"))
+    expect(between("const openingPanes = new Map", "onCleanup(() => {")).toContain(codeOf("openingPanes.delete(poll)"))
+    expect(poll + source.slice(source.indexOf(codeOf("}, 100)openingPolls.add(poll)")))).toContain(codeOf("openingPanes.set(poll, paneId)"))
+  })
+
+  test("the user's line is counted from the keys and the screen: a positive window does not count, the composer goes the same way", () => {
+    const submitted = between("const turnSubmitted = (", "const promptAnswered")
+    expect(submitted).toContain(
+      codeOf("enterIsUsersLine({ sendsLine: line, box: composerNow(paneId), windowKnown: questionOpen(paneId) || trustDialogUp(paneId) })"),
+    )
+    expect(submitted).toContain(codeOf("userSpokeAt.set(paneId, Date.now())"))
+    const renderer = codeOf(readFileSync(new URL("../surface/pane-renderer.tsx", import.meta.url), "utf8"))
+    const counted = renderer.indexOf(codeOf("const sendsLine = submitsLine(deps.records.typed.get(current().id), data)"))
+    expect(counted).toBeGreaterThanOrEqual(0)
+    // Before the key is added to the count, or an Enter would always find the line it has just emptied.
+    expect(counted).toBeLessThan(renderer.indexOf(codeOf("deps.records.typed.update(current().id, (line) => typedAfter(line, data")))
+    expect(renderer).toContain(codeOf("deps.turnSubmitted(current().id, sendsLine)"))
   })
 })
