@@ -703,6 +703,10 @@ export const en: Messages = {
     `The shortcut ${chord} for ${feature} is unavailable: another application might be using it. Choose another one in voice settings.`,
   "voice.shortcut.notSystem": (chord, feature) =>
     `The shortcut ${chord} for ${feature} only works with ADE in front: its key cannot be registered with the system. Choose one with a letter, a digit or an F key in voice settings.`,
+  "voice.shortcut.notSetUp":
+    "For now these shortcuts work only while ADE is in front, so they don't take the keys from other apps. They work everywhere once you save the xAI or OpenRouter key in Agents and accounts › API keys, or pick different keys here.",
+  "voice.shortcut.keyUnreadable":
+    "The saved keys could not be read, so for now these shortcuts work only while ADE is in front. ADE tries again; if the xAI or OpenRouter key is already saved, they will work everywhere as soon as it can be read.",
   "voice.shortcut.unknown": (chord) =>
     `Unrecognized voice shortcut (${chord}): the microphone was not opened. Reassign it in voice settings.`,
   "permission.answer.yes": "Yes",

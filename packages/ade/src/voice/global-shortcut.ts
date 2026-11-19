@@ -244,6 +244,26 @@ export function refusalsOf(
   return refusals
 }
 
+/**
+ * The one note the voice settings show above the shortcuts while none is claimed system-wide because voice is not set up.
+ *
+ * Not silent: the first-run gate describes an intended state, and a shortcut that does nothing outside ADE looks exactly
+ * like one that works until it is pressed elsewhere. While the keychain has not answered, or could not be read, the note
+ * must not tell someone to save a key they may already have: it says the keys could not be read, or nothing at all.
+ */
+export function shortcutsNote(input: {
+  /** The last registration claimed nothing because voice is not set up. */
+  notClaimed: boolean
+  /** The xAI key as the page holds it: `undefined` until a read has answered. */
+  xaiKeyMasked: string | null | undefined
+  /** The last read of the keychain failed. */
+  unreadable: boolean
+}): string | undefined {
+  if (!input.notClaimed) return undefined
+  if (input.xaiKeyMasked === undefined) return input.unreadable ? t("voice.shortcut.keyUnreadable") : undefined
+  return t("voice.shortcut.notSetUp")
+}
+
 export interface RegisterVoiceShortcutsDeps {
   /** Drops every hotkey ADE holds, so a changed chord stops answering. */
   unregisterAll: () => Promise<void>
@@ -255,15 +275,24 @@ export interface RegisterVoiceShortcutsDeps {
   windows?: boolean
 }
 
+/** What the gate looks at: the chords, the OpenRouter key, and whether the keychain holds an xAI key. */
+export type VoiceSetUpInput = Pick<VoiceSettings, "agentChord" | "transcriptionChord"> & {
+  openRouterApiKey?: string
+  /**
+   * An xAI key is in the keychain. The default engine (`grok-stream`) runs on it, and it is not in `VoiceSettings`:
+   * the page knows only that there is one, never its value.
+   */
+  hasXaiKey?: boolean
+}
+
 /**
  * Whether voice is set up so that system-wide hotkeys should be claimed.
  * With default settings and no key configured, chords are not claimed
  * so they do not steal hotkeys (e.g. Ctrl+Shift+J/K) from other apps.
  */
-export function isVoiceSetUp(
-  settings: Pick<VoiceSettings, "agentChord" | "transcriptionChord"> & { openRouterApiKey?: string },
-): boolean {
+export function isVoiceSetUp(settings: VoiceSetUpInput): boolean {
   if (Boolean(settings.openRouterApiKey?.trim())) return true
+  if (settings.hasXaiKey === true) return true
   if (settings.agentChord === "mod+shift+k" && settings.transcriptionChord === "mod+shift+j") {
     return false
   }
@@ -280,9 +309,14 @@ export function isVoiceSetUp(
  * outside the feature simply did not work.
  */
 export async function registerVoiceShortcuts(
-  settings: Pick<VoiceSettings, "agentChord" | "transcriptionChord"> & { openRouterApiKey?: string },
+  settings: VoiceSetUpInput,
   deps: RegisterVoiceShortcutsDeps,
-): Promise<{ registered: VoiceMode[]; failed: { mode: VoiceMode; chord: string; problem: string }[] }> {
+): Promise<{
+  registered: VoiceMode[]
+  failed: { mode: VoiceMode; chord: string; problem: string }[]
+  /** Nothing was claimed because voice is not set up yet: the settings say so, never silence. */
+  notSetUp?: true
+}> {
   try {
     await deps.unregisterAll()
   } catch {
@@ -290,7 +324,7 @@ export async function registerVoiceShortcuts(
   }
 
   if (!isVoiceSetUp(settings)) {
-    return { registered: [], failed: [] }
+    return { registered: [], failed: [], notSetUp: true }
   }
 
   const windows = deps.windows ?? isWindowsRuntime()

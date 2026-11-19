@@ -30,6 +30,13 @@ export function ShortcutsPage(p: { state: VoiceSettingsState; bare?: boolean }):
         desc={t("vui.shortcuts.desc")}
         bare={p.bare}
       />
+      <Show when={props.shortcutsNote}>
+        {(note) => (
+          <div role="status" data-slot="reason-box" data-tone="muted">
+            {note()}
+          </div>
+        )}
+      </Show>
       <div data-slot="shortcuts-list">
         {/* Agent Shortcut */}
         <div>

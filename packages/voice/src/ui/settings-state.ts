@@ -80,6 +80,11 @@ export interface VoiceSettingsStateProps {
    * exactly like one that works until it is pressed and nothing happens.
    */
   shortcutRefusals?: { agent?: string; transcription?: string }
+  /**
+   * One neutral note for the whole shortcuts block: they are not claimed system-wide yet, and what makes them so.
+   * Not a refusal: it describes an intended state (voice not set up), so it is shown once, not as an alert beside each chord.
+   */
+  shortcutsNote?: string
   /** Opens the page of a Piper voice's model, where its licence is stated. Absent: no link is shown. */
   onOpenVoiceSource?: (voice: ReplyVoice) => void
   naturalVoiceError?: string

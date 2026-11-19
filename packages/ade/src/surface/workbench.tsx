@@ -101,7 +101,7 @@ import {
   type LegacyVoiceKey,
   type VoiceKeyHost,
 } from "../secrets/voice-key"
-import { watchKeychain, XAI_KEY_ENV, xaiKeyChanged, xaiKeyEntry, type XaiKeyEffects } from "../secrets/xai-key"
+import { watchKeychain, XAI_KEY_ENV, xaiKeyChanged, type XaiKeyEffects } from "../secrets/xai-key"
 import { KEYS_VERBS, runKeysCommand, type KeyAsker } from "../secrets/keys"
 import {
   DEFAULT_MAX_DEPTH,
@@ -770,11 +770,14 @@ import { createPushToTalkHandler, resolveVoiceOrAdeKey } from "../voice/shortcut
 import {
   GLOBAL_VOICE_EVENT,
   globalVoiceAction,
+  isVoiceSetUp,
   refusalsOf,
   registerVoiceShortcuts,
   serialiseRegistrations,
+  shortcutsNote,
   unknownChordMessage,
 } from "../voice/global-shortcut"
+import { createXaiKeyWatch } from "../voice/xai-key-watch"
 import { createListenGuard, pollListenGuard } from "../voice/listen-guard"
 import { createProactiveAlerts } from "../voice/proactive-alerts"
 
@@ -1212,6 +1215,8 @@ export function Workbench() {
         void refreshVoiceKey()
       }
       if (draft.env === XAI_KEY_ENV) xaiKeyChanged("saved", xaiKeyEffects)
+      // The variable of the xAI entry may have been changed away from `XAI_API_KEY`: the key is no longer there, and the keychain says so.
+      else void refreshXaiKey()
     },
     remove: async (name) => {
       const host = await withKeys()
@@ -6413,6 +6418,8 @@ export function Workbench() {
   // While settings are open, a key saved outside this page shows up in Riconoscimento (T5b, B3).
   createEffect(() => {
     if (!voiceSettingsOpen() || !keysAvailable()) return
+    // Read again as the settings open: a read that failed at start is not left to the next focus or the next 30 s.
+    void refreshXaiKey()
     const stop = watchKeychain(() => void refreshXaiKey(), window)
     onCleanup(stop)
   })
@@ -6728,10 +6735,23 @@ export function Workbench() {
   const [streamState, setStreamState] = createSignal<StreamState | undefined>(undefined)
   /** The xAI key's masked tail from the keychain, `null` without one; undefined until read. Never the value. */
   const [xaiKeyMasked, setXaiKeyMasked] = createSignal<string | null | undefined>(undefined)
+  /** The last read of the keychain failed: «could not read» is not «no key», and the settings say so. */
+  const [xaiKeyUnreadable, setXaiKeyUnreadable] = createSignal(false)
+  /*
+   * A key saved or removed changes whether the voice is set up: the shortcuts are claimed or dropped now, not at the next launch.
+   * A failed read is tried again after a short back-off; see `createXaiKeyWatch`.
+   */
+  const xaiKeyWatch = createXaiKeyWatch({
+    list: () => keysService.list(),
+    masked: xaiKeyMasked,
+    setMasked: setXaiKeyMasked,
+    setUnreadable: setXaiKeyUnreadable,
+    setUpWith: (hasXaiKey) => isVoiceSetUp({ ...voiceSettings(), hasXaiKey }),
+    claim: () => void registerGlobalShortcuts?.(voiceSettings()),
+  })
+  onCleanup(() => xaiKeyWatch.stop())
   const refreshXaiKey = async () => {
-    if (!keysAvailable()) return
-    const keys = await keysService.list().catch(() => undefined)
-    if (keys) setXaiKeyMasked(xaiKeyEntry(keys)?.masked ?? null)
+    if (keysAvailable()) await xaiKeyWatch.refresh()
   }
   // Read once the keychain answers: only whether there is a key, and its masked tail (T5b).
   createEffect(() => {
@@ -7142,6 +7162,8 @@ export function Workbench() {
   let registerGlobalShortcuts: ((settings: VoiceSettings) => Promise<void>) | undefined
   /* The chords the system refused at the last registration, shown in the voice settings. */
   const [shortcutRefusals, setShortcutRefusals] = createSignal<Partial<Record<VoiceMode, string>>>({})
+  /* Nothing was claimed at the last registration because voice is not set up: one neutral note says so (`shortcutsNote`). */
+  const [shortcutsNotClaimed, setShortcutsNotClaimed] = createSignal(false)
 
   /*
    * Always-on listening: whether ADE should hold the microphone open by
@@ -8072,11 +8094,16 @@ export function Workbench() {
            * the chords the user kept were whichever finished last.
            */
           const syncGlobalShortcuts = serialiseRegistrations(async (settings: VoiceSettings) => {
-            const { failed } = await registerVoiceShortcuts(settings, {
-              unregisterAll: () => invoke("unregister_global_voice_shortcuts") as Promise<void>,
-              register: (chord) => invoke("register_global_voice_shortcut", { chord }) as Promise<void>,
-              report: (message) => report(message, "warning"),
-            })
+            // The xAI key is the keychain's, not the settings': only that it is there, read as the claim starts.
+            const { failed, notSetUp } = await registerVoiceShortcuts(
+              { ...settings, hasXaiKey: typeof xaiKeyMasked() === "string" },
+              {
+                unregisterAll: () => invoke("unregister_global_voice_shortcuts") as Promise<void>,
+                register: (chord) => invoke("register_global_voice_shortcut", { chord }) as Promise<void>,
+                report: (message) => report(message, "warning"),
+              },
+            )
+            setShortcutsNotClaimed(notSetUp === true)
             setShortcutRefusals(refusalsOf(failed))
           })
 
@@ -11856,6 +11883,11 @@ export function Workbench() {
             voiceSettings={voiceSettings()}
             onVoiceSettingsChange={handleVoiceSettingsChange}
             shortcutRefusals={shortcutRefusals()}
+            shortcutsNote={shortcutsNote({
+              notClaimed: shortcutsNotClaimed(),
+              xaiKeyMasked: xaiKeyMasked(),
+              unreadable: xaiKeyUnreadable(),
+            })}
             onOpenVoiceSource={(voice) => void getHost().then((host) => host?.ttsOpenVoiceSource?.(voice))}
             naturalVoiceError={voiceError()}
             naturalVoiceDownloading={voiceDownloading()}
