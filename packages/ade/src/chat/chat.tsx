@@ -501,9 +501,11 @@ export function Chat(props: ChatProps) {
         />
 
         <div data-slot="chat-column">
-          <RulesNote />
+          <Show when={hasRagu()}>
+            <RulesNote />
+          </Show>
 
-          <Show when={notice()}>
+          <Show when={hasRagu() && notice()}>
             {(shown) => (
               <p data-slot="chat-notice" role="status">
                 {(() => {
@@ -622,7 +624,10 @@ export function Chat(props: ChatProps) {
             when={hasRagu()}
             fallback={
               <div data-slot="chat-ragu-missing">
-                <span>{t("chat.raguNeeded")}</span>
+                <span>
+                  {t("chat.raguNeeded")}
+                  <small data-slot="chat-ragu-hint">{t("chat.raguNeeded.hint")}</small>
+                </span>
                 <button
                   type="button"
                   data-slot="chat-ragu-install"

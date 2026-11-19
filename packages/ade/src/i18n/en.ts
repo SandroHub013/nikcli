@@ -334,7 +334,6 @@ export const en: Messages = {
   "new.missing": "To install",
   "new.looking": "Looking for the installed agents…",
   "new.noneInstalled": "No agent is installed on this computer. Pick one below to see how to install it.",
-  "new.noAgentChosen": "no agent chosen",
   "pane.noAgent":
     "This session can't start: no agent was chosen. Close it and pick one in New session.",
   "install.cardHint": "Not installed. Open to see how to install it.",
@@ -374,6 +373,7 @@ export const en: Messages = {
   "new.role.reviewer": "reviews",
   "new.summary": (count, agent, workspace) =>
     `${count} ${count === 1 ? "session" : "sessions"} with ${agent} in ${workspace}`,
+  "new.summary.none": (workspace) => `No agent chosen in ${workspace}`,
   "hooks.desc":
     "When ADE restarts, it reopens your sessions where they left off. To do that it needs to know which conversation each panel had. Some CLIs accept an ID chosen by ADE; others, like codex, don't, and only they can report it. Here ADE adds an entry to that CLI's configuration so it reports the ID whenever a session starts.",
   "hooks.files":
@@ -918,6 +918,9 @@ export const en: Messages = {
   "shots.noFolder": "Screenshots will appear here. Press Win+PrtScn, or choose a folder.",
   "shots.emptyFolder": "No screenshots in this folder yet",
   "chat.raguNeeded": "Ragù Code is needed",
+  "chat.raguNeeded.hint": "Chat uses Ragù Code, this project's agent. Install it from the official page, then reopen Chat.",
+  "bots.raguNeeded.hint":
+    "Bots use Ragù Code, this project's agent. Install it from the official page: ADE picks it up on its own when you come back to this window.",
   "shots.choose": "Choose folder…",
   "shots.network": "Network folder: shown, not read",
   "shots.error.notAFolder": "That is not a folder.",

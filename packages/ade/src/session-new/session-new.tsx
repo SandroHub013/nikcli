@@ -265,7 +265,9 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
 
           <footer data-slot="new-foot">
             <span data-slot="new-summary">
-              {t("new.summary", count(), agentId() ? agentLabel(agentId()) : t("new.noAgentChosen"), props.workspace)}
+              {agentId()
+                ? t("new.summary", count(), agentLabel(agentId()), props.workspace)
+                : t("new.summary.none", props.workspace)}
             </span>
             <div data-slot="new-spacer" />
             <Show when={props.onClose}>

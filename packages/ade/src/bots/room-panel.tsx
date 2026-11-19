@@ -316,7 +316,10 @@ export function RoomMain(props: {
             when={props.hasRagu ?? true}
             fallback={
               <div data-slot="bots-ragu-missing">
-                <span>{t("chat.raguNeeded")}</span>
+                <span>
+                  {t("chat.raguNeeded")}
+                  <small data-slot="bots-ragu-hint">{t("bots.raguNeeded.hint")}</small>
+                </span>
                 <button
                   type="button"
                   data-slot="bots-ragu-install"
