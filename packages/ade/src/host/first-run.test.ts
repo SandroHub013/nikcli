@@ -11,6 +11,7 @@ import {
   parseFirstRun,
   voiceStorageFor,
 } from "./first-run"
+import { workbenchSource } from "../test-support/workbench-source"
 import { firstRunEnv, parseTestAppArgs } from "./test-app"
 
 const adeDir = join(import.meta.dir, "..", "..")
@@ -110,7 +111,7 @@ describe("first-run switches: the page", () => {
   })
 
   test("lint: the workbench loads and saves the voice settings through the one storage the switch gives", () => {
-    const source = read("src", "surface", "workbench.tsx")
+    const source = workbenchSource()
     expect(source).toContain("const voiceStore = voiceStorageFor(firstRun)")
     expect(source).toContain("loadVoiceSettings(voiceStore,")
     expect(source).toContain("saveVoiceSettings(next, voiceStore,")
