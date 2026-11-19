@@ -721,7 +721,9 @@ export const it = {
   "voice.shortcut.notSystem": (chord: string, feature: string) =>
     `La scorciatoia ${chord} per ${feature} funziona solo con ADE in primo piano: il suo tasto non si può registrare nel sistema. Scegline una con una lettera, un numero o un tasto F nelle impostazioni vocali.`,
   "voice.shortcut.notSetUp":
-    "Le scorciatoie vocali partono quando salvi una chiave o scegli i tasti, qui nelle impostazioni vocali.",
+    "Per ora queste scorciatoie funzionano solo con ADE in primo piano, così non tolgono i tasti alle altre app. Valgono anche fuori da ADE appena salvi la chiave xAI o OpenRouter in Agenti e account › Chiavi API, oppure scegli qui tasti diversi.",
+  "voice.shortcut.keyUnreadable":
+    "Non è stato possibile leggere le chiavi salvate, quindi per ora queste scorciatoie funzionano solo con ADE in primo piano. ADE riprova da solo; se la chiave xAI o OpenRouter c'è già, varranno anche fuori da ADE appena la lettura riesce.",
   "voice.shortcut.unknown": (chord: string) =>
     `Scorciatoia vocale non riconosciuta (${chord}): il microfono non è stato aperto. Riassegnala nelle impostazioni vocali.`,
   "permission.answer.yes": "Sì",

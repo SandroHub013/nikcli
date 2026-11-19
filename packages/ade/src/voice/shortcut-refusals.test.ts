@@ -84,11 +84,22 @@ describe("lint: the refusal reaches the voice settings", () => {
   const panel = codeOf(readFileSync(new URL("../../../voice/src/ui/settings-state.ts", import.meta.url), "utf8"))
 
   test("the workbench keeps what the last registration refused, and hands it to the panel", () => {
-    expect(workbench).toContain(codeOf("setShortcutRefusals(notSetUp ? notSetUpRefusals() : refusalsOf(failed))"))
+    expect(workbench).toContain(codeOf("setShortcutRefusals(refusalsOf(failed))"))
     expect(workbench).toContain(codeOf("shortcutRefusals={shortcutRefusals()}"))
   })
 
   test("the panel shows it where it shows the chord's other problems", () => {
     expect(panel).toContain(codeOf("props.shortcutRefusals?.[field]"))
+  })
+
+  test("the note of an unclaimed state is one neutral line above the list, not an alert under each chord", () => {
+    const page = codeOf(readFileSync(new URL("../../../voice/src/ui/settings-pages/shortcuts.tsx", import.meta.url), "utf8"))
+    expect(workbench).toContain(codeOf("shortcutsNote={shortcutsNote({"))
+    expect(codeOf(readFileSync(new URL("../settings/settings-sheet.tsx", import.meta.url), "utf8"))).toContain(
+      codeOf("return props.shortcutsNote"),
+    )
+    expect(page).toContain(
+      codeOf(`<Show when={props.shortcutsNote}>{(note) => (<div role="status" data-slot="reason-box" data-tone="muted">{note()}</div>)}</Show><div data-slot="shortcuts-list">`),
+    )
   })
 })

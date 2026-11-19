@@ -63,6 +63,7 @@ export interface SettingsSheetProps {
   voiceSettings: VoiceSettings
   onVoiceSettingsChange: (next: VoiceSettings) => void
   shortcutRefusals?: { agent?: string; transcription?: string }
+  shortcutsNote?: string
   onOpenVoiceSource?: (voice: ReplyVoice) => void
   naturalVoiceError?: string
   naturalVoiceDownloading?: boolean
@@ -170,6 +171,9 @@ function voiceStateProps(props: SettingsSheetProps): VoiceSettingsStateProps {
     onClose: () => props.onClose(),
     get shortcutRefusals() {
       return props.shortcutRefusals
+    },
+    get shortcutsNote() {
+      return props.shortcutsNote
     },
     get onOpenVoiceSource() {
       return props.onOpenVoiceSource

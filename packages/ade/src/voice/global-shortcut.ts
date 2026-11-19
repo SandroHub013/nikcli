@@ -245,14 +245,23 @@ export function refusalsOf(
 }
 
 /**
- * What the voice settings say beside both chords while none is claimed because voice is not set up.
+ * The one note the voice settings show above the shortcuts while none is claimed system-wide because voice is not set up.
  *
- * A chord that does nothing looks exactly like one that works until it is pressed: the first-run gate
- * must not turn the shortcuts off without a word.
+ * Not silent: the first-run gate describes an intended state, and a shortcut that does nothing outside ADE looks exactly
+ * like one that works until it is pressed elsewhere. While the keychain has not answered, or could not be read, the note
+ * must not tell someone to save a key they may already have: it says the keys could not be read, or nothing at all.
  */
-export function notSetUpRefusals(): Partial<Record<VoiceMode, string>> {
-  const message = t("voice.shortcut.notSetUp")
-  return { agent: message, transcription: message }
+export function shortcutsNote(input: {
+  /** The last registration claimed nothing because voice is not set up. */
+  notClaimed: boolean
+  /** The xAI key as the page holds it: `undefined` until a read has answered. */
+  xaiKeyMasked: string | null | undefined
+  /** The last read of the keychain failed. */
+  unreadable: boolean
+}): string | undefined {
+  if (!input.notClaimed) return undefined
+  if (input.xaiKeyMasked === undefined) return input.unreadable ? t("voice.shortcut.keyUnreadable") : undefined
+  return t("voice.shortcut.notSetUp")
 }
 
 export interface RegisterVoiceShortcutsDeps {

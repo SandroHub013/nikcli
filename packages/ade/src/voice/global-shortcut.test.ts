@@ -1,13 +1,14 @@
 import { describe, expect, test } from "bun:test"
 import { workbenchSource } from "../test-support/workbench-source"
 import { codeOf } from "../test-support/source-text"
+import { translate } from "../i18n"
 import { DEFAULT_VOICE_SETTINGS } from "@ragu/voice/core"
 import {
   globalVoiceAction,
   modeForGlobalChord,
-  notSetUpRefusals,
   registerVoiceShortcuts,
   serialiseRegistrations,
+  shortcutsNote,
   unknownChordMessage,
   parseGlobalChord,
   readGlobalVoicePayload,
@@ -273,12 +274,12 @@ describe("serialiseRegistrations", () => {
 describe("the xAI key counts as voice set up", () => {
   const defaults = { agentChord: "mod+shift+k", transcriptionChord: "mod+shift+j" }
   const claim = async (settings: Parameters<typeof registerVoiceShortcuts>[0]) => {
-    const claimed: string[] = []
+    const calls: string[] = []
     const result = await registerVoiceShortcuts(settings, {
-      unregisterAll: async () => {},
-      register: async (chord) => void claimed.push(chord),
+      unregisterAll: async () => void calls.push("unregister"),
+      register: async (chord) => void calls.push(chord),
     })
-    return { claimed, result }
+    return { calls, claimed: calls.filter((call) => call !== "unregister"), result }
   }
 
   test("only the xAI key, default chords: both chords are claimed", async () => {
@@ -287,26 +288,74 @@ describe("the xAI key counts as voice set up", () => {
     expect(result.notSetUp).toBeUndefined()
   })
 
-  test("no key, default chords: nothing is claimed, and it is said", async () => {
-    const { claimed, result } = await claim({ ...defaults, hasXaiKey: false })
-    expect(claimed).toEqual([])
+  /* A guard against the opposite fault: the claimed list is empty with or without the xAI fix. The held keys are dropped first. */
+  test("no key, default chords: what was held is dropped, nothing is claimed, and it is flagged", async () => {
+    const { calls, result } = await claim({ ...defaults, hasXaiKey: false })
+    expect(calls).toEqual(["unregister"])
     expect(result.notSetUp).toBe(true)
-    expect(notSetUpRefusals().agent).toBe(notSetUpRefusals().transcription)
-    expect(notSetUpRefusals().agent).toContain("chiave")
   })
 
-  test("the key saved later: claimed then, not before", async () => {
-    const before = await claim({ ...defaults, hasXaiKey: false })
-    const after = await claim({ ...defaults, hasXaiKey: true })
-    expect(before.claimed).toEqual([])
-    expect(after.claimed).toHaveLength(2)
+  test("chords of the user's own: claimed without any key", async () => {
+    const { claimed, result } = await claim({ agentChord: "mod+space", transcriptionChord: "mod+shift+j", hasXaiKey: false })
+    expect(claimed).toHaveLength(2)
+    expect(result.notSetUp).toBeUndefined()
+  })
+})
+
+describe("the note the shortcuts block shows", () => {
+  const note = shortcutsNote
+
+  test("claimed: no note", () => {
+    expect(note({ notClaimed: false, xaiKeyMasked: null, unreadable: false })).toBeUndefined()
   })
 
-  test("the workbench passes the keychain's answer to the gate and claims again when it changes", () => {
-    const workbench = codeOf(workbenchSource())
+  test("no key, read: says how to turn them on", () => {
+    expect(note({ notClaimed: true, xaiKeyMasked: null, unreadable: false })).toBe(translate("it", "voice.shortcut.notSetUp"))
+  })
+
+  test("read failed and nothing known: says the key could not be read, never to save one", () => {
+    const text = note({ notClaimed: true, xaiKeyMasked: undefined, unreadable: true })
+    expect(text).toBe(translate("it", "voice.shortcut.keyUnreadable"))
+    expect(text).not.toBe(translate("it", "voice.shortcut.notSetUp"))
+  })
+
+  test("still waiting for the first read: no note at all", () => {
+    expect(note({ notClaimed: true, xaiKeyMasked: undefined, unreadable: false })).toBeUndefined()
+  })
+
+  test("a later failed read keeps what the last good read said", () => {
+    expect(note({ notClaimed: true, xaiKeyMasked: null, unreadable: true })).toBe(translate("it", "voice.shortcut.notSetUp"))
+  })
+
+  for (const language of ["it", "en"] as const) {
+    test(`the text in ${language} keeps its points: only system-wide, where the keys are saved, which key, other keys turn it on`, () => {
+      const text = translate(language, "voice.shortcut.notSetUp")
+      expect(text).toContain("xAI")
+      expect(text).toContain("OpenRouter")
+      expect(text).toContain(language === "it" ? "Agenti e account › Chiavi API" : "Agents and accounts › API keys")
+      expect(text).toContain(language === "it" ? "ADE in primo piano" : "ADE is in front")
+      expect(text).toContain(language === "it" ? "tasti diversi" : "different keys")
+      expect(text.toLowerCase()).not.toContain("chord")
+      expect(translate(language, "voice.shortcut.keyUnreadable").toLowerCase()).not.toContain("chord")
+    })
+  }
+})
+
+describe("lint: the workbench hands the gate the keychain's answer", () => {
+  const workbench = codeOf(workbenchSource())
+
+  test("the gate gets the xAI key's presence, the settings get one note", () => {
     expect(workbench).toContain(codeOf("hasXaiKey: typeof xaiKeyMasked() === \"string\""))
-    expect(workbench).toContain(codeOf("void registerGlobalShortcuts?.(voiceSettings())"))
-    expect(workbench).toContain(codeOf("setShortcutRefusals(notSetUp ? notSetUpRefusals() : refusalsOf(failed))"))
+    expect(workbench).toContain(codeOf("setShortcutsNotClaimed(notSetUp === true)"))
+    expect(workbench).toContain(codeOf("shortcutsNote={shortcutsNote({"))
+  })
+
+  test("the read goes through the watch, which claims again, and runs again as the voice settings open", () => {
+    expect(workbench).toContain(codeOf("claim: () => void registerGlobalShortcuts?.(voiceSettings())"))
+    expect(workbench).toContain(codeOf("await xaiKeyWatch.refresh()"))
+    expect(workbenchSource()).toMatch(
+      /if \(!voiceSettingsOpen\(\) \|\| !keysAvailable\(\)\) return\s*(\/\/[^\n]*\n\s*)*void refreshXaiKey\(\)\s*const stop = watchKeychain/,
+    )
   })
 })
 
