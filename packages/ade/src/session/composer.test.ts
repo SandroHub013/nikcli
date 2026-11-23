@@ -1483,3 +1483,105 @@ describe("the gate and what it does not touch", () => {
     expect(registry).toContain("watchCursor(terminal)")
   })
 })
+
+describe("agy at rest draws a grey hint after its cursor, and that is still an empty box (live test 12)", () => {
+  // Recorded: the box and the hint, cut down from agy's bytes at 76 columns (chunks 18, 19 and 72 of live test 12), the
+  // `>` in ESC[94m and the hint in ESC[90m, palette colour 8. Reconstructed: WARNING keeps two real lines of the
+  // «unsandboxed» warning but puts them at the top of the screen, TYPED is the text and the colour of chunks 74 and 75
+  // moved onto the box's row here (in the recording the box was lower), and the narrow and paste cases below, where
+  // agy's own wrapping and the colour of a paste were never observed.
+  const RULE = "─".repeat(76)
+  const WARNING =
+    "\x1b[1;6H\x1b[37mFix: replace \"unsandboxed\" with \"command\" (e.g. command(git status)),\x1b[m" +
+    "\x1b[2;6H\x1b[37mor remove the rule. Edit the file directly or use /permissions.\x1b[m"
+  const BOX = `\x1b[90m\x1b[18;1H${RULE}\x1b[94m\r\n>\x1b[90m\r\n${RULE}\x1b[m\r\nGemini 3.8 Flash (High) · context 0%\x1b[19;3H\x1b[?25h`
+  const HINT = "\x1b[?25l\x1b[90mAuto mode: edits & safe commands auto-approved (shift+tab to cycle)\x1b[19;3H\x1b[?25h"
+  // The same box drawn in one frame, the hint after `> `, as agy repaints it (chunk 72).
+  const FRAME = `\x1b[90m\x1b[18;1H${RULE}\x1b[94m\r\n> \x1b[90mAuto mode: edits & safe commands auto-approved (shift+tab to cycle)       \r\n${RULE}\x1b[m\r\nGemini 3.8 Flash (High) · context 0% · quota 71% left\x1b[19;3H\x1b[?25h`
+  // What the user types goes in the default colour; the rest of the line is erased (chunks 74 and 75, reconstructed).
+  const TYPED = "\x1b[m\x1b[19;3HProva9 riga utente: rispondi so\x1b[Klo ok"
+
+  test("the box before its hint is drawn reads ready, with the warning over it", async () => {
+    expect(composerOf(await drawn(WARNING + BOX, 76, 21), "agy")).toBe("ready")
+  })
+
+  test("with its grey hint on the box line, at rest, it still reads ready", async () => {
+    expect(composerOf(await drawn(WARNING + BOX + HINT, 76, 21), "agy")).toBe("ready")
+    expect(composerOf(await drawn(WARNING + FRAME, 76, 21), "agy")).toBe("ready")
+  })
+
+  test("a line the user typed reads draft, and so does one with the caret taken back to its start", async () => {
+    expect(composerOf(await drawn(WARNING + BOX + HINT + TYPED, 76, 21), "agy")).toBe("draft")
+    expect(composerOf(await drawn(WARNING + BOX + HINT + TYPED + "\x1b[19;3H", 76, 21), "agy")).toBe("draft")
+  })
+
+  test("a single letter typed over the hint reads draft", async () => {
+    expect(composerOf(await drawn(WARNING + BOX + HINT + "\x1b[m\x1b[19;3Hx\x1b[K\x1b[19;3H", 76, 21), "agy")).toBe("draft")
+  })
+
+  test("another agent's grey cell after its cursor keeps today's answer: draft", async () => {
+    const grey = `${RULE}\r\n❯ \x1b[90mTry something grey\x1b[m\r\n${RULE}\r\n`
+    const terminal = await drawn(`\x1b[2;1H${grey}\x1b[3;3H`, 76, 10)
+    expect(composerOf(terminal, "claude-code")).toBe("draft")
+    const dim = `${RULE}\r\n❯ \x1b[2mTry something dim\x1b[m\r\n${RULE}\r\n`
+    expect(composerOf(await drawn(`\x1b[2;1H${dim}\x1b[3;3H`, 76, 10), "claude-code")).toBe("ready")
+  })
+
+  // The box at 40 columns, with `rows` after its prompt line: the first in `> `, the others from column 0 as agy wraps a paste.
+  const narrow = (rows: string[], color = "\x1b[90m") => {
+    const rule = "─".repeat(40)
+    return `\x1b[14;1H${rule}\x1b[94m\r\n> ${color}${rows.join("\r\n")}\r\n\x1b[90m${rule}\x1b[m\r\nGemini 3.8 Flash (High)\x1b[15;3H\x1b[?25h`
+  }
+
+  test("a grey paste placeholder after the cursor is the user's text: draft, not a hint", async () => {
+    expect(composerOf(await drawn(narrow(["[Pasted text #1 +3 lines]"]), 76, 21), "agy")).toBe("draft")
+    expect(composerOf(await drawn(WARNING + BOX + "\x1b[90m[Pasted text #1 +40 lines]\x1b[19;3H", 76, 21), "agy")).toBe("draft")
+    expect(composerOf(await drawn(narrow(["[Pasted text #1 1922", "chars]"]), 40, 21), "agy")).not.toBe("ready")
+  })
+
+  test("grey text that is not a mode hint is draft, and so is a hint in the default colour", async () => {
+    expect(composerOf(await drawn(narrow(["Try something grey (shift+tab to cycle)"]), 76, 21), "agy")).toBe("draft")
+    expect(composerOf(await drawn(narrow(["Auto mode: edits & safe commands auto-approved (shift+tab to cycle)"], "\x1b[m"), 76, 21), "agy")).toBe("draft")
+  })
+
+  test("each of agy's four mode hints reads ready", async () => {
+    for (const hint of [
+      "Auto mode: edits & safe commands auto-approved (shift+tab to cycle)",
+      "Plan mode: research & plan only (shift+tab to cycle)",
+      "Accept-edits mode: file edits auto-approved (shift+tab to cycle)",
+      "Best-of-N mode: fork into parallel arms and pick a winner (shift+tab to cycle)",
+    ]) {
+      expect(`${hint}: ${composerOf(await drawn(WARNING + BOX + `\x1b[90m${hint}\x1b[19;3H`, 100, 21), "agy")}`).toBe(`${hint}: ready`)
+    }
+  })
+
+  test("a hint wrapped onto the rows under the prompt, by words or in a word, is still the hint", async () => {
+    const byWords = ["Auto mode: edits & safe commands", "auto-approved (shift+tab to cycle)"]
+    const inAWord = ["Auto mode: edits & safe commands auto", "-approved (shift+tab to cycle)"]
+    const three = ["Best-of-N mode: fork into parallel", "arms and pick a winner (shift+tab to", "cycle)"]
+    for (const rows of [byWords, inAWord, three]) {
+      expect(`${rows.join("|")}: ${composerOf(await drawn(narrow(rows), 40, 21), "agy")}`).toBe(`${rows.join("|")}: ready`)
+    }
+  })
+
+  test("a grey row from column 0 under the prompt that is not part of a hint leaves the box unread: none", async () => {
+    expect(composerOf(await drawn(narrow(["", "\x1b[90msrc/app.ts"]), 40, 21), "agy")).toBe("none")
+    expect(composerOf(await drawn(narrow(["\x1b[m@a", "\x1b[90msrc/app.ts"]), 40, 21), "agy")).toBe("none")
+    // The same rows with the caret taken back are no hint's rows either.
+    expect(composerOf(await drawn(narrow(["Auto mode: edits & safe commands", "auto-approved (shift+tab to cycle)"]) + "\x1b[15;5H", 40, 21), "agy")).toBe("none")
+  })
+
+  test("only the four exact hints are skipped: grey words around or inside a hint are not", async () => {
+    const pasted = ["Auto mode: edits", "[Pasted text #1 +3 lines]", "(shift+tab to cycle)"]
+    expect(composerOf(await drawn(narrow(pasted), 40, 21), "agy")).not.toBe("ready")
+    const longer = "Auto mode: edits & safe commands auto-approved (shift+tab to cycle) now"
+    expect(composerOf(await drawn(narrow([longer]), 100, 21), "agy")).not.toBe("ready")
+    const fake = "Fast mode: go quickly (shift+tab to cycle)"
+    expect(composerOf(await drawn(narrow([fake]), 100, 21), "agy")).not.toBe("ready")
+  })
+
+  test("a wrapped hint with a row of the user's text among it is not an empty box", async () => {
+    const rows = ["Auto mode: edits & safe commands", "auto-approved (shift+tab to cycle)", "\x1b[mhello"]
+    expect(composerOf(await drawn(narrow(rows), 40, 21), "agy")).not.toBe("ready")
+  })
+})

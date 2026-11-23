@@ -20,6 +20,8 @@ interface ComposerCell {
   getChars(): string
   isDim(): number | boolean
   isInverse(): number | boolean
+  isFgPalette?(): number | boolean
+  getFgColor?(): number
 }
 
 interface ComposerLine {
@@ -208,7 +210,8 @@ export function composerOf(terminal: ComposerTerminal, agentId: string): Compose
     const marked = agentId === "ragu" ? markBox(terminal) : "none"
     return marked === "none" ? barBox(terminal) : marked
   }
-  return hidden ? ruledBoxFromRows(terminal, glyph) : ruledBox(terminal, glyph)
+  // agy with a hidden cursor has left at the top of this function, so the rows alone are read only for Claude Code.
+  return hidden ? ruledBoxFromRows(terminal, glyph) : ruledBox(terminal, glyph, agentId === "agy")
 }
 
 /**
@@ -279,7 +282,7 @@ function ruledBoxFromRows(terminal: ComposerTerminal, glyph: string): ComposerSt
   return afterCursorIsPlaceholder(lineAt(terminal, top), 2) ? "ready" : "draft"
 }
 
-function ruledBox(terminal: ComposerTerminal, glyph: string): ComposerState {
+function ruledBox(terminal: ComposerTerminal, glyph: string, greyHint: boolean): ComposerState {
   const { cursorX, cursorY } = terminal.buffer.active
   const isPrompt = (row: string) => isPromptRow(row, glyph)
   const here = textAt(terminal, cursorY)
@@ -297,15 +300,64 @@ function ruledBox(terminal: ComposerTerminal, glyph: string): ComposerState {
 
   // Down to the rule that closes the box.
   let bottom = cursorY + 1
+  let greyRows = false
   while (bottom < terminal.rows && !RULE.test(textAt(terminal, bottom))) {
-    if (!continues(textAt(terminal, bottom))) return "none"
+    if (!continues(textAt(terminal, bottom))) {
+      // A grey row from column 0 passes only as the rest of a wrapped hint: anything else under the prompt (a list, a
+      // picker) is still not a box to type into.
+      if (!(greyHint && greyFrom(lineAt(terminal, bottom), 0))) return "none"
+      greyRows = true
+    }
     bottom++
   }
   if (bottom >= terminal.rows) return "none"
+  if (greyRows && (scrolled || cursorY !== top || cursorX !== 2 || !modeHintFills(terminal, top, bottom, cursorX))) return "none"
 
   if (scrolled || cursorY !== top || cursorX !== 2) return "draft"
+  if (greyHint && modeHintFills(terminal, top, bottom, cursorX)) return "ready"
   for (let y = top + 1; y < bottom; y++) if (textAt(terminal, y)) return "draft"
   return afterCursorIsPlaceholder(lineAt(terminal, cursorY), cursorX) ? "ready" : "draft"
+}
+
+/**
+ * agy's hint in an empty box, «Auto mode: edits & safe commands auto-approved (shift+tab to cycle)»: it is not dim but grey,
+ * palette colour 8 (live test 12). The binary has four, one for each mode, and only these words are skipped. What the user
+ * puts in the box (a typed line, a paste's `[Pasted text #1 +3 lines]`) is not read as one: it is the default colour, or a
+ * colour nobody has looked at.
+ */
+const MODE_HINTS = new Set([
+  "Auto mode: edits & safe commands auto-approved (shift+tab to cycle)",
+  "Plan mode: research & plan only (shift+tab to cycle)",
+  "Accept-edits mode: file edits auto-approved (shift+tab to cycle)",
+  "Best-of-N mode: fork into parallel arms and pick a winner (shift+tab to cycle)",
+])
+
+/** Every character of `line` from `from` on is palette colour 8, and there is one. */
+function greyFrom(line: ComposerLine | undefined, from: number): boolean {
+  const text = line?.translateToString(true, from) ?? ""
+  if (!text.trim()) return false
+  for (let i = 0; i < text.length; i++) {
+    const cell = line?.getCell?.(from + i)
+    if (cell?.getChars().trim() && !(cell.isFgPalette?.() && cell.getFgColor?.() === 8)) return false
+  }
+  return true
+}
+
+/**
+ * Whether what the box holds after the cursor, rows `top` to `bottom - 1`, is one mode hint in grey. A narrow pane may wrap
+ * it onto the rows under the prompt, by words (the space goes with the break) or in the middle of one. How agy wraps it was
+ * never observed: its box wraps a paste's placeholder with no indent, so rows are taken as they come.
+ */
+function modeHintFills(terminal: ComposerTerminal, top: number, bottom: number, cursorX: number): boolean {
+  const parts: string[] = []
+  for (let y = top; y < bottom; y++) {
+    const line = lineAt(terminal, y)
+    const from = y === top ? cursorX : 0
+    if (!line?.translateToString(true, from).trim()) continue
+    if (!greyFrom(line, from)) return false
+    parts.push(line.translateToString(true, from).trim())
+  }
+  return MODE_HINTS.has(parts.join("")) || MODE_HINTS.has(parts.join(" ").replace(/ {2,}/g, " "))
 }
 
 /**
