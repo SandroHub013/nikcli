@@ -1483,3 +1483,44 @@ describe("the gate and what it does not touch", () => {
     expect(registry).toContain("watchCursor(terminal)")
   })
 })
+
+describe("agy at rest draws a grey hint after its cursor, and that is still an empty box (live test 12)", () => {
+  // agy's own bytes at 76 columns, cut down to the lines that matter (chunks 18, 19, 72 and 74 of the live test): the
+  // «unsandboxed» warning over the box, the box with its `>` in ESC[94m, then the hint in ESC[90m, palette colour 8.
+  const RULE = "─".repeat(76)
+  const WARNING =
+    "\x1b[1;6H\x1b[37mFix: replace \"unsandboxed\" with \"command\" (e.g. command(git status)),\x1b[m" +
+    "\x1b[2;6H\x1b[37mor remove the rule. Edit the file directly or use /permissions.\x1b[m"
+  const BOX = `\x1b[90m\x1b[18;1H${RULE}\x1b[94m\r\n>\x1b[90m\r\n${RULE}\x1b[m\r\nGemini 3.8 Flash (High) · context 0%\x1b[19;3H\x1b[?25h`
+  const HINT = "\x1b[?25l\x1b[90mAuto mode: edits & safe commands auto-approved (shift+tab to cycle)\x1b[19;3H\x1b[?25h"
+  // The same box drawn in one frame, the hint after `> `, as agy repaints it (chunk 72).
+  const FRAME = `\x1b[90m\x1b[18;1H${RULE}\x1b[94m\r\n> \x1b[90mAuto mode: edits & safe commands auto-approved (shift+tab to cycle)       \r\n${RULE}\x1b[m\r\nGemini 3.8 Flash (High) · context 0% · quota 71% left\x1b[19;3H\x1b[?25h`
+  // What the user types goes in the default colour; the rest of the line is erased (chunks 74 and 75).
+  const TYPED = "\x1b[m\x1b[19;3HProva9 riga utente: rispondi so\x1b[Klo ok"
+
+  test("the box before its hint is drawn reads ready, with the warning over it", async () => {
+    expect(composerOf(await drawn(WARNING + BOX, 76, 21), "agy")).toBe("ready")
+  })
+
+  test("with its grey hint on the box line, at rest, it still reads ready", async () => {
+    expect(composerOf(await drawn(WARNING + BOX + HINT, 76, 21), "agy")).toBe("ready")
+    expect(composerOf(await drawn(WARNING + FRAME, 76, 21), "agy")).toBe("ready")
+  })
+
+  test("a line the user typed reads draft, and so does one with the caret taken back to its start", async () => {
+    expect(composerOf(await drawn(WARNING + BOX + HINT + TYPED, 76, 21), "agy")).toBe("draft")
+    expect(composerOf(await drawn(WARNING + BOX + HINT + TYPED + "\x1b[19;3H", 76, 21), "agy")).toBe("draft")
+  })
+
+  test("a single letter typed over the hint reads draft", async () => {
+    expect(composerOf(await drawn(WARNING + BOX + HINT + "\x1b[m\x1b[19;3Hx\x1b[K\x1b[19;3H", 76, 21), "agy")).toBe("draft")
+  })
+
+  test("another agent's grey cell after its cursor keeps today's answer: draft", async () => {
+    const grey = `${RULE}\r\n❯ \x1b[90mTry something grey\x1b[m\r\n${RULE}\r\n`
+    const terminal = await drawn(`\x1b[2;1H${grey}\x1b[3;3H`, 76, 10)
+    expect(composerOf(terminal, "claude-code")).toBe("draft")
+    const dim = `${RULE}\r\n❯ \x1b[2mTry something dim\x1b[m\r\n${RULE}\r\n`
+    expect(composerOf(await drawn(`\x1b[2;1H${dim}\x1b[3;3H`, 76, 10), "claude-code")).toBe("ready")
+  })
+})

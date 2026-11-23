@@ -20,6 +20,8 @@ interface ComposerCell {
   getChars(): string
   isDim(): number | boolean
   isInverse(): number | boolean
+  isFgPalette?(): number | boolean
+  getFgColor?(): number
 }
 
 interface ComposerLine {
@@ -208,7 +210,8 @@ export function composerOf(terminal: ComposerTerminal, agentId: string): Compose
     const marked = agentId === "ragu" ? markBox(terminal) : "none"
     return marked === "none" ? barBox(terminal) : marked
   }
-  return hidden ? ruledBoxFromRows(terminal, glyph) : ruledBox(terminal, glyph)
+  const greyHint = agentId === "agy"
+  return hidden ? ruledBoxFromRows(terminal, glyph, greyHint) : ruledBox(terminal, glyph, greyHint)
 }
 
 /**
@@ -261,7 +264,7 @@ const isPromptRow = (row: string, glyph: string) =>
  * The box with no cursor to go by: its last rule low on the screen, with only a footer under it, and above that the prompt
  * with a rule over it. A dialog is drawn in the box's place, so its `❯ 1. Yes` has no such frame round it.
  */
-function ruledBoxFromRows(terminal: ComposerTerminal, glyph: string): ComposerState {
+function ruledBoxFromRows(terminal: ComposerTerminal, glyph: string, greyHint: boolean): ComposerState {
   let closing = terminal.rows - 1
   let footer = 0
   while (closing >= 0 && !RULE.test(textAt(terminal, closing))) {
@@ -276,10 +279,10 @@ function ruledBoxFromRows(terminal: ComposerTerminal, glyph: string): ComposerSt
   }
   if (top < 1 || !RULE.test(textAt(terminal, top - 1))) return "none"
   for (let y = top + 1; y < closing; y++) if (textAt(terminal, y)) return "draft"
-  return afterCursorIsPlaceholder(lineAt(terminal, top), 2) ? "ready" : "draft"
+  return afterCursorIsPlaceholder(lineAt(terminal, top), 2, greyHint) ? "ready" : "draft"
 }
 
-function ruledBox(terminal: ComposerTerminal, glyph: string): ComposerState {
+function ruledBox(terminal: ComposerTerminal, glyph: string, greyHint: boolean): ComposerState {
   const { cursorX, cursorY } = terminal.buffer.active
   const isPrompt = (row: string) => isPromptRow(row, glyph)
   const here = textAt(terminal, cursorY)
@@ -305,18 +308,21 @@ function ruledBox(terminal: ComposerTerminal, glyph: string): ComposerState {
 
   if (scrolled || cursorY !== top || cursorX !== 2) return "draft"
   for (let y = top + 1; y < bottom; y++) if (textAt(terminal, y)) return "draft"
-  return afterCursorIsPlaceholder(lineAt(terminal, cursorY), cursorX) ? "ready" : "draft"
+  return afterCursorIsPlaceholder(lineAt(terminal, cursorY), cursorX, greyHint) ? "ready" : "draft"
 }
 
 /**
  * Nothing after the cursor, or only dim text: Claude Code's `Try "refactor <filepath>"`. Without its native cursor it draws
  * the caret itself, an inverse first letter over the dim rest. An inverse letter alone is a letter typed, with the caret on it.
+ * agy's hint, «Auto mode: edits & safe commands auto-approved (shift+tab to cycle)», is not dim but grey, palette colour 8
+ * (live test 12): `greyHint` reads that cell as a placeholder too. What the user types in agy is drawn in the default colour.
  */
-function afterCursorIsPlaceholder(line: ComposerLine | undefined, cursorX: number): boolean {
+function afterCursorIsPlaceholder(line: ComposerLine | undefined, cursorX: number, greyHint = false): boolean {
   const after = line?.translateToString(true, cursorX) ?? ""
   for (let i = 0; i < after.length; i++) {
     const cell = line?.getCell?.(cursorX + i)
     if (!cell?.getChars().trim() || cell.isDim()) continue
+    if (greyHint && cell.isFgPalette?.() && cell.getFgColor?.() === 8) continue
     if (i === 0 && cell.isInverse() && after.length > 1) continue
     return false
   }
