@@ -28,7 +28,7 @@ permissions:
 jobs:
   build:
     if: github.repository == 'SandroHub013/nikcli'
-    runs-on: macos-14
+    runs-on: macos-15
     env:
       # build.rs fails the build if RaguVerse's 3D city cannot be bundled, instead of
       # shipping the plain list in silence (`raguverse/release-env.test.ts`).
