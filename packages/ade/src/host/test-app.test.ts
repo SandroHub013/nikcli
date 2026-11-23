@@ -212,8 +212,14 @@ describe("host/test-app with a build folder shared between worktrees", () => {
   const plan = planTestApp({ root, branch: "ade/prova-fix", env })
   const otherPlan = planTestApp({ root: other, branch: "x", env })
   const slashes = (text: string) => text.replace(/\\/g, "/")
+  /*
+   * planTestApp resolves the build folder with the OS's `node:path`, and ADE Test only runs on Windows. These paths are
+   * Windows ones: off Windows `resolve` reads `C:\Users\…` as a relative name and glues it to the worktree, so the
+   * plan, and everything these three tests check from it, is a different one. Skipped there rather than made to pass.
+   */
+  const onWindows = test.skipIf(process.platform !== "win32")
 
-  test("the plan says where cargo builds, and whether that is the worktree's own folder", () => {
+  onWindows("the plan says where cargo builds, and whether that is the worktree's own folder (Windows paths: skipped off Windows)", () => {
     expect(plan.targetDir).toBe(shared)
     expect(plan.sharedTarget).toBe(true)
     const own = planTestApp({ root, branch: "x" })
@@ -255,7 +261,7 @@ describe("host/test-app with a build folder shared between worktrees", () => {
     expect(instanceRunning(instanceProcesses(rows, plan, root), plan, root)).toBe(true)
   })
 
-  test("with `tauri dev` gone the app is still found, as the parent of this worktree's WebView2", () => {
+  onWindows("with `tauri dev` gone the app is still found, as the parent of this worktree's WebView2 (Windows paths: skipped off Windows)", () => {
     const orphaned = rows.filter((row) => row.pid !== 10 && row.pid !== 11)
     const pids = instanceProcesses(orphaned, plan, root)
       .map((row) => row.pid)
@@ -268,7 +274,7 @@ describe("host/test-app with a build folder shared between worktrees", () => {
     expect(instanceProcesses(stray, plan, root)).toEqual([])
   })
 
-  test("stop closes the app in order, then kills the rest, and leaves the other worktree's app alone", () => {
+  onWindows("stop closes the app in order, then kills the rest, and leaves the other worktree's app alone (Windows paths: skipped off Windows)", () => {
     const startedAt = 1_000_000
     const timed = rows.map((row) => ({ ...row, created: startedAt + row.pid }))
     const closed: number[] = []

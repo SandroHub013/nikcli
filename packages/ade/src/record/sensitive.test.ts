@@ -127,6 +127,8 @@ describe("record/sensitive", () => {
     const conPassword = sources()
       .filter((path) => /type="password"|autocomplete="(new|current)-password"/.test(readFileSync(path, "utf8")))
       .map((path) => path.slice(src.length + 1).replace(/\\/g, "/"))
+      // readdirSync order is the file system's: Linux gave secrets/ before bots/. The set is what this proves.
+      .sort()
     expect(conPassword).toEqual(["bots/gateway/panel.tsx", "secrets/keys-section.tsx"])
   })
 
