@@ -210,8 +210,8 @@ export function composerOf(terminal: ComposerTerminal, agentId: string): Compose
     const marked = agentId === "ragu" ? markBox(terminal) : "none"
     return marked === "none" ? barBox(terminal) : marked
   }
-  const greyHint = agentId === "agy"
-  return hidden ? ruledBoxFromRows(terminal, glyph, greyHint) : ruledBox(terminal, glyph, greyHint)
+  // agy with a hidden cursor has left at the top of this function, so the rows alone are read only for Claude Code.
+  return hidden ? ruledBoxFromRows(terminal, glyph) : ruledBox(terminal, glyph, agentId === "agy")
 }
 
 /**
@@ -264,7 +264,7 @@ const isPromptRow = (row: string, glyph: string) =>
  * The box with no cursor to go by: its last rule low on the screen, with only a footer under it, and above that the prompt
  * with a rule over it. A dialog is drawn in the box's place, so its `❯ 1. Yes` has no such frame round it.
  */
-function ruledBoxFromRows(terminal: ComposerTerminal, glyph: string, greyHint: boolean): ComposerState {
+function ruledBoxFromRows(terminal: ComposerTerminal, glyph: string): ComposerState {
   let closing = terminal.rows - 1
   let footer = 0
   while (closing >= 0 && !RULE.test(textAt(terminal, closing))) {
@@ -279,7 +279,7 @@ function ruledBoxFromRows(terminal: ComposerTerminal, glyph: string, greyHint: b
   }
   if (top < 1 || !RULE.test(textAt(terminal, top - 1))) return "none"
   for (let y = top + 1; y < closing; y++) if (textAt(terminal, y)) return "draft"
-  return afterCursorIsPlaceholder(lineAt(terminal, top), 2, greyHint) ? "ready" : "draft"
+  return afterCursorIsPlaceholder(lineAt(terminal, top), 2) ? "ready" : "draft"
 }
 
 function ruledBox(terminal: ComposerTerminal, glyph: string, greyHint: boolean): ComposerState {
@@ -301,28 +301,62 @@ function ruledBox(terminal: ComposerTerminal, glyph: string, greyHint: boolean):
   // Down to the rule that closes the box.
   let bottom = cursorY + 1
   while (bottom < terminal.rows && !RULE.test(textAt(terminal, bottom))) {
-    if (!continues(textAt(terminal, bottom))) return "none"
+    if (!continues(textAt(terminal, bottom)) && !(greyHint && greyFrom(lineAt(terminal, bottom), 0))) return "none"
     bottom++
   }
   if (bottom >= terminal.rows) return "none"
 
   if (scrolled || cursorY !== top || cursorX !== 2) return "draft"
+  if (greyHint && modeHintFills(terminal, top, bottom, cursorX)) return "ready"
   for (let y = top + 1; y < bottom; y++) if (textAt(terminal, y)) return "draft"
-  return afterCursorIsPlaceholder(lineAt(terminal, cursorY), cursorX, greyHint) ? "ready" : "draft"
+  return afterCursorIsPlaceholder(lineAt(terminal, cursorY), cursorX) ? "ready" : "draft"
+}
+
+/**
+ * agy's hint in an empty box, «Auto mode: edits & safe commands auto-approved (shift+tab to cycle)»: it is not dim but grey,
+ * palette colour 8 (live test 12). The binary has four, one for each mode, all of this shape. What the user puts in the box
+ * (a typed line, a paste's `[Pasted text #1 +3 lines]`) is not read as one: it is the default colour, or a colour nobody
+ * has looked at, and here only the words of a hint are skipped.
+ */
+const MODE_HINT = /^[\w-]+ mode: .*\(shift\+tab to cycle\)$/
+
+/** Every character of `line` from `from` on is palette colour 8, and there is one. */
+function greyFrom(line: ComposerLine | undefined, from: number): boolean {
+  const text = line?.translateToString(true, from) ?? ""
+  if (!text.trim()) return false
+  for (let i = 0; i < text.length; i++) {
+    const cell = line?.getCell?.(from + i)
+    if (cell?.getChars().trim() && !(cell.isFgPalette?.() && cell.getFgColor?.() === 8)) return false
+  }
+  return true
+}
+
+/**
+ * Whether what the box holds after the cursor, rows `top` to `bottom - 1`, is one mode hint in grey. A narrow pane may wrap
+ * it onto the rows under the prompt, by words (the space goes with the break) or in the middle of one. How agy wraps it was
+ * never observed: its box wraps a paste's placeholder with no indent, so rows are taken as they come.
+ */
+function modeHintFills(terminal: ComposerTerminal, top: number, bottom: number, cursorX: number): boolean {
+  const parts: string[] = []
+  for (let y = top; y < bottom; y++) {
+    const line = lineAt(terminal, y)
+    const from = y === top ? cursorX : 0
+    if (!line?.translateToString(true, from).trim()) continue
+    if (!greyFrom(line, from)) return false
+    parts.push(line.translateToString(true, from).trim())
+  }
+  return MODE_HINT.test(parts.join("")) || MODE_HINT.test(parts.join(" "))
 }
 
 /**
  * Nothing after the cursor, or only dim text: Claude Code's `Try "refactor <filepath>"`. Without its native cursor it draws
  * the caret itself, an inverse first letter over the dim rest. An inverse letter alone is a letter typed, with the caret on it.
- * agy's hint, «Auto mode: edits & safe commands auto-approved (shift+tab to cycle)», is not dim but grey, palette colour 8
- * (live test 12): `greyHint` reads that cell as a placeholder too. What the user types in agy is drawn in the default colour.
  */
-function afterCursorIsPlaceholder(line: ComposerLine | undefined, cursorX: number, greyHint = false): boolean {
+function afterCursorIsPlaceholder(line: ComposerLine | undefined, cursorX: number): boolean {
   const after = line?.translateToString(true, cursorX) ?? ""
   for (let i = 0; i < after.length; i++) {
     const cell = line?.getCell?.(cursorX + i)
     if (!cell?.getChars().trim() || cell.isDim()) continue
-    if (greyHint && cell.isFgPalette?.() && cell.getFgColor?.() === 8) continue
     if (i === 0 && cell.isInverse() && after.length > 1) continue
     return false
   }
