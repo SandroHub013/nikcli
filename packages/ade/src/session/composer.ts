@@ -300,11 +300,18 @@ function ruledBox(terminal: ComposerTerminal, glyph: string, greyHint: boolean):
 
   // Down to the rule that closes the box.
   let bottom = cursorY + 1
+  let greyRows = false
   while (bottom < terminal.rows && !RULE.test(textAt(terminal, bottom))) {
-    if (!continues(textAt(terminal, bottom)) && !(greyHint && greyFrom(lineAt(terminal, bottom), 0))) return "none"
+    if (!continues(textAt(terminal, bottom))) {
+      // A grey row from column 0 passes only as the rest of a wrapped hint: anything else under the prompt (a list, a
+      // picker) is still not a box to type into.
+      if (!(greyHint && greyFrom(lineAt(terminal, bottom), 0))) return "none"
+      greyRows = true
+    }
     bottom++
   }
   if (bottom >= terminal.rows) return "none"
+  if (greyRows && (scrolled || cursorY !== top || cursorX !== 2 || !modeHintFills(terminal, top, bottom, cursorX))) return "none"
 
   if (scrolled || cursorY !== top || cursorX !== 2) return "draft"
   if (greyHint && modeHintFills(terminal, top, bottom, cursorX)) return "ready"
@@ -314,11 +321,16 @@ function ruledBox(terminal: ComposerTerminal, glyph: string, greyHint: boolean):
 
 /**
  * agy's hint in an empty box, «Auto mode: edits & safe commands auto-approved (shift+tab to cycle)»: it is not dim but grey,
- * palette colour 8 (live test 12). The binary has four, one for each mode, all of this shape. What the user puts in the box
- * (a typed line, a paste's `[Pasted text #1 +3 lines]`) is not read as one: it is the default colour, or a colour nobody
- * has looked at, and here only the words of a hint are skipped.
+ * palette colour 8 (live test 12). The binary has four, one for each mode, and only these words are skipped. What the user
+ * puts in the box (a typed line, a paste's `[Pasted text #1 +3 lines]`) is not read as one: it is the default colour, or a
+ * colour nobody has looked at.
  */
-const MODE_HINT = /^[\w-]+ mode: .*\(shift\+tab to cycle\)$/
+const MODE_HINTS = new Set([
+  "Auto mode: edits & safe commands auto-approved (shift+tab to cycle)",
+  "Plan mode: research & plan only (shift+tab to cycle)",
+  "Accept-edits mode: file edits auto-approved (shift+tab to cycle)",
+  "Best-of-N mode: fork into parallel arms and pick a winner (shift+tab to cycle)",
+])
 
 /** Every character of `line` from `from` on is palette colour 8, and there is one. */
 function greyFrom(line: ComposerLine | undefined, from: number): boolean {
@@ -345,7 +357,7 @@ function modeHintFills(terminal: ComposerTerminal, top: number, bottom: number, 
     if (!greyFrom(line, from)) return false
     parts.push(line.translateToString(true, from).trim())
   }
-  return MODE_HINT.test(parts.join("")) || MODE_HINT.test(parts.join(" "))
+  return MODE_HINTS.has(parts.join("")) || MODE_HINTS.has(parts.join(" ").replace(/ {2,}/g, " "))
 }
 
 /**

@@ -1564,6 +1564,22 @@ describe("agy at rest draws a grey hint after its cursor, and that is still an e
     }
   })
 
+  test("a grey row from column 0 under the prompt that is not part of a hint leaves the box unread: none", async () => {
+    expect(composerOf(await drawn(narrow(["", "\x1b[90msrc/app.ts"]), 40, 21), "agy")).toBe("none")
+    expect(composerOf(await drawn(narrow(["\x1b[m@a", "\x1b[90msrc/app.ts"]), 40, 21), "agy")).toBe("none")
+    // The same rows with the caret taken back are no hint's rows either.
+    expect(composerOf(await drawn(narrow(["Auto mode: edits & safe commands", "auto-approved (shift+tab to cycle)"]) + "\x1b[15;5H", 40, 21), "agy")).toBe("none")
+  })
+
+  test("only the four exact hints are skipped: grey words around or inside a hint are not", async () => {
+    const pasted = ["Auto mode: edits", "[Pasted text #1 +3 lines]", "(shift+tab to cycle)"]
+    expect(composerOf(await drawn(narrow(pasted), 40, 21), "agy")).not.toBe("ready")
+    const longer = "Auto mode: edits & safe commands auto-approved (shift+tab to cycle) now"
+    expect(composerOf(await drawn(narrow([longer]), 100, 21), "agy")).not.toBe("ready")
+    const fake = "Fast mode: go quickly (shift+tab to cycle)"
+    expect(composerOf(await drawn(narrow([fake]), 100, 21), "agy")).not.toBe("ready")
+  })
+
   test("a wrapped hint with a row of the user's text among it is not an empty box", async () => {
     const rows = ["Auto mode: edits & safe commands", "auto-approved (shift+tab to cycle)", "\x1b[mhello"]
     expect(composerOf(await drawn(narrow(rows), 40, 21), "agy")).not.toBe("ready")
